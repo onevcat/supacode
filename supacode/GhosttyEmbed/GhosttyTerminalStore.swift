@@ -1,15 +1,17 @@
-import Combine
 import Foundation
+import Observation
 
-final class GhosttyTerminalStore: ObservableObject {
+@MainActor
+@Observable
+final class GhosttyTerminalStore {
     private let runtime: GhosttyRuntime
-    private var surfaceViews: [UUID: GhosttySurfaceView] = [:]
+    private var surfaceViews: [String: GhosttySurfaceView] = [:]
 
     init(runtime: GhosttyRuntime) {
         self.runtime = runtime
     }
 
-    func surfaceView(for id: UUID, workingDirectory: String?) -> GhosttySurfaceView {
+    func surfaceView(for id: String, workingDirectory: URL?) -> GhosttySurfaceView {
         if let existing = surfaceViews[id] {
             return existing
         }

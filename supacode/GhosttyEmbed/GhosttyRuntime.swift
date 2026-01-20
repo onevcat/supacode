@@ -1,9 +1,8 @@
 import AppKit
-import Combine
 import GhosttyKit
 import UniformTypeIdentifiers
 
-final class GhosttyRuntime: ObservableObject {
+final class GhosttyRuntime {
     private var config: ghostty_config_t?
     private(set) var app: ghostty_app_t?
     private var observers: [NSObjectProtocol] = []
@@ -94,7 +93,7 @@ final class GhosttyRuntime: ObservableObject {
 
     private static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
         guard let runtime = runtime(from: userdata) else { return }
-        DispatchQueue.main.async {
+        Task { @MainActor in
             runtime.tick()
         }
     }
@@ -110,7 +109,7 @@ final class GhosttyRuntime: ObservableObject {
     ) {
         guard let surfaceView = surfaceView(from: userdata), let surface = surfaceView.surface else { return }
         let value = NSPasteboard.ghostty(location)?.getOpinionatedStringContents() ?? ""
-        DispatchQueue.main.async {
+        Task { @MainActor in
             value.withCString { ptr in
                 ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
             }
@@ -126,7 +125,7 @@ final class GhosttyRuntime: ObservableObject {
         guard let surfaceView = surfaceView(from: userdata), let surface = surfaceView.surface else { return }
         guard let string else { return }
         let value = String(cString: string)
-        DispatchQueue.main.async {
+        Task { @MainActor in
             value.withCString { ptr in
                 ghostty_surface_complete_clipboard_request(surface, ptr, state, true)
             }
@@ -149,7 +148,7 @@ final class GhosttyRuntime: ObservableObject {
             items.append((mime: String(cString: mimePtr), data: String(cString: dataPtr)))
         }
         guard !items.isEmpty else { return }
-        DispatchQueue.main.async {
+        Task { @MainActor in
             guard let pasteboard = NSPasteboard.ghostty(location) else { return }
             let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
             if !types.isEmpty {
@@ -191,10 +190,7 @@ extension NSPasteboard {
     private static func ghosttyEscape(_ str: String) -> String {
         var result = str
         for char in ghosttyEscapeCharacters {
-            result = result.replacingOccurrences(
-                of: String(char),
-                with: "\\\(char)"
-            )
+            result = result.replacing(String(char), with: "\\\(char)")
         }
         return result
     }

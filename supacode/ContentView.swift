@@ -5,26 +5,25 @@
 //  Created by khoi on 20/1/26.
 //
 
+import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     let runtime: GhosttyRuntime
-    @State private var selectedWorktreeID: Worktree.ID?
-    @StateObject private var terminalStore: GhosttyTerminalStore
-    private let worktrees: [Worktree] = Worktree.sample
+    @Environment(RepositoryStore.self) private var repositoryStore
+    @State private var terminalStore: GhosttyTerminalStore
 
     init(runtime: GhosttyRuntime) {
         self.runtime = runtime
-        _terminalStore = StateObject(wrappedValue: GhosttyTerminalStore(runtime: runtime))
-    }
-
-    private var selectedWorktree: Worktree? {
-        worktrees.first { $0.id == selectedWorktreeID }
+        _terminalStore = State(initialValue: GhosttyTerminalStore(runtime: runtime))
     }
 
     var body: some View {
+        @Bindable var repositoryStore = repositoryStore
+        let selectedWorktree = repositoryStore.worktree(for: repositoryStore.selectedWorktreeID)
         NavigationSplitView {
-            SidebarView(worktrees: worktrees, selection: $selectedWorktreeID)
+            SidebarView(repositories: repositoryStore.repositories, selection: $repositoryStore.selectedWorktreeID)
         } detail: {
             Group {
                 if let selectedWorktree {
@@ -43,49 +42,100 @@ struct ContentView: View {
             .navigationTitle(selectedWorktree?.name ?? "Supacode")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button(action: {}) {
-                        Image(systemName: "sidebar.left")
-                    }
-                    Button(action: {}) {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    Button(action: {}) {
-                        Image(systemName: "gearshape")
-                    }
+                    Button("Sidebar", systemImage: "sidebar.left", action: {})
+                    Button("Compose", systemImage: "square.and.pencil", action: {})
+                    Button("Settings", systemImage: "gearshape", action: {})
                 }
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .fileImporter(
+            isPresented: $repositoryStore.isOpenPanelPresented,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                Task {
+                    await repositoryStore.openRepositories(at: urls)
+                }
+            case .failure:
+                repositoryStore.openError = OpenRepositoryError(
+                    id: UUID(),
+                    title: "Unable to open folders",
+                    message: "Supacode could not read the selected folders."
+                )
+            }
+        }
+        .alert(item: $repositoryStore.openError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 }
 
 private struct SidebarView: View {
-    let worktrees: [Worktree]
+    let repositories: [Repository]
     @Binding var selection: Worktree.ID?
-    @State private var isRepoExpanded = true
+    @State private var expandedRepoIDs: Set<Repository.ID>
+
+    init(repositories: [Repository], selection: Binding<Worktree.ID?>) {
+        self.repositories = repositories
+        _selection = selection
+        _expandedRepoIDs = State(initialValue: Set(repositories.map(\.id)))
+    }
 
     var body: some View {
         List(selection: $selection) {
-            DisclosureGroup(isExpanded: $isRepoExpanded) {
-                ForEach(worktrees) { worktree in
-                    WorktreeRow(name: worktree.name, detail: worktree.detail)
-                        .tag(worktree.id)
+            ForEach(repositories) { repository in
+                Section {
+                    if expandedRepoIDs.contains(repository.id) {
+                        ForEach(repository.worktrees) { worktree in
+                            WorktreeRow(name: worktree.name, detail: worktree.detail)
+                                .tag(worktree.id)
+                        }
+                    }
+                } header: {
+                    Button {
+                        if expandedRepoIDs.contains(repository.id) {
+                            expandedRepoIDs.remove(repository.id)
+                        } else {
+                            expandedRepoIDs.insert(repository.id)
+                        }
+                    } label: {
+                        RepoHeaderRow(
+                            name: repository.name,
+                            initials: repository.initials,
+                            isExpanded: expandedRepoIDs.contains(repository.id)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-            } label: {
-                RepoHeaderRow(name: "supacode", initials: "S")
             }
         }
         .listStyle(.sidebar)
         .frame(minWidth: 220)
+        .onChange(of: repositories) { _, newValue in
+            let current = Set(newValue.map(\.id))
+            expandedRepoIDs.formUnion(current)
+            expandedRepoIDs = expandedRepoIDs.intersection(current)
+        }
     }
 }
 
 private struct RepoHeaderRow: View {
     let name: String
     let initials: String
+    let isExpanded: Bool
     
     var body: some View {
         HStack {
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             ZStack {
                 Circle()
                     .fill(.secondary.opacity(0.2))
@@ -120,16 +170,20 @@ private struct WorktreeRow: View {
 }
 
 private struct EmptyStateView: View {
+    @Environment(RepositoryStore.self) private var repositoryStore
+
     var body: some View {
         VStack {
             Image(systemName: "tray")
                 .font(.title2)
             Text("Open a project or worktree")
                 .font(.headline)
-            Text("Double-click an item in the sidebar, or press Cmd+O.")
+            Text("Press Cmd+O or click Open to choose a repository.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Open...") {}
+            Button("Open...") {
+                repositoryStore.isOpenPanelPresented = true
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))

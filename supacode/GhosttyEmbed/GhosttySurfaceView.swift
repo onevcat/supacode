@@ -10,10 +10,11 @@ final class GhosttySurfaceView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
-    init(runtime: GhosttyRuntime, workingDirectory: String?) {
+    init(runtime: GhosttyRuntime, workingDirectory: URL?) {
         self.runtime = runtime
         if let workingDirectory {
-            workingDirectoryCString = workingDirectory.withCString { strdup($0) }
+            let path = workingDirectory.path(percentEncoded: false)
+            workingDirectoryCString = path.withCString { strdup($0) }
         } else {
             workingDirectoryCString = nil
         }
