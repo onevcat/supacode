@@ -57,9 +57,9 @@ private struct SidebarView: View {
 private struct RepoHeaderRow: View {
     let name: String
     let initials: String
-
+    
     var body: some View {
-        HStack(spacing: 10) {
+        HStack {
             ZStack {
                 Circle()
                     .fill(.secondary.opacity(0.2))
@@ -79,11 +79,10 @@ private struct WorktreeRow: View {
     let detail: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .firstTextBaseline) {
             Image(systemName: "arrow.triangle.branch")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                 Text(detail)
@@ -102,7 +101,7 @@ private struct Worktree: Identifiable {
 
 private struct EmptyStateView: View {
     var body: some View {
-        VStack(spacing: 10) {
+        VStack {
             Image(systemName: "tray")
                 .font(.title2)
             Text("Open a project or worktree")
