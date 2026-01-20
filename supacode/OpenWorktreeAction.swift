@@ -52,14 +52,14 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         }
     }
 
-    var applicationName: String? {
+    var bundleIdentifier: String? {
         switch self {
         case .cursor:
-            return "Cursor"
+            return "com.todesktop.230313mzl4w4u92"
         case .zed:
-            return "Zed"
+            return "dev.zed.Zed"
         case .ghostty:
-            return "Ghostty"
+            return "com.mitchellh.ghostty"
         case .finder, .copyPath:
             return nil
         }
@@ -81,21 +81,19 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(path, forType: .string)
         case .cursor, .zed, .ghostty:
-            guard let applicationName else { return }
-            guard let path = NSWorkspace.shared.fullPath(forApplication: applicationName) else {
+            guard let bundleIdentifier, let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
                 onError(OpenActionError(
-                    title: "\(applicationName) not found",
-                    message: "Install \(applicationName) to open this worktree."
+                    title: "\(title) not found",
+                    message: "Install \(title) to open this worktree."
                 ))
                 return
             }
-            let url = URL(fileURLWithPath: path)
             let configuration = NSWorkspace.OpenConfiguration()
-            NSWorkspace.shared.open([worktree.workingDirectory], withApplicationAt: url, configuration: configuration) { _, error in
+            NSWorkspace.shared.open([worktree.workingDirectory], withApplicationAt: appURL, configuration: configuration) { _, error in
                 guard let error else { return }
                 Task { @MainActor in
                     onError(OpenActionError(
-                        title: "Unable to open in \(applicationName)",
+                        title: "Unable to open in \(self.title)",
                         message: error.localizedDescription
                     ))
                 }
