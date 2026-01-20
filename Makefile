@@ -31,7 +31,7 @@ sync-ghostty-resources: # Sync ghostty resources (themes, docs) over to the main
 	rsync -a --delete "$$src/" "$$dst/"
 
 build-app: build-ghostty-xcframework # Build the macOS app (Debug)
-	@cd $(CURRENT_MAKEFILE_DIR) && xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build 2>&1 | xcsift
+	@cd $(CURRENT_MAKEFILE_DIR) && xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build 2>&1 | xcsift -qw
 
 run-app: build-app # Build then launch (Debug)
 	@settings="$$(xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug -showBuildSettings -json 2>/dev/null)"; \
