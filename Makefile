@@ -3,7 +3,7 @@ CURRENT_MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_MAKEFILE_DIR := $(patsubst %/,%,$(dir $(CURRENT_MAKEFILE_PATH)))
 
 .DEFAULT_GOAL := help
-.PHONY: serve build-ghostty-xcframework build-app run-app
+.PHONY: serve build-ghostty-xcframework build-app run-app sync-ghostty-resources
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -15,6 +15,17 @@ build-ghostty-xcframework: # Build ghostty framework
 	@cd $(CURRENT_MAKEFILE_DIR) && mise install
 	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
 	@cd $(CURRENT_MAKEFILE_DIR) && rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework Frameworks
+
+sync-ghostty-resources: # Sync ghostty resources (themes, docs) over to the main repo
+	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
+	dst="$(CURRENT_MAKEFILE_DIR)/supacode/Resources/ghostty"; \
+	if [ ! -d "$$src" ]; then \
+		echo "ghostty resources not found: $$src"; \
+		echo "run: make build-ghostty-xcframework"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$dst"; \
+	rsync -a --delete "$$src/" "$$dst/"
 
 build-app: # Build the macOS app (Debug)
 	@cd $(CURRENT_MAKEFILE_DIR) && xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build

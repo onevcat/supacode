@@ -14,6 +14,9 @@ struct supacodeApp: App {
     @State private var settings = SettingsModel()
     
     init() {
+        if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
+            setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
+        }
         if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCESS {
                   preconditionFailure("ghostty_init failed")
               }

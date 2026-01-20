@@ -9,12 +9,14 @@
 /* Begin PBXBuildFile section */
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
+		D6A1CB3A2F1F4B00004FDABD /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = D6A1CB392F1F4B00004FDABD /* ghostty */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		D69CE04A2F1F378200584C57 /* supacode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = supacode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		D6A1CB342F1F4AC2004FDABD /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		D6A1CB392F1F4B00004FDABD /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = supacode/Resources/ghostty; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -41,6 +43,7 @@
 		D69CE0412F1F378200584C57 = {
 			isa = PBXGroup;
 			children = (
+				D6A1CB392F1F4B00004FDABD /* ghostty */,
 				D69CE04C2F1F378200584C57 /* supacode */,
 				D69CE04B2F1F378200584C57 /* Products */,
 				D6A1CB2E2F1F4A36004FDABD /* Frameworks */,
@@ -128,6 +131,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D6A1CB3A2F1F4B00004FDABD /* ghostty in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
