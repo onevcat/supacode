@@ -33,6 +33,7 @@ struct supacodeApp: App {
         .environment(repositoryStore)
         .commands {
             OpenRepositoryCommands(repositoryStore: repositoryStore)
+            TerminalCommands()
         }
         Settings {
             SettingsView()

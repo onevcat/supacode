@@ -42,6 +42,10 @@ struct ContentView: View {
                     Button("Settings", systemImage: "gearshape", action: {})
                 }
             }
+            .focusedSceneValue(\.newTerminalAction, {
+                guard let selectedWorktree else { return }
+                terminalStore.createTab(in: selectedWorktree)
+            })
         }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: repositoryStore.repositories) { _, newValue in
