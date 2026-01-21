@@ -8,7 +8,7 @@
 import Foundation
 
 enum Github {
-    static func profilePictureURL(username: String, size: Int = 200) -> URL? {
-        URL(string: "https://github.com/\(username).png?size=\(size)")
-    }
+  static func profilePictureURL(username: String, size: Int = 200) -> URL? {
+    URL(string: "https://github.com/\(username).png?size=\(size)")
+  }
 }

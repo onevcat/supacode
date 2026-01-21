@@ -1,0 +1,37 @@
+included:
+  - supacode
+  - supacodeTests
+excluded:
+  - ThirdParty/ghostty
+
+opt_in_rules:
+  - accessibility_label_for_image
+  - accessibility_trait_for_button
+  - async_without_await
+
+opening_brace:
+  ignore_multiline_function_signatures: true
+  ignore_multiline_statement_conditions: true
+  ignore_multiline_type_headers: true
+
+trailing_comma:
+  mandatory_comma: true
+
+cyclomatic_complexity:
+  warning: 15
+  error: 20
+
+file_length:
+  warning: 600
+  error: 800
+
+function_body_length:
+  warning: 100
+  error: 150
+
+type_body_length:
+  warning: 500
+  error: 650
+
+redundant_discardable_let:
+  ignore_swiftui_view_bodies: true
