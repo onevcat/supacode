@@ -47,7 +47,7 @@ jobs:
           security list-keychains -s build.keychain
       - run: make build-ghostty-xcframework
       - run: |
-          xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_IDENTITY="$DEVELOPER_ID_IDENTITY" OTHER_CODE_SIGN_FLAGS="--timestamp"
+          xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_IDENTITY="$DEVELOPER_ID_IDENTITY" OTHER_CODE_SIGN_FLAGS="--timestamp" 2>&1 | mise exec -- xcsift -qw
       - run: |
           cat > build/ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -65,7 +65,7 @@ jobs:
           </dict>
           </plist>
           EOF
-          xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+          xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw
       - name: Notarize and staple
         run: |
           APP_PATH="$(find build/export -name "supacode.app" -maxdepth 3 -print -quit)"
