@@ -12,6 +12,17 @@ final class RepositoryStore {
     var selectedWorktreeID: String?
     var isOpenPanelPresented = false
     var openError: OpenRepositoryError?
+    var createWorktreeError: CreateWorktreeError?
+
+    var canCreateWorktree: Bool {
+        if repositories.isEmpty {
+            return false
+        }
+        if selectedWorktreeID != nil {
+            return true
+        }
+        return repositories.count == 1
+    }
 
     init(userDefaults: UserDefaults = .standard, gitClient: GitClient = .init()) {
         self.userDefaults = userDefaults
@@ -74,6 +85,51 @@ final class RepositoryStore {
         }
     }
 
+    func createRandomWorktree() async {
+        createWorktreeError = nil
+        guard let repository = repositoryForWorktreeCreation() else {
+            let message: String
+            if repositories.isEmpty {
+                message = "Open a repository to create a worktree."
+            } else if selectedWorktreeID == nil && repositories.count > 1 {
+                message = "Select a worktree to choose which repository to use."
+            } else {
+                message = "Unable to resolve a repository for the new worktree."
+            }
+            createWorktreeError = CreateWorktreeError(
+                id: UUID(),
+                title: "Unable to create worktree",
+                message: message
+            )
+            return
+        }
+
+        do {
+            let branchNames = try await gitClient.localBranchNames(for: repository.rootURL)
+            let worktreeNames = Set(repository.worktrees.map { $0.name.lowercased() })
+            let existing = worktreeNames.union(branchNames)
+            guard let name = WorktreeNameGenerator.nextName(excluding: existing) else {
+                createWorktreeError = CreateWorktreeError(
+                    id: UUID(),
+                    title: "No available worktree names",
+                    message: "All default animal names are already in use. Delete a worktree or rename a branch, then try again."
+                )
+                return
+            }
+
+            let newWorktree = try await gitClient.createWorktree(named: name, in: repository.rootURL)
+            let roots = repositories.map(\.rootURL)
+            repositories = await loadRepositories(for: roots)
+            selectedWorktreeID = newWorktree.id
+        } catch {
+            createWorktreeError = CreateWorktreeError(
+                id: UUID(),
+                title: "Unable to create worktree",
+                message: error.localizedDescription
+            )
+        }
+    }
+
     func selectWorktree(_ id: String?) {
         selectedWorktreeID = id
     }
@@ -84,6 +140,20 @@ final class RepositoryStore {
             if let worktree = repository.worktrees.first(where: { $0.id == id }) {
                 return worktree
             }
+        }
+        return nil
+    }
+
+    private func repositoryForWorktreeCreation() -> Repository? {
+        if let selectedWorktreeID {
+            for repository in repositories {
+                if repository.worktrees.contains(where: { $0.id == selectedWorktreeID }) {
+                    return repository
+                }
+            }
+        }
+        if repositories.count == 1 {
+            return repositories.first
         }
         return nil
     }

@@ -34,6 +34,20 @@ struct supacodeTests {
         #expect(owner == "supabitapp")
     }
 
+    @Test func worktreeNameGeneratorReturnsRemainingName() {
+        let animals = WorktreeNameGenerator.animals
+        let expected = animals.last
+        let excluded = Set(animals.dropLast())
+        let name = WorktreeNameGenerator.nextName(excluding: excluded)
+        #expect(name == expected)
+    }
+
+    @Test func worktreeNameGeneratorReturnsNilWhenExhausted() {
+        let excluded = Set(WorktreeNameGenerator.animals)
+        let name = WorktreeNameGenerator.nextName(excluding: excluded)
+        #expect(name == nil)
+    }
+
     private func makeTempRepo(remote: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

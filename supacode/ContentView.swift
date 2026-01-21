@@ -25,7 +25,16 @@ struct ContentView: View {
         @Bindable var repositoryStore = repositoryStore
         let selectedWorktree = repositoryStore.worktree(for: repositoryStore.selectedWorktreeID)
         NavigationSplitView(columnVisibility: $sidebarVisibility) {
-            SidebarView(repositories: repositoryStore.repositories, selection: $repositoryStore.selectedWorktreeID)
+            SidebarView(
+                repositories: repositoryStore.repositories,
+                selection: $repositoryStore.selectedWorktreeID,
+                canCreateWorktree: repositoryStore.canCreateWorktree,
+                createWorktree: {
+                    Task {
+                        await repositoryStore.createRandomWorktree()
+                    }
+                }
+            )
         } detail: {
             WorktreeDetailView(
                 selectedWorktree: selectedWorktree,
@@ -62,6 +71,13 @@ struct ContentView: View {
             }
         }
         .alert(item: $repositoryStore.openError) { error in
+            Alert(
+                title: Text(error.title),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .alert(item: $repositoryStore.createWorktreeError) { error in
             Alert(
                 title: Text(error.title),
                 message: Text(error.message),
@@ -146,11 +162,20 @@ private struct WorktreeDetailView: View {
 private struct SidebarView: View {
     let repositories: [Repository]
     @Binding var selection: Worktree.ID?
+    let canCreateWorktree: Bool
+    let createWorktree: () -> Void
     @State private var expandedRepoIDs: Set<Repository.ID>
 
-    init(repositories: [Repository], selection: Binding<Worktree.ID?>) {
+    init(
+        repositories: [Repository],
+        selection: Binding<Worktree.ID?>,
+        canCreateWorktree: Bool,
+        createWorktree: @escaping () -> Void
+    ) {
         self.repositories = repositories
         _selection = selection
+        self.canCreateWorktree = canCreateWorktree
+        self.createWorktree = createWorktree
         _expandedRepoIDs = State(initialValue: Set(repositories.map(\.id)))
     }
 
@@ -191,6 +216,16 @@ private struct SidebarView: View {
             let current = Set(newValue.map(\.id))
             expandedRepoIDs.formUnion(current)
             expandedRepoIDs = expandedRepoIDs.intersection(current)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Worktree", systemImage: "plus") {
+                    createWorktree()
+                }
+                .keyboardShortcut(AppShortcuts.newWorktree.keyEquivalent, modifiers: AppShortcuts.newWorktree.modifiers)
+                .help("New Worktree (\(AppShortcuts.newWorktree.display))")
+                .disabled(!canCreateWorktree)
+            }
         }
     }
 }

@@ -1,0 +1,65 @@
+import Foundation
+
+enum WorktreeNameGenerator {
+    static let animals: [String] = [
+        "cat",
+        "dog",
+        "fox",
+        "bear",
+        "wolf",
+        "lion",
+        "tiger",
+        "leopard",
+        "cheetah",
+        "horse",
+        "cow",
+        "pig",
+        "sheep",
+        "goat",
+        "deer",
+        "moose",
+        "rabbit",
+        "hare",
+        "squirrel",
+        "otter",
+        "beaver",
+        "badger",
+        "raccoon",
+        "panda",
+        "koala",
+        "kangaroo",
+        "monkey",
+        "gorilla",
+        "lemur",
+        "owl",
+        "eagle",
+        "hawk",
+        "falcon",
+        "raven",
+        "crow",
+        "duck",
+        "goose",
+        "swan",
+        "penguin",
+        "seal",
+        "dolphin",
+        "whale",
+        "shark",
+        "turtle",
+        "frog",
+        "lizard",
+        "octopus",
+        "squid",
+        "crab",
+        "lobster",
+        "bee",
+        "ant",
+        "butterfly"
+    ]
+
+    static func nextName(excluding existing: Set<String>) -> String? {
+        let normalized = Set(existing.map { $0.lowercased() })
+        let available = animals.filter { !normalized.contains($0) }
+        return available.randomElement()
+    }
+}

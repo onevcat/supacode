@@ -43,6 +43,41 @@ struct GitClient {
         }
     }
 
+    nonisolated func localBranchNames(for repoRoot: URL) async throws -> Set<String> {
+        let path = repoRoot.path(percentEncoded: false)
+        let output = try await runGit(arguments: [
+            "-C",
+            path,
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads"
+        ])
+        let names = output
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        return Set(names)
+    }
+
+    nonisolated func createWorktree(named name: String, in repoRoot: URL) async throws -> Worktree {
+        let baseDirectory = wtBaseDirectory(for: repoRoot)
+        let wtURL = try wtScriptURL()
+        let output = try await runProcess(
+            executableURL: wtURL,
+            arguments: ["sw", name, "--base", baseDirectory.path(percentEncoded: false)],
+            currentDirectoryURL: repoRoot
+        )
+        let pathLine = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
+        if pathLine.isEmpty {
+            let command = "\(wtURL.lastPathComponent) sw \(name) --base \(baseDirectory.path(percentEncoded: false))"
+            throw GitClientError.commandFailed(command: command, message: "Empty output")
+        }
+        let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
+        let detail = Self.relativePath(from: baseDirectory, to: worktreeURL)
+        let id = worktreeURL.path(percentEncoded: false)
+        return Worktree(id: id, name: name, detail: detail, workingDirectory: worktreeURL)
+    }
+
     nonisolated func githubOwner(for repoRoot: URL) async -> String? {
         guard let remote = await originRemoteURL(for: repoRoot) else { return nil }
         return Self.githubOwner(fromRemote: remote)
