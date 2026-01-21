@@ -48,6 +48,24 @@ struct supacodeTests {
         #expect(name == nil)
     }
 
+    @Test func worktreeDirtCheckEmptyIsClean() {
+        #expect(WorktreeDirtCheck.isDirty(statusOutput: "") == false)
+    }
+
+    @Test func worktreeDirtCheckWhitespaceIsClean() {
+        #expect(WorktreeDirtCheck.isDirty(statusOutput: " \n") == false)
+    }
+
+    @Test func worktreeDirtCheckModifiedIsDirty() {
+        let output = " M README.md\n"
+        #expect(WorktreeDirtCheck.isDirty(statusOutput: output))
+    }
+
+    @Test func worktreeDirtCheckUntrackedIsDirty() {
+        let output = "?? new-file.txt\n"
+        #expect(WorktreeDirtCheck.isDirty(statusOutput: output))
+    }
+
     private func makeTempRepo(remote: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
