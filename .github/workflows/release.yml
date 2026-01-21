@@ -55,7 +55,7 @@ jobs:
           echo "DEVELOPER_ID_IDENTITY_SHA=$DEVELOPER_ID_IDENTITY_SHA" >> "$GITHUB_ENV"
       - run: make build-ghostty-xcframework
       - run: |
-          xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_IDENTITY="$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" 2>&1 | mise exec -- xcsift -qw
+          xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" 2>&1 | mise exec -- xcsift -qw
       - run: |
           cat > build/ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
