@@ -69,18 +69,18 @@ jobs:
       - name: Re-sign Sparkle framework
         run: |
           APP_PATH="$(find build/export -name "supacode.app" -maxdepth 3 -print -quit)"
-          SPARKLE="$APP_PATH/Contents/Frameworks/Sparkle.framework"
-          CODESIGN_ARGS="--force --options runtime --timestamp --sign $DEVELOPER_ID_IDENTITY"
+          SPARKLE="$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B"
 
-          codesign $CODESIGN_ARGS "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
-          codesign $CODESIGN_ARGS "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
-          codesign $CODESIGN_ARGS "$SPARKLE/Versions/B/Updater.app"
-          codesign $CODESIGN_ARGS "$SPARKLE/Versions/B/Autoupdate"
-          codesign $CODESIGN_ARGS "$SPARKLE/Versions/B/Sparkle"
-          codesign $CODESIGN_ARGS "$SPARKLE"
-          codesign $CODESIGN_ARGS "$APP_PATH"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$SPARKLE/XPCServices/Installer.xpc"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$SPARKLE/Updater.app"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$SPARKLE/Autoupdate"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$SPARKLE/Sparkle"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+          codesign -f -s "$DEVELOPER_ID_IDENTITY" -o runtime --timestamp "$APP_PATH"
 
-          codesign --verify --deep --strict "$APP_PATH"
+          codesign -vvv --deep --strict "$APP_PATH"
+          echo "Signature verified successfully"
       - name: Notarize and staple
         run: |
           APP_PATH="$(find build/export -name "supacode.app" -maxdepth 3 -print -quit)"
