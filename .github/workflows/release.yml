@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: write
     env:
+      GH_TOKEN: ${{ github.token }}
       RELEASE_REPO_PRIMARY: supabit/supacode-sh
       RELEASE_REPO_MAIN: supabitapp/supacode
       RELEASE_REPO_SH: supabit/supacode-sh
@@ -140,10 +141,10 @@ jobs:
       - run: |
           NOTES_FILE=build/release-notes.txt
           printf "" > "$NOTES_FILE"
-          if GH_TOKEN="$GITHUB_TOKEN" gh release view "$TAG" -R "$RELEASE_REPO_MAIN" >/dev/null 2>&1; then
-            GH_TOKEN="$GITHUB_TOKEN" gh release upload "$TAG" build/supacode.app.zip build/appcast.xml --clobber -R "$RELEASE_REPO_MAIN"
+          if gh release view "$TAG" -R "$RELEASE_REPO_MAIN" >/dev/null 2>&1; then
+            gh release upload "$TAG" build/supacode.app.zip build/appcast.xml --clobber -R "$RELEASE_REPO_MAIN"
           else
-            GH_TOKEN="$GITHUB_TOKEN" gh release create "$TAG" build/supacode.app.zip build/appcast.xml --title "$TAG" --notes-file "$NOTES_FILE" -R "$RELEASE_REPO_MAIN"
+            gh release create "$TAG" build/supacode.app.zip build/appcast.xml --title "$TAG" --notes-file "$NOTES_FILE" -R "$RELEASE_REPO_MAIN"
           fi
 
           if GH_TOKEN="$SUPACODE_SH_RELEASE_TOKEN" gh release view "$TAG" -R "$RELEASE_REPO_SH" >/dev/null 2>&1; then
