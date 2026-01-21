@@ -130,7 +130,26 @@ jobs:
       - run: |
           STAGING=$(mktemp -d)
           cp build/supacode.app.zip "$STAGING/"
-          printf "%s" "$SPARKLE_PRIVATE_KEY" | ./bins/generate_appcast --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" --ed-key-file - "$STAGING"
+          SPARKLE_KEY_B64=$(python3 - <<'PY'
+import os, base64, re, binascii, sys
+key = os.environ.get("SPARKLE_PRIVATE_KEY", "")
+key = key.strip().replace("\n", "").replace("\r", "")
+if not key:
+    sys.exit("SPARKLE_PRIVATE_KEY is empty")
+if re.fullmatch(r"[0-9a-fA-F]{128}", key):
+    raw = binascii.unhexlify(key)
+    print(base64.b64encode(raw).decode())
+    sys.exit(0)
+try:
+    raw = base64.b64decode(key, validate=True)
+except Exception:
+    sys.exit("SPARKLE_PRIVATE_KEY is not valid base64 or hex")
+if len(raw) not in (32, 64):
+    sys.exit(f"SPARKLE_PRIVATE_KEY decoded length {len(raw)} is not 32 or 64")
+print(key)
+PY
+)
+          printf "%s" "$SPARKLE_KEY_B64" | ./bins/generate_appcast --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" --ed-key-file - "$STAGING"
           cp "$STAGING/appcast.xml" build/appcast.xml
       - run: |
           NOTES_FILE=build/release-notes.txt
