@@ -105,7 +105,6 @@
 			buildPhases = (
 				D69CE0462F1F378200584C57 /* Sources */,
 				D69CE0472F1F378200584C57 /* Frameworks */,
-				776A15AD70EEDE6144AA3372 /* Sync git-wt */,
 				D69CE0482F1F378200584C57 /* Resources */,
 			);
 			buildRules = (
@@ -207,25 +206,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		776A15AD70EEDE6144AA3372 /* Sync git-wt */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/ThirdParty/git-wt/wt",
-			);
-			name = "Sync git-wt";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/git-wt/wt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nsrc=\"${SRCROOT}/ThirdParty/git-wt/wt\"\ndst_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/git-wt\"\nmkdir -p \"$dst_dir\"\ncp \"$src\" \"$dst_dir/wt\"\nchmod +x \"$dst_dir/wt\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D69CE0462F1F378200584C57 /* Sources */ = {

@@ -1,6 +1,3 @@
 [submodule "ThirdParty/ghostty"]
 	path = ThirdParty/ghostty
 	url = https://github.com/ghostty-org/ghostty
-[submodule "ThirdParty/git-wt"]
-	path = ThirdParty/git-wt
-	url = https://github.com/khoi/git-wt.git

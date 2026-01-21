@@ -25,6 +25,6 @@ See `./docs/swift-rules.md` for Swift/SwiftUI conventions. Key points:
 - Use Peekabo skill to verify UI behavior if necessary.
 - If you want to inspect a swift pm package, clone it to do so.
 
-## Submodules
-- ghostty 
-- git-wt (this is owned by us, we could modify this if needed)
+## References
+- git@github.com:ghostty-org/ghostty.git - Dive into this codebase when needing to implement something with Ghostty
+- git@github.com:khoi/git-wt.git - This is our repo, supacode uses this under the hood, we can change this if needed.

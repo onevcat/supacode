@@ -4,7 +4,7 @@ CURRENT_MAKEFILE_DIR := $(patsubst %/,%,$(dir $(CURRENT_MAKEFILE_PATH)))
 GHOSTTY_XCFRAMEWORK_PATH := $(CURRENT_MAKEFILE_DIR)/Frameworks/GhosttyKit.xcframework
 
 .DEFAULT_GOAL := help
-.PHONY: serve build-ghostty-xcframework build-app run-app sync-ghostty-resources test
+.PHONY: serve build-ghostty-xcframework build-app run-app sync-ghostty-resources test update-wt
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -41,3 +41,8 @@ run-app: build-app # Build then launch (Debug)
 
 test: build-ghostty-xcframework
 	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" 2>&1 | xcsift -qw
+
+update-wt: # Download git-wt binary to Resources
+	@mkdir -p "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt"
+	@curl -fsSL "https://raw.githubusercontent.com/khoi/git-wt/refs/heads/main/wt" -o "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
+	@chmod +x "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
