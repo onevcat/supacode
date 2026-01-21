@@ -41,11 +41,12 @@ sync-ghostty-resources: # Sync ghostty resources (themes, docs) over to the main
 build-app: build-ghostty-xcframework # Build the macOS app (Debug)
 	xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build 2>&1 | xcsift -qw
 
-run-app: build-app # Build then launch (Debug)
+run-app: build-app # Build then launch (Debug) with log streaming
 	@settings="$$(xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug -showBuildSettings -json 2>/dev/null)"; \
 	build_dir="$$(echo "$$settings" | jq -r '.[0].buildSettings.BUILT_PRODUCTS_DIR')"; \
 	product="$$(echo "$$settings" | jq -r '.[0].buildSettings.FULL_PRODUCT_NAME')"; \
-	open -n "$$build_dir/$$product"
+	exec_name="$$(echo "$$settings" | jq -r '.[0].buildSettings.EXECUTABLE_NAME')"; \
+	"$$build_dir/$$product/Contents/MacOS/$$exec_name"
 
 lint: # Run swiftlint
 	mise exec -- swiftlint --quiet
