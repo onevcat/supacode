@@ -75,11 +75,10 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" build/supacode.app.zip
           VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - run: brew install sparkle
       - run: |
           STAGING=$(mktemp -d)
           cp build/supacode.app.zip "$STAGING/"
-          printf "%s" "$SPARKLE_PRIVATE_KEY" | generate_appcast --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" --ed-key-file - "$STAGING"
+          printf "%s" "$SPARKLE_PRIVATE_KEY" | ./bins/generate_appcast --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" --ed-key-file - "$STAGING"
           cp "$STAGING/appcast.xml" build/appcast.xml
       - run: |
           NOTES_FILE=build/release-notes.txt
