@@ -64,3 +64,4 @@ fastlane/test_output
 
 Frameworks/GhosttyKit.xcframework
 *.profraw
+.env
