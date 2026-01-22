@@ -14,10 +14,12 @@ final class WorktreeTerminalState: BonsplitDelegate {
   private var trees: [TabID: SplitTree<GhosttySurfaceView>] = [:]
   private var surfaces: [UUID: GhosttySurfaceView] = [:]
   private var focusedSurfaceIdByTab: [TabID: UUID] = [:]
+  private var pendingSetupScript: Bool
 
-  init(runtime: GhosttyRuntime, worktree: Worktree) {
+  init(runtime: GhosttyRuntime, worktree: Worktree, runSetupScript: Bool = false) {
     self.runtime = runtime
     self.worktree = worktree
+    pendingSetupScript = runSetupScript
     let configuration = BonsplitConfiguration(
       allowSplits: false,
       allowCloseTabs: true,
@@ -59,7 +61,7 @@ final class WorktreeTerminalState: BonsplitDelegate {
       return nil
     }
     controller.selectTab(tabId)
-    let tree = splitTree(for: tabId, initialInput: startupInput())
+    let tree = splitTree(for: tabId)
     if let surface = tree.root?.leftmostLeaf() {
       focusSurface(surface, in: tabId)
     }
@@ -84,7 +86,10 @@ final class WorktreeTerminalState: BonsplitDelegate {
     if let existing = trees[tabId] {
       return existing
     }
-    let resolvedInput = initialInput ?? defaultInitialInput()
+    let resolvedInput = initialInput ?? setupScriptInput(shouldRun: pendingSetupScript)
+    if pendingSetupScript {
+      pendingSetupScript = false
+    }
     let surface = createSurface(tabId: tabId, initialInput: resolvedInput)
     let tree = SplitTree(view: surface)
     trees[tabId] = tree
@@ -193,20 +198,18 @@ final class WorktreeTerminalState: BonsplitDelegate {
     }
   }
 
-  private func defaultInitialInput() -> String? {
-    startupInput()
-  }
-
-  private func startupInput() -> String? {
+  private func setupScriptInput(shouldRun: Bool) -> String? {
+    guard shouldRun else { return nil }
     let settings = settingsStore.load(for: worktree.repositoryRootURL)
-    let command = settings.startupCommand
-    if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    let script = settings.setupScript
+    let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
       return nil
     }
-    if command.hasSuffix("\n") {
-      return command
+    if script.hasSuffix("\n") {
+      return script
     }
-    return "\(command)\n"
+    return "\(script)\n"
   }
 
   func closeAllSurfaces() {

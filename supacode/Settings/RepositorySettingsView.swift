@@ -14,7 +14,25 @@ struct RepositorySettingsView: View {
 
     Form {
       Section {
-        TextField("Start up command", text: $model.startupCommand, prompt: Text("echo 123"))
+        ZStack(alignment: .topLeading) {
+          TextEditor(text: $model.setupScript)
+            .font(.body)
+            .frame(minHeight: 120)
+          if model.setupScript.isEmpty {
+            Text("echo 123")
+              .foregroundStyle(.secondary)
+              .padding(.top, 8)
+              .padding(.leading, 6)
+              .font(.body)
+              .allowsHitTesting(false)
+          }
+        }
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Setup Script")
+          Text("Initial setup script that will be launched once after worktree creation")
+            .foregroundStyle(.secondary)
+        }
       }
     }
     .formStyle(.grouped)

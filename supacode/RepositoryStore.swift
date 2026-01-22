@@ -19,6 +19,7 @@ final class RepositoryStore {
   var removeRepositoryError: RemoveRepositoryError?
   var loadError: LoadRepositoryError?
   var pendingWorktrees: [PendingWorktree] = []
+  private var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
   var deletingWorktreeIDs: Set<Worktree.ID> = []
   var removingRepositoryIDs: Set<Repository.ID> = []
   private(set) var pinnedWorktreeIDs: [Worktree.ID] = []
@@ -158,6 +159,7 @@ final class RepositoryStore {
       }
 
       let newWorktree = try await gitClient.createWorktree(named: name, in: repository.rootURL)
+      pendingSetupScriptWorktreeIDs.insert(newWorktree.id)
       let roots = repositories.map(\.rootURL)
       let loaded = await reloadRepositories(for: roots)
       if selectedWorktreeID == pendingID {
@@ -195,6 +197,10 @@ final class RepositoryStore {
   func pendingWorktree(for id: Worktree.ID?) -> PendingWorktree? {
     guard let id else { return nil }
     return pendingWorktrees.first(where: { $0.id == id })
+  }
+
+  func consumeSetupScript(for id: Worktree.ID) -> Bool {
+    pendingSetupScriptWorktreeIDs.remove(id) != nil
   }
 
   func pendingWorktrees(in repository: Repository) -> [PendingWorktree] {

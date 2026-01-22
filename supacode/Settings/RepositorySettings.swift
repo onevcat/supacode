@@ -1,28 +1,28 @@
 import Foundation
 
 nonisolated struct RepositorySettings: Codable, Equatable {
-  var startupCommand: String
+  var setupScript: String
   var openActionID: String
 
   private enum CodingKeys: String, CodingKey {
-    case startupCommand
+    case setupScript
     case openActionID
   }
 
   static let `default` = RepositorySettings(
-    startupCommand: "echo 123",
+    setupScript: "",
     openActionID: "finder"
   )
 
-  init(startupCommand: String, openActionID: String) {
-    self.startupCommand = startupCommand
+  init(setupScript: String, openActionID: String) {
+    self.setupScript = setupScript
     self.openActionID = openActionID
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    startupCommand = try container.decodeIfPresent(String.self, forKey: .startupCommand)
-      ?? Self.default.startupCommand
+    setupScript = try container.decodeIfPresent(String.self, forKey: .setupScript)
+      ?? Self.default.setupScript
     openActionID = try container.decodeIfPresent(String.self, forKey: .openActionID)
       ?? Self.default.openActionID
   }

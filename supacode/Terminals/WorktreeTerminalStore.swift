@@ -11,11 +11,19 @@ final class WorktreeTerminalStore {
     self.runtime = runtime
   }
 
-  func state(for worktree: Worktree) -> WorktreeTerminalState {
+  func state(
+    for worktree: Worktree,
+    runSetupScriptIfNew: () -> Bool = { false }
+  ) -> WorktreeTerminalState {
     if let existing = states[worktree.id] {
       return existing
     }
-    let state = WorktreeTerminalState(runtime: runtime, worktree: worktree)
+    let runSetupScript = runSetupScriptIfNew()
+    let state = WorktreeTerminalState(
+      runtime: runtime,
+      worktree: worktree,
+      runSetupScript: runSetupScript
+    )
     states[worktree.id] = state
     return state
   }

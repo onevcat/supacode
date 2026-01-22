@@ -8,12 +8,12 @@ final class RepositorySettingsModel {
   private let rootURL: URL
   private var settings: RepositorySettings
 
-  var startupCommand: String {
+  var setupScript: String {
     get {
-      settings.startupCommand
+      settings.setupScript
     }
     set {
-      settings.startupCommand = newValue
+      settings.setupScript = newValue
       store.save(settings, for: rootURL)
     }
   }

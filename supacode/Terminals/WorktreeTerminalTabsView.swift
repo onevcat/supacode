@@ -4,9 +4,12 @@ import SwiftUI
 struct WorktreeTerminalTabsView: View {
   let worktree: Worktree
   let store: WorktreeTerminalStore
+  @Environment(RepositoryStore.self) private var repositoryStore
 
   var body: some View {
-    let state = store.state(for: worktree)
+    let state = store.state(for: worktree) {
+      repositoryStore.consumeSetupScript(for: worktree.id)
+    }
     ZStack(alignment: .topLeading) {
       BonsplitView(
         controller: state.controller,
