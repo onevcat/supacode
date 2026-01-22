@@ -84,42 +84,14 @@ struct ContentView: View {
           await repositoryStore.openRepositories(at: urls)
         }
       case .failure:
-        repositoryStore.openError = OpenRepositoryError(
+        repositoryStore.alert = AppAlert(
           id: UUID(),
           title: "Unable to open folders",
           message: "Supacode could not read the selected folders."
         )
       }
     }
-    .alert(item: $repositoryStore.openError) { error in
-      Alert(
-        title: Text(error.title),
-        message: Text(error.message),
-        dismissButton: .default(Text("OK"))
-      )
-    }
-    .alert(item: $repositoryStore.createWorktreeError) { error in
-      Alert(
-        title: Text(error.title),
-        message: Text(error.message),
-        dismissButton: .default(Text("OK"))
-      )
-    }
-    .alert(item: $repositoryStore.removeWorktreeError) { error in
-      Alert(
-        title: Text(error.title),
-        message: Text(error.message),
-        dismissButton: .default(Text("OK"))
-      )
-    }
-    .alert(item: $repositoryStore.removeRepositoryError) { error in
-      Alert(
-        title: Text(error.title),
-        message: Text(error.message),
-        dismissButton: .default(Text("OK"))
-      )
-    }
-    .alert(item: $repositoryStore.loadError) { error in
+    .alert(item: $repositoryStore.alert) { error in
       Alert(
         title: Text(error.title),
         message: Text(error.message),
@@ -349,7 +321,7 @@ private struct SidebarView: View {
       if isDirty {
         pendingRemoval = PendingWorktreeRemoval(repository: repository, worktree: worktree)
       } else {
-        await repositoryStore.removeWorktree(worktree, from: repository, force: false)
+        await repositoryStore.removeWorktree(worktree, from: repository, force: true)
       }
     }
   }

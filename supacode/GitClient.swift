@@ -134,16 +134,21 @@ struct GitClient {
       arguments.append("--force")
     }
     arguments.append(name)
+    print(
+      "[GitClient] removeWorktree: \(wtURL.lastPathComponent) \(arguments.joined(separator: " "))"
+    )
     let output = try await runProcess(
       executableURL: wtURL,
       arguments: arguments,
       currentDirectoryURL: repoRoot
     )
+    print("[GitClient] removeWorktree output: \(output)")
     let pathLine = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
     if pathLine.isEmpty {
       let command = ([wtURL.lastPathComponent] + arguments).joined(separator: " ")
       throw GitClientError.commandFailed(command: command, message: "Empty output")
     }
+    print("[GitClient] removeWorktree path: \(pathLine)")
     return URL(fileURLWithPath: pathLine).standardizedFileURL
   }
 
@@ -214,15 +219,24 @@ struct GitClient {
       process.waitUntilExit()
       let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
       let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-      let output = String(bytes: outputData, encoding: .utf8) ?? ""
-      let errorOutput = String(bytes: errorData, encoding: .utf8) ?? ""
+      let output = (String(bytes: outputData, encoding: .utf8) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let errorOutput = (String(bytes: errorData, encoding: .utf8) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       if process.terminationStatus != 0 {
         let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(
           separator: " ")
-        let message = errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        var messageParts: [String] = []
+        if !output.isEmpty {
+          messageParts.append("stdout:\n\(output)")
+        }
+        if !errorOutput.isEmpty {
+          messageParts.append("stderr:\n\(errorOutput)")
+        }
+        let message = messageParts.joined(separator: "\n")
         throw GitClientError.commandFailed(command: command, message: message)
       }
-      return output.trimmingCharacters(in: .whitespacesAndNewlines)
+      return output
     }.value
   }
 

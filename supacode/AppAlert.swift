@@ -1,6 +1,6 @@
 import Foundation
 
-struct LoadRepositoryError: Identifiable, Hashable {
+struct AppAlert: Identifiable, Hashable {
   let id: UUID
   let title: String
   let message: String

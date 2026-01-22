@@ -13,11 +13,7 @@ final class RepositoryStore {
   var repositories: [Repository] = []
   var selectedWorktreeID: String?
   var isOpenPanelPresented = false
-  var openError: OpenRepositoryError?
-  var createWorktreeError: CreateWorktreeError?
-  var removeWorktreeError: RemoveWorktreeError?
-  var removeRepositoryError: RemoveRepositoryError?
-  var loadError: LoadRepositoryError?
+  var alert: AppAlert?
   var pendingWorktrees: [PendingWorktree] = []
   private var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
   var deletingWorktreeIDs: Set<Worktree.ID> = []
@@ -83,7 +79,7 @@ final class RepositoryStore {
 
     if !failures.isEmpty {
       let message = failures.map { "\($0) is not a Git repository." }.joined(separator: "\n")
-      openError = OpenRepositoryError(
+      alert = AppAlert(
         id: UUID(),
         title: "Some folders couldn't be opened",
         message: message
@@ -92,7 +88,7 @@ final class RepositoryStore {
   }
 
   func createRandomWorktree() async {
-    createWorktreeError = nil
+    alert = nil
     guard let repository = repositoryForWorktreeCreation() else {
       let message: String
       if repositories.isEmpty {
@@ -102,19 +98,21 @@ final class RepositoryStore {
       } else {
         message = "Unable to resolve a repository for the new worktree."
       }
-      createWorktreeError = CreateWorktreeError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to create worktree",
         message: message
       )
+      print("[RepositoryStore] alert: Unable to create worktree\n\(message)")
       return
     }
     if isRemovingRepository(repository) {
-      createWorktreeError = CreateWorktreeError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to create worktree",
         message: "This repository is being removed."
       )
+      print("[RepositoryStore] alert: Unable to create worktree\nThis repository is being removed.")
       return
     }
 
@@ -122,9 +120,9 @@ final class RepositoryStore {
   }
 
   func createRandomWorktree(in repository: Repository) async {
-    createWorktreeError = nil
+    alert = nil
     if isRemovingRepository(repository) {
-      createWorktreeError = CreateWorktreeError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to create worktree",
         message: "This repository is being removed."
@@ -148,13 +146,15 @@ final class RepositoryStore {
       guard let name = WorktreeNameGenerator.nextName(excluding: existing) else {
         removePendingWorktree(id: pendingID)
         restoreSelection(previousSelection, whenSelectionIs: pendingID)
-        createWorktreeError = CreateWorktreeError(
+        let message =
+          "All default animal names are already in use. "
+          + "Delete a worktree or rename a branch, then try again."
+        alert = AppAlert(
           id: UUID(),
           title: "No available worktree names",
-          message:
-            "All default animal names are already in use. "
-            + "Delete a worktree or rename a branch, then try again."
+          message: message
         )
+        print("[RepositoryStore] alert: No available worktree names\n\(message)")
         return
       }
 
@@ -172,11 +172,12 @@ final class RepositoryStore {
     } catch {
       removePendingWorktree(id: pendingID)
       restoreSelection(previousSelection, whenSelectionIs: pendingID)
-      createWorktreeError = CreateWorktreeError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to create worktree",
         message: error.localizedDescription
       )
+      print("[RepositoryStore] alert: Unable to create worktree\n\(error.localizedDescription)")
     }
   }
 
@@ -343,7 +344,7 @@ final class RepositoryStore {
     do {
       return try await gitClient.isWorktreeDirty(at: worktree.workingDirectory)
     } catch {
-      removeWorktreeError = RemoveWorktreeError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to check worktree status",
         message: error.localizedDescription
@@ -353,33 +354,45 @@ final class RepositoryStore {
   }
 
   func removeWorktree(_ worktree: Worktree, from repository: Repository, force: Bool) async {
-    removeWorktreeError = nil
+    alert = nil
+    print(
+      "[RepositoryStore] removeWorktree requested: \(worktree.name) id=\(worktree.id) repo=\(repository.rootURL.path(percentEncoded: false)) force=\(force)"
+    )
     if deletingWorktreeIDs.contains(worktree.id) {
+      print("[RepositoryStore] removeWorktree skipped: already deleting \(worktree.id)")
       return
     }
     deletingWorktreeIDs.insert(worktree.id)
+    print("[RepositoryStore] removeWorktree deletingWorktreeIDs: \(deletingWorktreeIDs)")
     defer { deletingWorktreeIDs.remove(worktree.id) }
     let selectionWasRemoved = selectedWorktreeID == worktree.id
     let nextSelection = selectionWasRemoved ? nextWorktreeID(afterRemoving: worktree) : nil
     do {
-      _ = try await gitClient.removeWorktree(
+      let removedURL = try await gitClient.removeWorktree(
         named: worktree.name, in: repository.rootURL, force: force)
+      print("[RepositoryStore] removeWorktree removed URL: \(removedURL.path(percentEncoded: false))")
       let roots = repositories.map(\.rootURL)
+      print("[RepositoryStore] removeWorktree reloading repositories: \(roots.count)")
       let loaded = await reloadRepositories(for: roots, animated: true)
       if selectionWasRemoved, loaded != nil {
+        print(
+          "[RepositoryStore] removeWorktree selectionWasRemoved, nextSelection=\(String(describing: nextSelection))"
+        )
         selectedWorktreeID = nextSelection ?? firstAvailableWorktreeID(from: repositories)
       }
     } catch {
-      removeWorktreeError = RemoveWorktreeError(
+      print("[RepositoryStore] removeWorktree error: \(error.localizedDescription)")
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to remove worktree",
         message: error.localizedDescription
       )
+      print("[RepositoryStore] alert: Unable to remove worktree\n\(error.localizedDescription)")
     }
   }
 
   func removeRepository(_ repository: Repository) async {
-    removeRepositoryError = nil
+    alert = nil
     if removingRepositoryIDs.contains(repository.id) {
       return
     }
@@ -414,7 +427,7 @@ final class RepositoryStore {
     }
     if !failures.isEmpty {
       let message = failures.joined(separator: "\n")
-      removeRepositoryError = RemoveRepositoryError(
+      alert = AppAlert(
         id: UUID(),
         title: "Unable to remove repository",
         message: message
@@ -488,7 +501,7 @@ final class RepositoryStore {
   private func reloadRepositories(for roots: [URL], animated: Bool = false) async -> [Repository]? {
     reloadToken += 1
     let token = reloadToken
-    loadError = nil
+    alert = nil
     let loaded = await loadRepositories(for: roots, token: token)
     guard token == reloadToken else { return nil }
     applyRepositories(loaded, animated: animated)
@@ -575,7 +588,7 @@ final class RepositoryStore {
       } catch {
         print("[RepositoryStore] ERROR loading \(root.path(percentEncoded: false)): \(error)")
         if token == reloadToken {
-          loadError = LoadRepositoryError(
+          alert = AppAlert(
             id: UUID(),
             title: "Failed to load repository",
             message: error.localizedDescription

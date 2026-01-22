@@ -12,6 +12,7 @@ Commands:
   switch <branch> create or open a workspace
   sw <branch>     alias for switch
   exec <branch>   open a workspace and run a command
+  sync [from to]  copy files between worktrees
   ls              list workspaces
   rm <branch>     remove a workspace
   here            print current workspace branch
@@ -31,7 +32,7 @@ Flags:
   --base <dir>      base dir override
   --path <dir>      explicit worktree path
   --fetch           fetch remotes before resolving --from
-  --copy-all        copy ignored, untracked, and modified files to new worktree
+  --copy-all        copy all files to new worktree
   --copy-ignored    copy gitignored files to new worktree
   --copy-untracked  copy untracked files to new worktree
   --copy-modified   copy modified files to new worktree
@@ -49,6 +50,22 @@ Flags:
   --path <dir>    explicit worktree path
   --fetch         fetch remotes before resolving --from
   -h, --help      show help
+USAGE
+}
+
+sync_usage() {
+  cat <<'USAGE'
+wt sync [<from-branch> <to-branch>]
+
+Defaults to main worktree -> current worktree.
+
+Flags:
+  --copy-all        copy all files
+  --copy-ignored    copy gitignored files
+  --copy-untracked  copy untracked files
+  --copy-modified   copy modified files
+  -f, --force       overwrite conflicting destination files
+  -h, --help        show help
 USAGE
 }
 
@@ -110,7 +127,11 @@ die() {
 }
 
 require_repo() {
-  git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+  local err
+  if ! err=$(git rev-parse --git-dir 2>&1); then
+    printf '%s\n' "$err" >&2
+    die "not a git repository"
+  fi
 }
 
 main_worktree_path() {
@@ -237,25 +258,30 @@ json_escape() {
 
 list_ignored_files() {
   local root="$1"
-  git -C "$root" ls-files --others --ignored --exclude-standard 2>/dev/null | sed '/^\.git\//d'
+  git -C "$root" ls-files --others --ignored --exclude-standard | sed '/^\.git\//d'
 }
 
 list_untracked_files() {
   local root="$1"
-  git -C "$root" ls-files --others --exclude-standard 2>/dev/null | sed '/^\.git\//d'
+  git -C "$root" ls-files --others --exclude-standard | sed '/^\.git\//d'
 }
 
 list_modified_files() {
   local root="$1"
-  git -C "$root" ls-files --modified 2>/dev/null | sed '/^\.git\//d'
+  git -C "$root" ls-files --modified | sed '/^\.git\//d'
 }
 
-copy_files_to_worktree() {
+list_tracked_files() {
+  local root="$1"
+  git -C "$root" ls-files | sed '/^\.git\//d'
+}
+
+collect_copy_files() {
   local src="$1"
-  local dst="$2"
-  local copyignored="$3"
-  local copyuntracked="$4"
-  local copymodified="$5"
+  local copyignored="$2"
+  local copyuntracked="$3"
+  local copymodified="$4"
+  local copytracked="$5"
   local files=""
   if [ "$copyignored" -eq 1 ]; then
     files+=$(list_ignored_files "$src")$'\n'
@@ -266,14 +292,74 @@ copy_files_to_worktree() {
   if [ "$copymodified" -eq 1 ]; then
     files+=$(list_modified_files "$src")$'\n'
   fi
-  local seen=""
+  if [ "$copytracked" -eq 1 ]; then
+    files+=$(list_tracked_files "$src")$'\n'
+  fi
+  local seen="" out=""
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$seen" in *"$file"*) continue ;; esac
     seen+="$file"$'\n'
+    out+="$file"$'\n'
+  done <<< "$files"
+  printf '%s' "$out"
+}
+
+copy_files_to_worktree() {
+  local src="$1"
+  local dst="$2"
+  local copyignored="$3"
+  local copyuntracked="$4"
+  local copymodified="$5"
+  local copytracked="$6"
+  local files=""
+  files=$(collect_copy_files "$src" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked")
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
     local srcfile="$src/$file"
     local dstfile="$dst/$file"
     [ -f "$srcfile" ] || continue
+    mkdir -p "$(dirname "$dstfile")"
+    cp "$srcfile" "$dstfile" 2>/dev/null || true
+  done <<< "$files"
+}
+
+copy_files_between() {
+  local src="$1"
+  local dst="$2"
+  local copyignored="$3"
+  local copyuntracked="$4"
+  local copymodified="$5"
+  local copytracked="$6"
+  local force="$7"
+  local files=""
+  files=$(collect_copy_files "$src" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked")
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    local srcfile="$src/$file"
+    local dstfile="$dst/$file"
+    [ -f "$srcfile" ] || continue
+    if [ -e "$dstfile" ]; then
+      if [ -d "$dstfile" ]; then
+        die "destination path is a directory: '$file'"
+      fi
+      if cmp -s "$srcfile" "$dstfile"; then
+        continue
+      fi
+      if git -C "$dst" ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+        if git -C "$dst" diff --quiet -- "$file" >/dev/null 2>&1 && git -C "$dst" diff --quiet --cached -- "$file" >/dev/null 2>&1; then
+          :
+        else
+          if [ "$force" -eq 0 ]; then
+            die "destination file has local changes: '$file'"
+          fi
+        fi
+      else
+        if [ "$force" -eq 0 ]; then
+          die "destination file differs: '$file'"
+        fi
+      fi
+    fi
     mkdir -p "$(dirname "$dstfile")"
     cp "$srcfile" "$dstfile" 2>/dev/null || true
   done <<< "$files"
@@ -288,6 +374,7 @@ open_path() {
   local copyignored="${6:-0}"
   local copyuntracked="${7:-0}"
   local copymodified="${8:-0}"
+  local copytracked="${9:-0}"
   require_repo
   local root base path
   root=$(main_worktree_path)
@@ -310,27 +397,29 @@ open_path() {
       die "worktree path already in use: '$path'"
     fi
     mkdir -p "$(dirname "$path")"
-    git -C "$root" worktree add "$path" "$branch" >/dev/null 2>&1
-    copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified"
+    git -C "$root" worktree add "$path" "$branch"
+    copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked"
     printf '%s\n' "$path"
     return 0
   fi
   if [ "$fetch" -eq 1 ]; then
-    git -C "$root" fetch >/dev/null 2>&1
+    git -C "$root" fetch
   fi
   if [ -z "$from" ]; then
     from=$(git -C "$root" rev-parse HEAD)
   fi
-  git -C "$root" rev-parse --verify "${from}^{commit}" >/dev/null 2>&1 || die "invalid --from ref '$from'"
+  if ! git -C "$root" rev-parse --verify "${from}^{commit}" >/dev/null; then
+    die "invalid --from ref '$from'"
+  fi
   mkdir -p "$(dirname "$path")"
-  git -C "$root" worktree add -b "$branch" "$path" "$from" >/dev/null 2>&1
-  copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified"
+  git -C "$root" worktree add -b "$branch" "$path" "$from"
+  copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked"
   printf '%s\n' "$path"
 }
 
 cmd_switch() {
   local from="" base_override="" path_override="" fetch=0 branch=""
-  local copyignored=0 copyuntracked=0 copymodified=0
+  local copyignored=0 copyuntracked=0 copymodified=0 copytracked=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
     -h | --help)
@@ -356,7 +445,7 @@ cmd_switch() {
       ;;
     --path=*) path_override="${1#--path=}" ;;
     --fetch) fetch=1 ;;
-    --copy-all) copyignored=1; copyuntracked=1; copymodified=1 ;;
+    --copy-all) copyignored=1; copyuntracked=1; copymodified=1; copytracked=1 ;;
     --copy-ignored) copyignored=1 ;;
     --copy-untracked) copyuntracked=1 ;;
     --copy-modified) copymodified=1 ;;
@@ -366,7 +455,7 @@ cmd_switch() {
     shift
   done
   [ -n "$branch" ] || die "missing branch"
-  open_path "$branch" "$from" "$base_override" "$path_override" "$fetch" "$copyignored" "$copyuntracked" "$copymodified"
+  open_path "$branch" "$from" "$base_override" "$path_override" "$fetch" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked"
 }
 
 cmd_exec() {
@@ -414,6 +503,76 @@ cmd_exec() {
   path=$(open_path "$branch" "$from" "$base_override" "$path_override" "$fetch")
   cd "$path"
   exec "$@"
+}
+
+cmd_sync() {
+  local copyignored=0 copyuntracked=0 copymodified=0 copytracked=0 force=0
+  local from_branch="" to_branch=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+    -h | --help)
+      sync_usage
+      exit 0
+      ;;
+    --copy-all) copyignored=1; copyuntracked=1; copymodified=1; copytracked=1 ;;
+    --copy-ignored) copyignored=1 ;;
+    --copy-untracked) copyuntracked=1 ;;
+    --copy-modified) copymodified=1 ;;
+    -f | --force) force=1 ;;
+    --)
+      shift
+      break
+      ;;
+    --*) die "unknown flag '$1'" ;;
+    *)
+      if [ -z "$from_branch" ]; then
+        from_branch="$1"
+      elif [ -z "$to_branch" ]; then
+        to_branch="$1"
+      else
+        die "unexpected argument '$1'"
+      fi
+      ;;
+    esac
+    shift
+  done
+  for arg in "$@"; do
+    if [ -z "$from_branch" ]; then
+      from_branch="$arg"
+    elif [ -z "$to_branch" ]; then
+      to_branch="$arg"
+    else
+      die "unexpected argument '$arg'"
+    fi
+  done
+  if [ -n "$from_branch" ] && [ -z "$to_branch" ]; then
+    die "missing destination branch"
+  fi
+  if [ -z "$from_branch" ] && [ -n "$to_branch" ]; then
+    die "missing source branch"
+  fi
+  if [ "$copyignored" -eq 0 ] && [ "$copyuntracked" -eq 0 ] && [ "$copymodified" -eq 0 ] && [ "$copytracked" -eq 0 ]; then
+    die "missing copy flag"
+  fi
+  require_repo
+  local root src dst
+  root=$(main_worktree_path)
+  if [ -z "$from_branch" ]; then
+    src="$root"
+    dst=$(git rev-parse --show-toplevel)
+    find_worktree_by_path "$root" "$dst" >/dev/null || die "current directory is not a worktree"
+  else
+    if ! src=$(find_worktree_by_branch "$root" "$from_branch"); then
+      die "workspace not found: '$from_branch'"
+    fi
+    if ! dst=$(find_worktree_by_branch "$root" "$to_branch"); then
+      die "workspace not found: '$to_branch'"
+    fi
+  fi
+  if [ "$src" = "$dst" ]; then
+    die "source and destination are the same"
+  fi
+  copy_files_between "$src" "$dst" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked" "$force"
 }
 
 cmd_ls() {
@@ -538,14 +697,14 @@ cmd_rm() {
     fi
   fi
   if [ "$force" -eq 1 ]; then
-    git -C "$root" worktree remove --force "$path" >/dev/null 2>&1
+    git -C "$root" worktree remove --force "$path"
   else
-    git -C "$root" worktree remove "$path" >/dev/null 2>&1
+    git -C "$root" worktree remove "$path"
   fi
   if [ "$force" -eq 1 ]; then
-    git -C "$root" branch -D "$branch" >/dev/null 2>&1
+    git -C "$root" branch -D "$branch"
   else
-    git -C "$root" branch -d "$branch" >/dev/null 2>&1
+    git -C "$root" branch -d "$branch"
   fi
   printf '%s\n' "$path"
 }
@@ -591,7 +750,7 @@ cmd_root() {
 
 completion_bash() {
   local commands
-  commands="switch sw exec ls rm here base root help completion"
+  commands="switch sw exec sync ls rm here base root help completion"
   cat <<EOF
 command -v wt >/dev/null 2>&1 || return 0
 
@@ -669,6 +828,10 @@ _wt_complete() {
         COMPREPLY=( \$(compgen -W "\$flags" -- "\$cur") )
       fi
       ;;
+    sync)
+      flags="--copy-all --copy-ignored --copy-untracked --copy-modified -f --force -h --help"
+      COMPREPLY=( \$(compgen -W "\$flags \$(__wt_branches)" -- "\$cur") )
+      ;;
     rm)
       flags="--base -f --force -h --help"
       case "\$prev" in
@@ -688,7 +851,7 @@ _wt_complete() {
       COMPREPLY=( \$(compgen -W "\$flags" -- "\$cur") )
       ;;
     help)
-      flags="switch sw exec ls rm here base root help completion"
+      flags="switch sw exec sync ls rm here base root help completion"
       COMPREPLY=( \$(compgen -W "\$flags" -- "\$cur") )
       ;;
     completion)
@@ -744,12 +907,13 @@ __wt_branches() {
 }
 
 _wt() {
-  local -a subcmds subdescs switch_flags switch_descs exec_flags exec_descs ls_flags ls_descs rm_flags rm_descs hb_flags hb_descs
-  subcmds=(switch sw exec ls rm here base root help completion)
+  local -a subcmds subdescs switch_flags switch_descs exec_flags exec_descs sync_flags sync_descs ls_flags ls_descs rm_flags rm_descs hb_flags hb_descs
+  subcmds=(switch sw exec sync ls rm here base root help completion)
   subdescs=(
     "create or open a workspace"
     "alias for switch"
     "open a workspace and run a command"
+    "copy files between worktrees"
     "list workspaces"
     "remove a workspace"
     "print current workspace branch"
@@ -759,9 +923,11 @@ _wt() {
     "print shell completion"
   )
   switch_flags=(--from --base --path --fetch --copy-all --copy-ignored --copy-untracked --copy-modified -h --help)
-  switch_descs=("base ref for new branch" "base dir override" "explicit worktree path" "fetch remotes before resolving --from" "copy ignored, untracked, and modified files to new worktree" "copy gitignored files to new worktree" "copy untracked files to new worktree" "copy modified files to new worktree" "show help" "show help")
+  switch_descs=("base ref for new branch" "base dir override" "explicit worktree path" "fetch remotes before resolving --from" "copy all files to new worktree" "copy gitignored files to new worktree" "copy untracked files to new worktree" "copy modified files to new worktree" "show help" "show help")
   exec_flags=(--from --base --path --fetch -h --help --)
   exec_descs=("base ref for new branch" "base dir override" "explicit worktree path" "fetch remotes before resolving --from" "show help" "show help" "end of flags")
+  sync_flags=(--copy-all --copy-ignored --copy-untracked --copy-modified -f --force -h --help)
+  sync_descs=("copy all files" "copy gitignored files" "copy untracked files" "copy modified files" "overwrite conflicting destination files" "overwrite conflicting destination files" "show help" "show help")
   ls_flags=(--base --plain --json -h --help)
   ls_descs=("base dir override" "tab-delimited output" "JSON output" "show help" "show help")
   rm_flags=(--base -f --force -h --help)
@@ -791,6 +957,11 @@ _wt() {
       else
         compadd -d exec_descs -- \$exec_flags
       fi
+      return 0
+      ;;
+    sync)
+      compadd -d sync_descs -- \$sync_flags
+      compadd -- \${(f)"\$(__wt_branches)"}
       return 0
       ;;
     rm)
@@ -834,7 +1005,7 @@ type -q wt; or return
 
 function wt
   if test "$argv[1]" = "switch" -o "$argv[1]" = "sw"
-    if contains -- -h --help $argv
+    if contains -- -h $argv; or contains -- --help $argv
       command wt $argv
       return $status
     end
@@ -845,7 +1016,7 @@ function wt
     end | string collect | string trim --right)
     set -l rc $__wt_rc
     set -e __wt_rc
-    set -l out_lines (string split -- "\n" -- $out)
+    set -l out_lines (string split -- "\n" $out)
     set -l path $out_lines[-1]
     if test $rc -eq 0 -a -n "$path" -a -d "$path"
       if test (count $out_lines) -gt 1
@@ -871,6 +1042,7 @@ complete -c wt -f
 complete -c wt -n '__fish_use_subcommand' -a switch -d 'create or open a workspace'
 complete -c wt -n '__fish_use_subcommand' -a sw -d 'alias for switch'
 complete -c wt -n '__fish_use_subcommand' -a exec -d 'open a workspace and run a command'
+complete -c wt -n '__fish_use_subcommand' -a sync -d 'copy files between worktrees'
 complete -c wt -n '__fish_use_subcommand' -a ls -d 'list workspaces'
 complete -c wt -n '__fish_use_subcommand' -a rm -d 'remove a workspace'
 complete -c wt -n '__fish_use_subcommand' -a here -d 'print current workspace branch'
@@ -878,17 +1050,23 @@ complete -c wt -n '__fish_use_subcommand' -a base -d 'print base dir'
 complete -c wt -n '__fish_use_subcommand' -a root -d 'print main worktree path'
 complete -c wt -n '__fish_use_subcommand' -a help -d 'show help'
 complete -c wt -n '__fish_use_subcommand' -a completion -d 'print shell completion'
-complete -c wt -n '__fish_seen_subcommand_from switch sw exec rm' -a '(__wt_branches)'
+complete -c wt -n '__fish_seen_subcommand_from switch sw exec sync rm' -a '(__wt_branches)'
 
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l from -r -d 'base ref for new branch'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l base -r -d 'base dir override'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l path -r -d 'explicit worktree path'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l fetch -d 'fetch remotes before resolving --from'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -s h -l help -d 'show help'
-complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-all -d 'copy ignored, untracked, and modified files to new worktree'
+complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-all -d 'copy all files to new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-ignored -d 'copy gitignored files to new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-untracked -d 'copy untracked files to new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-modified -d 'copy modified files to new worktree'
+complete -c wt -n '__fish_seen_subcommand_from sync' -l copy-all -d 'copy all files'
+complete -c wt -n '__fish_seen_subcommand_from sync' -l copy-ignored -d 'copy gitignored files'
+complete -c wt -n '__fish_seen_subcommand_from sync' -l copy-untracked -d 'copy untracked files'
+complete -c wt -n '__fish_seen_subcommand_from sync' -l copy-modified -d 'copy modified files'
+complete -c wt -n '__fish_seen_subcommand_from sync' -s f -l force -d 'overwrite conflicting destination files'
+complete -c wt -n '__fish_seen_subcommand_from sync' -s h -l help -d 'show help'
 
 complete -c wt -n '__fish_seen_subcommand_from ls' -l base -r -d 'base dir override'
 complete -c wt -n '__fish_seen_subcommand_from ls' -l plain -d 'tab-delimited output'
@@ -902,6 +1080,7 @@ complete -c wt -n '__fish_seen_subcommand_from rm' -s h -l help -d 'show help'
 complete -c wt -n '__fish_seen_subcommand_from help' -a switch -d 'create or open a workspace'
 complete -c wt -n '__fish_seen_subcommand_from help' -a sw -d 'alias for switch'
 complete -c wt -n '__fish_seen_subcommand_from help' -a exec -d 'open a workspace and run a command'
+complete -c wt -n '__fish_seen_subcommand_from help' -a sync -d 'copy files between worktrees'
 complete -c wt -n '__fish_seen_subcommand_from help' -a ls -d 'list workspaces'
 complete -c wt -n '__fish_seen_subcommand_from help' -a rm -d 'remove a workspace'
 complete -c wt -n '__fish_seen_subcommand_from help' -a here -d 'print current workspace branch'
@@ -934,6 +1113,7 @@ cmd_help() {
   case "$1" in
   switch | sw) switch_usage ;;
   exec) exec_usage ;;
+  sync) sync_usage ;;
   ls) ls_usage ;;
   rm) rm_usage ;;
   here) here_usage ;;
@@ -969,6 +1149,10 @@ sw)
 exec)
   shift
   cmd_exec "$@"
+  ;;
+sync)
+  shift
+  cmd_sync "$@"
   ;;
 ls)
   shift
