@@ -415,6 +415,11 @@
 					"$(inherited)",
 					"-lc++",
 				);
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xcc",
+					"-Wno-incomplete-umbrella",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.supabit.supacode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -463,6 +468,11 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lc++",
+				);
+				OTHER_SWIFT_FLAGS = (
+					"$(inherited)",
+					"-Xcc",
+					"-Wno-incomplete-umbrella",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.supabit.supacode;
 				PRODUCT_NAME = "$(TARGET_NAME)";

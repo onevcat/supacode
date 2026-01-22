@@ -5,8 +5,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class RepositoryStore {
-  private let userDefaults: UserDefaults
-  private let gitClient: GitClient
+  private let userDefaults: UserDefaults = .standard
+  private let gitClient: GitClient = .init()
   private let rootsKey = "repositories.roots"
   private let pinnedWorktreesKey = "repositories.worktrees.pinned"
 
@@ -33,15 +33,10 @@ final class RepositoryStore {
     return false
   }
 
-  init(userDefaults: UserDefaults = .standard, gitClient: GitClient = .init()) {
-    print("[RepositoryStore] init")
-    self.userDefaults = userDefaults
-    self.gitClient = gitClient
+  fileprivate func start() async {
     pinnedWorktreeIDs = loadPinnedWorktreeIDs()
     print("[RepositoryStore] pinnedWorktreeIDs: \(pinnedWorktreeIDs)")
-    Task {
-      await loadPersistedRepositories()
-    }
+    await loadPersistedRepositories()
   }
 
   func loadPersistedRepositories() async {
@@ -606,4 +601,13 @@ final class RepositoryStore {
     }
     return initials.uppercased()
   }
+}
+
+@MainActor
+func makeRepositoryStore() -> RepositoryStore {
+  let store = RepositoryStore()
+  Task {
+    await store.start()
+  }
+  return store
 }
