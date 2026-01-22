@@ -16,19 +16,21 @@ final class RepositoryStore {
   var openError: OpenRepositoryError?
   var createWorktreeError: CreateWorktreeError?
   var removeWorktreeError: RemoveWorktreeError?
+  var removeRepositoryError: RemoveRepositoryError?
   var loadError: LoadRepositoryError?
   var pendingWorktrees: [PendingWorktree] = []
   var deletingWorktreeIDs: Set<Worktree.ID> = []
+  var removingRepositoryIDs: Set<Repository.ID> = []
   private(set) var pinnedWorktreeIDs: [Worktree.ID] = []
 
   var canCreateWorktree: Bool {
     if repositories.isEmpty {
       return false
     }
-    if selectedWorktreeID != nil {
-      return true
+    if let repository = repositoryForWorktreeCreation() {
+      return !isRemovingRepository(repository)
     }
-    return repositories.count == 1
+    return false
   }
 
   init(userDefaults: UserDefaults = .standard, gitClient: GitClient = .init()) {
@@ -110,12 +112,28 @@ final class RepositoryStore {
       )
       return
     }
+    if isRemovingRepository(repository) {
+      createWorktreeError = CreateWorktreeError(
+        id: UUID(),
+        title: "Unable to create worktree",
+        message: "This repository is being removed."
+      )
+      return
+    }
 
     await createRandomWorktree(in: repository)
   }
 
   func createRandomWorktree(in repository: Repository) async {
     createWorktreeError = nil
+    if isRemovingRepository(repository) {
+      createWorktreeError = CreateWorktreeError(
+        id: UUID(),
+        title: "Unable to create worktree",
+        message: "This repository is being removed."
+      )
+      return
+    }
     let previousSelection = selectedWorktreeID
     let pendingID = "pending:\(UUID().uuidString)"
     let pendingWorktree = PendingWorktree(
@@ -188,12 +206,13 @@ final class RepositoryStore {
   func worktreeRows(in repository: Repository) -> [WorktreeRowModel] {
     let ordered = orderedWorktrees(in: repository)
     let pinnedIDs = Set(pinnedWorktreeIDs)
+    let isRemovingRepository = removingRepositoryIDs.contains(repository.id)
     let pinnedWorktrees = ordered.filter { pinnedIDs.contains($0.id) }
     let unpinnedWorktrees = ordered.filter { !pinnedIDs.contains($0.id) }
     let pendingEntries = pendingWorktrees.filter { $0.repositoryID == repository.id }
     var rows: [WorktreeRowModel] = []
     for worktree in pinnedWorktrees {
-      let isDeleting = deletingWorktreeIDs.contains(worktree.id)
+      let isDeleting = isRemovingRepository || deletingWorktreeIDs.contains(worktree.id)
       rows.append(
         WorktreeRowModel(
           id: worktree.id,
@@ -216,13 +235,13 @@ final class RepositoryStore {
           detail: pending.detail,
           isPinned: false,
           isPending: true,
-          isDeleting: false,
+          isDeleting: isRemovingRepository,
           isRemovable: false
         )
       )
     }
     for worktree in unpinnedWorktrees {
-      let isDeleting = deletingWorktreeIDs.contains(worktree.id)
+      let isDeleting = isRemovingRepository || deletingWorktreeIDs.contains(worktree.id)
       rows.append(
         WorktreeRowModel(
           id: worktree.id,
@@ -242,6 +261,7 @@ final class RepositoryStore {
   func selectedRow(for id: Worktree.ID?) -> WorktreeRowModel? {
     guard let id else { return nil }
     if let pending = pendingWorktree(for: id) {
+      let isDeleting = removingRepositoryIDs.contains(pending.repositoryID)
       return WorktreeRowModel(
         id: pending.id,
         repositoryID: pending.repositoryID,
@@ -249,13 +269,15 @@ final class RepositoryStore {
         detail: pending.detail,
         isPinned: false,
         isPending: true,
-        isDeleting: false,
+        isDeleting: isDeleting,
         isRemovable: false
       )
     }
     for repository in repositories {
       if let worktree = repository.worktrees.first(where: { $0.id == id }) {
-        let isDeleting = deletingWorktreeIDs.contains(worktree.id)
+        let isDeleting =
+          removingRepositoryIDs.contains(repository.id)
+          || deletingWorktreeIDs.contains(worktree.id)
         return WorktreeRowModel(
           id: worktree.id,
           repositoryID: repository.id,
@@ -296,6 +318,10 @@ final class RepositoryStore {
 
   func isWorktreePinned(_ worktree: Worktree) -> Bool {
     pinnedWorktreeIDs.contains(worktree.id)
+  }
+
+  func isRemovingRepository(_ repository: Repository) -> Bool {
+    removingRepositoryIDs.contains(repository.id)
   }
 
   func pinWorktree(_ worktree: Worktree) {
@@ -345,6 +371,51 @@ final class RepositoryStore {
         id: UUID(),
         title: "Unable to remove worktree",
         message: error.localizedDescription
+      )
+    }
+  }
+
+  func removeRepository(_ repository: Repository) async {
+    removeRepositoryError = nil
+    if removingRepositoryIDs.contains(repository.id) {
+      return
+    }
+    removingRepositoryIDs.insert(repository.id)
+    defer { removingRepositoryIDs.remove(repository.id) }
+    let selectionWasRemoved =
+      selectedWorktreeID.map { id in
+        repository.worktrees.contains(where: { $0.id == id })
+      } ?? false
+    var failures: [String] = []
+    for worktree in repository.worktrees {
+      do {
+        _ = try await gitClient.removeWorktree(
+          named: worktree.name,
+          in: repository.rootURL,
+          force: true
+        )
+      } catch {
+        failures.append(error.localizedDescription)
+      }
+    }
+    if failures.isEmpty {
+      let rootPaths = uniqueRootPaths(loadRootPaths())
+      let normalized = repository.rootURL.standardizedFileURL.path(percentEncoded: false)
+      let remaining = rootPaths.filter { $0 != normalized }
+      persistRootPaths(remaining)
+    }
+    let roots = uniqueRootPaths(loadRootPaths()).map { URL(fileURLWithPath: $0) }
+    let loaded = await loadRepositories(for: roots)
+    applyRepositories(loaded, animated: true)
+    if selectionWasRemoved {
+      selectedWorktreeID = firstAvailableWorktreeID(from: repositories)
+    }
+    if !failures.isEmpty {
+      let message = failures.joined(separator: "\n")
+      removeRepositoryError = RemoveRepositoryError(
+        id: UUID(),
+        title: "Unable to remove repository",
+        message: message
       )
     }
   }

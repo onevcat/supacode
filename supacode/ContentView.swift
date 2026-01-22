@@ -112,6 +112,13 @@ struct ContentView: View {
         dismissButton: .default(Text("OK"))
       )
     }
+    .alert(item: $repositoryStore.removeRepositoryError) { error in
+      Alert(
+        title: Text(error.title),
+        message: Text(error.message),
+        dismissButton: .default(Text("OK"))
+      )
+    }
     .alert(item: $repositoryStore.loadError) { error in
       Alert(
         title: Text(error.title),
@@ -150,6 +157,7 @@ private struct WorktreeDetailView: View {
     }
     .navigationTitle(selectedWorktree?.name ?? loadingInfo?.name ?? "Supacode")
     .toolbar {
+      let isOpenDisabled = selectedWorktree == nil || loadingInfo != nil
       ToolbarItemGroup(placement: .primaryAction) {
         Menu {
           ForEach(OpenWorktreeAction.allCases) { action in
@@ -169,13 +177,13 @@ private struct WorktreeDetailView: View {
             }
             .modifier(OpenActionShortcutModifier(shortcut: action.shortcut))
             .help(action.helpText)
-            .disabled(selectedWorktree == nil)
+            .disabled(isOpenDisabled)
           }
         } label: {
           Label("Open", systemImage: "folder")
         }
         .help("Open Finder (\(AppShortcuts.openFinder.display))")
-        .disabled(selectedWorktree == nil)
+        .disabled(isOpenDisabled)
       }
     }
     .alert(item: $openActionError) { error in
@@ -216,6 +224,7 @@ private struct SidebarView: View {
   @Environment(RepositoryStore.self) private var repositoryStore
   @State private var expandedRepoIDs: Set<Repository.ID>
   @State private var pendingRemoval: PendingWorktreeRemoval?
+  @State private var pendingRepositoryRemoval: PendingRepositoryRemoval?
 
   init(
     repositories: [Repository],
@@ -244,7 +253,8 @@ private struct SidebarView: View {
       selection: $selection,
       expandedRepoIDs: $expandedRepoIDs,
       createWorktree: createWorktree,
-      onRequestRemoval: requestRemoval
+      onRequestRemoval: requestRemoval,
+      onRequestRepositoryRemoval: requestRepositoryRemoval
     )
     .focusedSceneValue(\.removeWorktreeAction, removeWorktreeAction)
     .alert(item: $pendingRemoval) { candidate in
@@ -258,6 +268,22 @@ private struct SidebarView: View {
           Task {
             await repositoryStore.removeWorktree(
               candidate.worktree, from: candidate.repository, force: true)
+          }
+        },
+        secondaryButton: .cancel()
+      )
+    }
+    .alert(item: $pendingRepositoryRemoval) { candidate in
+      Alert(
+        title: Text("Remove repository?"),
+        message: Text(
+          "This removes the repository from Supacode and deletes all of its worktrees "
+            + "and their branches created by Supacode. "
+            + "The main repository folder is not deleted."
+        ),
+        primaryButton: .destructive(Text("Remove repository")) {
+          Task {
+            await repositoryStore.removeRepository(candidate.repository)
           }
         },
         secondaryButton: .cancel()
@@ -285,6 +311,13 @@ private struct SidebarView: View {
       }
     }
   }
+
+  private func requestRepositoryRemoval(_ repository: Repository) {
+    if repositoryStore.isRemovingRepository(repository) {
+      return
+    }
+    pendingRepositoryRemoval = PendingRepositoryRemoval(repository: repository)
+  }
 }
 
 private struct SidebarListView: View {
@@ -294,6 +327,7 @@ private struct SidebarListView: View {
   @Binding var expandedRepoIDs: Set<Repository.ID>
   let createWorktree: (Repository) -> Void
   let onRequestRemoval: (Worktree, Repository) -> Void
+  let onRequestRepositoryRemoval: (Repository) -> Void
 
   var body: some View {
     List(selection: $selection) {
@@ -302,7 +336,8 @@ private struct SidebarListView: View {
           repository: repository,
           expandedRepoIDs: $expandedRepoIDs,
           createWorktree: createWorktree,
-          onRequestRemoval: onRequestRemoval
+          onRequestRemoval: onRequestRemoval,
+          onRequestRepositoryRemoval: onRequestRepositoryRemoval
         )
       }
     }
@@ -325,9 +360,12 @@ private struct RepositorySectionView: View {
   @Binding var expandedRepoIDs: Set<Repository.ID>
   let createWorktree: (Repository) -> Void
   let onRequestRemoval: (Worktree, Repository) -> Void
+  let onRequestRepositoryRemoval: (Repository) -> Void
+  @Environment(RepositoryStore.self) private var repositoryStore
 
   var body: some View {
     let isExpanded = expandedRepoIDs.contains(repository.id)
+    let isRemovingRepository = repositoryStore.isRemovingRepository(repository)
     Section {
       WorktreeRowsView(
         repository: repository,
@@ -349,11 +387,24 @@ private struct RepositorySectionView: View {
             profileURL: repository.githubOwner.flatMap {
               Github.profilePictureURL(username: $0, size: 48)
             },
-            isExpanded: isExpanded
+            isExpanded: isExpanded,
+            isRemoving: isRemovingRepository
           )
         }
         .buttonStyle(.plain)
+        .disabled(isRemovingRepository)
+        .contextMenu {
+          Button("Remove Repository") {
+            onRequestRepositoryRemoval(repository)
+          }
+          .help("Remove repository (no shortcut)")
+          .disabled(isRemovingRepository)
+        }
         Spacer()
+        if isRemovingRepository {
+          ProgressView()
+            .controlSize(.small)
+        }
         Button("New Worktree", systemImage: "plus") {
           createWorktree(repository)
         }
@@ -362,6 +413,7 @@ private struct RepositorySectionView: View {
         .foregroundStyle(.primary)
         .padding(.trailing, 6)
         .help("New Worktree (\(AppShortcuts.newWorktree.display))")
+        .disabled(isRemovingRepository)
       }
       .padding()
     }
@@ -377,16 +429,19 @@ private struct WorktreeRowsView: View {
   var body: some View {
     if isExpanded {
       let rows = repositoryStore.worktreeRows(in: repository)
+      let isRepositoryRemoving = repositoryStore.isRemovingRepository(repository)
       ForEach(rows) { row in
-        rowView(row)
+        rowView(row, isRepositoryRemoving: isRepositoryRemoving)
       }
     }
   }
 
   @ViewBuilder
-  private func rowView(_ row: WorktreeRowModel) -> some View {
+  private func rowView(_ row: WorktreeRowModel, isRepositoryRemoving: Bool) -> some View {
     let displayDetail = row.isDeleting ? "Removing..." : row.detail
-    if row.isRemovable, let worktree = repositoryStore.worktree(for: row.id) {
+    if row.isRemovable, let worktree = repositoryStore.worktree(for: row.id),
+       !isRepositoryRemoving
+    {
       WorktreeRow(
         name: row.name,
         detail: displayDetail,
@@ -419,6 +474,7 @@ private struct WorktreeRowsView: View {
         isLoading: row.isPending || row.isDeleting
       )
       .tag(row.id)
+      .disabled(isRepositoryRemoving)
     }
   }
 }
@@ -435,11 +491,22 @@ private struct PendingWorktreeRemoval: Identifiable, Hashable {
   }
 }
 
+private struct PendingRepositoryRemoval: Identifiable, Hashable {
+  let id: Repository.ID
+  let repository: Repository
+
+  init(repository: Repository) {
+    self.id = repository.id
+    self.repository = repository
+  }
+}
+
 private struct RepoHeaderRow: View {
   let name: String
   let initials: String
   let profileURL: URL?
   let isExpanded: Bool
+  let isRemoving: Bool
 
   var body: some View {
     HStack {
@@ -470,6 +537,11 @@ private struct RepoHeaderRow: View {
       Text(name)
         .font(.headline)
         .foregroundStyle(.primary)
+      if isRemoving {
+        Text("Removing...")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
   }
 }
