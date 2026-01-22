@@ -569,7 +569,7 @@
 		};
 		D61414512F1F9799007DF542 /* XCRemoteSwiftPackageReference "bonsplit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/almonk/bonsplit.git";
+			repositoryURL = "https://github.com/khoi/bonsplit.git";
 			requirement = {
 				branch = main;
 				kind = branch;

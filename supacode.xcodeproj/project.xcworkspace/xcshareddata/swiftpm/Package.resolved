@@ -1,33 +1,33 @@
 {
-  "originHash" : "fc4ff5e9992e43f307760f3776e5b13b859d574f0a4b10d923c16cc5e3b3e469",
-  "pins" : [
+  "originHash": "fc4ff5e9992e43f307760f3776e5b13b859d574f0a4b10d923c16cc5e3b3e469",
+  "pins": [
     {
-      "identity" : "bonsplit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/almonk/bonsplit.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "dba79cd31e26bf8021e0a4f5bba0d0756c191918"
+      "identity": "bonsplit",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/khoi/bonsplit.git",
+      "state": {
+        "branch": "main",
+        "revision": "5ff46b1f9e7d9a78250bad5b52d5794ff3f8c033"
       }
     },
     {
-      "identity" : "kingfisher",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/onevcat/Kingfisher.git",
-      "state" : {
-        "revision" : "d30a5fad881137e2267f96a8e3fc35c58999bb94",
-        "version" : "8.6.2"
+      "identity": "kingfisher",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/onevcat/Kingfisher.git",
+      "state": {
+        "revision": "d30a5fad881137e2267f96a8e3fc35c58999bb94",
+        "version": "8.6.2"
       }
     },
     {
-      "identity" : "sparkle",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sparkle-project/Sparkle",
-      "state" : {
-        "revision" : "5581748cef2bae787496fe6d61139aebe0a451f6",
-        "version" : "2.8.1"
+      "identity": "sparkle",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/sparkle-project/Sparkle",
+      "state": {
+        "revision": "5581748cef2bae787496fe6d61139aebe0a451f6",
+        "version": "2.8.1"
       }
     }
   ],
-  "version" : 3
+  "version": 3
 }
