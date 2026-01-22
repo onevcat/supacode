@@ -248,13 +248,23 @@ struct GitClient {
   ) async throws -> String {
     let shellPath = defaultShellPath()
     let shellURL = URL(fileURLWithPath: shellPath)
+    let execCommand = shellExecCommand(for: shellURL)
     let shellArguments =
-      ["-l", "-c", "exec \"$@\"", "--", executableURL.path(percentEncoded: false)] + arguments
+      ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
     return try await runProcess(
       executableURL: shellURL,
       arguments: shellArguments,
       currentDirectoryURL: currentDirectoryURL
     )
+  }
+
+  nonisolated private func shellExecCommand(for shellURL: URL) -> String {
+    switch shellURL.lastPathComponent {
+    case "fish":
+      return "exec $argv"
+    default:
+      return "exec \"$@\""
+    }
   }
 
   nonisolated private func defaultShellPath() -> String {
