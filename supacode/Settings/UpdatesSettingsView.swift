@@ -9,7 +9,9 @@ struct UpdatesSettingsView: View {
     VStack(alignment: .leading, spacing: 0) {
       Form {
         Section("Automatic Updates") {
-          Toggle("Check for updates automatically", isOn: $updateController.automaticallyChecksForUpdates)
+          Toggle(
+            "Check for updates automatically", isOn: $updateController.automaticallyChecksForUpdates
+          )
           Toggle(
             "Download and install updates automatically",
             isOn: $updateController.automaticallyDownloadsUpdates

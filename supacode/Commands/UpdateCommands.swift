@@ -10,7 +10,8 @@ struct UpdateCommands: Commands {
         updateController.checkForUpdates()
       }
       .keyboardShortcut(
-        AppShortcuts.checkForUpdates.keyEquivalent, modifiers: AppShortcuts.checkForUpdates.modifiers
+        AppShortcuts.checkForUpdates.keyEquivalent,
+        modifiers: AppShortcuts.checkForUpdates.modifiers
       )
       .help("Check for Updates (\(AppShortcuts.checkForUpdates.display))")
     }

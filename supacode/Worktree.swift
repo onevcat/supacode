@@ -5,4 +5,5 @@ struct Worktree: Identifiable, Hashable {
   let name: String
   let detail: String
   let workingDirectory: URL
+  let repositoryRootURL: URL
 }

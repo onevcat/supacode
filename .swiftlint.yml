@@ -4,6 +4,11 @@ included:
 excluded:
   - ThirdParty/ghostty
 
+disabled_rules:
+  - file_length
+  - closure_parameter_position
+  - type_body_length
+
 opt_in_rules:
   - accessibility_label_for_image
   - accessibility_trait_for_button
@@ -21,17 +26,9 @@ cyclomatic_complexity:
   warning: 15
   error: 20
 
-file_length:
-  warning: 600
-  error: 800
-
 function_body_length:
   warning: 100
   error: 150
-
-type_body_length:
-  warning: 500
-  error: 650
 
 redundant_discardable_let:
   ignore_swiftui_view_bodies: true

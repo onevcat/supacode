@@ -498,7 +498,9 @@ final class RepositoryStore {
     let repositoryIDs = Set(loaded.map(\.id))
     pendingWorktrees = pendingWorktrees.filter { repositoryIDs.contains($0.repositoryID) }
     if !isSelectionValid(selectedWorktreeID) {
-      print("[RepositoryStore] selectedWorktreeID \(String(describing: selectedWorktreeID)) is invalid, clearing")
+      print(
+        "[RepositoryStore] selectedWorktreeID \(String(describing: selectedWorktreeID)) is invalid, clearing"
+      )
       selectedWorktreeID = nil
     }
     print("[RepositoryStore] applyRepositories done, repositories.count = \(repositories.count)")

@@ -362,10 +362,14 @@ private struct RepositorySectionView: View {
   let onRequestRemoval: (Worktree, Repository) -> Void
   let onRequestRepositoryRemoval: (Repository) -> Void
   @Environment(RepositoryStore.self) private var repositoryStore
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     let isExpanded = expandedRepoIDs.contains(repository.id)
     let isRemovingRepository = repositoryStore.isRemovingRepository(repository)
+    let openRepoSettings = {
+      openWindow(id: WindowIdentifiers.repoSettings, value: repository.id)
+    }
     Section {
       WorktreeRowsView(
         repository: repository,
@@ -394,6 +398,10 @@ private struct RepositorySectionView: View {
         .buttonStyle(.plain)
         .disabled(isRemovingRepository)
         .contextMenu {
+          Button("Repo Settings") {
+            openRepoSettings()
+          }
+          .help("Repo Settings (no shortcut)")
           Button("Remove Repository") {
             onRequestRepositoryRemoval(repository)
           }
@@ -405,6 +413,19 @@ private struct RepositorySectionView: View {
           ProgressView()
             .controlSize(.small)
         }
+        Menu {
+          Button("Repo Settings") {
+            openRepoSettings()
+          }
+          .help("Repo Settings (no shortcut)")
+        } label: {
+          Label("Repository options", systemImage: "ellipsis")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .help("Repository options (no shortcut)")
+        .disabled(isRemovingRepository)
         Button("New Worktree", systemImage: "plus") {
           createWorktree(repository)
         }
@@ -440,7 +461,7 @@ private struct WorktreeRowsView: View {
   private func rowView(_ row: WorktreeRowModel, isRepositoryRemoving: Bool) -> some View {
     let displayDetail = row.isDeleting ? "Removing..." : row.detail
     if row.isRemovable, let worktree = repositoryStore.worktree(for: row.id),
-       !isRepositoryRemoving
+      !isRepositoryRemoving
     {
       WorktreeRow(
         name: row.name,

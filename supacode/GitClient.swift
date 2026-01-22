@@ -34,6 +34,7 @@ struct GitClient {
 
   nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
     let baseDirectory = wtBaseDirectory(for: repoRoot)
+    let repositoryRootURL = repoRoot.standardizedFileURL
     let output = try await runWtList(repoRoot: repoRoot, baseDirectory: baseDirectory)
     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
@@ -55,7 +56,8 @@ struct GitClient {
           id: id,
           name: entry.branch,
           detail: detail,
-          workingDirectory: worktreeURL
+          workingDirectory: worktreeURL,
+          repositoryRootURL: repositoryRootURL
         ),
         createdAt: createdAt,
         index: index
@@ -91,6 +93,7 @@ struct GitClient {
 
   nonisolated func createWorktree(named name: String, in repoRoot: URL) async throws -> Worktree {
     let baseDirectory = wtBaseDirectory(for: repoRoot)
+    let repositoryRootURL = repoRoot.standardizedFileURL
     let wtURL = try wtScriptURL()
     let output = try await runProcess(
       executableURL: wtURL,
@@ -106,7 +109,13 @@ struct GitClient {
     let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
     let detail = Self.relativePath(from: baseDirectory, to: worktreeURL)
     let id = worktreeURL.path(percentEncoded: false)
-    return Worktree(id: id, name: name, detail: detail, workingDirectory: worktreeURL)
+    return Worktree(
+      id: id,
+      name: name,
+      detail: detail,
+      workingDirectory: worktreeURL,
+      repositoryRootURL: repositoryRootURL
+    )
   }
 
   nonisolated func isWorktreeDirty(at worktreeURL: URL) async throws -> Bool {
@@ -184,11 +193,7 @@ struct GitClient {
   }
 
   nonisolated private func wtBaseDirectory(for repoRoot: URL) -> URL {
-    let repoName = repoRoot.lastPathComponent
-    let fallback = repoRoot.path(percentEncoded: false).replacingOccurrences(of: "/", with: "_")
-    let name = repoName.isEmpty ? fallback : repoName
-    return SupacodePaths.reposDirectory
-      .appending(path: name, directoryHint: .isDirectory)
+    SupacodePaths.repositoryDirectory(for: repoRoot)
   }
 
   nonisolated private func runProcess(

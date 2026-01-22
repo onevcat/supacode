@@ -6,6 +6,7 @@ final class WorktreeTerminalState: BonsplitDelegate {
   let controller: BonsplitController
   private let runtime: GhosttyRuntime
   private let worktree: Worktree
+  private let settingsStore = RepositorySettingsStore()
   private var surfaces: [TabID: GhosttySurfaceView] = [:]
 
   init(runtime: GhosttyRuntime, worktree: Worktree) {
@@ -52,7 +53,7 @@ final class WorktreeTerminalState: BonsplitDelegate {
       return nil
     }
     controller.selectTab(tabId)
-    surfaceView(for: tabId, initialInput: "echo \(title)\n").requestFocus()
+    surfaceView(for: tabId, initialInput: startupInput()).requestFocus()
     return tabId
   }
 
@@ -74,7 +75,7 @@ final class WorktreeTerminalState: BonsplitDelegate {
     if let existing = surfaces[tabId] {
       return existing
     }
-    let resolvedInput = initialInput ?? defaultInitialInput(for: tabId)
+    let resolvedInput = initialInput ?? defaultInitialInput()
     let view = GhosttySurfaceView(
       runtime: runtime,
       workingDirectory: worktree.workingDirectory,
@@ -87,9 +88,20 @@ final class WorktreeTerminalState: BonsplitDelegate {
     return view
   }
 
-  private func defaultInitialInput(for tabId: TabID) -> String? {
-    guard let title = controller.tab(tabId)?.title else { return nil }
-    return "echo \(title)\n"
+  private func defaultInitialInput() -> String? {
+    startupInput()
+  }
+
+  private func startupInput() -> String? {
+    let settings = settingsStore.load(for: worktree.repositoryRootURL)
+    let command = settings.startupCommand
+    if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return nil
+    }
+    if command.hasSuffix("\n") {
+      return command
+    }
+    return "\(command)\n"
   }
 
   func closeAllSurfaces() {

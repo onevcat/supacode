@@ -99,12 +99,16 @@ final class GhosttyRuntime {
     return Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()
   }
 
-  private static func surfaceBridge(fromUserdata userdata: UnsafeMutableRawPointer?) -> GhosttySurfaceBridge? {
+  private static func surfaceBridge(fromUserdata userdata: UnsafeMutableRawPointer?)
+    -> GhosttySurfaceBridge?
+  {
     guard let userdata else { return nil }
     return Unmanaged<GhosttySurfaceBridge>.fromOpaque(userdata).takeUnretainedValue()
   }
 
-  private static func surfaceBridge(fromSurface surface: ghostty_surface_t?) -> GhosttySurfaceBridge? {
+  private static func surfaceBridge(fromSurface surface: ghostty_surface_t?)
+    -> GhosttySurfaceBridge?
+  {
     guard let surface, let userdata = ghostty_surface_userdata(surface) else { return nil }
     return Unmanaged<GhosttySurfaceBridge>.fromOpaque(userdata).takeUnretainedValue()
   }

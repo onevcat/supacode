@@ -12,7 +12,7 @@
   "lineBreakBeforeEachArgument" : false,
   "lineBreakBeforeEachGenericRequirement" : false,
   "lineBreakBetweenDeclarationAttributes" : false,
-  "lineLength" : 100,
+  "lineLength" : 120,
   "maximumBlankLines" : 1,
   "multiElementCollectionTrailingCommas" : true,
   "noAssignmentInExpressions" : {

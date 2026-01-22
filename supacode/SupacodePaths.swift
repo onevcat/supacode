@@ -10,6 +10,13 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "repos", directoryHint: .isDirectory)
   }
 
+  static func repositoryDirectory(for rootURL: URL) -> URL {
+    let repoName = rootURL.lastPathComponent
+    let fallback = rootURL.path(percentEncoded: false).replacing("/", with: "_")
+    let name = repoName.isEmpty ? fallback : repoName
+    return reposDirectory.appending(path: name, directoryHint: .isDirectory)
+  }
+
   static var settingsURL: URL {
     baseDirectory.appending(path: "settings.json", directoryHint: .notDirectory)
   }
