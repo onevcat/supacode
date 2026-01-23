@@ -23,14 +23,18 @@ struct GitClient {
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
-    let raw = try await runGit(arguments: [
-      "-C", path.path(percentEncoded: false), "rev-parse", "--show-toplevel",
-    ])
-    if raw.isEmpty {
-      let command = "git -C \(path.path(percentEncoded: false)) rev-parse --show-toplevel"
+    let normalizedPath = Self.directoryURL(for: path)
+    let wtURL = try wtScriptURL()
+    let output = try await runLoginShellProcess(
+      executableURL: wtURL,
+      arguments: ["root"],
+      currentDirectoryURL: normalizedPath
+    )
+    if output.isEmpty {
+      let command = "\(wtURL.lastPathComponent) root"
       throw GitClientError.commandFailed(command: command, message: "Empty output")
     }
-    return URL(fileURLWithPath: raw).standardizedFileURL
+    return URL(fileURLWithPath: output).standardizedFileURL
   }
 
   nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
@@ -308,6 +312,13 @@ struct GitClient {
       return "."
     }
     return result.joined(separator: "/")
+  }
+
+  nonisolated private static func directoryURL(for path: URL) -> URL {
+    if path.hasDirectoryPath {
+      return path
+    }
+    return path.deletingLastPathComponent()
   }
 
   nonisolated private static func githubOwner(fromRemote remote: String) -> String? {

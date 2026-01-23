@@ -366,6 +366,7 @@ private struct SidebarListView: View {
   let createWorktree: (Repository) -> Void
   let onRequestRemoval: (Worktree, Repository) -> Void
   let onRequestRepositoryRemoval: (Repository) -> Void
+  @Environment(RepositoryStore.self) private var repositoryStore
 
   var body: some View {
     List(selection: $selection) {
@@ -389,6 +390,14 @@ private struct SidebarListView: View {
     .onChange(of: pendingWorktrees) { _, newValue in
       let repositoryIDs = Set(newValue.map(\.repositoryID))
       expandedRepoIDs.formUnion(repositoryIDs)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      let fileURLs = urls.filter(\.isFileURL)
+      guard !fileURLs.isEmpty else { return false }
+      Task {
+        await repositoryStore.openRepositories(at: fileURLs)
+      }
+      return true
     }
   }
 }

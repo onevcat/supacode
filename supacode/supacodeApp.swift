@@ -62,7 +62,6 @@ struct SupacodeApp: App {
     }
     .environment(ghosttyShortcuts)
     .commands {
-      OpenRepositoryCommands(repositoryStore: repositoryStore)
       WorktreeCommands(repositoryStore: repositoryStore)
       SidebarCommands()
       TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)

@@ -8,6 +8,14 @@ struct WorktreeCommands: Commands {
   var body: some Commands {
     @Bindable var repositoryStore = repositoryStore
     CommandGroup(replacing: .newItem) {
+      Button("Open Repository...", systemImage: "folder") {
+        repositoryStore.isOpenPanelPresented = true
+      }
+      .keyboardShortcut(
+        AppShortcuts.openRepository.keyEquivalent,
+        modifiers: AppShortcuts.openRepository.modifiers
+      )
+      .help("Open Repository (\(AppShortcuts.openRepository.display))")
       Button("New Worktree", systemImage: "plus") {
         Task {
           await repositoryStore.createRandomWorktree()
