@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum GitClientError: LocalizedError {
@@ -95,7 +96,7 @@ struct GitClient {
     let baseDirectory = wtBaseDirectory(for: repoRoot)
     let repositoryRootURL = repoRoot.standardizedFileURL
     let wtURL = try wtScriptURL()
-    let output = try await runProcess(
+    let output = try await runLoginShellProcess(
       executableURL: wtURL,
       arguments: ["sw", name, "--base", baseDirectory.path(percentEncoded: false)],
       currentDirectoryURL: repoRoot
@@ -137,7 +138,7 @@ struct GitClient {
     print(
       "[GitClient] removeWorktree: \(wtURL.lastPathComponent) \(arguments.joined(separator: " "))"
     )
-    let output = try await runProcess(
+    let output = try await runLoginShellProcess(
       executableURL: wtURL,
       arguments: arguments,
       currentDirectoryURL: repoRoot
@@ -172,7 +173,7 @@ struct GitClient {
     print(
       "\(wtURL.lastPathComponent) \(arguments.joined(separator: " "))"
     )
-    let output = try await runProcess(
+    let output = try await runLoginShellProcess(
       executableURL: wtURL,
       arguments: arguments,
       currentDirectoryURL: repoRoot
@@ -238,6 +239,53 @@ struct GitClient {
       }
       return output
     }.value
+  }
+
+  nonisolated private func runLoginShellProcess(
+    executableURL: URL,
+    arguments: [String],
+    currentDirectoryURL: URL?
+  ) async throws -> String {
+    let shellPath = defaultShellPath()
+    let shellURL = URL(fileURLWithPath: shellPath)
+    let execCommand = shellExecCommand(for: shellURL)
+    let shellArguments =
+      ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
+    return try await runProcess(
+      executableURL: shellURL,
+      arguments: shellArguments,
+      currentDirectoryURL: currentDirectoryURL
+    )
+  }
+
+  nonisolated private func shellExecCommand(for shellURL: URL) -> String {
+    switch shellURL.lastPathComponent {
+    case "fish":
+      return "exec $argv"
+    default:
+      return "exec \"$@\""
+    }
+  }
+
+  nonisolated private func defaultShellPath() -> String {
+    if let env = ProcessInfo.processInfo.environment["SHELL"], !env.isEmpty {
+      return env
+    }
+
+    var pwd = passwd()
+    var result: UnsafeMutablePointer<passwd>? = nil
+    let bufSize = sysconf(_SC_GETPW_R_SIZE_MAX)
+    let size = bufSize > 0 ? Int(bufSize) : 1024
+    var buffer = [CChar](repeating: 0, count: size)
+    let lookup = getpwuid_r(getuid(), &pwd, &buffer, buffer.count, &result)
+    if lookup == 0, let result, let shell = result.pointee.pw_shell {
+      let value = String(cString: shell)
+      if !value.isEmpty {
+        return value
+      }
+    }
+
+    return "/bin/zsh"
   }
 
   nonisolated private static func relativePath(from base: URL, to target: URL) -> String {

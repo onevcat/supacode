@@ -47,6 +47,7 @@ enum AppShortcuts {
   static let copyPath = AppShortcut(key: "c", modifiers: [.command, .shift])
   static let openRepository = AppShortcut(key: "o", modifiers: [.command, .shift])
   static let toggleSidebar = AppShortcut(key: "[", modifiers: .command)
+  static let refreshWorktrees = AppShortcut(key: "r", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
   static let all: [AppShortcut] = [
     newWorktree,
@@ -54,6 +55,7 @@ enum AppShortcuts {
     copyPath,
     openRepository,
     toggleSidebar,
+    refreshWorktrees,
     checkForUpdates,
   ]
 }

@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
   let runtime: GhosttyRuntime
   @Environment(RepositoryStore.self) private var repositoryStore
+  @Environment(\.scenePhase) private var scenePhase
   @State private var terminalStore: WorktreeTerminalStore
   @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
@@ -64,6 +65,12 @@ struct ContentView: View {
       )
     }
     .navigationSplitViewStyle(.balanced)
+    .onChange(of: scenePhase) { _, newValue in
+      guard newValue == .active else { return }
+      Task {
+        await repositoryStore.loadPersistedRepositories()
+      }
+    }
     .onChange(of: repositoryStore.repositories) { _, newValue in
       var worktreeIDs: Set<Worktree.ID> = []
       for repository in newValue {

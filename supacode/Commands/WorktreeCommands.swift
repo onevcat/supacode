@@ -24,6 +24,16 @@ struct WorktreeCommands: Commands {
       .keyboardShortcut(.delete, modifiers: .command)
       .help("Remove Worktree (⌘⌫)")
       .disabled(removeWorktreeAction == nil)
+      Button("Refresh Worktrees") {
+        Task {
+          await repositoryStore.loadPersistedRepositories()
+        }
+      }
+      .keyboardShortcut(
+        AppShortcuts.refreshWorktrees.keyEquivalent,
+        modifiers: AppShortcuts.refreshWorktrees.modifiers
+      )
+      .help("Refresh Worktrees (\(AppShortcuts.refreshWorktrees.display))")
     }
   }
 }
