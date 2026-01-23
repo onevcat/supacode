@@ -78,3 +78,4 @@ Always read `./docs/swift-rules.md` before writing Swift code. Key points:
 
 - `git@github.com:ghostty-org/ghostty.git` - Dive into this codebase when implementing Ghostty features
 - `git@github.com:khoi/git-wt.git` - Our git worktree wrapper, can be modified as needed
+- `git@github.com:vivy-company/aizen.git` - A competitor, also use ghostty
