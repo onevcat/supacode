@@ -77,15 +77,31 @@ update-wt: # Download git-wt binary to Resources
 	@curl -fsSL "https://raw.githubusercontent.com/khoi/git-wt/refs/heads/main/wt" -o "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
 	@chmod +x "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
 
-bump-version: # Bump app version (usage: make bump-version VERSION=x.x.x)
+bump-version: # Bump app version (usage: make bump-version VERSION=x.x.x [BUILD=123])
 	@if [ -z "$(VERSION)" ]; then \
-		echo "error: VERSION required (e.g., make bump-version VERSION=1.2.3)"; \
+		echo "error: VERSION required (e.g., make bump-version VERSION=1.2.3 [BUILD=123])"; \
 		exit 1; \
 	fi; \
 	if ! echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
 		echo "error: VERSION must be in x.x.x format"; \
 		exit 1; \
 	fi; \
+	if [ -z "$(BUILD)" ]; then \
+		build="$$(/usr/bin/awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
+		if [ -z "$$build" ]; then \
+			echo "error: CURRENT_PROJECT_VERSION not found"; \
+			exit 1; \
+		fi; \
+		build="$$((build + 1))"; \
+	else \
+		if ! echo "$(BUILD)" | grep -qE '^[0-9]+$$'; then \
+			echo "error: BUILD must be an integer"; \
+			exit 1; \
+		fi; \
+		build="$(BUILD)"; \
+	fi; \
 	sed -i '' 's/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = $(VERSION);/g' \
 		"$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
-	echo "version bumped to $(VERSION)"
+	sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $$build;/g" \
+		"$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
+	echo "version bumped to $(VERSION) (build $$build)"
