@@ -71,7 +71,7 @@ Always read `./docs/swift-rules.md` before writing Swift code. Key points:
 
 ## Releases
 
-- When making new releases use `make bump-version VERSION=x.x.x` to bump Info.plist version
+- When making new releases use `make bump-version` (auto-increments minor) or `make bump-version VERSION=x.x.x`
 - Tagging `vx.x.x` and push will trigger prod build automatically by Github action
 
 ## References

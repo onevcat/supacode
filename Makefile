@@ -10,6 +10,8 @@ MAKEFLAGS += --no-builtin-rules
 CURRENT_MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_MAKEFILE_DIR := $(patsubst %/,%,$(dir $(CURRENT_MAKEFILE_PATH)))
 GHOSTTY_XCFRAMEWORK_PATH := $(CURRENT_MAKEFILE_DIR)/Frameworks/GhosttyKit.xcframework
+VERSION ?=
+BUILD ?=
 
 .DEFAULT_GOAL := help
 .PHONY: serve build-ghostty-xcframework build-app run-app install-dev-build sync-ghostty-resources lint test update-wt bump-version
@@ -77,14 +79,22 @@ update-wt: # Download git-wt binary to Resources
 	@curl -fsSL "https://raw.githubusercontent.com/khoi/git-wt/refs/heads/main/wt" -o "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
 	@chmod +x "$(CURRENT_MAKEFILE_DIR)/supacode/Resources/git-wt/wt"
 
-bump-version: # Bump app version (usage: make bump-version VERSION=x.x.x [BUILD=123])
+bump-version: # Bump app version (usage: make bump-version [VERSION=x.x.x] [BUILD=123])
 	@if [ -z "$(VERSION)" ]; then \
-		echo "error: VERSION required (e.g., make bump-version VERSION=1.2.3 [BUILD=123])"; \
-		exit 1; \
-	fi; \
-	if ! echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "error: VERSION must be in x.x.x format"; \
-		exit 1; \
+		current="$$(/usr/bin/awk -F' = ' '/MARKETING_VERSION = [0-9.]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
+		if [ -z "$$current" ]; then \
+			echo "error: MARKETING_VERSION not found"; \
+			exit 1; \
+		fi; \
+		major="$$(echo "$$current" | cut -d. -f1)"; \
+		minor="$$(echo "$$current" | cut -d. -f2)"; \
+		version="$$major.$$((minor + 1)).0"; \
+	else \
+		if ! echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+			echo "error: VERSION must be in x.x.x format"; \
+			exit 1; \
+		fi; \
+		version="$(VERSION)"; \
 	fi; \
 	if [ -z "$(BUILD)" ]; then \
 		build="$$(/usr/bin/awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+;/{gsub(/;/,"",$$2);print $$2; exit}' "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj")"; \
@@ -100,8 +110,8 @@ bump-version: # Bump app version (usage: make bump-version VERSION=x.x.x [BUILD=
 		fi; \
 		build="$(BUILD)"; \
 	fi; \
-	sed -i '' 's/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = $(VERSION);/g' \
+	sed -i '' "s/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = $$version;/g" \
 		"$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
 	sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $$build;/g" \
 		"$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
-	echo "version bumped to $(VERSION) (build $$build)"
+	echo "version bumped to $$version (build $$build)"
