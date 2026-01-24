@@ -128,22 +128,19 @@ nonisolated private func loadWorktreeInfoSnapshot(
   let repositoryPath = repoRoot.path(percentEncoded: false)
   let worktreePath = worktreeRoot.path(percentEncoded: false)
 
-  let branchOutput = try await runGit(
-    ["rev-parse", "--abbrev-ref", "HEAD"],
+  let statusOutput = try await runGit(
+    ["status", "--porcelain=v2", "--branch"],
     in: worktreeRoot,
     shellClient: shellClient
   )
-  let isDetachedHead = branchOutput == "HEAD"
+  let statusSummary = parseGitStatusV2(statusOutput)
+  let branchHead = statusSummary.branchHead ?? "HEAD"
+  let isDetachedHead = branchHead == "(detached)"
   let branchName: String
   if isDetachedHead {
-    let shortSha = try? await runGit(
-      ["rev-parse", "--short", "HEAD"],
-      in: worktreeRoot,
-      shellClient: shellClient
-    )
-    branchName = shortSha?.isEmpty == false ? shortSha! : "HEAD"
+    branchName = statusSummary.shortOid ?? "HEAD"
   } else {
-    branchName = branchOutput
+    branchName = branchHead
   }
 
   var githubError: String?
@@ -217,34 +214,11 @@ nonisolated private func loadWorktreeInfoSnapshot(
 
   let outOfDateWithDefault = behindDefault.map { $0 > 0 }
 
-  let upstreamBranchName = try? await runGit(
-    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    in: worktreeRoot,
-    shellClient: shellClient
-  )
-
-  var aheadOfUpstream: Int?
-  var behindUpstream: Int?
-  if let upstreamBranchName, !upstreamBranchName.isEmpty {
-    let output = try? await runGit(
-      ["rev-list", "--left-right", "--count", "\(upstreamBranchName)...HEAD"],
-      in: worktreeRoot,
-      shellClient: shellClient
-    )
-    if let output, let counts = parseAheadBehindCounts(output) {
-      behindUpstream = counts.behind
-      aheadOfUpstream = counts.ahead
-    }
-  }
-
-  let statusOutput = try? await runGit(
-    ["status", "--porcelain"],
-    in: worktreeRoot,
-    shellClient: shellClient
-  )
-  let statusCounts = parseStatusCounts(statusOutput ?? "")
+  let upstreamBranchName = statusSummary.upstream
+  let aheadOfUpstream = statusSummary.ahead
+  let behindUpstream = statusSummary.behind
   let hasUncommittedChanges =
-    statusCounts.staged > 0 || statusCounts.unstaged > 0 || statusCounts.untracked > 0
+    statusSummary.staged > 0 || statusSummary.unstaged > 0 || statusSummary.untracked > 0
 
   let stashOutput = try? await runGit(
     ["stash", "list"],
@@ -357,9 +331,9 @@ nonisolated private func loadWorktreeInfoSnapshot(
     behindUpstream: behindUpstream,
     remoteBranchExists: remoteBranchExists,
     hasUncommittedChanges: hasUncommittedChanges,
-    stagedChanges: statusCounts.staged,
-    unstagedChanges: statusCounts.unstaged,
-    untrackedChanges: statusCounts.untracked,
+    stagedChanges: statusSummary.staged,
+    unstagedChanges: statusSummary.unstaged,
+    untrackedChanges: statusSummary.untracked,
     stashCount: stashCount,
     lastCommitSubject: lastCommitSubject,
     lastCommitDate: lastCommitDate,

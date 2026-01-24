@@ -32,7 +32,7 @@ struct WorktreeInfoView: View {
             }
 
             VStack(alignment: .leading) {
-              Text("Git")
+              Text("Local Git Data")
                 .font(.headline)
 
               if case .loading = state.status {
@@ -109,8 +109,15 @@ struct WorktreeInfoView: View {
             }
 
             VStack(alignment: .leading) {
-              Text("GitHub")
+              Text("GitHub CLI Integrations")
                 .font(.headline)
+
+              if let githubError = snapshot.githubError {
+                LabeledContent("GitHub CLI") {
+                  Text(githubError)
+                    .foregroundStyle(.secondary)
+                }
+              }
 
               if let number = snapshot.pullRequestNumber, let title = snapshot.pullRequestTitle {
                 LabeledContent("Pull request") {
@@ -137,17 +144,9 @@ struct WorktreeInfoView: View {
                 }
               }
 
-              if let githubError = snapshot.githubError {
-                LabeledContent("GitHub status") {
-                  Text(githubError)
-                    .foregroundStyle(.secondary)
-                }
-              }
-            }
-
-            VStack(alignment: .leading) {
               Text("CI")
-                .font(.headline)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
               LabeledContent("Workflow") {
                 Text(snapshot.workflowName ?? "n/a")
