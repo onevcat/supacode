@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - run: brew install mise
+      - run: brew install mise 2>/dev/null
       - run: mise install
       - run: |
           GHOSTTY_SHA=$(git -C ThirdParty/ghostty rev-parse HEAD)
