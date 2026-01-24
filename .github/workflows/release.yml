@@ -104,6 +104,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, macOS, ARM64]
+    needs: [release_notes]
     permissions:
       contents: read
     env:
@@ -115,6 +116,7 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -306,15 +308,30 @@ jobs:
 
           xcrun stapler staple "$DMG_PATH"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: build
+      - run: |
+          NOTES_FILE=build/release-notes.txt
+          STAGING=$(mktemp -d)
+          ARCHIVE=build/supacode.app.zip
+          ARCHIVE_BASE=$(basename "$ARCHIVE")
+          ARCHIVE_BASE="${ARCHIVE_BASE%.zip}"
+          cp "$ARCHIVE" "$STAGING/"
+          cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.txt"
+          printf "%s" "$SPARKLE_PRIVATE_KEY" | tr -d '\r\n\t ' | ./bins/generate_appcast --download-url-prefix "https://supacode.sh/download/$TAG/" --embed-release-notes --ed-key-file - "$STAGING"
+          cp "$STAGING/appcast.xml" build/appcast.xml
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: |
             build/supacode.app.zip
             build/supacode.dmg
+            build/appcast.xml
 
   publish:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ubuntu-latest
     needs: [release_notes, build]
     permissions:
       contents: write
@@ -323,9 +340,7 @@ jobs:
       RELEASE_REPO_MAIN: supabitapp/supacode
       RELEASE_REPO_SH: supabitapp/supacode-sh
       SUPACODE_SH_RELEASE_TOKEN: ${{ secrets.SUPACODE_SH_RELEASE_TOKEN }}
-      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
       - run: |
           TAG="$GITHUB_REF_NAME"
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
@@ -340,16 +355,6 @@ jobs:
         with:
           name: build-artifacts
           path: build
-      - run: |
-          NOTES_FILE=build/release-notes.txt
-          STAGING=$(mktemp -d)
-          ARCHIVE=build/supacode.app.zip
-          ARCHIVE_BASE=$(basename "$ARCHIVE")
-          ARCHIVE_BASE="${ARCHIVE_BASE%.zip}"
-          cp "$ARCHIVE" "$STAGING/"
-          cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.txt"
-          printf "%s" "$SPARKLE_PRIVATE_KEY" | tr -d '\r\n\t ' | ./bins/generate_appcast --download-url-prefix "https://supacode.sh/download/$TAG/" --embed-release-notes --ed-key-file - "$STAGING"
-          cp "$STAGING/appcast.xml" build/appcast.xml
       - run: |
           NOTES_FILE=build/release-notes.txt
           if gh release view "$TAG" -R "$RELEASE_REPO_MAIN" >/dev/null 2>&1; then
