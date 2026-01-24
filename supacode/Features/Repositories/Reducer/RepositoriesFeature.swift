@@ -524,13 +524,10 @@ struct RepositoriesFeature {
       do {
         let worktrees = try await gitClient.worktrees(root)
         let name = repositoryName(from: root)
-        let githubOwner = await gitClient.githubOwner(root)
         let repository = Repository(
           id: root.standardizedFileURL.path(percentEncoded: false),
           rootURL: root.standardizedFileURL,
           name: name,
-          initials: repositoryInitials(from: name),
-          githubOwner: githubOwner,
           worktrees: worktrees
         )
         loaded.append(repository)
@@ -838,8 +835,6 @@ private func insertWorktree(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
-    initials: repository.initials,
-    githubOwner: repository.githubOwner,
     worktrees: worktrees
   )
 }
@@ -937,31 +932,4 @@ private func repositoryName(from root: URL) -> String {
     return root.path(percentEncoded: false)
   }
   return name
-}
-
-private func repositoryInitials(from name: String) -> String {
-  var parts: [String] = []
-  var current = ""
-  for character in name {
-    if character.isLetter || character.isNumber {
-      current.append(character)
-    } else if !current.isEmpty {
-      parts.append(current)
-      current = ""
-    }
-  }
-  if !current.isEmpty {
-    parts.append(current)
-  }
-  let initials: String
-  if parts.count >= 2 {
-    let first = parts[0].prefix(1)
-    let second = parts[1].prefix(1)
-    initials = String(first + second)
-  } else if let part = parts.first {
-    initials = String(part.prefix(2))
-  } else {
-    initials = String(name.prefix(2))
-  }
-  return initials.uppercased()
 }

@@ -82,8 +82,6 @@ struct RepositoriesFeatureTests {
       id: id,
       rootURL: URL(fileURLWithPath: id),
       name: "repo",
-      initials: "RP",
-      githubOwner: nil,
       worktrees: worktrees
     )
   }

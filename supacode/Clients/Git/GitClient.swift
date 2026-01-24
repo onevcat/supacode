@@ -143,11 +143,6 @@ struct GitClient {
     return worktree.workingDirectory
   }
 
-  nonisolated func githubOwner(for repoRoot: URL) async -> String? {
-    guard let remote = await originRemoteURL(for: repoRoot) else { return nil }
-    return Self.githubOwner(fromRemote: remote)
-  }
-
   nonisolated private func runGit(arguments: [String]) async throws -> String {
     let env = URL(fileURLWithPath: "/usr/bin/env")
     return try await runProcess(
@@ -180,12 +175,6 @@ struct GitClient {
       return url
   }
 
-  nonisolated private func originRemoteURL(for repoRoot: URL) async -> String? {
-    let path = repoRoot.path(percentEncoded: false)
-    let raw = try? await runGit(arguments: ["-C", path, "config", "--get", "remote.origin.url"])
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return trimmed.isEmpty ? nil : trimmed
-  }
 
   nonisolated private func runProcess(
     executableURL: URL,
@@ -302,22 +291,6 @@ struct GitClient {
     return path.deletingLastPathComponent()
   }
 
-  nonisolated private static func githubOwner(fromRemote remote: String) -> String? {
-    let trimmed = remote.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let hostRange = trimmed.range(of: "github.com") else { return nil }
-    let afterHost = trimmed[hostRange.upperBound...]
-    let path: Substring
-    if afterHost.hasPrefix(":") {
-      path = afterHost.dropFirst()
-    } else if afterHost.hasPrefix("/") {
-      path = afterHost.dropFirst()
-    } else {
-      return nil
-    }
-    let components = path.split(separator: "/")
-    guard let owner = components.first, !owner.isEmpty else { return nil }
-    return String(owner)
-  }
 }
 
 struct GitWtWorktreeEntry: Decodable {

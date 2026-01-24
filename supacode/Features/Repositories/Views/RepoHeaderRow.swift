@@ -1,10 +1,8 @@
-import Kingfisher
 import SwiftUI
 
 struct RepoHeaderRow: View {
   let name: String
   let initials: String
-  let profileURL: URL?
   let isExpanded: Bool
   let isRemoving: Bool
 
@@ -17,20 +15,9 @@ struct RepoHeaderRow: View {
       ZStack {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
           .fill(.secondary.opacity(0.2))
-        if let profileURL {
-          KFImage(profileURL)
-            .resizable()
-            .placeholder {
-              Text(initials)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .scaledToFill()
-        } else {
-          Text(initials)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+        Text(initials)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
       .frame(width: 24, height: 24)
       .clipShape(.rect(cornerRadius: 6, style: .continuous))

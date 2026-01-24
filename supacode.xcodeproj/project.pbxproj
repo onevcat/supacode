@@ -16,7 +16,6 @@
 		D661760B2F250A60000FC27C /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = D661760A2F250A60000FC27C /* CasePaths */; };
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
-		D6F820F52F1FC962004B4174 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = D6F820F42F1FC962004B4174 /* Kingfisher */; };
 		DFE570C142184CC387C1BC78 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B5698573F7354B14B940EA60 /* Sparkle */; };
 /* End PBXBuildFile section */
 
@@ -73,7 +72,6 @@
 			files = (
 				C8B33B9AFE69E738ABFA08BE /* ComposableArchitecture in Frameworks */,
 				886A649F771240E8A5AC792D /* Dependencies in Frameworks */,
-				D6F820F52F1FC962004B4174 /* Kingfisher in Frameworks */,
 				D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */,
 				D661760B2F250A60000FC27C /* CasePaths in Frameworks */,
 				D61414532F1F9799007DF542 /* Bonsplit in Frameworks */,
@@ -144,7 +142,6 @@
 			name = supacode;
 			packageProductDependencies = (
 				D61414522F1F9799007DF542 /* Bonsplit */,
-				D6F820F42F1FC962004B4174 /* Kingfisher */,
 				8D787DCF45744283A83F226F /* Dependencies */,
 				B5698573F7354B14B940EA60 /* Sparkle */,
 				497B582F42253CBC8FBF101F /* ComposableArchitecture */,
@@ -207,7 +204,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D61414512F1F9799007DF542 /* XCRemoteSwiftPackageReference "bonsplit" */,
-				D6F820F32F1FC962004B4174 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				911B4AAD84AF4B34BE232133 /* XCRemoteSwiftPackageReference "swift-case-paths" */,
 				8E10C2184F9342AC850013F5 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				46ECCA2394D141A89BE74516 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
@@ -617,14 +613,6 @@
 				kind = branch;
 			};
 		};
-		D6F820F32F1FC962004B4174 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 8.6.2;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -652,11 +640,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 911B4AAD84AF4B34BE232133 /* XCRemoteSwiftPackageReference "swift-case-paths" */;
 			productName = CasePaths;
-		};
-		D6F820F42F1FC962004B4174 /* Kingfisher */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D6F820F32F1FC962004B4174 /* XCRemoteSwiftPackageReference "Kingfisher" */;
-			productName = Kingfisher;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

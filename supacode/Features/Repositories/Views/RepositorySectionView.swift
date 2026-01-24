@@ -34,9 +34,6 @@ struct RepositorySectionView: View {
           RepoHeaderRow(
             name: repository.name,
             initials: repository.initials,
-            profileURL: repository.githubOwner.flatMap {
-              Github.profilePictureURL(username: $0, size: 48)
-            },
             isExpanded: isExpanded,
             isRemoving: isRemovingRepository
           )
