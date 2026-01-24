@@ -85,6 +85,9 @@ struct TerminalSplitTreeView: View {
         GhosttyTerminalView(surfaceView: surfaceView)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .top) {
+            GhosttySurfaceProgressOverlay(state: surfaceView.bridge.state)
+          }
+          .overlay(alignment: .top) {
             if isSplit {
               DragHandle(surfaceView: surfaceView)
             }
