@@ -224,9 +224,73 @@ jobs:
 
           xcrun stapler staple "$DMG_PATH"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
-      - run: |
-          NOTES_FILE=build/release-notes.txt
-          gh api -X POST "repos/$RELEASE_REPO_MAIN/releases/generate-notes" -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" -q .body > "$NOTES_FILE"
+      - name: Prepare release context
+        run: |
+          set -euo pipefail
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | rg -v "^$TAG$" | head -n 1 || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..$TAG"
+          else
+            RANGE="$(git rev-list --max-parents=0 HEAD)..$TAG"
+          fi
+          COMMITS=$(git log --pretty=format:"%h %s" "$RANGE")
+          CHANGES=$(git diff --name-status "$RANGE")
+          mkdir -p build
+          cat > build/release-prompt.txt <<EOF
+          You are generating release notes for Supacode.
+          Release tag: $TAG
+          Compare range: $RANGE
+
+          Commits:
+          $COMMITS
+
+          Files changed:
+          $CHANGES
+
+          Requirements:
+          - Return JSON that matches the provided schema exactly.
+          - new_features, bug_fixes, improvements are arrays of user-facing bullet text.
+          - Keep each item short, concrete, and non-redundant.
+          - If a section has no items, use an empty array.
+          EOF
+      - name: Generate release notes data
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.REVIEW_OPENAI_API_KEY }}
+          prompt-file: build/release-prompt.txt
+          output-schema: |
+            {
+              "type": "object",
+              "properties": {
+                "new_features": { "type": "array", "items": { "type": "string" } },
+                "bug_fixes": { "type": "array", "items": { "type": "string" } },
+                "improvements": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["new_features", "bug_fixes", "improvements"],
+              "additionalProperties": false
+            }
+          output-file: build/release-notes.json
+      - name: Build release notes text
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("build/release-notes.json").read_text())
+          lines = ["📅 Release date: 20 Sep 2026"]
+
+          def add_section(title, items):
+            if items:
+              lines.append("")
+              lines.append(title)
+              lines.extend([f"- {item}" for item in items])
+
+          add_section("✨ New Features", data.get("new_features", []))
+          add_section("🐛 Bug Fixes:", data.get("bug_fixes", []))
+          add_section("🌱 Improvements:", data.get("improvements", []))
+
+          Path("build/release-notes.txt").write_text("\n".join(lines).strip() + "\n")
+          PY
       - run: |
           NOTES_FILE=build/release-notes.txt
           STAGING=$(mktemp -d)
