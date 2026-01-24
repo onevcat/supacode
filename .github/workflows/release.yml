@@ -335,9 +335,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-notes
+          path: build
       - uses: actions/download-artifact@v4
         with:
           name: build-artifacts
+          path: build
       - run: |
           NOTES_FILE=build/release-notes.txt
           STAGING=$(mktemp -d)
