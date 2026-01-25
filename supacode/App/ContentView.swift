@@ -13,7 +13,8 @@ struct ContentView: View {
   @Bindable var store: StoreOf<AppFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
-  @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
+  @State private var leftSidebarVisibility: NavigationSplitViewVisibility = .all
+  @State private var isRightSidebarVisible = true
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
@@ -22,15 +23,17 @@ struct ContentView: View {
 
   var body: some View {
     let repositoriesStore = store.scope(state: \.repositories, action: \.repositories)
-    let worktreeInfoStore = store.scope(state: \.worktreeInfo, action: \.worktreeInfo)
-    NavigationSplitView(columnVisibility: $sidebarVisibility) {
+    NavigationSplitView(columnVisibility: $leftSidebarVisibility) {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
-    } content: {
-      WorktreeDetailView(store: store, terminalManager: terminalManager)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
     } detail: {
-      WorktreeInfoView(store: worktreeInfoStore)
+      WorktreeSplitView(
+        store: store,
+        terminalManager: terminalManager,
+        isInfoVisible: $isRightSidebarVisible
+      )
     }
-    .navigationSplitViewStyle(.balanced)
+    .navigationSplitViewStyle(.automatic)
     .task {
       store.send(.task)
     }
@@ -61,12 +64,19 @@ struct ContentView: View {
     }
     .alert(store: repositoriesStore.scope(state: \.$alert, action: \.alert))
     .alert(store: store.scope(state: \.$alert, action: \.alert))
-    .focusedSceneValue(\.toggleSidebarAction, toggleSidebar)
+    .focusedSceneValue(\.toggleLeftSidebarAction, toggleLeftSidebar)
+    .focusedSceneValue(\.toggleRightSidebarAction, toggleRightSidebar)
   }
 
-  private func toggleSidebar() {
+  private func toggleLeftSidebar() {
     withAnimation(.easeInOut(duration: 0.2)) {
-      sidebarVisibility = sidebarVisibility == .doubleColumn ? .all : .doubleColumn
+      leftSidebarVisibility = leftSidebarVisibility == .detailOnly ? .all : .detailOnly
+    }
+  }
+
+  private func toggleRightSidebar() {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      isRightSidebarVisible.toggle()
     }
   }
 }
