@@ -357,3 +357,7 @@ jobs:
           else
             GH_TOKEN="$SUPACODE_SH_RELEASE_TOKEN" gh release create "$TAG" build/supacode.app.zip build/supacode.dmg build/appcast.xml --title "$TAG" --notes-file "$NOTES_FILE" -R "$RELEASE_REPO_SH"
           fi
+      - run: |
+          set -euo pipefail
+          curl -fsSL "https://supacode.sh/download/$TAG/supacode.app.zip" -o /dev/null
+          curl -fsSL "https://supacode.sh/download/$TAG/supacode.dmg" -o /dev/null
