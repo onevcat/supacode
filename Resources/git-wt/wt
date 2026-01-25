@@ -326,6 +326,13 @@ copy_files_to_worktree() {
   done <<< "$files"
 }
 
+init_submodules() {
+  local root="$1"
+  local path="$2"
+  [ -f "$root/.gitmodules" ] || return 0
+  git -C "$path" submodule update --init --recursive >/dev/null 2>&1 || true
+}
+
 copy_files_between() {
   local src="$1"
   local dst="$2"
@@ -400,6 +407,7 @@ open_path() {
     fi
     mkdir -p "$(dirname "$path")"
     git -C "$root" worktree add "$path" "$branch" >/dev/null
+    init_submodules "$root" "$path"
     copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked"
     printf '%s\n' "$path"
     return 0
@@ -415,6 +423,7 @@ open_path() {
   fi
   mkdir -p "$(dirname "$path")"
   git -C "$root" worktree add -b "$branch" "$path" "$from" >/dev/null
+  init_submodules "$root" "$path"
   copy_files_to_worktree "$root" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked"
   printf '%s\n' "$path"
 }
@@ -662,16 +671,14 @@ cmd_rm() {
   done
   [ -n "$branch" ] || die "missing branch"
   require_repo
-  local root base path
+  local root path
   root=$(main_worktree_path)
-  base=$(base_dir "$root" "$BASE_DIR_OVERRIDE")
   if ! path=$(find_worktree_by_branch "$root" "$branch"); then
     die "workspace not found: '$branch'"
   fi
-  case "$path" in
-  "$base"/*) ;;
-  *) die "workspace not under base: '$path'" ;;
-  esac
+  if [ "$path" = "$root" ]; then
+    die "cannot remove main worktree"
+  fi
   local dirty
   dirty=$(git -C "$path" status --porcelain)
   if [ -n "$dirty" ] && [ "$force" -eq 0 ]; then
