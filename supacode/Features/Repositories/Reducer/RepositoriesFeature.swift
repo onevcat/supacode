@@ -22,7 +22,6 @@ struct RepositoriesFeature {
     var pendingWorktrees: [PendingWorktree] = []
     var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
     var deletingWorktreeIDs: Set<Worktree.ID> = []
-    var failedWorktreeRemovalIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
     var watchingRepositoryIDs: Set<Repository.ID> = []
@@ -48,15 +47,14 @@ struct RepositoriesFeature {
     case createRandomWorktreeSucceeded(
       Worktree,
       repositoryID: Repository.ID,
-      pendingID: PendingWorktree.ID
+      pendingID: Worktree.ID
     )
     case createRandomWorktreeFailed(
       title: String,
       message: String,
-      pendingID: PendingWorktree.ID,
+      pendingID: Worktree.ID,
       previousSelection: Worktree.ID?
     )
-    case pendingWorktreeNamed(PendingWorktree.ID, name: String)
     case consumeSetupScript(Worktree.ID)
     case requestRemoveWorktree(Worktree.ID, Repository.ID)
     case presentWorktreeRemovalConfirmation(Worktree.ID, Repository.ID)
@@ -261,8 +259,7 @@ struct RepositoriesFeature {
             id: pendingID,
             repositoryID: repository.id,
             name: "Creating worktree...",
-            detail: "",
-            targetName: nil
+            detail: ""
           )
         )
         state.selectedWorktreeID = pendingID
@@ -288,7 +285,6 @@ struct RepositoriesFeature {
               )
               return
             }
-            await send(.pendingWorktreeNamed(pendingID, name: name))
             let newWorktree = try await gitClient.createWorktree(name, repository.rootURL)
             await send(
               .createRandomWorktreeSucceeded(
@@ -334,10 +330,6 @@ struct RepositoriesFeature {
         removePendingWorktree(pendingID, state: &state)
         restoreSelection(previousSelection, pendingID: pendingID, state: &state)
         state.alert = errorAlert(title: title, message: message)
-        return .none
-
-      case .pendingWorktreeNamed(let pendingID, let name):
-        updatePendingWorktreeName(pendingID, name: name, state: &state)
         return .none
 
       case .consumeSetupScript(let id):
@@ -409,7 +401,6 @@ struct RepositoriesFeature {
         }
         state.alert = nil
         state.deletingWorktreeIDs.insert(worktree.id)
-        state.failedWorktreeRemovalIDs.remove(worktree.id)
         let selectionWasRemoved = state.selectedWorktreeID == worktree.id
         let nextSelection = selectionWasRemoved
           ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
@@ -437,7 +428,6 @@ struct RepositoriesFeature {
         let nextSelection
       ):
         state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
-        state.failedWorktreeRemovalIDs.remove(worktreeID)
         let roots = state.repositories.map(\.rootURL)
         if selectionWasRemoved {
           state.selectedWorktreeID =
@@ -449,10 +439,9 @@ struct RepositoriesFeature {
         )
 
       case .worktreeRemovalFailed(let message, let worktreeID):
-        state.failedWorktreeRemovalIDs.insert(worktreeID)
+        state.deletingWorktreeIDs.remove(worktreeID)
         state.alert = errorAlert(title: "Unable to remove worktree", message: message)
-        let roots = state.repositories.map(\.rootURL)
-        return roots.isEmpty ? .none : .send(.reloadRepositories(animated: true))
+        return .none
 
       case .requestRemoveRepository(let repositoryID):
         state.alert = confirmationAlertForRepositoryRemoval(repositoryID: repositoryID, state: state)
@@ -592,20 +581,8 @@ struct RepositoriesFeature {
     }
     let repositoryIDs = Set(repositories.map(\.id))
     state.pendingWorktrees = state.pendingWorktrees.filter { repositoryIDs.contains($0.repositoryID) }
-    let worktreeNamesByRepository = Dictionary(
-      uniqueKeysWithValues: repositories.map { repository in
-        (repository.id, Set(repository.worktrees.map { $0.name.lowercased() }))
-      }
-    )
-    state.pendingWorktrees = state.pendingWorktrees.filter { pending in
-      guard let targetName = pending.targetName?.lowercased() else { return true }
-      guard let knownNames = worktreeNamesByRepository[pending.repositoryID] else { return false }
-      return !knownNames.contains(targetName)
-    }
     let availableWorktreeIDs = Set(repositories.flatMap { $0.worktrees.map(\.id) })
     state.deletingWorktreeIDs = state.deletingWorktreeIDs.intersection(availableWorktreeIDs)
-    state.failedWorktreeRemovalIDs = state.failedWorktreeRemovalIDs.intersection(availableWorktreeIDs)
-    state.deletingWorktreeIDs.subtract(state.failedWorktreeRemovalIDs)
     state.pendingSetupScriptWorktreeIDs = state.pendingSetupScriptWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
     }
@@ -874,24 +851,8 @@ extension RepositoriesFeature.State {
   }
 }
 
-private func removePendingWorktree(_ id: PendingWorktree.ID, state: inout RepositoriesFeature.State) {
+private func removePendingWorktree(_ id: String, state: inout RepositoriesFeature.State) {
   state.pendingWorktrees.removeAll { $0.id == id }
-}
-
-private func updatePendingWorktreeName(
-  _ id: PendingWorktree.ID,
-  name: String,
-  state: inout RepositoriesFeature.State
-) {
-  guard let index = state.pendingWorktrees.firstIndex(where: { $0.id == id }) else { return }
-  let pending = state.pendingWorktrees[index]
-  state.pendingWorktrees[index] = PendingWorktree(
-    id: pending.id,
-    repositoryID: pending.repositoryID,
-    name: pending.name,
-    detail: pending.detail,
-    targetName: name
-  )
 }
 
 private func insertWorktree(
@@ -916,7 +877,7 @@ private func insertWorktree(
 
 private func restoreSelection(
   _ id: Worktree.ID?,
-  pendingID: PendingWorktree.ID,
+  pendingID: Worktree.ID,
   state: inout RepositoriesFeature.State
 ) {
   guard state.selectedWorktreeID == pendingID else { return }

@@ -5,5 +5,4 @@ struct PendingWorktree: Identifiable, Hashable {
   let repositoryID: Repository.ID
   let name: String
   let detail: String
-  let targetName: String?
 }
