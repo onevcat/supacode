@@ -1,6 +1,6 @@
 import Foundation
 
-struct Repository: Identifiable, Hashable, Sendable {
+struct Repository: Identifiable, Hashable {
   let id: String
   let rootURL: URL
   let name: String

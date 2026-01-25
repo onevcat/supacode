@@ -1,12 +1,12 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated struct SettingsClient: Sendable {
+struct SettingsClient {
   var load: @Sendable () -> GlobalSettings
   var save: @Sendable (GlobalSettings) -> Void
 }
 
-nonisolated extension SettingsClient: DependencyKey {
+extension SettingsClient: DependencyKey {
   static let liveValue = SettingsClient(
     load: { SettingsStorage().load() },
     save: { SettingsStorage().save($0) }
@@ -18,7 +18,7 @@ nonisolated extension SettingsClient: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var settingsClient: SettingsClient {
+  var settingsClient: SettingsClient {
     get { self[SettingsClient.self] }
     set { self[SettingsClient.self] = newValue }
   }

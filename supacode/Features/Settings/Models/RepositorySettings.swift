@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
+nonisolated struct RepositorySettings: Codable, Equatable {
   var setupScript: String
   var openActionID: String
 

@@ -1,12 +1,12 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated struct RepositorySettingsClient: Sendable {
+struct RepositorySettingsClient {
   var load: @Sendable (URL) -> RepositorySettings
   var save: @Sendable (_ settings: RepositorySettings, _ rootURL: URL) -> Void
 }
 
-nonisolated extension RepositorySettingsClient: DependencyKey {
+extension RepositorySettingsClient: DependencyKey {
   static let liveValue = RepositorySettingsClient(
     load: { RepositorySettingsStorage().load(for: $0) },
     save: { settings, url in
@@ -20,7 +20,7 @@ nonisolated extension RepositorySettingsClient: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var repositorySettingsClient: RepositorySettingsClient {
+  var repositorySettingsClient: RepositorySettingsClient {
     get { self[RepositorySettingsClient.self] }
     set { self[RepositorySettingsClient.self] = newValue }
   }

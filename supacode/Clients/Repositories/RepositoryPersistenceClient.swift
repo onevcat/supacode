@@ -1,33 +1,34 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated struct RepositoryPersistenceClient: Sendable {
+struct RepositoryPersistenceClient {
   var loadRoots: @Sendable () -> [String]
   var saveRoots: @Sendable ([String]) -> Void
   var loadPinnedWorktreeIDs: @Sendable () -> [Worktree.ID]
   var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) -> Void
 }
 
-nonisolated extension RepositoryPersistenceClient: DependencyKey {
+extension RepositoryPersistenceClient: DependencyKey {
   static let liveValue: RepositoryPersistenceClient = {
+    let userDefaults = UserDefaults.standard
     let rootsKey = "repositories.roots"
     let pinnedKey = "repositories.worktrees.pinned"
     return RepositoryPersistenceClient(
       loadRoots: {
-        guard let data = UserDefaults.standard.data(forKey: rootsKey) else { return [] }
+        guard let data = userDefaults.data(forKey: rootsKey) else { return [] }
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
       },
       saveRoots: { roots in
         guard let data = try? JSONEncoder().encode(roots) else { return }
-        UserDefaults.standard.set(data, forKey: rootsKey)
+        userDefaults.set(data, forKey: rootsKey)
       },
       loadPinnedWorktreeIDs: {
-        guard let data = UserDefaults.standard.data(forKey: pinnedKey) else { return [] }
+        guard let data = userDefaults.data(forKey: pinnedKey) else { return [] }
         return (try? JSONDecoder().decode([Worktree.ID].self, from: data)) ?? []
       },
       savePinnedWorktreeIDs: { ids in
         guard let data = try? JSONEncoder().encode(ids) else { return }
-        UserDefaults.standard.set(data, forKey: pinnedKey)
+        userDefaults.set(data, forKey: pinnedKey)
       }
     )
   }()
@@ -40,7 +41,7 @@ nonisolated extension RepositoryPersistenceClient: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var repositoryPersistence: RepositoryPersistenceClient {
+  var repositoryPersistence: RepositoryPersistenceClient {
     get { self[RepositoryPersistenceClient.self] }
     set { self[RepositoryPersistenceClient.self] = newValue }
   }

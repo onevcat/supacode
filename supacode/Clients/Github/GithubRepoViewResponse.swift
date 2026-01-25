@@ -1,3 +1,3 @@
-nonisolated struct GithubRepoViewResponse: Decodable, Equatable, Sendable {
+nonisolated struct GithubRepoViewResponse: Decodable, Equatable {
   let defaultBranchRef: GithubDefaultBranchRef
 }

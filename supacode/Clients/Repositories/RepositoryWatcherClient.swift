@@ -1,11 +1,11 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated struct RepositoryWatcherClient: Sendable {
+struct RepositoryWatcherClient {
   var watch: @Sendable (URL) -> AsyncStream<Void>
 }
 
-nonisolated extension RepositoryWatcherClient: DependencyKey {
+extension RepositoryWatcherClient: DependencyKey {
   static let liveValue = RepositoryWatcherClient { rootURL in
     AsyncStream { continuation in
       Task { @MainActor in
@@ -29,7 +29,7 @@ nonisolated extension RepositoryWatcherClient: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var repositoryWatcher: RepositoryWatcherClient {
+  var repositoryWatcher: RepositoryWatcherClient {
     get { self[RepositoryWatcherClient.self] }
     set { self[RepositoryWatcherClient.self] = newValue }
   }

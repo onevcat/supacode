@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorktreeRowModel: Identifiable, Hashable, Sendable {
+struct WorktreeRowModel: Identifiable, Hashable {
   let id: String
   let repositoryID: Repository.ID
   let name: String

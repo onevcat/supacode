@@ -1,4 +1,4 @@
-struct WorktreeLoadingInfo: Hashable, Sendable {
+struct WorktreeLoadingInfo: Hashable {
   let name: String
   let repositoryName: String?
   let state: WorktreeLoadingState

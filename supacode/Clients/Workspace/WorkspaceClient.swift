@@ -1,15 +1,15 @@
 import AppKit
 import ComposableArchitecture
 
-nonisolated struct WorkspaceClient: Sendable {
+struct WorkspaceClient {
   var open: @MainActor @Sendable (
     _ action: OpenWorktreeAction,
     _ worktree: Worktree,
-    _ onError: @escaping @MainActor @Sendable (OpenActionError) -> Void
+    _ onError: @escaping @MainActor (OpenActionError) -> Void
   ) -> Void
 }
 
-nonisolated extension WorkspaceClient: DependencyKey {
+extension WorkspaceClient: DependencyKey {
   static let liveValue = WorkspaceClient { action, worktree, onError in
     action.perform(with: worktree) { error in
       onError(error)
@@ -20,7 +20,7 @@ nonisolated extension WorkspaceClient: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var workspaceClient: WorkspaceClient {
+  var workspaceClient: WorkspaceClient {
     get { self[WorkspaceClient.self] }
     set { self[WorkspaceClient.self] = newValue }
   }

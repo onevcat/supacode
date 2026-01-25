@@ -90,7 +90,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     fatalError("init(coder:) is not supported")
   }
 
-  @MainActor deinit {
+  deinit {
     closeSurface()
     if let workingDirectoryCString {
       free(workingDirectoryCString)
@@ -1096,9 +1096,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: scrollView.contentView,
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.handleScrollChange()
-      }
+      self?.handleScrollChange()
     })
 
     observers.append(NotificationCenter.default.addObserver(
@@ -1106,9 +1104,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: scrollView,
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.isLiveScrolling = true
-      }
+      self?.isLiveScrolling = true
     })
 
     observers.append(NotificationCenter.default.addObserver(
@@ -1116,9 +1112,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: scrollView,
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.isLiveScrolling = false
-      }
+      self?.isLiveScrolling = false
     })
 
     observers.append(NotificationCenter.default.addObserver(
@@ -1126,9 +1120,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: scrollView,
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.handleLiveScroll()
-      }
+      self?.handleLiveScroll()
     })
 
     observers.append(NotificationCenter.default.addObserver(
@@ -1136,9 +1128,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: nil,
       queue: nil
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.handleScrollerStyleChange()
-      }
+      self?.handleScrollerStyleChange()
     })
 
     observers.append(NotificationCenter.default.addObserver(
@@ -1146,9 +1136,7 @@ final class GhosttySurfaceScrollView: NSView {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in
-        self?.refreshAppearance()
-      }
+      self?.refreshAppearance()
     })
   }
 
@@ -1156,7 +1144,7 @@ final class GhosttySurfaceScrollView: NSView {
     fatalError("init(coder:) is not supported")
   }
 
-  @MainActor deinit {
+  deinit {
     observers.forEach { NotificationCenter.default.removeObserver($0) }
   }
 

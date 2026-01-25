@@ -1,4 +1,4 @@
-enum WorktreeLoadingState: Sendable {
+enum WorktreeLoadingState {
   case creating
   case removing
 }

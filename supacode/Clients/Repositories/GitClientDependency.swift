@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-nonisolated struct GitClientDependency: Sendable {
+struct GitClientDependency {
   var repoRoot: @Sendable (URL) async throws -> URL
   var worktrees: @Sendable (URL) async throws -> [Worktree]
   var localBranchNames: @Sendable (URL) async throws -> Set<String>
@@ -10,7 +10,7 @@ nonisolated struct GitClientDependency: Sendable {
   var removeWorktree: @Sendable (_ worktree: Worktree) async throws -> URL
 }
 
-nonisolated extension GitClientDependency: DependencyKey {
+extension GitClientDependency: DependencyKey {
   static let liveValue = GitClientDependency(
     repoRoot: { try await GitClient().repoRoot(for: $0) },
     worktrees: { try await GitClient().worktrees(for: $0) },
@@ -27,7 +27,7 @@ nonisolated extension GitClientDependency: DependencyKey {
 }
 
 extension DependencyValues {
-  nonisolated var gitClient: GitClientDependency {
+  var gitClient: GitClientDependency {
     get { self[GitClientDependency.self] }
     set { self[GitClientDependency.self] = newValue }
   }

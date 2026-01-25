@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct GithubWorkflowRun: Decodable, Equatable, Sendable {
+nonisolated struct GithubWorkflowRun: Decodable, Equatable {
   let workflowName: String?
   let name: String?
   let displayTitle: String?
