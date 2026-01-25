@@ -10,9 +10,10 @@ struct WorktreeRow: View {
 
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
+    let iconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
     HStack(alignment: .center) {
       ZStack {
-        Image(systemName: "arrow.triangle.branch")
+        Image(systemName: iconName)
           .font(.caption)
           .foregroundStyle(.secondary)
           .opacity(showsSpinner ? 0 : 1)
@@ -26,19 +27,6 @@ struct WorktreeRow: View {
       Spacer(minLength: 8)
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)
-      } else {
-        if isMainWorktree {
-          Image(systemName: "star.fill")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-        }
-        if isPinned {
-          Image(systemName: "pin.fill")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-        }
       }
     }
   }

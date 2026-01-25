@@ -498,6 +498,14 @@ struct RepositoriesFeature {
         return .none
 
       case .pinWorktree(let worktreeID):
+        if let worktree = state.worktree(for: worktreeID), state.isMainWorktree(worktree) {
+          let wasPinned = state.pinnedWorktreeIDs.contains(worktreeID)
+          state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
+          if wasPinned {
+            repositoryPersistence.savePinnedWorktreeIDs(state.pinnedWorktreeIDs)
+          }
+          return .none
+        }
         state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
         state.pinnedWorktreeIDs.insert(worktreeID, at: 0)
         repositoryPersistence.savePinnedWorktreeIDs(state.pinnedWorktreeIDs)
@@ -795,7 +803,7 @@ extension RepositoriesFeature.State {
           repositoryID: repository.id,
           name: mainWorktree.name,
           detail: mainWorktree.detail,
-          isPinned: pinnedIDs.contains(mainWorktree.id),
+          isPinned: false,
           isMainWorktree: true,
           isPending: false,
           isDeleting: isDeleting,
@@ -937,7 +945,12 @@ private func uniqueRootPaths(_ paths: [String]) -> [String] {
 
 private func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> Bool {
   let availableIDs = Set(state.repositories.flatMap { $0.worktrees.map(\.id) })
-  let pruned = state.pinnedWorktreeIDs.filter { availableIDs.contains($0) }
+  let mainIDs = Set(
+    state.repositories.compactMap { repository in
+      repository.worktrees.first(where: { state.isMainWorktree($0) })?.id
+    }
+  )
+  let pruned = state.pinnedWorktreeIDs.filter { availableIDs.contains($0) && !mainIDs.contains($0) }
   if pruned != state.pinnedWorktreeIDs {
     state.pinnedWorktreeIDs = pruned
     return true

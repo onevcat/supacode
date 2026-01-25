@@ -48,16 +48,18 @@ struct WorktreeRowsView: View {
       )
       .tag(SidebarSelection.worktree(row.id))
       .contextMenu {
-        if row.isPinned {
-          Button("Unpin") {
-            store.send(.unpinWorktree(worktree.id))
+        if !row.isMainWorktree {
+          if row.isPinned {
+            Button("Unpin") {
+              store.send(.unpinWorktree(worktree.id))
+            }
+            .help("Unpin (no shortcut)")
+          } else {
+            Button("Pin to top") {
+              store.send(.pinWorktree(worktree.id))
+            }
+            .help("Pin to top (no shortcut)")
           }
-          .help("Unpin (no shortcut)")
-        } else {
-          Button("Pin to top") {
-            store.send(.pinWorktree(worktree.id))
-          }
-          .help("Pin to top (no shortcut)")
         }
         Button("Remove") {
           store.send(.requestRemoveWorktree(worktree.id, repository.id))
