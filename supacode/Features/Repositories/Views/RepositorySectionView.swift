@@ -85,7 +85,7 @@ struct RepositorySectionView: View {
         .disabled(isRemovingRepository)
       }
       .padding()
-      .padding(.bottom, 6)
+      .padding(.bottom, isExpanded ? 6 : 0)
     }
   }
 }
