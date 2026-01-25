@@ -19,62 +19,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Mise cache
+        uses: ./.github/actions/shared-cache
+        with:
+          path: |
+            ~/.local/share/mise
+            ~/.cache/mise
+          key: ${{ runner.os }}-${{ runner.arch }}-mise-${{ hashFiles('mise.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-mise-
       - run: brew install mise 2>/dev/null
       - run: mise install
-      - name: Ghostty cache context
+      - name: Ghostty cache key
         run: |
           set -euo pipefail
           GHOSTTY_SHA=$(git -C ThirdParty/ghostty rev-parse HEAD)
-          CACHE_BASE="/Volumes/My Shared Files/gha-cache"
-          if [ -d "$CACHE_BASE" ]; then
-            CACHE_ROOT="$CACHE_BASE/ghostty/$GHOSTTY_SHA"
-          else
-            CACHE_ROOT=""
-          fi
           printf '%s\n' "GHOSTTY_SHA=$GHOSTTY_SHA" >> "$GITHUB_ENV"
-          printf '%s\n' "GHOSTTY_CACHE_BASE=$CACHE_BASE" >> "$GITHUB_ENV"
-          printf '%s\n' "GHOSTTY_CACHE_ROOT=$CACHE_ROOT" >> "$GITHUB_ENV"
-          printf '%s\n' "ghostty sha: $GHOSTTY_SHA"
-          if [ -n "$CACHE_ROOT" ]; then
-            printf '%s\n' "ghostty cache root: $CACHE_ROOT"
-          else
-            printf '%s\n' "ghostty cache root: unavailable"
-          fi
-      - name: Ghostty cache restore
-        run: |
-          set -euo pipefail
-          CACHE_ROOT="${GHOSTTY_CACHE_ROOT:-}"
-          if [ -n "$CACHE_ROOT" ] && [ -d "$CACHE_ROOT/Frameworks/GhosttyKit.xcframework" ] && \
-             [ -d "$CACHE_ROOT/Resources/ghostty" ] && \
-             [ -d "$CACHE_ROOT/Resources/terminfo" ]; then
-            printf '%s\n' "ghostty cache hit"
-            rsync -a "$CACHE_ROOT/Frameworks/GhosttyKit.xcframework" Frameworks/
-            rsync -a "$CACHE_ROOT/Resources/ghostty/" Resources/ghostty/
-            rsync -a "$CACHE_ROOT/Resources/terminfo/" Resources/terminfo/
-            printf '%s\n' "GHOSTTY_CACHE_HIT=1" >> "$GITHUB_ENV"
-          else
-            printf '%s\n' "ghostty cache miss"
-            printf '%s\n' "GHOSTTY_CACHE_HIT=0" >> "$GITHUB_ENV"
-          fi
+      - name: Ghostty cache
+        uses: ./.github/actions/shared-cache
+        with:
+          path: |
+            Frameworks/GhosttyKit.xcframework
+            Resources/ghostty
+            Resources/terminfo
+          key: ${{ runner.os }}-${{ runner.arch }}-ghostty-${{ env.GHOSTTY_SHA }}
       - name: Build ghostty
-        if: env.GHOSTTY_CACHE_HIT != '1'
         run: |
           set -euo pipefail
           make build-ghostty-xcframework
-      - name: Ghostty cache save
-        if: env.GHOSTTY_CACHE_HIT != '1'
-        run: |
-          set -euo pipefail
-          CACHE_ROOT="${GHOSTTY_CACHE_ROOT:-}"
-          if [ -n "$CACHE_ROOT" ]; then
-            mkdir -p "$CACHE_ROOT/Frameworks" "$CACHE_ROOT/Resources/ghostty" "$CACHE_ROOT/Resources/terminfo"
-            rsync -a Frameworks/GhosttyKit.xcframework "$CACHE_ROOT/Frameworks/"
-            rsync -a Resources/ghostty/ "$CACHE_ROOT/Resources/ghostty/"
-            rsync -a Resources/terminfo/ "$CACHE_ROOT/Resources/terminfo/"
-            printf '%s\n' "ghostty cache saved"
-          else
-            printf '%s\n' "ghostty cache save skipped: cache root unavailable"
-          fi
       - run: make lint
       - run: make build-app
       - run: make test

@@ -1,0 +1,24 @@
+name: Shared Cache
+description: Cache files on shared volume
+inputs:
+  path:
+    description: Files or directories to cache
+    required: true
+  key:
+    description: Cache key
+    required: true
+  restore-keys:
+    description: Prefix-matched restore keys
+    required: false
+  cache-base:
+    description: Shared cache base directory
+    required: false
+    default: /Volumes/My Shared Files/gha-cache
+outputs:
+  cache-hit:
+    description: Exact key matched
+runs:
+  using: node20
+  main: main.js
+  post: post.js
+  post-if: success()
