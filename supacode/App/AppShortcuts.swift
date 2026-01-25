@@ -53,6 +53,24 @@ enum AppShortcuts {
   static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.command, .control])
   static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.command, .control])
   static let selectWorktree4 = AppShortcut(key: "4", modifiers: [.command, .control])
+  static let selectWorktree5 = AppShortcut(key: "5", modifiers: [.command, .control])
+  static let selectWorktree6 = AppShortcut(key: "6", modifiers: [.command, .control])
+  static let selectWorktree7 = AppShortcut(key: "7", modifiers: [.command, .control])
+  static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.command, .control])
+  static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.command, .control])
+  static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.command, .control])
+  static let worktreeSelection: [AppShortcut] = [
+    selectWorktree1,
+    selectWorktree2,
+    selectWorktree3,
+    selectWorktree4,
+    selectWorktree5,
+    selectWorktree6,
+    selectWorktree7,
+    selectWorktree8,
+    selectWorktree9,
+    selectWorktree0,
+  ]
   static let all: [AppShortcut] = [
     newWorktree,
     openFinder,
@@ -65,5 +83,11 @@ enum AppShortcuts {
     selectWorktree2,
     selectWorktree3,
     selectWorktree4,
+    selectWorktree5,
+    selectWorktree6,
+    selectWorktree7,
+    selectWorktree8,
+    selectWorktree9,
+    selectWorktree0,
   ]
 }

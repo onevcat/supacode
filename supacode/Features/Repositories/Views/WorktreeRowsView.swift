@@ -76,17 +76,7 @@ struct WorktreeRowsView: View {
   }
 
   private func worktreeShortcutHint(for index: Int) -> String? {
-    switch index {
-    case 0:
-      return AppShortcuts.selectWorktree1.display
-    case 1:
-      return AppShortcuts.selectWorktree2.display
-    case 2:
-      return AppShortcuts.selectWorktree3.display
-    case 3:
-      return AppShortcuts.selectWorktree4.display
-    default:
-      return nil
-    }
+    guard AppShortcuts.worktreeSelection.indices.contains(index) else { return nil }
+    return AppShortcuts.worktreeSelection[index].display
   }
 }

@@ -64,12 +64,7 @@ struct WorktreeCommands: Commands {
   }
 
   private var worktreeShortcuts: [AppShortcut] {
-    [
-      AppShortcuts.selectWorktree1,
-      AppShortcuts.selectWorktree2,
-      AppShortcuts.selectWorktree3,
-      AppShortcuts.selectWorktree4,
-    ]
+    AppShortcuts.worktreeSelection
   }
 
   private func worktreeShortcutButton(
