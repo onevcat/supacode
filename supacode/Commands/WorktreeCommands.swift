@@ -15,7 +15,8 @@ struct WorktreeCommands: Commands {
   var body: some Commands {
     let orderedRows = viewStore.state.orderedWorktreeRows()
     CommandMenu("Worktrees") {
-      ForEach(worktreeShortcuts.enumerated(), id: \.offset) { index, shortcut in
+      ForEach(worktreeShortcuts.indices, id: \.self) { index in
+        let shortcut = worktreeShortcuts[index]
         worktreeShortcutButton(index: index, shortcut: shortcut, orderedRows: orderedRows)
       }
     }
