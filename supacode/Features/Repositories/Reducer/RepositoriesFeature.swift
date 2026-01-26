@@ -4,7 +4,6 @@ import SwiftUI
 
 private enum CancelID {
   static let load = "repositories.load"
-  static let periodic = "repositories.periodic"
 }
 
 @Reducer
@@ -27,11 +26,9 @@ struct RepositoriesFeature {
     case task
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
+    case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], errors: [String], animated: Bool)
-    case startPeriodicRefresh
-    case stopPeriodicRefresh
-    case periodicRefreshTick
     case openRepositories([URL])
     case openRepositoriesFinished([Repository], errors: [String], failures: [String])
     case selectWorktree(Worktree.ID?)
@@ -80,7 +77,6 @@ struct RepositoriesFeature {
 
   @Dependency(\.gitClient) private var gitClient
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
-  @Dependency(\.continuousClock) private var clock
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in
@@ -99,16 +95,7 @@ struct RepositoriesFeature {
         let roots = rootPaths.map { URL(fileURLWithPath: $0) }
         return loadRepositories(roots, animated: false)
 
-      case .startPeriodicRefresh:
-        return .merge(
-          .cancel(id: CancelID.periodic),
-          periodicRefreshEffect()
-        )
-
-      case .stopPeriodicRefresh:
-        return .cancel(id: CancelID.periodic)
-
-      case .periodicRefreshTick:
+      case .refreshWorktrees:
         return .send(.reloadRepositories(animated: false))
 
       case .reloadRepositories(let animated):
@@ -484,16 +471,6 @@ struct RepositoriesFeature {
         return .none
       }
     }
-  }
-
-  private func periodicRefreshEffect() -> Effect<Action> {
-    .run { send in
-      while !Task.isCancelled {
-        try await clock.sleep(for: GlobalConstants.worktreePeriodicRefreshInterval)
-        await send(.periodicRefreshTick)
-      }
-    }
-    .cancellable(id: CancelID.periodic, cancelInFlight: true)
   }
 
   private func loadRepositories(_ roots: [URL], animated: Bool) -> Effect<Action> {

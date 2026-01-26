@@ -49,6 +49,7 @@ enum AppShortcuts {
   static let openRepository = AppShortcut(key: "o", modifiers: [.command, .shift])
   static let toggleLeftSidebar = AppShortcut(key: "[", modifiers: .command)
   static let toggleRightSidebar = AppShortcut(key: "]", modifiers: .command)
+  static let refreshWorktrees = AppShortcut(key: "r", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
   static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.command, .control])
   static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.command, .control])
@@ -80,6 +81,7 @@ enum AppShortcuts {
     openRepository,
     toggleLeftSidebar,
     toggleRightSidebar,
+    refreshWorktrees,
     checkForUpdates,
     selectWorktree1,
     selectWorktree2,

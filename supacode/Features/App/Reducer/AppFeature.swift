@@ -61,11 +61,10 @@ struct AppFeature {
         case .active:
           return .merge(
             .send(.repositories(.loadPersistedRepositories)),
-            .send(.repositories(.startPeriodicRefresh)),
             .send(.worktreeInfo(.appBecameActive))
           )
         default:
-          return .send(.repositories(.stopPeriodicRefresh))
+          return .none
         }
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):

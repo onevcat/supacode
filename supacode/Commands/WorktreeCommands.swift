@@ -52,6 +52,14 @@ struct WorktreeCommands: Commands {
       .keyboardShortcut(.delete, modifiers: .command)
       .help("Remove Worktree (⌘⌫)")
       .disabled(removeWorktreeAction == nil)
+      Button("Refresh Worktrees") {
+        store.send(.refreshWorktrees)
+      }
+      .keyboardShortcut(
+        AppShortcuts.refreshWorktrees.keyEquivalent,
+        modifiers: AppShortcuts.refreshWorktrees.modifiers
+      )
+      .help("Refresh Worktrees (\(AppShortcuts.refreshWorktrees.display))")
     }
   }
 
