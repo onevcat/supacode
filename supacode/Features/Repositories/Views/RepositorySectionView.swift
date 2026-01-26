@@ -34,12 +34,16 @@ struct RepositorySectionView: View {
             expandedRepoIDs.insert(repository.id)
           }
         } label: {
-          RepoHeaderRow(
-            name: repository.name,
-            initials: repository.initials,
-            isExpanded: isExpanded,
-            isRemoving: isRemovingRepository
-          )
+          HStack {
+            RepoHeaderRow(
+              name: repository.name,
+              initials: repository.initials,
+              isExpanded: isExpanded,
+              isRemoving: isRemovingRepository
+            )
+            Spacer()
+          }
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isRemovingRepository)
@@ -54,7 +58,6 @@ struct RepositorySectionView: View {
           .help("Remove repository (no shortcut)")
           .disabled(isRemovingRepository)
         }
-        Spacer()
         if isRemovingRepository {
           ProgressView()
             .controlSize(.small)
