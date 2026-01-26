@@ -262,10 +262,9 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Build DMG
         run: |
-          npm install -g create-dmg
           APP_PATH="$(find build/export -name "supacode.app" -maxdepth 3 -print -quit)"
 
-          create-dmg "$APP_PATH" build/ \
+          mise exec -- create-dmg "$APP_PATH" build/ \
             --overwrite \
             --dmg-title="Supacode" \
             --identity="$DEVELOPER_ID_IDENTITY_SHA"
