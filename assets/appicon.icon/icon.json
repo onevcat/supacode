@@ -1,12 +1,14 @@
 {
   "fill-specializations" : [
     {
-      "value" : "automatic"
+      "value" : {
+        "solid" : "srgb:0.98039,0.98039,0.98039,1.00000"
+      }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "solid" : "display-p3:0.03922,0.03797,0.03797,1.00000"
+        "solid" : "display-p3:0.03922,0.03922,0.03922,1.00000"
       }
     }
   ],
@@ -22,7 +24,19 @@
       "layers" : [
         {
           "blend-mode" : "normal",
-          "fill" : "automatic",
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.03922,0.03922,0.03922,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:0.98039,0.98039,0.98039,1.00000"
+              }
+            }
+          ],
           "glass-specializations" : [
             {
               "value" : true
