@@ -601,8 +601,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.8.1;
+				kind = exactVersion;
+				version = "2.9.0-beta.2";
 			};
 		};
 		911B4AAD84AF4B34BE232133 /* XCRemoteSwiftPackageReference "swift-case-paths" */ = {

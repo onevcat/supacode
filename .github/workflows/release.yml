@@ -78,31 +78,33 @@ jobs:
               "additionalProperties": false
             }
           output-file: build/release-notes.json
-      - name: Build release notes text
+      - name: Build release notes markdown
         run: |
           python3 - <<'PY'
           import json
+          from datetime import datetime
           from pathlib import Path
 
           data = json.loads(Path("build/release-notes.json").read_text())
-          lines = ["📅 Release date: 20 Sep 2026"]
+          today = datetime.now().strftime("%d %b %Y")
+          lines = [f"**📅 Release date:** {today}"]
 
           def add_section(title, items):
             if items:
               lines.append("")
-              lines.append(title)
+              lines.append(f"**{title}**")
               lines.extend([f"- {item}" for item in items])
 
           add_section("✨ New Features", data.get("new_features", []))
-          add_section("🐛 Bug Fixes:", data.get("bug_fixes", []))
-          add_section("🌱 Improvements:", data.get("improvements", []))
+          add_section("🐛 Bug Fixes", data.get("bug_fixes", []))
+          add_section("🌱 Improvements", data.get("improvements", []))
 
-          Path("build/release-notes.txt").write_text("\n".join(lines).strip() + "\n")
+          Path("build/release-notes.md").write_text("\n".join(lines).strip() + "\n")
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: release-notes
-          path: build/release-notes.txt
+          path: build/release-notes.md
 
   build:
     runs-on: [self-hosted, macOS, ARM64]
@@ -302,13 +304,13 @@ jobs:
       - name: Generate appcast with history
         run: |
           set -euo pipefail
-          NOTES_FILE=build/release-notes.txt
+          NOTES_FILE=build/release-notes.md
           STAGING=$(mktemp -d)
           ARCHIVE=build/supacode.app.zip
           ARCHIVE_BASE=$(basename "$ARCHIVE")
           ARCHIVE_BASE="${ARCHIVE_BASE%.zip}"
           cp "$ARCHIVE" "$STAGING/"
-          cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.txt"
+          cp "$NOTES_FILE" "$STAGING/$ARCHIVE_BASE.md"
 
           curl -fsSL "https://supacode.sh/download/latest/appcast.xml" -o "$STAGING/appcast.xml" || true
 
@@ -348,7 +350,7 @@ jobs:
           name: build-artifacts
           path: build
       - run: |
-          NOTES_FILE=build/release-notes.txt
+          NOTES_FILE=build/release-notes.md
           if gh release view "$TAG" -R "$RELEASE_REPO_MAIN" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file "$NOTES_FILE" -R "$RELEASE_REPO_MAIN"
             gh release upload "$TAG" build/supacode.app.zip build/supacode.dmg build/appcast.xml --clobber -R "$RELEASE_REPO_MAIN"
