@@ -20,7 +20,7 @@ struct TerminalTabsRowView: View {
   var body: some View {
     ZStack(alignment: .topLeading) {
       HStack(alignment: .center, spacing: TerminalTabBarMetrics.tabSpacing) {
-        ForEach(openedTabs.enumerated(), id: \.element) { index, id in
+        ForEach(Array(openedTabs.enumerated()), id: \.element) { index, id in
           if let item = manager.tabs.first(where: { $0.id == id }) {
             TerminalTabView(
               tab: item,
