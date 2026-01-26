@@ -956,29 +956,14 @@ extension GhosttySurfaceView {
   override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
     let pasteboard = sender.draggingPasteboard
 
-    let content: String?
-    if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
-      let fileUrls = urls.filter { $0.isFileURL }
-      if !fileUrls.isEmpty {
-        content = fileUrls
-          .map { NSPasteboard.ghosttyEscape($0.path) }
-          .joined(separator: " ")
-      } else {
-        content = urls
-          .map { $0.absoluteString }
-          .joined(separator: " ")
-      }
-    } else if let url = pasteboard.string(forType: .URL) {
-      content = NSPasteboard.ghosttyEscape(url)
-    } else if let str = pasteboard.string(forType: .string) {
-      content = str
-    } else {
-      content = nil
+    guard let content = pasteboard.getOpinionatedStringContents(), !content.isEmpty else {
+      return false
     }
 
-    guard let content else { return false }
-
-    insertText(content, replacementRange: NSRange(location: 0, length: 0))
+    let selectionPasteboard = NSPasteboard.ghosttySelection
+    selectionPasteboard.clearContents()
+    selectionPasteboard.setString(content, forType: .string)
+    performBindingAction("paste_from_selection")
     return true
   }
 }
