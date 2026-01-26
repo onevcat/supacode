@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release_notes:
     runs-on: ubuntu-latest
