@@ -10,7 +10,8 @@ struct SettingsFeatureTests {
       appearanceMode: .dark,
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
-      inAppNotificationsEnabled: false
+      inAppNotificationsEnabled: false,
+      notificationSoundEnabled: true
     )
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
@@ -23,6 +24,7 @@ struct SettingsFeatureTests {
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
+      $0.notificationSoundEnabled = true
     }
     await store.receive(.delegate(.settingsChanged(loaded)))
   }
@@ -44,14 +46,16 @@ struct SettingsFeatureTests {
       appearanceMode: .dark,
       updatesAutomaticallyCheckForUpdates: true,
       updatesAutomaticallyDownloadUpdates: false,
-      inAppNotificationsEnabled: true
+      inAppNotificationsEnabled: true,
+      notificationSoundEnabled: true
     ))))
 
     #expect(saved.value == GlobalSettings(
       appearanceMode: .dark,
       updatesAutomaticallyCheckForUpdates: true,
       updatesAutomaticallyDownloadUpdates: false,
-      inAppNotificationsEnabled: true
+      inAppNotificationsEnabled: true,
+      notificationSoundEnabled: true
     ))
   }
 }
