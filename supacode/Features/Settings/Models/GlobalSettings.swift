@@ -6,7 +6,7 @@ nonisolated struct GlobalSettings: Codable, Equatable {
   var notificationSoundEnabled: Bool
 
   static let `default` = GlobalSettings(
-    appearanceMode: .system,
+    appearanceMode: .dark,
     updatesAutomaticallyCheckForUpdates: true,
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
