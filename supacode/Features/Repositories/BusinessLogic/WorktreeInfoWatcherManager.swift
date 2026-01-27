@@ -125,8 +125,9 @@ final class WorktreeInfoWatcherManager {
     event: DispatchSource.FileSystemEvent
   ) {
     if event.contains(.delete) || event.contains(.rename) {
-      stopWatcher(for: worktreeID)
+      stopHeadWatcher(for: worktreeID)
       scheduleRestart(worktreeID: worktreeID)
+      scheduleBranchChanged(worktreeID: worktreeID)
       return
     }
     scheduleBranchChanged(worktreeID: worktreeID)
@@ -176,10 +177,14 @@ final class WorktreeInfoWatcherManager {
     configureWatcher(for: worktree)
   }
 
-  private func stopWatcher(for worktreeID: Worktree.ID) {
+  private func stopHeadWatcher(for worktreeID: Worktree.ID) {
     if let watcher = headWatchers.removeValue(forKey: worktreeID) {
       watcher.source.cancel()
     }
+  }
+
+  private func stopWatcher(for worktreeID: Worktree.ID) {
+    stopHeadWatcher(for: worktreeID)
     branchDebounceTasks.removeValue(forKey: worktreeID)?.cancel()
     filesDebounceTasks.removeValue(forKey: worktreeID)?.cancel()
     restartTasks.removeValue(forKey: worktreeID)?.cancel()
