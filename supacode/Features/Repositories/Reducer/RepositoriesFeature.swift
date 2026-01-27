@@ -722,8 +722,8 @@ struct RepositoriesFeature {
 }
 
 extension RepositoriesFeature.State {
-  func worktreeDescription(for worktreeID: Worktree.ID) -> String? {
-    worktreeInfoByID[worktreeID]?.descriptionText
+  func worktreeInfo(for worktreeID: Worktree.ID) -> WorktreeInfoEntry? {
+    worktreeInfoByID[worktreeID]
   }
 
   var canCreateWorktree: Bool {
@@ -764,7 +764,7 @@ extension RepositoriesFeature.State {
         repositoryID: pending.repositoryID,
         name: pending.name,
         detail: pending.detail,
-        description: worktreeDescription(for: pending.id),
+        info: worktreeInfo(for: pending.id),
         isPinned: false,
         isMainWorktree: false,
         isPending: true,
@@ -782,7 +782,7 @@ extension RepositoriesFeature.State {
           repositoryID: repository.id,
           name: worktree.name,
           detail: worktree.detail,
-          description: worktreeDescription(for: worktree.id),
+          info: worktreeInfo(for: worktree.id),
           isPinned: pinnedWorktreeIDs.contains(worktree.id),
           isMainWorktree: isMainWorktree(worktree),
           isPending: false,
@@ -852,7 +852,7 @@ extension RepositoriesFeature.State {
           repositoryID: repository.id,
           name: mainWorktree.name,
           detail: mainWorktree.detail,
-          description: worktreeDescription(for: mainWorktree.id),
+          info: worktreeInfo(for: mainWorktree.id),
           isPinned: false,
           isMainWorktree: true,
           isPending: false,
@@ -872,7 +872,7 @@ extension RepositoriesFeature.State {
           repositoryID: repository.id,
           name: worktree.name,
           detail: worktree.detail,
-          description: worktreeDescription(for: worktree.id),
+          info: worktreeInfo(for: worktree.id),
           isPinned: true,
           isMainWorktree: false,
           isPending: false,
@@ -888,7 +888,7 @@ extension RepositoriesFeature.State {
           repositoryID: pending.repositoryID,
           name: pending.name,
           detail: pending.detail,
-          description: worktreeDescription(for: pending.id),
+          info: worktreeInfo(for: pending.id),
           isPinned: false,
           isMainWorktree: false,
           isPending: true,
@@ -908,7 +908,7 @@ extension RepositoriesFeature.State {
           repositoryID: repository.id,
           name: worktree.name,
           detail: worktree.detail,
-          description: worktreeDescription(for: worktree.id),
+          info: worktreeInfo(for: worktree.id),
           isPinned: false,
           isMainWorktree: false,
           isPending: false,
@@ -996,7 +996,7 @@ private func updateWorktreeLineChanges(
     entry.addedLines = added
     entry.removedLines = removed
   }
-  if entry.descriptionText == nil {
+  if entry.isEmpty {
     state.worktreeInfoByID.removeValue(forKey: worktreeID)
   } else {
     state.worktreeInfoByID[worktreeID] = entry
@@ -1010,7 +1010,7 @@ private func updateWorktreePullRequest(
 ) {
   var entry = state.worktreeInfoByID[worktreeID] ?? WorktreeInfoEntry()
   entry.pullRequestNumber = number
-  if entry.descriptionText == nil {
+  if entry.isEmpty {
     state.worktreeInfoByID.removeValue(forKey: worktreeID)
   } else {
     state.worktreeInfoByID[worktreeID] = entry

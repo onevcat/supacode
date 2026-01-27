@@ -44,7 +44,7 @@ struct WorktreeRowsView: View {
     if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
       WorktreeRow(
         name: displayName,
-        description: row.description,
+        info: row.info,
         isPinned: row.isPinned,
         isMainWorktree: row.isMainWorktree,
         isLoading: row.isPending || row.isDeleting,
@@ -80,7 +80,7 @@ struct WorktreeRowsView: View {
     } else {
       WorktreeRow(
         name: displayName,
-        description: row.description,
+        info: row.info,
         isPinned: row.isPinned,
         isMainWorktree: row.isMainWorktree,
         isLoading: row.isPending || row.isDeleting,

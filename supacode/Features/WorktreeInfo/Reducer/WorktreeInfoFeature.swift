@@ -143,20 +143,24 @@ nonisolated private func loadWorktreeInfoSnapshot(
 
   var pullRequestNumber: Int?
   var pullRequestTitle: String?
+  var pullRequestURL: String?
   var pullRequestState: String?
   var pullRequestIsDraft = false
   var pullRequestReviewDecision: String?
   var pullRequestUpdatedAt: Date?
+  var pullRequestStatusChecks: [GithubPullRequestStatusCheck] = []
 
   if githubAvailable {
     do {
       if let pullRequest = try await githubCLI.currentPullRequest(worktreeRoot) {
         pullRequestNumber = pullRequest.number
         pullRequestTitle = pullRequest.title
+        pullRequestURL = pullRequest.url
         pullRequestState = pullRequest.state
         pullRequestIsDraft = pullRequest.isDraft
         pullRequestReviewDecision = pullRequest.reviewDecision
         pullRequestUpdatedAt = pullRequest.updatedAt
+        pullRequestStatusChecks = pullRequest.statusCheckRollup?.checks ?? []
       }
     } catch {
       githubError = githubError ?? error.localizedDescription
@@ -183,10 +187,12 @@ nonisolated private func loadWorktreeInfoSnapshot(
     defaultBranchName: defaultBranchName,
     pullRequestNumber: pullRequestNumber,
     pullRequestTitle: pullRequestTitle,
+    pullRequestURL: pullRequestURL,
     pullRequestState: pullRequestState,
     pullRequestIsDraft: pullRequestIsDraft,
     pullRequestReviewDecision: pullRequestReviewDecision,
     pullRequestUpdatedAt: pullRequestUpdatedAt,
+    pullRequestStatusChecks: pullRequestStatusChecks,
     workflowName: workflowName,
     workflowStatus: workflowStatus,
     workflowConclusion: workflowConclusion,

@@ -7,4 +7,6 @@ nonisolated struct GithubPullRequest: Decodable, Equatable {
   let isDraft: Bool
   let reviewDecision: String?
   let updatedAt: Date?
+  let url: String
+  let statusCheckRollup: GithubPullRequestStatusCheckRollup?
 }

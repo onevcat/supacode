@@ -16,6 +16,7 @@ struct WorktreeDetailView: View {
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let loadingInfo = loadingInfo(for: selectedRow, repositories: repositories)
     let hasActiveWorktree = selectedWorktree != nil && loadingInfo == nil
+    let worktreeInfoSnapshot = state.worktreeInfo.snapshot
     let openActionSelection = state.openActionSelection
     let openSelectedWorktreeAction: (() -> Void)? = hasActiveWorktree
       ? { store.send(.openSelectedWorktree) }
@@ -47,12 +48,8 @@ struct WorktreeDetailView: View {
     let runScriptEnabled = hasActiveWorktree
       && !state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
-    let runScriptAction: (() -> Void)? = runScriptEnabled
-      ? { store.send(.runScript) }
-      : nil
-    let stopRunScriptAction: (() -> Void)? = runScriptIsRunning
-      ? { store.send(.stopRunScript) }
-      : nil
+    let runScriptAction: (() -> Void)? = runScriptEnabled ? { store.send(.runScript) } : nil
+    let stopRunScriptAction: (() -> Void)? = runScriptIsRunning ? { store.send(.stopRunScript) } : nil
     let navigationTitle = hasActiveWorktree
       ? ""
       : (selectedWorktree?.name ?? loadingInfo?.name ?? "Supacode")
@@ -88,10 +85,11 @@ struct WorktreeDetailView: View {
       if hasActiveWorktree, let selectedWorktree {
         let toolbarState = WorktreeToolbarState(
           branchName: selectedWorktree.name,
-          runScriptEnabled: runScriptEnabled,
-          runScriptIsRunning: runScriptIsRunning,
+          worktreeInfoSnapshot: worktreeInfoSnapshot,
           openActionSelection: openActionSelection,
-          showExtras: commandKeyObserver.isPressed
+          showExtras: commandKeyObserver.isPressed,
+          runScriptEnabled: runScriptEnabled,
+          runScriptIsRunning: runScriptIsRunning
         )
         worktreeToolbar(worktreeID: selectedWorktree.id, toolbarState: toolbarState)
       }
@@ -146,31 +144,21 @@ struct WorktreeDetailView: View {
 
   private struct WorktreeToolbarState {
     let branchName: String
-    let runScriptEnabled: Bool
-    let runScriptIsRunning: Bool
-    let runScriptHelpText: String
-    let stopRunScriptHelpText: String
+    let worktreeInfoSnapshot: WorktreeInfoSnapshot?
     let openActionSelection: OpenWorktreeAction
     let showExtras: Bool
+    let runScriptEnabled: Bool
+    let runScriptIsRunning: Bool
 
-    init(
-      branchName: String,
-      runScriptEnabled: Bool,
-      runScriptIsRunning: Bool,
-      openActionSelection: OpenWorktreeAction,
-      showExtras: Bool
-    ) {
-      self.branchName = branchName
-      self.runScriptEnabled = runScriptEnabled
-      self.runScriptIsRunning = runScriptIsRunning
-      self.openActionSelection = openActionSelection
-      self.showExtras = showExtras
+    var runScriptHelpText: String {
       if runScriptEnabled {
-        runScriptHelpText = "Run Script (\(AppShortcuts.runScript.display))"
-      } else {
-        runScriptHelpText = "Run Script (\(AppShortcuts.runScript.display)) — Set Run Script in repo settings"
+        return "Run Script (\(AppShortcuts.runScript.display))"
       }
-      stopRunScriptHelpText = "Stop Script (\(AppShortcuts.stopRunScript.display))"
+      return "Run Script (\(AppShortcuts.runScript.display)) — Set Run Script in repo settings"
+    }
+
+    var stopRunScriptHelpText: String {
+      "Stop Script (\(AppShortcuts.stopRunScript.display))"
     }
   }
 
@@ -211,7 +199,11 @@ struct WorktreeDetailView: View {
       )
     }
     ToolbarItem(placement: .principal) {
-      XcodeStyleStatusView()
+      if let model = PullRequestStatusModel(snapshot: toolbarState.worktreeInfoSnapshot) {
+        PullRequestStatusButton(model: model)
+      } else {
+        XcodeStyleStatusView()
+      }
     }
     ToolbarItem(placement: .primaryAction) {
       RunScriptToolbarButton(
