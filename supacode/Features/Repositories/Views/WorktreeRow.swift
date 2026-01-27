@@ -14,8 +14,11 @@ struct WorktreeRow: View {
     let showsSpinner = isLoading || taskStatus == .running
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
     let hasInfo = info?.addedLines != nil || info?.removedLines != nil
-    let isMerged = info?.pullRequest?.state.uppercased() == "MERGED"
+    let pullRequestState = info?.pullRequest?.state.uppercased()
+    let isMerged = pullRequestState == "MERGED"
+    let isOpen = pullRequestState == "OPEN"
     let mergedColor = Color(red: 137.0 / 255.0, green: 87.0 / 255.0, blue: 229.0 / 255.0)
+    let openColor = Color(red: 35.0 / 255.0, green: 134.0 / 255.0, blue: 54.0 / 255.0)
     HStack(alignment: .center) {
       ZStack {
         if showsNotificationIndicator {
@@ -59,23 +62,35 @@ struct WorktreeRow: View {
           .accessibilityLabel("Task running")
       }
       if isMerged {
-        Text("MERGED")
-          .font(.caption2)
-          .monospaced()
-          .foregroundStyle(mergedColor)
-          .padding(.horizontal, 6)
-          .padding(.vertical, 2)
-          .overlay {
-            RoundedRectangle(cornerRadius: 4)
-              .stroke(mergedColor, lineWidth: 1)
-          }
-          .help("Pull request merged")
-          .accessibilityLabel("Merged")
+        WorktreePullRequestBadge(text: "MERGED", color: mergedColor, help: "Pull request merged")
+      } else if isOpen {
+        WorktreePullRequestBadge(text: "OPEN", color: openColor, help: "Pull request open")
       }
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)
       }
     }
+  }
+}
+
+private struct WorktreePullRequestBadge: View {
+  let text: String
+  let color: Color
+  let help: String
+
+  var body: some View {
+    Text(text)
+      .font(.caption2)
+      .monospaced()
+      .foregroundStyle(color)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 2)
+      .overlay {
+        RoundedRectangle(cornerRadius: 4)
+          .stroke(color, lineWidth: 1)
+      }
+      .help(help)
+      .accessibilityLabel(text)
   }
 }
 
