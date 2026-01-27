@@ -16,6 +16,7 @@ struct WorktreeDetailView: View {
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let loadingInfo = loadingInfo(for: selectedRow, repositories: repositories)
     let hasActiveWorktree = selectedWorktree != nil && loadingInfo == nil
+    let worktreeInfoSnapshot = state.worktreeInfo.snapshot
     let openActionSelection = state.openActionSelection
     let openSelectedWorktreeAction: (() -> Void)? = hasActiveWorktree
       ? { store.send(.openSelectedWorktree) }
@@ -80,6 +81,7 @@ struct WorktreeDetailView: View {
         worktreeToolbar(
           worktreeID: selectedWorktree.id,
           branchName: selectedWorktree.name,
+          worktreeInfoSnapshot: worktreeInfoSnapshot,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed
         )
@@ -154,6 +156,7 @@ struct WorktreeDetailView: View {
   private func worktreeToolbar(
     worktreeID: Worktree.ID,
     branchName: String,
+    worktreeInfoSnapshot: WorktreeInfoSnapshot?,
     openActionSelection: OpenWorktreeAction,
     showExtras: Bool
   ) -> some ToolbarContent {
@@ -165,8 +168,10 @@ struct WorktreeDetailView: View {
         }
       )
     }
-    ToolbarItem(placement: .principal) {
-      XcodeStyleStatusView()
+    if let model = PullRequestStatusModel(snapshot: worktreeInfoSnapshot) {
+      ToolbarItem(placement: .principal) {
+        PullRequestStatusButton(model: model)
+      }
     }
     #if DEBUG
     ToolbarItem(placement: .automatic) {

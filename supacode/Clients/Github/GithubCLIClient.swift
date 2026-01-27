@@ -55,7 +55,7 @@ extension GithubCLIClient: DependencyKey {
             "pr",
             "view",
             "--json",
-            "number,title,state,isDraft,reviewDecision,updatedAt",
+            "number,title,state,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
           ],
           repoRoot: worktreeRoot
         )
