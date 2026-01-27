@@ -7,6 +7,7 @@ enum GitOperation: String {
   case worktreeCreate = "worktree_create"
   case worktreeRemove = "worktree_remove"
   case branchNames = "branch_names"
+  case branchRename = "branch_rename"
   case dirtyCheck = "dirty_check"
 }
 
@@ -138,6 +139,14 @@ struct GitClient {
       detail: detail,
       workingDirectory: worktreeURL,
       repositoryRootURL: repositoryRootURL
+    )
+  }
+
+  nonisolated func renameBranch(in worktreeURL: URL, to branchName: String) async throws {
+    let path = worktreeURL.path(percentEncoded: false)
+    _ = try await runGit(
+      operation: .branchRename,
+      arguments: ["-C", path, "branch", "-m", branchName]
     )
   }
 

@@ -8,6 +8,7 @@ struct GitClientDependency {
   var createWorktree: @Sendable (_ name: String, _ repoRoot: URL) async throws -> Worktree
   var isWorktreeDirty: @Sendable (URL) async -> Bool
   var removeWorktree: @Sendable (_ worktree: Worktree) async throws -> URL
+  var renameBranch: @Sendable (_ worktreeURL: URL, _ branchName: String) async throws -> Void
 }
 
 extension GitClientDependency: DependencyKey {
@@ -21,6 +22,9 @@ extension GitClientDependency: DependencyKey {
     isWorktreeDirty: { await GitClient().isWorktreeDirty(at: $0) },
     removeWorktree: { worktree in
       try await GitClient().removeWorktree(worktree)
+    },
+    renameBranch: { worktreeURL, branchName in
+      try await GitClient().renameBranch(in: worktreeURL, to: branchName)
     }
   )
   static let testValue = liveValue

@@ -30,6 +30,9 @@ struct WorktreeDetailView: View {
     let closeSurfaceAction: (() -> Void)? = hasActiveWorktree
       ? { store.send(.closeSurface) }
       : nil
+    let navigationTitle = hasActiveWorktree
+      ? ""
+      : (selectedWorktree?.name ?? loadingInfo?.name ?? "Supacode")
     Group {
       if let loadingInfo {
         WorktreeLoadingView(info: loadingInfo)
@@ -57,10 +60,11 @@ struct WorktreeDetailView: View {
         EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
       }
     }
-    .navigationTitle(selectedWorktree?.name ?? loadingInfo?.name ?? "Supacode")
+    .navigationTitle(navigationTitle)
     .toolbar {
       if hasActiveWorktree, let selectedWorktree {
         worktreeToolbar(
+          worktreeID: selectedWorktree.id,
           branchName: selectedWorktree.name,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed
@@ -98,35 +102,39 @@ struct WorktreeDetailView: View {
 
   @ToolbarContentBuilder
   private func worktreeToolbar(
+    worktreeID: Worktree.ID,
     branchName: String,
     openActionSelection: OpenWorktreeAction,
     showExtras: Bool
   ) -> some ToolbarContent {
-    ToolbarItem(placement: .principal) {
-        XcodeStyleStatusView()
+    ToolbarItem(placement: .navigation) {
+      WorktreeDetailTitleView(
+        branchName: branchName,
+        onSubmit: { newBranch in
+          store.send(.repositories(.requestRenameBranch(worktreeID, newBranch)))
+        }
+      )
     }
-      
-      #if DEBUG
-      ToolbarItem(placement: .automatic) {
-          openMenu(openActionSelection: openActionSelection, showExtras: showExtras)
+    ToolbarItem(placement: .principal) {
+      XcodeStyleStatusView()
+    }
+    #if DEBUG
+    ToolbarItem(placement: .automatic) {
+      openMenu(openActionSelection: openActionSelection, showExtras: showExtras)
+    }
 
-      }
-      
-      ToolbarItem(placement: .primaryAction) {
-          Button("PR Button") { }.padding(.horizontal)
-      }
-      
-      
-      ToolbarItem(placement: .secondaryAction) {
-          Button("secpond") { }.padding(.horizontal)
-      }
-      
-      ToolbarItem(placement: .status) {
-          Button("status") { }.padding(.horizontal)
-      }
-      #endif
+    ToolbarItem(placement: .primaryAction) {
+      Button("PR Button") { }.padding(.horizontal)
+    }
 
-      
+    ToolbarItem(placement: .secondaryAction) {
+      Button("secpond") { }.padding(.horizontal)
+    }
+
+    ToolbarItem(placement: .status) {
+      Button("status") { }.padding(.horizontal)
+    }
+    #endif
   }
 
   @ViewBuilder
