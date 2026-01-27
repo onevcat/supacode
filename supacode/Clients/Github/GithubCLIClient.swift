@@ -6,6 +6,7 @@ struct GithubCLIClient {
   var latestRun: @Sendable (URL, String) async throws -> GithubWorkflowRun?
   var currentPullRequest: @Sendable (URL) async throws -> GithubPullRequest?
   var isAvailable: @Sendable () async -> Bool
+  var currentUser: @Sendable () async throws -> String
 }
 
 extension GithubCLIClient: DependencyKey {
@@ -74,6 +75,14 @@ extension GithubCLIClient: DependencyKey {
         } catch {
           return false
         }
+      },
+      currentUser: {
+        let output = try await runGh(
+          shell: shell,
+          arguments: ["api", "user", "--jq", ".login"],
+          repoRoot: nil
+        )
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
       }
     )
   }()
@@ -82,7 +91,8 @@ extension GithubCLIClient: DependencyKey {
     defaultBranch: { _ in "main" },
     latestRun: { _, _ in nil },
     currentPullRequest: { _ in nil },
-    isAvailable: { true }
+    isAvailable: { true },
+    currentUser: { "testuser" }
   )
 }
 

@@ -34,6 +34,8 @@ struct SettingsView: View {
             .tag(SettingsSection.notifications)
           Label("Updates", systemImage: "arrow.down.circle")
             .tag(SettingsSection.updates)
+          Label("GitHub", systemImage: "arrow.triangle.branch")
+            .tag(SettingsSection.github)
 
           Section("Repositories") {
             ForEach(repositories) { repository in
@@ -78,6 +80,12 @@ struct SettingsView: View {
           UpdatesSettingsView(settingsStore: settingsStore, updatesStore: updatesStore)
             .navigationTitle("Updates")
             .navigationSubtitle("Update preferences")
+        }
+      case .github:
+        SettingsDetailView {
+          GithubSettingsView()
+            .navigationTitle("GitHub")
+            .navigationSubtitle("GitHub CLI integration")
         }
       case .repository(let repositoryID):
         if let repository = repositories.first(where: { $0.id == repositoryID }) {

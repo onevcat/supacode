@@ -6,5 +6,6 @@ enum SettingsSection: Hashable {
   case appearance
   case notifications
   case updates
+  case github
   case repository(Repository.ID)
 }
