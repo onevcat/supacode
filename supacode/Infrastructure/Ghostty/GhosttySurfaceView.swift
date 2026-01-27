@@ -4,11 +4,6 @@ import CoreText
 import GhosttyKit
 
 final class GhosttySurfaceView: NSView, Identifiable {
-  static let dropTypes: Set<NSPasteboard.PasteboardType> = [
-    .string,
-    .fileURL,
-    .URL,
-  ]
   private struct ScrollbarState {
     let total: UInt64
     let offset: UInt64
@@ -67,6 +62,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
     GHOSTTY_MOUSE_SHAPE_N_RESIZE,
     GHOSTTY_MOUSE_SHAPE_S_RESIZE,
     GHOSTTY_MOUSE_SHAPE_NS_RESIZE,
+  ]
+  private static let dropTypes: Set<NSPasteboard.PasteboardType> = [
+    .string,
+    .fileURL,
+    .URL,
   ]
 
   override var acceptsFirstResponder: Bool { true }
@@ -944,6 +944,30 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
 }
 
+extension GhosttySurfaceView {
+  override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+    guard let types = sender.draggingPasteboard.types else { return [] }
+    if Set(types).isDisjoint(with: Self.dropTypes) {
+      return []
+    }
+    return .copy
+  }
+
+  override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+    let pasteboard = sender.draggingPasteboard
+
+    guard let content = pasteboard.getOpinionatedStringContents(), !content.isEmpty else {
+      return false
+    }
+
+    let selectionPasteboard = NSPasteboard.ghosttySelection
+    selectionPasteboard.clearContents()
+    selectionPasteboard.setString(content, forType: .string)
+    performBindingAction("paste_from_selection")
+    return true
+  }
+}
+
 extension GhosttySurfaceView: NSTextInputClient {
   func hasMarkedText() -> Bool {
     markedText.length > 0
@@ -1067,34 +1091,6 @@ extension GhosttySurfaceView: NSTextInputClient {
     chars.withCString { ptr in
       ghostty_surface_text(surface, ptr, UInt(len - 1))
     }
-  }
-}
-
-extension GhosttySurfaceView {
-  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-    guard let types = sender.draggingPasteboard.types else { return [] }
-    if Set(types).isDisjoint(with: Self.dropTypes) { return [] }
-    return .copy
-  }
-
-  override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-    let pasteboard = sender.draggingPasteboard
-    let content: String?
-    if let url = pasteboard.string(forType: .URL) {
-      content = NSPasteboard.ghosttyEscape(url)
-    } else if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
-      content = urls
-        .map { $0.isFileURL ? NSPasteboard.ghosttyEscape($0.path) : $0.absoluteString }
-        .joined(separator: " ")
-    } else if let str = pasteboard.string(forType: .string) {
-      content = str
-    } else {
-      content = nil
-    }
-
-    guard let content else { return false }
-    insertText(content, replacementRange: NSRange(location: 0, length: 0))
-    return true
   }
 }
 

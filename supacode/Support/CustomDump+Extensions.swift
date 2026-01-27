@@ -47,9 +47,3 @@ extension RepositoriesFeature.State: CustomDumpRepresentable {
     )
   }
 }
-
-extension URL: CustomDumpRepresentable {
-  public var customDumpValue: Any {
-    isFileURL ? lastPathComponent : absoluteString
-  }
-}
