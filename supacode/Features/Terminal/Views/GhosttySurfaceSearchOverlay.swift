@@ -67,21 +67,24 @@ struct GhosttySurfaceSearchOverlay: View {
       .padding(8)
       .background(.background)
       .clipShape(.rect(cornerRadius: 8))
-      .shadow(radius: 4)
-      .onAppear {
-        isSearchFieldFocused = true
-        scheduleSearch(searchText)
+    .shadow(radius: 4)
+    .onAppear {
+      focusSearchField()
+      scheduleSearch(searchText)
+    }
+    .onChange(of: searchText) { _, newValue in
+      scheduleSearch(newValue)
+    }
+    .onChange(of: state.searchNeedle) { _, newValue in
+      guard let newValue else { return }
+      focusSearchField()
+      if !newValue.isEmpty, newValue != searchText {
+        searchText = newValue
       }
-      .onChange(of: searchText) { _, newValue in
-        scheduleSearch(newValue)
-      }
-      .onChange(of: state.searchNeedle) { _, newValue in
-        guard let newValue else { return }
-        isSearchFieldFocused = true
-        if !newValue.isEmpty, newValue != searchText {
-          searchText = newValue
-        }
-      }
+    }
+    .onChange(of: state.searchFocusCount) { _, _ in
+      focusSearchField()
+    }
       .onDisappear {
         searchTask?.cancel()
         searchTask = nil
@@ -164,6 +167,14 @@ struct GhosttySurfaceSearchOverlay: View {
 
   private func closeSearch() {
     surfaceView.performBindingAction("end_search")
+  }
+
+  private func focusSearchField() {
+    isSearchFieldFocused = false
+    Task { @MainActor in
+      await Task.yield()
+      isSearchFieldFocused = true
+    }
   }
 
   private func centerPosition(

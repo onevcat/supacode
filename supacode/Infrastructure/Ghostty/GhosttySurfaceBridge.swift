@@ -276,6 +276,7 @@ final class GhosttySurfaceBridge {
 
     case GHOSTTY_ACTION_START_SEARCH:
       state.searchNeedle = string(from: action.action.start_search.needle)
+      state.searchFocusCount += 1
       return true
 
     case GHOSTTY_ACTION_END_SEARCH:
