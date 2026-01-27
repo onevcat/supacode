@@ -4,12 +4,14 @@ nonisolated enum PullRequestCheckState: Equatable {
   case passed
   case failed
   case pending
+  case ignored
 }
 
 nonisolated struct PullRequestCheckSummary: Equatable {
   let passed: Int
   let failed: Int
   let pending: Int
+  let ignored: Int
 
   var total: Int {
     passed + failed + pending
@@ -19,6 +21,7 @@ nonisolated struct PullRequestCheckSummary: Equatable {
     var passed = 0
     var failed = 0
     var pending = 0
+    var ignored = 0
     for check in checks {
       switch check.summarizedState {
       case .passed:
@@ -27,11 +30,14 @@ nonisolated struct PullRequestCheckSummary: Equatable {
         failed += 1
       case .pending:
         pending += 1
+      case .ignored:
+        ignored += 1
       }
     }
     self.passed = passed
     self.failed = failed
     self.pending = pending
+    self.ignored = ignored
   }
 }
 
@@ -58,8 +64,10 @@ nonisolated struct GithubPullRequestStatusCheck: Decodable, Equatable {
     }
     if let conclusion {
       switch conclusion.uppercased() {
-      case "SUCCESS", "NEUTRAL", "CANCELLED", "SKIPPED":
+      case "SUCCESS", "NEUTRAL":
         return .passed
+      case "CANCELLED", "SKIPPED":
+        return .ignored
       case "FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE":
         return .failed
       default:

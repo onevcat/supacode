@@ -49,16 +49,34 @@ extension GithubCLIClient: DependencyKey {
       return runs.first
       },
       currentPullRequest: { worktreeRoot in
-        let output = try await runGhAllowingNoPR(
-          shell: shell,
-          arguments: [
-            "pr",
-            "view",
-            "--json",
-            "number,title,state,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
-          ],
-          repoRoot: worktreeRoot
-        )
+        let output: String?
+        do {
+          output = try await runGhAllowingNoPR(
+            shell: shell,
+            arguments: [
+              "pr",
+              "view",
+              "--json",
+              "number,title,state,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
+            ],
+            repoRoot: worktreeRoot
+          )
+        } catch {
+          if isUnsupportedStatusCheckRollupError(error) {
+            output = try await runGhAllowingNoPR(
+              shell: shell,
+              arguments: [
+                "pr",
+                "view",
+                "--json",
+                "number,title,state,isDraft,reviewDecision,updatedAt,url",
+              ],
+              repoRoot: worktreeRoot
+            )
+          } else {
+            throw error
+          }
+        }
         guard let output, !output.isEmpty else {
           return nil
         }
@@ -125,4 +143,12 @@ nonisolated private func runGhAllowingNoPR(
     }
     throw error
   }
+}
+
+nonisolated private func isUnsupportedStatusCheckRollupError(_ error: Error) -> Bool {
+  let message = error.localizedDescription.lowercased()
+  if !message.contains("statuscheckrollup") {
+    return false
+  }
+  return message.contains("unknown") || message.contains("unsupported") || message.contains("field")
 }
