@@ -15,8 +15,8 @@ struct SidebarFooterView: View {
       }
       .labelStyle(.iconOnly)
       .help("Help")
-      SettingsLink {
-        Label("Settings", systemImage: "gearshape")
+      Button("Settings", systemImage: "gearshape") {
+        SettingsWindowManager.shared.show()
       }
       .labelStyle(.iconOnly)
       .help("Settings (\(AppShortcuts.openSettings.display))")
