@@ -36,6 +36,7 @@ struct WorktreeInfoView: View {
             VStack(alignment: .leading) {
               Text("Local Git Data")
                 .font(.headline)
+                .monospaced()
 
               if case .loading = state.status {
                 Text("Refreshing...")
@@ -58,6 +59,7 @@ struct WorktreeInfoView: View {
             VStack(alignment: .leading) {
               Text("GitHub CLI Integrations")
                 .font(.headline)
+                .monospaced()
 
               if let githubError = snapshot.githubError {
                 LabeledContent("GitHub CLI") {
@@ -98,6 +100,7 @@ struct WorktreeInfoView: View {
 
               Text("CI")
                 .font(.subheadline)
+                .monospaced()
                 .foregroundStyle(.secondary)
 
               LabeledContent("Workflow") {

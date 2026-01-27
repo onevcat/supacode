@@ -32,6 +32,7 @@ struct WorktreeDetailTitleView: View {
           }
       }
       .font(.headline)
+      .monospaced()
       .padding(.horizontal, 8)
       .padding(.vertical, 4)
       .task { isFocused = true }
@@ -47,6 +48,7 @@ struct WorktreeDetailTitleView: View {
           Text(branchName)
         }
         .font(.headline)
+        .monospaced()
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
       }

@@ -18,6 +18,7 @@ struct WorktreeRow: View {
         if showsNotificationIndicator {
           Image(systemName: "bell.fill")
             .font(.caption)
+            .monospaced()
             .foregroundStyle(.orange)
             .opacity(showsSpinner ? 0 : 1)
             .help("Unread notifications")
@@ -25,6 +26,7 @@ struct WorktreeRow: View {
         } else {
           Image(systemName: branchIconName)
             .font(.caption)
+            .monospaced()
             .foregroundStyle(.secondary)
             .opacity(showsSpinner ? 0 : 1)
             .accessibilityHidden(true)
@@ -39,6 +41,7 @@ struct WorktreeRow: View {
         if let description {
           Text(description)
             .font(.caption)
+            .monospaced()
             .foregroundStyle(.secondary)
         }
       }

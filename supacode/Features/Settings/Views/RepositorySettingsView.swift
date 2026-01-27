@@ -15,6 +15,7 @@ struct RepositorySettingsView: View {
             )
           )
           .font(.body)
+          .monospaced()
           .frame(minHeight: 120)
           if store.settings.setupScript.isEmpty {
             Text("echo 123")
@@ -22,6 +23,7 @@ struct RepositorySettingsView: View {
               .padding(.top, 8)
               .padding(.leading, 6)
               .font(.body)
+              .monospaced()
               .allowsHitTesting(false)
           }
         }

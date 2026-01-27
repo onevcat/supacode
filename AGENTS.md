@@ -102,6 +102,7 @@ Always read `./docs/swift-rules.md` before writing Swift code. Key points:
 - Buttons must have tooltips explaining the action and associated hotkey
 - Use Dynamic Type, avoid hardcoded font sizes
 - Components should be layout-agnostic (parents control layout, children control appearance)
+- Always use `.monospaced()` modifier on fonts for consistent SF Mono typography
 
 ## Rules
 

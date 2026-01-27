@@ -40,6 +40,7 @@ struct AppearanceOptionCardView: View {
         .aspectRatio(1.6, contentMode: .fit)
         Text(mode.title)
           .font(.headline)
+          .monospaced()
       }
       .frame(maxWidth: .infinity)
       .padding()

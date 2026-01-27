@@ -6,18 +6,22 @@ struct XcodeStyleStatusView: View {
       Image(systemName: "checkmark.circle.fill")
         .foregroundStyle(.green)
         .font(.system(size: 14))
+        .monospaced()
         .accessibilityHidden(true)
 
       Text("Build Succeeded")
         .font(.system(size: 12))
+        .monospaced()
         .foregroundStyle(.secondary)
 
       Text("|")
         .font(.system(size: 12))
+        .monospaced()
         .foregroundStyle(.quaternary)
 
       Text("Today at 2:34 PM")
         .font(.system(size: 12))
+        .monospaced()
         .foregroundStyle(.tertiary)
     }
   }
@@ -40,9 +44,10 @@ struct XcodeStyleDiagnosticsView: View {
         Image(systemName: "exclamationmark.triangle.fill")
           .foregroundStyle(.yellow)
           .font(.system(size: 12))
+          .monospaced()
           .accessibilityHidden(true)
         Text("3")
-          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .font(.system(size: 12, weight: .medium, design: .monospaced))
       }
       .padding(.horizontal, 8)
       .padding(.vertical, 4)
@@ -52,9 +57,10 @@ struct XcodeStyleDiagnosticsView: View {
         Image(systemName: "xmark.circle.fill")
           .foregroundStyle(.red)
           .font(.system(size: 12))
+          .monospaced()
           .accessibilityHidden(true)
         Text("0")
-          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .font(.system(size: 12, weight: .medium, design: .monospaced))
       }
       .padding(.horizontal, 8)
       .padding(.vertical, 4)
