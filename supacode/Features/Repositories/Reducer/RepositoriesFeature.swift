@@ -157,6 +157,10 @@ struct RepositoriesFeature {
           let mergedRoots = await MainActor.run {
             uniqueRootPaths(mergedPathsSnapshot)
           }.map { URL(fileURLWithPath: $0) }
+          let persistedRoots = mergedRoots.map { $0.path(percentEncoded: false) }
+          await MainActor.run {
+            repositoryPersistence.saveRoots(persistedRoots)
+          }
           let (repositories, errors) = await loadRepositoriesData(mergedRoots)
           await send(
             .openRepositoriesFinished(repositories, errors: errors, failures: failures)
@@ -617,8 +621,6 @@ struct RepositoriesFeature {
         errors.append(error.localizedDescription)
       }
     }
-    let persistedRoots = loaded.map { $0.rootURL.path(percentEncoded: false) }
-    repositoryPersistence.saveRoots(persistedRoots)
     return (loaded, errors)
   }
 
