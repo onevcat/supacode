@@ -5,6 +5,11 @@ struct TerminalCommands: Commands {
   @FocusedValue(\.newTerminalAction) private var newTerminalAction
   @FocusedValue(\.closeSurfaceAction) private var closeSurfaceAction
   @FocusedValue(\.closeTabAction) private var closeTabAction
+  @FocusedValue(\.startSearchAction) private var startSearchAction
+  @FocusedValue(\.searchSelectionAction) private var searchSelectionAction
+  @FocusedValue(\.navigateSearchNextAction) private var navigateSearchNextAction
+  @FocusedValue(\.navigateSearchPreviousAction) private var navigateSearchPreviousAction
+  @FocusedValue(\.endSearchAction) private var endSearchAction
 
   var body: some Commands {
     CommandGroup(after: .newItem) {
@@ -27,6 +32,41 @@ struct TerminalCommands: Commands {
         KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "close_tab"))
       )
       .disabled(closeTabAction == nil)
+    }
+    CommandGroup(after: .textEditing) {
+      Button("Find...") {
+        startSearchAction?()
+      }
+      .keyboardShortcut("f", modifiers: .command)
+      .disabled(startSearchAction == nil)
+
+      Button("Find Next") {
+        navigateSearchNextAction?()
+      }
+      .keyboardShortcut("g", modifiers: .command)
+      .disabled(navigateSearchNextAction == nil)
+
+      Button("Find Previous") {
+        navigateSearchPreviousAction?()
+      }
+      .keyboardShortcut("g", modifiers: [.command, .shift])
+      .disabled(navigateSearchPreviousAction == nil)
+
+      Divider()
+
+      Button("Hide Find Bar") {
+        endSearchAction?()
+      }
+      .keyboardShortcut("f", modifiers: [.command, .shift])
+      .disabled(endSearchAction == nil)
+
+      Divider()
+
+      Button("Use Selection for Find") {
+        searchSelectionAction?()
+      }
+      .keyboardShortcut("e", modifiers: .command)
+      .disabled(searchSelectionAction == nil)
     }
   }
 }
@@ -61,6 +101,61 @@ extension FocusedValues {
   var closeTabAction: (() -> Void)? {
     get { self[CloseTabActionKey.self] }
     set { self[CloseTabActionKey.self] = newValue }
+  }
+}
+
+private struct StartSearchActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var startSearchAction: (() -> Void)? {
+    get { self[StartSearchActionKey.self] }
+    set { self[StartSearchActionKey.self] = newValue }
+  }
+}
+
+private struct SearchSelectionActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var searchSelectionAction: (() -> Void)? {
+    get { self[SearchSelectionActionKey.self] }
+    set { self[SearchSelectionActionKey.self] = newValue }
+  }
+}
+
+private struct NavigateSearchNextActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var navigateSearchNextAction: (() -> Void)? {
+    get { self[NavigateSearchNextActionKey.self] }
+    set { self[NavigateSearchNextActionKey.self] = newValue }
+  }
+}
+
+private struct NavigateSearchPreviousActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var navigateSearchPreviousAction: (() -> Void)? {
+    get { self[NavigateSearchPreviousActionKey.self] }
+    set { self[NavigateSearchPreviousActionKey.self] = newValue }
+  }
+}
+
+private struct EndSearchActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var endSearchAction: (() -> Void)? {
+    get { self[EndSearchActionKey.self] }
+    set { self[EndSearchActionKey.self] = newValue }
   }
 }
 

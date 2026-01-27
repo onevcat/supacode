@@ -44,6 +44,11 @@ struct AppFeature {
     case newTerminal
     case closeTab
     case closeSurface
+    case startSearch
+    case searchSelection
+    case navigateSearchNext
+    case navigateSearchPrevious
+    case endSearch
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
   }
@@ -198,6 +203,46 @@ struct AppFeature {
         }
         return .run { _ in
           await terminalClient.send(.closeFocusedSurface(worktree))
+        }
+
+      case .startSearch:
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.startSearch(worktree))
+        }
+
+      case .searchSelection:
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.searchSelection(worktree))
+        }
+
+      case .navigateSearchNext:
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.navigateSearchNext(worktree))
+        }
+
+      case .navigateSearchPrevious:
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.navigateSearchPrevious(worktree))
+        }
+
+      case .endSearch:
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(.endSearch(worktree))
         }
 
       case .alert(.dismiss):

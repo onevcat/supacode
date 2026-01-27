@@ -107,6 +107,18 @@ final class WorktreeTerminalState {
     return true
   }
 
+  @discardableResult
+  func performBindingActionOnFocusedSurface(_ action: String) -> Bool {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId],
+      let surface = surfaces[focusedId]
+    else {
+      return false
+    }
+    surface.performBindingAction(action)
+    return true
+  }
+
   func closeTab(_ tabId: TerminalTabID) {
     removeTree(for: tabId)
     tabManager.closeTab(tabId)

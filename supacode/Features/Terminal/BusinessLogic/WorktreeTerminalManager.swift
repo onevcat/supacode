@@ -21,6 +21,16 @@ final class WorktreeTerminalManager {
       _ = closeFocusedTab(in: worktree)
     case .closeFocusedSurface(let worktree):
       _ = closeFocusedSurface(in: worktree)
+    case .startSearch(let worktree):
+      state(for: worktree).performBindingActionOnFocusedSurface("start_search")
+    case .searchSelection(let worktree):
+      state(for: worktree).performBindingActionOnFocusedSurface("search_selection")
+    case .navigateSearchNext(let worktree):
+      state(for: worktree).performBindingActionOnFocusedSurface("navigate_search:next")
+    case .navigateSearchPrevious(let worktree):
+      state(for: worktree).performBindingActionOnFocusedSurface("navigate_search:previous")
+    case .endSearch(let worktree):
+      state(for: worktree).performBindingActionOnFocusedSurface("end_search")
     case .prune(let ids):
       prune(keeping: ids)
     case .setNotificationsEnabled(let enabled):
