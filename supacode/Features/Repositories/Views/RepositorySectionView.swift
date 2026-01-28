@@ -12,7 +12,7 @@ struct RepositorySectionView: View {
     let isExpanded = expandedRepoIDs.contains(repository.id)
     let isRemovingRepository = state.isRemovingRepository(repository)
     let openRepoSettings = {
-      store.send(.openRepositorySettings(repository.id))
+      _ = store.send(.openRepositorySettings(repository.id))
     }
     Section {
       WorktreeRowsView(
