@@ -55,7 +55,7 @@ struct SupacodeApp: App {
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
-    let initialSettings = SettingsStorage().load().global
+    let initialSettings = GlobalSettings.default
     let terminalManager = WorktreeTerminalManager(runtime: runtime)
     _terminalManager = State(initialValue: terminalManager)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()

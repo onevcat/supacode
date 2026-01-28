@@ -2,15 +2,15 @@ import ComposableArchitecture
 import Foundation
 
 struct RepositorySettingsClient {
-  var load: @Sendable (URL) -> RepositorySettings
-  var save: @Sendable (_ settings: RepositorySettings, _ rootURL: URL) -> Void
+  var load: @Sendable (URL) async -> RepositorySettings
+  var save: @Sendable (_ settings: RepositorySettings, _ rootURL: URL) async -> Void
 }
 
 extension RepositorySettingsClient: DependencyKey {
   static let liveValue = RepositorySettingsClient(
-    load: { RepositorySettingsStorage().load(for: $0) },
+    load: { await RepositorySettingsStorage().load(for: $0) },
     save: { settings, url in
-      RepositorySettingsStorage().save(settings, for: url)
+      await RepositorySettingsStorage().save(settings, for: url)
     }
   )
   static let testValue = RepositorySettingsClient(

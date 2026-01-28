@@ -1,6 +1,7 @@
 import Foundation
 
-nonisolated struct SettingsStorage {
+actor SettingsStorage {
+  static let shared = SettingsStorage()
   let settingsURL: URL
 
   init(settingsURL: URL = SupacodePaths.settingsURL) {
@@ -8,6 +9,21 @@ nonisolated struct SettingsStorage {
   }
 
   func load() -> SettingsFile {
+    loadLocked()
+  }
+
+  func save(_ settings: SettingsFile) {
+    saveLocked(settings)
+  }
+
+  func update<T: Sendable>(_ transform: @Sendable (inout SettingsFile) -> T) -> T {
+    var settings = loadLocked()
+    let result = transform(&settings)
+    saveLocked(settings)
+    return result
+  }
+
+  private func loadLocked() -> SettingsFile {
     var settings: SettingsFile
     var shouldSave = false
     if let data = try? Data(contentsOf: settingsURL),
@@ -22,12 +38,12 @@ nonisolated struct SettingsStorage {
       shouldSave = true
     }
     if shouldSave {
-      save(settings)
+      saveLocked(settings)
     }
     return settings
   }
 
-  func save(_ settings: SettingsFile) {
+  private func saveLocked(_ settings: SettingsFile) {
     do {
       let directory = settingsURL.deletingLastPathComponent()
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

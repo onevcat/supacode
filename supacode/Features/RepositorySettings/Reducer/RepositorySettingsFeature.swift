@@ -16,6 +16,7 @@ struct RepositorySettingsFeature {
 
   enum Action: Equatable {
     case task
+    case settingsLoaded(RepositorySettings)
     case setSetupScript(String)
     case setRunScript(String)
   }
@@ -26,26 +27,43 @@ struct RepositorySettingsFeature {
     Reduce { state, action in
       switch action {
       case .task:
-        state.settings = repositorySettingsClient.load(state.rootURL)
+        let rootURL = state.rootURL
+        return .run { send in
+          let settings = await repositorySettingsClient.load(rootURL)
+          await send(.settingsLoaded(settings))
+        }
+
+      case .settingsLoaded(let settings):
+        state.settings = settings
         return .none
 
       case .setSetupScript(let script):
         state.settings.setupScript = script
-        repositorySettingsClient.save(state.settings, state.rootURL)
-        NotificationCenter.default.post(
-          name: Notification.Name("repositorySettingsChanged"),
-          object: state.rootURL
-        )
-        return .none
+        let settings = state.settings
+        let rootURL = state.rootURL
+        return .run { _ in
+          await repositorySettingsClient.save(settings, rootURL)
+          await MainActor.run {
+            NotificationCenter.default.post(
+              name: Notification.Name("repositorySettingsChanged"),
+              object: rootURL
+            )
+          }
+        }
 
       case .setRunScript(let script):
         state.settings.runScript = script
-        repositorySettingsClient.save(state.settings, state.rootURL)
-        NotificationCenter.default.post(
-          name: Notification.Name("repositorySettingsChanged"),
-          object: state.rootURL
-        )
-        return .none
+        let settings = state.settings
+        let rootURL = state.rootURL
+        return .run { _ in
+          await repositorySettingsClient.save(settings, rootURL)
+          await MainActor.run {
+            NotificationCenter.default.post(
+              name: Notification.Name("repositorySettingsChanged"),
+              object: rootURL
+            )
+          }
+        }
       }
     }
   }

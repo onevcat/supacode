@@ -1,4 +1,4 @@
-nonisolated struct GlobalSettings: Codable, Equatable {
+nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var appearanceMode: AppearanceMode
   var updatesAutomaticallyCheckForUpdates: Bool
   var updatesAutomaticallyDownloadUpdates: Bool

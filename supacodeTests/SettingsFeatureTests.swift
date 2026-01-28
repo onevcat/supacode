@@ -19,7 +19,8 @@ struct SettingsFeatureTests {
       $0.settingsClient.load = { loaded }
     }
 
-    await store.send(.task) {
+    await store.send(.task)
+    await store.receive(.settingsLoaded(loaded)) {
       $0.appearanceMode = .dark
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true

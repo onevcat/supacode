@@ -1,30 +1,30 @@
 import ComposableArchitecture
 
 struct RepositoryPersistenceClient {
-  var loadRoots: @Sendable () -> [String]
-  var saveRoots: @Sendable ([String]) -> Void
-  var loadPinnedWorktreeIDs: @Sendable () -> [Worktree.ID]
-  var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) -> Void
+  var loadRoots: @Sendable () async -> [String]
+  var saveRoots: @Sendable ([String]) async -> Void
+  var loadPinnedWorktreeIDs: @Sendable () async -> [Worktree.ID]
+  var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
 }
 
 extension RepositoryPersistenceClient: DependencyKey {
   static let liveValue: RepositoryPersistenceClient = {
     return RepositoryPersistenceClient(
       loadRoots: {
-        SettingsStorage().load().repositoryRoots
+        await SettingsStorage.shared.load().repositoryRoots
       },
       saveRoots: { roots in
-        var settings = SettingsStorage().load()
-        settings.repositoryRoots = roots
-        SettingsStorage().save(settings)
+        await SettingsStorage.shared.update { settings in
+          settings.repositoryRoots = roots
+        }
       },
       loadPinnedWorktreeIDs: {
-        SettingsStorage().load().pinnedWorktreeIDs
+        await SettingsStorage.shared.load().pinnedWorktreeIDs
       },
       savePinnedWorktreeIDs: { ids in
-        var settings = SettingsStorage().load()
-        settings.pinnedWorktreeIDs = ids
-        SettingsStorage().save(settings)
+        await SettingsStorage.shared.update { settings in
+          settings.pinnedWorktreeIDs = ids
+        }
       }
     )
   }()

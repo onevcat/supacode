@@ -9,7 +9,6 @@ final class WorktreeTerminalState {
   let tabManager: TerminalTabManager
   private let runtime: GhosttyRuntime
   private let worktree: Worktree
-  private let settingsStorage = RepositorySettingsStorage()
   private var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   private var surfaces: [UUID: GhosttySurfaceView] = [:]
   private var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
@@ -50,15 +49,26 @@ final class WorktreeTerminalState {
 
   func ensureInitialTab(focusing: Bool) {
     if tabManager.tabs.isEmpty {
-      _ = createTab(focusing: focusing)
+      Task {
+        let setupScript: String?
+        if pendingSetupScript {
+          let settings = await RepositorySettingsStorage().load(for: worktree.repositoryRootURL)
+          setupScript = settings.setupScript
+        } else {
+          setupScript = nil
+        }
+        await MainActor.run {
+          _ = createTab(focusing: focusing, setupScript: setupScript)
+        }
+      }
     }
   }
 
   @discardableResult
-  func createTab(focusing: Bool = true) -> TerminalTabID? {
+  func createTab(focusing: Bool = true, setupScript: String? = nil) -> TerminalTabID? {
     let title = "\(worktree.name) \(nextTabIndex())"
-    let resolvedInput = setupScriptInput(shouldRun: pendingSetupScript)
-    if pendingSetupScript {
+    let resolvedInput = setupScriptInput(setupScript: setupScript)
+    if pendingSetupScript, setupScript != nil {
       pendingSetupScript = false
     }
     return createTab(
@@ -210,11 +220,7 @@ final class WorktreeTerminalState {
     if let existing = trees[tabId] {
       return existing
     }
-    let resolvedInput = initialInput ?? setupScriptInput(shouldRun: pendingSetupScript)
-    if pendingSetupScript {
-      pendingSetupScript = false
-    }
-    let surface = createSurface(tabId: tabId, initialInput: resolvedInput)
+    let surface = createSurface(tabId: tabId, initialInput: initialInput)
     let tree = SplitTree(view: surface)
     trees[tabId] = tree
     focusedSurfaceIdByTab[tabId] = surface.id
@@ -345,10 +351,12 @@ final class WorktreeTerminalState {
     hasUnseenNotification = false
   }
 
-  private func setupScriptInput(shouldRun: Bool) -> String? {
-    guard shouldRun else { return nil }
-    let settings = settingsStorage.load(for: worktree.repositoryRootURL)
-    let script = settings.setupScript
+  func needsSetupScript() -> Bool {
+    pendingSetupScript
+  }
+
+  private func setupScriptInput(setupScript: String?) -> String? {
+    guard pendingSetupScript, let script = setupScript else { return nil }
     let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       return nil

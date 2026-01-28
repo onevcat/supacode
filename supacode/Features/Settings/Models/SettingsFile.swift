@@ -1,4 +1,4 @@
-nonisolated struct SettingsFile: Codable, Equatable {
+nonisolated struct SettingsFile: Codable, Equatable, Sendable {
   var global: GlobalSettings
   var repositories: [String: RepositorySettings]
   var repositoryRoots: [String]

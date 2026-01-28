@@ -1,6 +1,6 @@
 import Foundation
 
-struct Worktree: Identifiable, Hashable {
+struct Worktree: Identifiable, Hashable, Sendable {
   let id: String
   let name: String
   let detail: String
