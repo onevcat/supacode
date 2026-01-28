@@ -254,7 +254,7 @@ struct AppFeature {
         var effects: [Effect<Action>] = [
           .run { _ in
             await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
-          }
+          },
         ]
         if shouldRunSetupScript {
           effects.append(.send(.repositories(.consumeSetupScript(worktree.id))))
