@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     HStack {
@@ -11,7 +12,15 @@ struct SidebarFooterView: View {
       }
       .help("Add Repository (\(AppShortcuts.openRepository.display))")
       Spacer()
-      Button("Help", systemImage: "questionmark.circle") {
+      Menu {
+        Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
+          if let url = URL(string: "https://github.com/supabitapp/supacode-sh/issues/new") {
+            openURL(url)
+          }
+        }
+        .help("Submit GitHub issue")
+      } label: {
+        Label("Help", systemImage: "questionmark.circle")
       }
       .labelStyle(.iconOnly)
       .help("Help")
