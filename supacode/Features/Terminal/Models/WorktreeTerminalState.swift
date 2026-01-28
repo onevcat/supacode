@@ -361,6 +361,15 @@ final class WorktreeTerminalState {
     pendingSetupScript
   }
 
+  func enableSetupScriptIfNeeded() {
+    if pendingSetupScript {
+      return
+    }
+    if tabManager.tabs.isEmpty {
+      pendingSetupScript = true
+    }
+  }
+
   private func setupScriptInput(setupScript: String?) -> String? {
     guard pendingSetupScript, let script = setupScript else { return nil }
     let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)

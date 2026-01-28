@@ -250,9 +250,16 @@ struct AppFeature {
         guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
           return .none
         }
-        return .run { _ in
-          await terminalClient.send(.createTab(worktree))
+        let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        var effects: [Effect<Action>] = [
+          .run { _ in
+            await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
+          }
+        ]
+        if shouldRunSetupScript {
+          effects.append(.send(.repositories(.consumeSetupScript(worktree.id))))
         }
+        return .merge(effects)
 
       case .runScript:
         guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {

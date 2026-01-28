@@ -6,7 +6,7 @@ struct TerminalClient {
   var events: @MainActor @Sendable () -> AsyncStream<Event>
 
   enum Command: Equatable {
-    case createTab(Worktree)
+    case createTab(Worktree, runSetupScriptIfNew: Bool)
     case runScript(Worktree, script: String)
     case stopRunScript(Worktree)
     case closeFocusedTab(Worktree)
