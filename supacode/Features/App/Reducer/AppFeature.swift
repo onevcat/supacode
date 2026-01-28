@@ -19,7 +19,7 @@ struct AppFeature {
     var worktreeInfo = WorktreeInfoFeature.State()
     var settings: SettingsFeature.State
     var updates = UpdatesFeature.State()
-    var openActionSelection: OpenWorktreeAction = .finder
+    var openActionSelection: OpenWorktreeAction = .preferredDefault()
     var selectedRunScript: String = ""
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     @Presents var alert: AlertState<Alert>?
@@ -101,7 +101,7 @@ struct AppFeature {
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
         guard let worktree else {
-          state.openActionSelection = .finder
+          state.openActionSelection = .preferredDefault()
           state.selectedRunScript = ""
           return .merge(
             .send(.worktreeInfo(.worktreeChanged(nil, cachedPullRequest: nil))),
