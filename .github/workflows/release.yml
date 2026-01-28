@@ -35,11 +35,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          LATEST_RELEASE_TAG=$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName' | head -n 1 || true)
-          if [ -n "$LATEST_RELEASE_TAG" ]; then
-            RANGE="$LATEST_RELEASE_TAG..$TAG"
+          PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" "$TAG^" 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..$TAG"
           else
-            RANGE="$(git rev-list --max-parents=0 HEAD)..$TAG"
+            RANGE="$(git rev-list --max-parents=0 "$TAG")..$TAG"
           fi
           COMMITS=$(git log --pretty=format:"%h %s" "$RANGE")
           CHANGES=$(git diff --name-status "$RANGE")
