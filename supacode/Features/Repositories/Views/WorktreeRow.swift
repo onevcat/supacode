@@ -16,6 +16,7 @@ struct WorktreeRow: View {
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
     let hasInfo = info?.addedLines != nil || info?.removedLines != nil
     let pullRequestState = info?.pullRequest?.state.uppercased()
+    let pullRequestNumber = info?.pullRequest?.number
     let isMerged = pullRequestState == "MERGED"
     let isOpen = pullRequestState == "OPEN"
     let mergedColor = Color(red: 137.0 / 255.0, green: 87.0 / 255.0, blue: 229.0 / 255.0)
@@ -66,7 +67,11 @@ struct WorktreeRow: View {
       if isMerged {
         WorktreePullRequestBadge(text: "MERGED", color: mergedColor, help: "Pull request merged")
       } else if isOpen {
-        WorktreePullRequestBadge(text: "OPEN", color: openColor, help: "Pull request open")
+        if let pullRequestNumber {
+          WorktreePullRequestBadge(text: "#\(pullRequestNumber)", color: openColor, help: "Pull request open")
+        } else {
+          WorktreePullRequestBadge(text: "OPEN", color: openColor, help: "Pull request open")
+        }
       }
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)
