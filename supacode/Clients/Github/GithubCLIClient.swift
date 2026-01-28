@@ -96,7 +96,7 @@ extension GithubCLIClient: DependencyKey {
               "pr",
               "view",
               "--json",
-              "number,title,state,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
+              "number,title,state,additions,deletions,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
             ],
             repoRoot: worktreeRoot
           )
@@ -108,7 +108,7 @@ extension GithubCLIClient: DependencyKey {
                 "pr",
                 "view",
                 "--json",
-                "number,title,state,isDraft,reviewDecision,updatedAt,url",
+                "number,title,state,additions,deletions,isDraft,reviewDecision,updatedAt,url",
               ],
               repoRoot: worktreeRoot
             )

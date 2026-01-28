@@ -14,9 +14,12 @@ struct WorktreeRow: View {
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
-    let hasInfo = info?.addedLines != nil || info?.removedLines != nil
-    let pullRequestState = info?.pullRequest?.state.uppercased()
-    let pullRequestNumber = info?.pullRequest?.number
+    let pullRequest = info?.pullRequest
+    let displayAddedLines = pullRequest?.additions ?? info?.addedLines
+    let displayRemovedLines = pullRequest?.deletions ?? info?.removedLines
+    let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
+    let pullRequestState = pullRequest?.state.uppercased()
+    let pullRequestNumber = pullRequest?.number
     let isMerged = pullRequestState == "MERGED"
     let isOpen = pullRequestState == "OPEN"
     let mergedColor = Color(red: 137.0 / 255.0, green: 87.0 / 255.0, blue: 229.0 / 255.0)
@@ -49,7 +52,7 @@ struct WorktreeRow: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(name)
             .monospaced()
-          WorktreeRowInfoView(info: info)
+          WorktreeRowInfoView(addedLines: displayAddedLines, removedLines: displayRemovedLines)
         }
       } else {
         Text(name)
@@ -102,11 +105,12 @@ private struct WorktreePullRequestBadge: View {
 }
 
 private struct WorktreeRowInfoView: View {
-  let info: WorktreeInfoEntry?
+  let addedLines: Int?
+  let removedLines: Int?
 
   var body: some View {
     HStack {
-      if let info, let addedLines = info.addedLines, let removedLines = info.removedLines {
+      if let addedLines, let removedLines {
         HStack {
           Text("+\(addedLines)")
             .foregroundStyle(.green)
