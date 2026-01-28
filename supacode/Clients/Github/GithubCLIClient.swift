@@ -88,32 +88,48 @@ extension GithubCLIClient: DependencyKey {
       return runs.first
       },
       currentPullRequest: { worktreeRoot in
-        let output: String?
-        do {
-          output = try await runGhAllowingNoPR(
-            shell: shell,
-            arguments: [
-              "pr",
-              "view",
-              "--json",
-              "number,title,state,additions,deletions,isDraft,reviewDecision,updatedAt,url,statusCheckRollup",
-            ],
-            repoRoot: worktreeRoot
-          )
-        } catch {
-          if isUnsupportedStatusCheckRollupError(error) {
+        let baseFields = [
+          "number",
+          "title",
+          "state",
+          "additions",
+          "deletions",
+          "isDraft",
+          "reviewDecision",
+          "updatedAt",
+          "url",
+        ]
+        let headRefNameField = "headRefName"
+        let statusCheckField = "statusCheckRollup"
+        var requestedFields = baseFields + [headRefNameField, statusCheckField]
+        var output: String?
+        while true {
+          do {
             output = try await runGhAllowingNoPR(
               shell: shell,
               arguments: [
                 "pr",
                 "view",
                 "--json",
-                "number,title,state,additions,deletions,isDraft,reviewDecision,updatedAt,url",
+                requestedFields.joined(separator: ","),
               ],
               repoRoot: worktreeRoot
             )
-          } else {
-            throw error
+            break
+          } catch {
+            let dropHeadRefName = isUnsupportedFieldError(error, fieldName: headRefNameField)
+            let dropStatusCheck = isUnsupportedFieldError(error, fieldName: statusCheckField)
+            var updatedFields = requestedFields
+            if dropHeadRefName {
+              updatedFields.removeAll { $0 == headRefNameField }
+            }
+            if dropStatusCheck {
+              updatedFields.removeAll { $0 == statusCheckField }
+            }
+            if updatedFields == requestedFields {
+              throw error
+            }
+            requestedFields = updatedFields
           }
         }
         guard let output, !output.isEmpty else {
@@ -199,9 +215,10 @@ nonisolated private func runGhAllowingNoPR(
   }
 }
 
-nonisolated private func isUnsupportedStatusCheckRollupError(_ error: Error) -> Bool {
+nonisolated private func isUnsupportedFieldError(_ error: Error, fieldName: String) -> Bool {
   let message = error.localizedDescription.lowercased()
-  if !message.contains("statuscheckrollup") {
+  let normalizedFieldName = fieldName.lowercased()
+  if !message.contains(normalizedFieldName) {
     return false
   }
   return message.contains("unknown") || message.contains("unsupported") || message.contains("field")

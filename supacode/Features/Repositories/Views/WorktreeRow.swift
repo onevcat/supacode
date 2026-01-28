@@ -15,11 +15,17 @@ struct WorktreeRow: View {
     let showsSpinner = isLoading || taskStatus == .running
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
     let pullRequest = info?.pullRequest
-    let displayAddedLines = pullRequest?.additions ?? info?.addedLines
-    let displayRemovedLines = pullRequest?.deletions ?? info?.removedLines
+    let matchesWorktree = if let pullRequest {
+      pullRequest.headRefName == nil || pullRequest.headRefName == name
+    } else {
+      false
+    }
+    let displayPullRequest = matchesWorktree ? pullRequest : nil
+    let displayAddedLines = displayPullRequest?.additions ?? info?.addedLines
+    let displayRemovedLines = displayPullRequest?.deletions ?? info?.removedLines
     let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
-    let pullRequestState = pullRequest?.state.uppercased()
-    let pullRequestNumber = pullRequest?.number
+    let pullRequestState = displayPullRequest?.state.uppercased()
+    let pullRequestNumber = displayPullRequest?.number
     let isMerged = pullRequestState == "MERGED"
     let isOpen = pullRequestState == "OPEN"
     let mergedColor = Color(red: 137.0 / 255.0, green: 87.0 / 255.0, blue: 229.0 / 255.0)
