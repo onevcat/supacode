@@ -9,7 +9,7 @@ nonisolated struct RepositoryRootsKey: SharedKey {
   }
 
   func load(
-    context: LoadContext<[String]>,
+    context _: LoadContext<[String]>,
     continuation: LoadContinuation<[String]>
   ) {
     @Shared(.settingsFile) var settingsFile: SettingsFile
@@ -20,11 +20,7 @@ nonisolated struct RepositoryRootsKey: SharedKey {
       }
       return normalized
     }
-    if roots.isEmpty, let defaults = context.initialValue {
-      continuation.resume(returning: defaults)
-    } else {
-      continuation.resume(returning: roots)
-    }
+    continuation.resume(returning: roots)
   }
 
   func subscribe(
@@ -56,7 +52,7 @@ nonisolated struct PinnedWorktreeIDsKey: SharedKey {
   }
 
   func load(
-    context: LoadContext<[Worktree.ID]>,
+    context _: LoadContext<[Worktree.ID]>,
     continuation: LoadContinuation<[Worktree.ID]>
   ) {
     @Shared(.settingsFile) var settingsFile: SettingsFile
@@ -67,11 +63,7 @@ nonisolated struct PinnedWorktreeIDsKey: SharedKey {
       }
       return normalized
     }
-    if ids.isEmpty, let defaults = context.initialValue {
-      continuation.resume(returning: defaults)
-    } else {
-      continuation.resume(returning: ids)
-    }
+    continuation.resume(returning: ids)
   }
 
   func subscribe(

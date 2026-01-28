@@ -120,8 +120,7 @@ struct RepositoriesFeature {
         state.alert = nil
         return .run { send in
           let loadedPaths = await repositoryPersistence.loadRoots()
-          var seen: Set<String> = []
-          let rootPaths = loadedPaths.filter { seen.insert($0).inserted }
+          let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           let roots = rootPaths.map { URL(fileURLWithPath: $0) }
           let (repositories, failures) = await loadRepositoriesData(roots)
           await send(
@@ -184,8 +183,7 @@ struct RepositoriesFeature {
         state.alert = nil
         return .run { send in
           let loadedPaths = await repositoryPersistence.loadRoots()
-          var seen: Set<String> = []
-          let existingRootPaths = loadedPaths.filter { seen.insert($0).inserted }
+          let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           var resolvedRoots: [URL] = []
           var invalidRoots: [String] = []
           for url in urls {
@@ -196,20 +194,12 @@ struct RepositoriesFeature {
               invalidRoots.append(url.path(percentEncoded: false))
             }
           }
-          var mergedPaths = existingRootPaths
-          for root in resolvedRoots {
-            let normalized = root.standardizedFileURL.path(percentEncoded: false)
-            if !mergedPaths.contains(normalized) {
-              mergedPaths.append(normalized)
-            }
-          }
-          let mergedPathsSnapshot = mergedPaths
-          var mergedSeen: Set<String> = []
-          let mergedRoots = mergedPathsSnapshot
-            .filter { mergedSeen.insert($0).inserted }
-            .map { URL(fileURLWithPath: $0) }
-          let persistedRoots = mergedRoots.map { $0.path(percentEncoded: false) }
-          await repositoryPersistence.saveRoots(persistedRoots)
+          let resolvedRootPaths = RepositoryPathNormalizer.normalize(
+            resolvedRoots.map { $0.path(percentEncoded: false) }
+          )
+          let mergedPaths = RepositoryPathNormalizer.normalize(existingRootPaths + resolvedRootPaths)
+          let mergedRoots = mergedPaths.map { URL(fileURLWithPath: $0) }
+          await repositoryPersistence.saveRoots(mergedPaths)
           let (repositories, failures) = await loadRepositoriesData(mergedRoots)
           await send(
             .openRepositoriesFinished(
