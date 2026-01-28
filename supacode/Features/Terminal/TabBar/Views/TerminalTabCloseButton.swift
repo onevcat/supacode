@@ -3,6 +3,7 @@ import SwiftUI
 struct TerminalTabCloseButton: View {
   var isHoveringTab: Bool
   var isDragging: Bool
+  var isShowingShortcutHint: Bool
   var closeAction: () -> Void
   @Binding var closeButtonGestureActive: Bool
   @Binding var isHoveringClose: Bool
@@ -13,7 +14,7 @@ struct TerminalTabCloseButton: View {
   @State private var isPressing = false
 
   var body: some View {
-    let showClose = (isHoveringTab || isHoveringClose) && !isDragging
+    let showClose = (isHoveringTab || isHoveringClose) && !isDragging && !isShowingShortcutHint
     Button("Close Tab", systemImage: "xmark") {
       closeAction()
     }

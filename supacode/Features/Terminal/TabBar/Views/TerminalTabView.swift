@@ -13,21 +13,36 @@ struct TerminalTabView: View {
   @State private var isHovering = false
   @State private var isHoveringClose = false
   @State private var isPressing = false
+  @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
   var body: some View {
-    Button(action: onSelect) {
-      TerminalTabLabelView(
-        tab: tab,
-        isActive: isActive,
+    ZStack(alignment: .trailing) {
+      Button(action: onSelect) {
+        TerminalTabLabelView(
+          tab: tab,
+          isActive: isActive,
+          isHoveringTab: isHovering,
+          isHoveringClose: isHoveringClose,
+          shortcutHint: shortcutHint,
+          showsShortcutHint: showsShortcutHint
+        )
+      }
+      .buttonStyle(TerminalTabButtonStyle(isPressing: $isPressing))
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .contentShape(.rect)
+      .help("Open tab \(tab.title)")
+      .accessibilityLabel(tab.title)
+
+      TerminalTabCloseButton(
         isHoveringTab: isHovering,
         isDragging: isDragging,
-        tabIndex: tabIndex,
+        isShowingShortcutHint: showsShortcutHint,
         closeAction: onClose,
         closeButtonGestureActive: $closeButtonGestureActive,
         isHoveringClose: $isHoveringClose
       )
+      .padding(.trailing, TerminalTabBarMetrics.tabHorizontalPadding)
     }
-    .buttonStyle(TerminalTabButtonStyle(isPressing: $isPressing))
     .background {
       TerminalTabBackground(
         isActive: isActive,
@@ -52,7 +67,15 @@ struct TerminalTabView: View {
       isHovering = hovering
     }
     .zIndex(isActive ? 2 : (isDragging ? 3 : 0))
-    .help("Open tab \(tab.title)")
-    .accessibilityLabel(tab.title)
+  }
+
+  private var shortcutHint: String? {
+    let number = tabIndex + 1
+    guard number > 0 && number <= 9 else { return nil }
+    return "⌘\(number)"
+  }
+
+  private var showsShortcutHint: Bool {
+    commandKeyObserver.isPressed && shortcutHint != nil
   }
 }
