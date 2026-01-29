@@ -22,66 +22,68 @@ struct PullRequestChecksPopoverView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading) {
-      Text("Checks")
-        .font(.headline)
-        .monospaced()
+    ScrollView {
+      VStack(alignment: .leading) {
+        Text("Checks")
+          .font(.headline)
+          .monospaced()
 
-      HStack {
-        PullRequestChecksRingView(breakdown: breakdown)
-        Text(breakdown.summaryText)
-          .foregroundStyle(.secondary)
-      }
-      .font(.caption)
-
-      if let pullRequestURL {
-        Button("Open pull request on GitHub") {
-          openURL(pullRequestURL)
+        HStack {
+          PullRequestChecksRingView(breakdown: breakdown)
+          Text(breakdown.summaryText)
+            .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .help("Open pull request on GitHub (\(AppShortcuts.openPullRequest.display))")
-        .keyboardShortcut(AppShortcuts.openPullRequest.keyboardShortcut)
         .font(.caption)
-      }
 
-      Divider()
-
-      if sortedChecks.isEmpty {
-        Text("Checks unavailable")
-          .foregroundStyle(.secondary)
+        if let pullRequestURL {
+          Button("Open pull request on GitHub") {
+            openURL(pullRequestURL)
+          }
+          .buttonStyle(.plain)
+          .help("Open pull request on GitHub (\(AppShortcuts.openPullRequest.display))")
+          .keyboardShortcut(AppShortcuts.openPullRequest.keyboardShortcut)
           .font(.caption)
-      } else {
-        VStack(alignment: .leading) {
-          ForEach(sortedChecks, id: \.self) { check in
-            let style = PullRequestCheckStatusStyle(state: check.checkState)
-            HStack {
-              Image(systemName: style.symbol)
-                .foregroundStyle(style.color)
-                .accessibilityHidden(true)
-              if let url = check.detailsUrl.flatMap(URL.init(string:)) {
-                Button {
-                  openURL(url)
-                } label: {
+        }
+
+        Divider()
+
+        if sortedChecks.isEmpty {
+          Text("Checks unavailable")
+            .foregroundStyle(.secondary)
+            .font(.caption)
+        } else {
+          VStack(alignment: .leading) {
+            ForEach(sortedChecks, id: \.self) { check in
+              let style = PullRequestCheckStatusStyle(state: check.checkState)
+              HStack {
+                Image(systemName: style.symbol)
+                  .foregroundStyle(style.color)
+                  .accessibilityHidden(true)
+                if let url = check.detailsUrl.flatMap(URL.init(string:)) {
+                  Button {
+                    openURL(url)
+                  } label: {
+                    Text(check.displayName)
+                      .lineLimit(1)
+                  }
+                  .buttonStyle(.plain)
+                  .help("Open check details on GitHub")
+                } else {
                   Text(check.displayName)
                     .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .help("Open check details on GitHub")
-              } else {
-                Text(check.displayName)
-                  .lineLimit(1)
+                Spacer()
+                Text(style.label)
+                  .foregroundStyle(.secondary)
               }
-              Spacer()
-              Text(style.label)
-                .foregroundStyle(.secondary)
+              .font(.caption)
             }
-            .font(.caption)
           }
         }
       }
+      .padding()
     }
-    .padding()
-    .frame(minWidth: 260)
+    .frame(minWidth: 260, maxWidth: 840, maxHeight: 720)
   }
 
   private static func sortRank(for state: GithubPullRequestCheckState) -> Int {
