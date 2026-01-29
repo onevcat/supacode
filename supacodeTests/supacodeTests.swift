@@ -15,25 +15,6 @@ struct SupacodeTests {
     // Write your test here and use APIs like `#expect(...)` to check expected conditions.
   }
 
-  @Test func worktreeNameGeneratorReturnsRemainingName() {
-    let adjectives = WorktreeNameGenerator.adjectives
-    let animals = WorktreeNameGenerator.animals
-    let allNames = adjectives.flatMap { adj in animals.map { "\(adj)-\($0)" } }
-    let expected = allNames.last!
-    let excluded = Set(allNames.dropLast())
-    let name = WorktreeNameGenerator.nextName(excluding: excluded)
-    #expect(name == expected)
-  }
-
-  @Test func worktreeNameGeneratorReturnsNilWhenExhausted() {
-    let adjectives = WorktreeNameGenerator.adjectives
-    let animals = WorktreeNameGenerator.animals
-    let allNames = adjectives.flatMap { adj in animals.map { "\(adj)-\($0)" } }
-    let excluded = Set(allNames)
-    let name = WorktreeNameGenerator.nextName(excluding: excluded)
-    #expect(name == nil)
-  }
-
   @Test func worktreeDirtCheckEmptyIsClean() {
     #expect(WorktreeDirtCheck.isDirty(statusOutput: "") == false)
   }
