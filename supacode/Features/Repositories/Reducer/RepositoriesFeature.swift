@@ -374,6 +374,15 @@ struct RepositoriesFeature {
                 repositorySettings.copyUntrackedOnWorktreeCreate
               )
             } catch {
+              let repositoryPath = repository.rootURL.path(percentEncoded: false)
+              let worktreePath = newWorktree.workingDirectory.path(percentEncoded: false)
+              let message =
+                "worktree sync failed repo=\(repositoryPath) "
+                + "worktree=\(worktreePath) "
+                + "copyIgnored=\(repositorySettings.copyIgnoredOnWorktreeCreate) "
+                + "copyUntracked=\(repositorySettings.copyUntrackedOnWorktreeCreate) "
+                + "error=\(error.localizedDescription)"
+              print(message)
               await send(
                 .presentAlert(
                   title: "Unable to copy files to new worktree",
