@@ -74,7 +74,11 @@ struct WorktreeRow: View {
           .accessibilityLabel("Run script active")
       }
       if isMerged {
-        WorktreePullRequestBadge(text: "MERGED", color: mergedColor, help: "Pull request merged")
+        if let pullRequestNumber {
+          WorktreePullRequestBadge(text: "#\(pullRequestNumber)", color: mergedColor, help: "Pull request merged")
+        } else {
+          WorktreePullRequestBadge(text: "MERGED", color: mergedColor, help: "Pull request merged")
+        }
       } else if isOpen {
         if let pullRequestNumber {
           WorktreePullRequestBadge(text: "#\(pullRequestNumber)", color: openColor, help: "Pull request open")
