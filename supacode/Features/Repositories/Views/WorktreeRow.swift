@@ -10,6 +10,7 @@ struct WorktreeRow: View {
   let isRunScriptRunning: Bool
   let showsNotificationIndicator: Bool
   let shortcutHint: String?
+  @Environment(\.openURL) private var openURL
 
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
@@ -26,8 +27,11 @@ struct WorktreeRow: View {
     let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
     let pullRequestState = displayPullRequest?.state.uppercased()
     let pullRequestNumber = displayPullRequest?.number
+    let pullRequestURL = displayPullRequest?.url.flatMap(URL.init(string:))
     let isMerged = pullRequestState == "MERGED"
     let isOpen = pullRequestState == "OPEN"
+    let mergedHelp = pullRequestURL == nil ? "Pull request merged" : "Open merged pull request on GitHub"
+    let openHelp = pullRequestURL == nil ? "Pull request open" : "Open pull request on GitHub"
     let mergedColor = Color(red: 137.0 / 255.0, green: 87.0 / 255.0, blue: 229.0 / 255.0)
     let openColor = Color(red: 35.0 / 255.0, green: 134.0 / 255.0, blue: 54.0 / 255.0)
     HStack(alignment: .center) {
@@ -75,20 +79,34 @@ struct WorktreeRow: View {
       }
       if isMerged {
         if let pullRequestNumber {
-          WorktreePullRequestBadge(text: "#\(pullRequestNumber)", color: mergedColor, help: "Pull request merged")
+          pullRequestBadge(text: "#\(pullRequestNumber)", color: mergedColor, help: mergedHelp, url: pullRequestURL)
         } else {
-          WorktreePullRequestBadge(text: "MERGED", color: mergedColor, help: "Pull request merged")
+          pullRequestBadge(text: "MERGED", color: mergedColor, help: mergedHelp, url: pullRequestURL)
         }
       } else if isOpen {
         if let pullRequestNumber {
-          WorktreePullRequestBadge(text: "#\(pullRequestNumber)", color: openColor, help: "Pull request open")
+          pullRequestBadge(text: "#\(pullRequestNumber)", color: openColor, help: openHelp, url: pullRequestURL)
         } else {
-          WorktreePullRequestBadge(text: "OPEN", color: openColor, help: "Pull request open")
+          pullRequestBadge(text: "OPEN", color: openColor, help: openHelp, url: pullRequestURL)
         }
       }
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)
       }
+    }
+  }
+
+  @ViewBuilder
+  private func pullRequestBadge(text: String, color: Color, help: String, url: URL?) -> some View {
+    if let url {
+      Button {
+        openURL(url)
+      } label: {
+        WorktreePullRequestBadge(text: text, color: color, help: help)
+      }
+      .buttonStyle(.plain)
+    } else {
+      WorktreePullRequestBadge(text: text, color: color, help: help)
     }
   }
 }
