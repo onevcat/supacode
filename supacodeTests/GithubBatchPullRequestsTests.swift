@@ -65,4 +65,45 @@ struct GithubBatchPullRequestsTests {
     #expect(prs["feature-a"]?.title == "Primary PR")
     #expect(prs["feature-b"] == nil)
   }
+
+  @Test func ignoresForkOnlyMatches() throws {
+    let json = """
+    {
+      "data": {
+        "repository": {
+          "branch0": {
+            "nodes": [
+              {
+                "number": 9,
+                "title": "Fork PR",
+                "state": "OPEN",
+                "additions": 1,
+                "deletions": 0,
+                "isDraft": false,
+                "reviewDecision": null,
+                "updatedAt": "2025-01-01T00:00:00Z",
+                "url": "https://github.com/fork/repo/pull/9",
+                "headRefName": "feature-a",
+                "headRepository": {
+                  "name": "repo",
+                  "owner": { "login": "fork" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+    """
+    let data = Data(json.utf8)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let response = try decoder.decode(GithubGraphQLPullRequestResponse.self, from: data)
+    let prs = response.pullRequestsByBranch(
+      aliasMap: ["branch0": "feature-a"],
+      owner: "octo",
+      repo: "repo"
+    )
+    #expect(prs["feature-a"] == nil)
+  }
 }

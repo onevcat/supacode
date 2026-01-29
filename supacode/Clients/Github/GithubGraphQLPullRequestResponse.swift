@@ -15,10 +15,9 @@ nonisolated struct GithubGraphQLPullRequestResponse: Decodable {
       guard let branch = aliasMap[alias] else {
         continue
       }
-      let node = connection.nodes.first(where: {
+      if let node = connection.nodes.first(where: {
         $0.matches(owner: normalizedOwner, repo: normalizedRepo)
-      }) ?? connection.nodes.first
-      if let node {
+      }) {
         results[branch] = node.pullRequest
       }
     }
