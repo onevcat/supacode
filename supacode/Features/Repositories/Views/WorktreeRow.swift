@@ -116,27 +116,27 @@ struct WorktreeRow: View {
       Button {
         openURL(url)
       } label: {
-        HStack(spacing: 6) {
-          if let checkBreakdown {
-            PullRequestBadgeView(text: text, color: color)
-            PullRequestChecksRingView(breakdown: checkBreakdown)
-          } else {
-            PullRequestBadgeView(text: text, color: color)
-          }
-        }
+        pullRequestBadgeContent(text: text, color: color, checkBreakdown: checkBreakdown)
       }
       .buttonStyle(.plain)
       .help(help)
     } else {
-      HStack(spacing: 6) {
-        if let checkBreakdown {
-          PullRequestBadgeView(text: text, color: color)
-          PullRequestChecksRingView(breakdown: checkBreakdown)
-        } else {
-          PullRequestBadgeView(text: text, color: color)
-        }
+      pullRequestBadgeContent(text: text, color: color, checkBreakdown: checkBreakdown)
+        .help(help)
+    }
+  }
+
+  @ViewBuilder
+  private func pullRequestBadgeContent(
+    text: String,
+    color: Color,
+    checkBreakdown: PullRequestCheckBreakdown?
+  ) -> some View {
+    HStack(spacing: 6) {
+      PullRequestBadgeView(text: text, color: color)
+      if let checkBreakdown {
+        PullRequestChecksRingView(breakdown: checkBreakdown)
       }
-      .help(help)
     }
   }
 }
