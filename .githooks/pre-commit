@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+files_file=$(mktemp -t supacode-pre-commit.XXXXXX)
+trap 'rm -f "$files_file"' EXIT
+
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.swift' > "$files_file"
+if [ ! -s "$files_file" ]; then
+  exit 0
+fi
+
+unstaged=0
+while IFS= read -r -d '' file; do
+  if ! git diff --quiet -- "$file"; then
+    echo "unstaged changes present in: $file"
+    unstaged=1
+  fi
+done < "$files_file"
+if [ "$unstaged" -ne 0 ]; then
+  echo "stash or stage all Swift changes before committing"
+  exit 1
+fi
+
+make format FILES_FILE="$files_file"
+make lint FILES_FILE="$files_file"
+
+xargs -0 git add -- < "$files_file"
