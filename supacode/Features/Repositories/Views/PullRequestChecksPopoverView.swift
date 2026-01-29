@@ -83,7 +83,7 @@ struct PullRequestChecksPopoverView: View {
       }
       .padding()
     }
-    .frame(minWidth: 260, maxWidth: 420, maxHeight: 360)
+    .frame(minWidth: 260, maxWidth: 840, maxHeight: 720)
   }
 
   private static func sortRank(for state: GithubPullRequestCheckState) -> Int {
