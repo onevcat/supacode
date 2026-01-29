@@ -28,12 +28,14 @@ struct PullRequestChecksPopoverView: View {
           .font(.headline)
           .monospaced()
 
-        HStack {
-          PullRequestChecksRingView(breakdown: breakdown)
-          Text(breakdown.summaryText)
-            .foregroundStyle(.secondary)
+        if breakdown.total > 0 {
+          HStack {
+            PullRequestChecksRingView(breakdown: breakdown)
+            Text(breakdown.summaryText)
+              .foregroundStyle(.secondary)
+          }
+          .font(.caption)
         }
-        .font(.caption)
 
         if let pullRequestURL {
           Button("Open pull request on GitHub") {
@@ -45,13 +47,8 @@ struct PullRequestChecksPopoverView: View {
           .font(.caption)
         }
 
-        Divider()
-
-        if sortedChecks.isEmpty {
-          Text("Checks unavailable")
-            .foregroundStyle(.secondary)
-            .font(.caption)
-        } else {
+        if !sortedChecks.isEmpty {
+          Divider()
           VStack(alignment: .leading) {
             ForEach(sortedChecks, id: \.self) { check in
               let style = PullRequestCheckStatusStyle(state: check.checkState)

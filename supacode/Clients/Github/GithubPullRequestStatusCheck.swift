@@ -140,7 +140,7 @@ nonisolated struct PullRequestCheckBreakdown: Equatable {
       parts.append("\(passed) successful")
     }
     if parts.isEmpty {
-      return "Checks unavailable"
+      return ""
     }
     return parts.joined(separator: ", ")
   }

@@ -60,7 +60,7 @@ struct PullRequestStatusModel: Equatable {
     let checks = pullRequest.statusCheckRollup?.checks ?? []
     self.statusChecks = checks
     if checks.isEmpty {
-      self.detailText = prefix + "Checks unavailable"
+      self.detailText = isDraft ? "(Drafted)" : nil
       return
     }
     let breakdown = PullRequestCheckBreakdown(checks: checks)
