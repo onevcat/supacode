@@ -19,6 +19,8 @@ struct RepositorySettingsFeature {
     case settingsLoaded(RepositorySettings)
     case setSetupScript(String)
     case setRunScript(String)
+    case setCopyIgnoredOnWorktreeCreate(Bool)
+    case setCopyUntrackedOnWorktreeCreate(Bool)
     case delegate(Delegate)
   }
 
@@ -55,6 +57,26 @@ struct RepositorySettingsFeature {
 
       case .setRunScript(let script):
         state.settings.runScript = script
+        let settings = state.settings
+        let rootURL = state.rootURL
+        let repositorySettingsClient = repositorySettingsClient
+        return .run { send in
+          repositorySettingsClient.save(settings, rootURL)
+          await send(.delegate(.settingsChanged(rootURL)))
+        }
+
+      case .setCopyIgnoredOnWorktreeCreate(let isEnabled):
+        state.settings.copyIgnoredOnWorktreeCreate = isEnabled
+        let settings = state.settings
+        let rootURL = state.rootURL
+        let repositorySettingsClient = repositorySettingsClient
+        return .run { send in
+          repositorySettingsClient.save(settings, rootURL)
+          await send(.delegate(.settingsChanged(rootURL)))
+        }
+
+      case .setCopyUntrackedOnWorktreeCreate(let isEnabled):
+        state.settings.copyUntrackedOnWorktreeCreate = isEnabled
         let settings = state.settings
         let rootURL = state.rootURL
         let repositorySettingsClient = repositorySettingsClient

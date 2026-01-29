@@ -99,6 +99,7 @@ struct RepositoriesFeature {
   @Dependency(\.gitClient) private var gitClient
   @Dependency(\.githubCLI) private var githubCLI
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
+  @Dependency(\.repositorySettingsClient) private var repositorySettingsClient
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in
@@ -329,6 +330,7 @@ struct RepositoriesFeature {
         }
         let previousSelection = state.selectedWorktreeID
         let pendingID = "pending:\(UUID().uuidString)"
+        let repositorySettings = repositorySettingsClient.load(repository.rootURL)
         state.pendingWorktrees.append(
           PendingWorktree(
             id: pendingID,
@@ -361,6 +363,20 @@ struct RepositoriesFeature {
               return
             }
             let newWorktree = try await gitClient.createWorktree(name, repository.rootURL)
+            do {
+              try await gitClient.syncWorktree(
+                newWorktree.workingDirectory,
+                repositorySettings.copyIgnoredOnWorktreeCreate,
+                repositorySettings.copyUntrackedOnWorktreeCreate
+              )
+            } catch {
+              await send(
+                .presentAlert(
+                  title: "Unable to copy files to new worktree",
+                  message: "Check your repository state and try again."
+                )
+              )
+            }
             await send(
               .createRandomWorktreeSucceeded(
                 newWorktree,

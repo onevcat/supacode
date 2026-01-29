@@ -5,6 +5,7 @@ enum GitOperation: String {
   case repoRoot = "repo_root"
   case worktreeList = "worktree_list"
   case worktreeCreate = "worktree_create"
+  case worktreeSync = "worktree_sync"
   case worktreeRemove = "worktree_remove"
   case branchNames = "branch_names"
   case branchRename = "branch_rename"
@@ -140,6 +141,30 @@ struct GitClient {
       detail: detail,
       workingDirectory: worktreeURL,
       repositoryRootURL: repositoryRootURL
+    )
+  }
+
+  nonisolated func syncWorktree(
+    at worktreeURL: URL,
+    copyIgnored: Bool,
+    copyUntracked: Bool
+  ) async throws {
+    if !copyIgnored && !copyUntracked {
+      return
+    }
+    let wtURL = try wtScriptURL()
+    var arguments = ["sync", "-f"]
+    if copyIgnored {
+      arguments.append("--copy-ignored")
+    }
+    if copyUntracked {
+      arguments.append("--copy-untracked")
+    }
+    _ = try await runLoginShellProcess(
+      operation: .worktreeSync,
+      executableURL: wtURL,
+      arguments: arguments,
+      currentDirectoryURL: worktreeURL
     )
   }
 
