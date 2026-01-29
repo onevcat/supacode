@@ -1,12 +1,15 @@
 #!/bin/sh
 set -e
 
-files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')
-if [ -z "$files" ]; then
+files_file=$(mktemp -t supacode-pre-commit.XXXXXX)
+trap 'rm -f "$files_file"' EXIT
+
+git diff --cached --name-only -z --diff-filter=ACMR -- '*.swift' > "$files_file"
+if [ ! -s "$files_file" ]; then
   exit 0
 fi
 
-make format FILES="$files"
-make lint FILES="$files"
+make format FILES_FILE="$files_file"
+make lint FILES_FILE="$files_file"
 
-git add $files
+xargs -0 git add -- < "$files_file"

@@ -15,7 +15,7 @@ GHOSTTY_TERMINFO_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/terminfo
 GHOSTTY_BUILD_OUTPUTS := $(GHOSTTY_XCFRAMEWORK_PATH) $(GHOSTTY_RESOURCE_PATH) $(GHOSTTY_TERMINFO_PATH)
 VERSION ?=
 BUILD ?=
-FILES ?=
+FILES_FILE ?=
 
 .DEFAULT_GOAL := help
 .PHONY: serve build-ghostty-xcframework build-app run-app install-dev-build sync-ghostty-resources lint test update-wt bump-version bump-and-release install-git-hooks
@@ -65,10 +65,13 @@ install-dev-build: build-app # install dev build to /Applications
 	echo "installed $$dst"
 
 lint: # Run swiftlint
-	if [ -n "$(FILES)" ]; then \
-		for file in $(FILES); do \
+	if [ -n "$(FILES_FILE)" ]; then \
+		if [ ! -s "$(FILES_FILE)" ]; then \
+			exit 0; \
+		fi; \
+		while IFS= read -r -d '' file; do \
 			mise exec -- swiftlint --quiet --path "$$file"; \
-		done; \
+		done < "$(FILES_FILE)"; \
 	else \
 		mise exec -- swiftlint --quiet; \
 	fi
@@ -77,11 +80,14 @@ test: build-ghostty-xcframework
 	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation 2>&1
 
 format: # Swift format
-	if [ -n "$(FILES)" ]; then \
-		swift-format -p --in-place --configuration ./.swift-format.json $(FILES); \
-		for file in $(FILES); do \
+	if [ -n "$(FILES_FILE)" ]; then \
+		if [ ! -s "$(FILES_FILE)" ]; then \
+			exit 0; \
+		fi; \
+		xargs -0 swift-format -p --in-place --configuration ./.swift-format.json -- < "$(FILES_FILE)"; \
+		while IFS= read -r -d '' file; do \
 			mise exec -- swiftlint --fix --quiet --path "$$file"; \
-		done; \
+		done < "$(FILES_FILE)"; \
 	else \
 		swift-format -p --in-place --recursive --configuration ./.swift-format.json supacode supacodeTests; \
 		mise exec -- swiftlint --fix --quiet; \
