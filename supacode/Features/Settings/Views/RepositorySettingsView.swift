@@ -7,6 +7,28 @@ struct RepositorySettingsView: View {
   var body: some View {
     Form {
       Section {
+        Toggle(
+          "Copy ignored files to new worktrees",
+          isOn: Binding(
+            get: { store.settings.copyIgnoredOnWorktreeCreate },
+            set: { store.send(.setCopyIgnoredOnWorktreeCreate($0)) }
+          )
+        )
+        Toggle(
+          "Copy untracked files to new worktrees",
+          isOn: Binding(
+            get: { store.settings.copyUntrackedOnWorktreeCreate },
+            set: { store.send(.setCopyUntrackedOnWorktreeCreate($0)) }
+          )
+        )
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Worktree")
+          Text("Applies when creating a new worktree")
+            .foregroundStyle(.secondary)
+        }
+      }
+      Section {
         ZStack(alignment: .topLeading) {
           TextEditor(
             text: Binding(
@@ -59,28 +81,6 @@ struct RepositorySettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
           Text("Run Script")
           Text("Run script launched on demand from the toolbar")
-            .foregroundStyle(.secondary)
-        }
-      }
-      Section {
-        Toggle(
-          "Copy ignored files to new worktrees",
-          isOn: Binding(
-            get: { store.settings.copyIgnoredOnWorktreeCreate },
-            set: { store.send(.setCopyIgnoredOnWorktreeCreate($0)) }
-          )
-        )
-        Toggle(
-          "Copy untracked files to new worktrees",
-          isOn: Binding(
-            get: { store.settings.copyUntrackedOnWorktreeCreate },
-            set: { store.send(.setCopyUntrackedOnWorktreeCreate($0)) }
-          )
-        )
-      } header: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Worktree")
-          Text("Uses wt sync -f after creating a new worktree")
             .foregroundStyle(.secondary)
         }
       }

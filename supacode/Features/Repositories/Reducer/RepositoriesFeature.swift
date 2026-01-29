@@ -372,8 +372,8 @@ struct RepositoriesFeature {
             } catch {
               await send(
                 .presentAlert(
-                  title: "Unable to sync new worktree",
-                  message: error.localizedDescription
+                  title: "Unable to copy files to new worktree",
+                  message: "Check your repository state and try again."
                 )
               )
             }
