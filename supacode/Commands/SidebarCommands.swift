@@ -5,7 +5,7 @@ struct SidebarCommands: Commands {
   @FocusedValue(\.toggleRightSidebarAction) private var toggleRightSidebarAction
 
   var body: some Commands {
-    CommandMenu("View") {
+    CommandGroup(replacing: .sidebar) {
       Button("Toggle Left Sidebar") {
         toggleLeftSidebarAction?()
       }
