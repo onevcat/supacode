@@ -14,7 +14,6 @@ struct ContentView: View {
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
   @State private var leftSidebarVisibility: NavigationSplitViewVisibility = .all
-  @State private var isRightSidebarVisible = false
 
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
@@ -27,11 +26,7 @@ struct ContentView: View {
       SidebarView(store: repositoriesStore, terminalManager: terminalManager)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
     } detail: {
-      WorktreeSplitView(
-        store: store,
-        terminalManager: terminalManager,
-        isInfoVisible: $isRightSidebarVisible
-      )
+      WorktreeDetailView(store: store, terminalManager: terminalManager)
     }
     .navigationSplitViewStyle(.automatic)
     .task {
@@ -65,18 +60,11 @@ struct ContentView: View {
     .alert(store: repositoriesStore.scope(state: \.$alert, action: \.alert))
     .alert(store: store.scope(state: \.$alert, action: \.alert))
     .focusedSceneValue(\.toggleLeftSidebarAction, toggleLeftSidebar)
-    .focusedSceneValue(\.toggleRightSidebarAction, toggleRightSidebar)
   }
 
   private func toggleLeftSidebar() {
     withAnimation(.easeInOut(duration: 0.2)) {
       leftSidebarVisibility = leftSidebarVisibility == .detailOnly ? .all : .detailOnly
-    }
-  }
-
-  private func toggleRightSidebar() {
-    withAnimation(.easeInOut(duration: 0.2)) {
-      isRightSidebarVisible.toggle()
     }
   }
 }

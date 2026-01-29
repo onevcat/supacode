@@ -16,7 +16,7 @@ struct WorktreeDetailView: View {
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let loadingInfo = loadingInfo(for: selectedRow, repositories: repositories)
     let hasActiveWorktree = selectedWorktree != nil && loadingInfo == nil
-    let worktreeInfoSnapshot = state.worktreeInfo.snapshot
+    let pullRequest = selectedWorktree.flatMap { repositories.worktreeInfoByID[$0.id]?.pullRequest }
     let openActionSelection = state.openActionSelection
     let runScriptEnabled =
       hasActiveWorktree
@@ -58,7 +58,7 @@ struct WorktreeDetailView: View {
       if hasActiveWorktree, let selectedWorktree {
         let toolbarState = WorktreeToolbarState(
           branchName: selectedWorktree.name,
-          worktreeInfoSnapshot: worktreeInfoSnapshot,
+          pullRequest: pullRequest,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed,
           runScriptEnabled: runScriptEnabled,
@@ -132,7 +132,7 @@ struct WorktreeDetailView: View {
 
   private struct WorktreeToolbarState {
     let branchName: String
-    let worktreeInfoSnapshot: WorktreeInfoSnapshot?
+    let pullRequest: GithubPullRequest?
     let openActionSelection: OpenWorktreeAction
     let showExtras: Bool
     let runScriptEnabled: Bool
@@ -188,7 +188,7 @@ struct WorktreeDetailView: View {
     }
     ToolbarItem(placement: .principal) {
       HStack {
-        if let model = PullRequestStatusModel(snapshot: toolbarState.worktreeInfoSnapshot) {
+        if let model = PullRequestStatusModel(pullRequest: toolbarState.pullRequest) {
           PullRequestStatusButton(model: model).padding(.horizontal)
         } else {
           MiddleStatusView().padding(.horizontal)

@@ -103,8 +103,10 @@ struct WorktreeCommands: Commands {
   }
 
   private var selectedPullRequestURL: URL? {
-    let pullRequestURL = viewStore.state.worktreeInfo.snapshot?.pullRequestURL
-    return pullRequestURL.flatMap(URL.init(string:))
+    let repositories = viewStore.state.repositories
+    guard let selectedWorktreeID = repositories.selectedWorktreeID else { return nil }
+    let pullRequest = repositories.worktreeInfoByID[selectedWorktreeID]?.pullRequest
+    return pullRequest.flatMap { URL(string: $0.url) }
   }
 
   private func worktreeShortcutButton(

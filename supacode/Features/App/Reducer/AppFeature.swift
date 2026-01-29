@@ -16,7 +16,6 @@ struct AppFeature {
   @ObservableState
   struct State: Equatable {
     var repositories: RepositoriesFeature.State
-    var worktreeInfo = WorktreeInfoFeature.State()
     var settings: SettingsFeature.State
     var updates = UpdatesFeature.State()
     var openActionSelection: OpenWorktreeAction = .finder
@@ -37,7 +36,6 @@ struct AppFeature {
     case task
     case scenePhaseChanged(ScenePhase)
     case repositories(RepositoriesFeature.Action)
-    case worktreeInfo(WorktreeInfoFeature.Action)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
     case openActionSelectionChanged(OpenWorktreeAction)
@@ -75,7 +73,6 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
-          .send(.worktreeInfo(.task)),
           .run { send in
             for await event in await terminalClient.events() {
               await send(.terminalEvent(event))
@@ -91,10 +88,7 @@ struct AppFeature {
       case .scenePhaseChanged(let phase):
         switch phase {
         case .active:
-          return .merge(
-            .send(.repositories(.loadPersistedRepositories)),
-            .send(.worktreeInfo(.appBecameActive))
-          )
+          return .send(.repositories(.loadPersistedRepositories))
         default:
           return .none
         }
@@ -104,7 +98,6 @@ struct AppFeature {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           return .merge(
-            .send(.worktreeInfo(.worktreeChanged(nil, cachedPullRequest: nil))),
             .run { _ in
               await terminalClient.send(.setSelectedWorktreeID(nil))
             },
@@ -113,12 +106,10 @@ struct AppFeature {
             }
           )
         }
-        let cachedPullRequest = state.repositories.worktreeInfoByID[worktree.id]?.pullRequest
         let rootURL = worktree.repositoryRootURL
         let worktreeID = worktree.id
         let repositorySettingsClient = repositorySettingsClient
         return .merge(
-          .send(.worktreeInfo(.worktreeChanged(worktree, cachedPullRequest: cachedPullRequest))),
           .run { _ in
             await terminalClient.send(.setSelectedWorktreeID(worktree.id))
             await terminalClient.send(.clearNotificationIndicator(worktree))
@@ -189,8 +180,8 @@ struct AppFeature {
         }
         return .none
 
-      case .repositories(.worktreePullRequestLoaded(let worktreeID, let pullRequest)):
-        return .send(.worktreeInfo(.cachedPullRequestUpdated(worktreeID, pullRequest)))
+      case .repositories(.worktreePullRequestLoaded):
+        return .none
 
       case .settings(.delegate(.settingsChanged(let settings))):
         return .merge(
@@ -369,9 +360,6 @@ struct AppFeature {
       case .repositories:
         return .none
 
-      case .worktreeInfo:
-        return .none
-
       case .settings:
         return .none
 
@@ -400,9 +388,6 @@ struct AppFeature {
       .printActionLabels()
     Scope(state: \.repositories, action: \.repositories) {
       RepositoriesFeature()
-    }
-    Scope(state: \.worktreeInfo, action: \.worktreeInfo) {
-      WorktreeInfoFeature()
     }
     Scope(state: \.settings, action: \.settings) {
       SettingsFeature()

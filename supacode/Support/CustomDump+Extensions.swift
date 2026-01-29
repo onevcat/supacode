@@ -20,22 +20,6 @@ extension Worktree: CustomDumpRepresentable {
   }
 }
 
-extension WorktreeInfoSnapshot: CustomDumpRepresentable {
-  var customDumpValue: Any {
-    (
-      repositoryName: repositoryName,
-      pr: pullRequestNumber.map { "#\($0)" },
-      prState: pullRequestState,
-      isDraft: pullRequestIsDraft,
-      reviewDecision: pullRequestReviewDecision,
-      workflow: workflowStatus,
-      conclusion: workflowConclusion,
-      githubError: githubError,
-      ciError: ciError
-    )
-  }
-}
-
 extension RepositoriesFeature.State: CustomDumpRepresentable {
   var customDumpValue: Any {
     (

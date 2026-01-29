@@ -36,26 +36,25 @@ struct PullRequestStatusModel: Equatable {
   let statusChecks: [GithubPullRequestStatusCheck]
   let detailText: String?
 
-  init?(snapshot: WorktreeInfoSnapshot?) {
+  init?(pullRequest: GithubPullRequest?) {
     guard
-      let snapshot,
-      let number = snapshot.pullRequestNumber,
-      Self.shouldDisplay(state: snapshot.pullRequestState, number: number)
+      let pullRequest,
+      Self.shouldDisplay(state: pullRequest.state, number: pullRequest.number)
     else {
       return nil
     }
-    self.number = number
-    let state = snapshot.pullRequestState?.uppercased()
+    self.number = pullRequest.number
+    let state = pullRequest.state.uppercased()
     self.state = state
-    self.url = snapshot.pullRequestURL.flatMap(URL.init(string:))
+    self.url = URL(string: pullRequest.url)
     if state == "MERGED" {
       self.detailText = "Merged"
       self.statusChecks = []
       return
     }
-    let isDraft = snapshot.pullRequestIsDraft
-    let prefix = "\(isDraft ? "(Drafted) " : "")"
-    let checks = snapshot.pullRequestStatusChecks
+    let isDraft = pullRequest.isDraft
+    let prefix = isDraft ? "(Drafted) " : ""
+    let checks = pullRequest.statusCheckRollup?.checks ?? []
     self.statusChecks = checks
     if checks.isEmpty {
       self.detailText = prefix + "Checks unavailable"
