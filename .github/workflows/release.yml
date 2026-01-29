@@ -155,6 +155,10 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-mise-v0-${{ hashFiles('**/mise.toml', '**/.mise.toml', '**/.tool-versions', '**/.config/mise.toml', '**/mise/config.toml', '**/mise.lock', '**/.mise.lock', '**/mise/config.lock', '**/.config/mise.lock', '**/mise.*.toml', '**/.mise.*.toml', '**/.config/mise.*.toml', '**/mise.*.lock', '**/.mise.*.lock', '**/.config/mise.*.lock') }}
       - run: brew install mise 2>/dev/null
       - run: mise install
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry.io/get-cli/ | sh
+          sentry-cli --help
       - name: Ghostty cache key
         run: |
           set -euo pipefail
@@ -204,7 +208,7 @@ jobs:
           SENTRY_ORG: supabit
           SENTRY_PROJECT: supacode
         run: |
-          mise exec -- sentry-cli debug-files upload --include-sources build/supacode.xcarchive/dSYMs
+          sentry-cli debug-files upload --include-sources build/supacode.xcarchive/dSYMs
       - run: |
           cat > build/ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
