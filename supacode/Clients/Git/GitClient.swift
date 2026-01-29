@@ -8,6 +8,7 @@ enum GitOperation: String {
   case worktreeRemove = "worktree_remove"
   case branchNames = "branch_names"
   case branchRename = "branch_rename"
+  case branchDelete = "branch_delete"
   case dirtyCheck = "dirty_check"
   case lineChanges = "line_changes"
 }
@@ -66,6 +67,7 @@ struct GitClient {
     let entries = try JSONDecoder().decode([GitWtWorktreeEntry].self, from: data)
     let worktreeEntries = entries.enumerated().map { index, entry in
       let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
+      let name = entry.branch.isEmpty ? worktreeURL.lastPathComponent : entry.branch
       let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
       let id = worktreeURL.path(percentEncoded: false)
       let resourceValues = try? worktreeURL.resourceValues(forKeys: [
@@ -76,7 +78,7 @@ struct GitClient {
       return WorktreeSortEntry(
         worktree: Worktree(
           id: id,
-          name: entry.branch,
+          name: name,
           detail: detail,
           workingDirectory: worktreeURL,
           repositoryRootURL: repositoryRootURL
@@ -208,16 +210,6 @@ struct GitClient {
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree) async throws -> URL {
-    if !worktree.name.isEmpty {
-      let wtURL = try wtScriptURL()
-      _ = try await runLoginShellProcess(
-        operation: .worktreeRemove,
-        executableURL: wtURL,
-        arguments: ["rm", "-f", worktree.name],
-        currentDirectoryURL: worktree.repositoryRootURL
-      )
-      return worktree.workingDirectory
-    }
     let rootPath = worktree.repositoryRootURL.path(percentEncoded: false)
     let worktreePath = worktree.workingDirectory.path(percentEncoded: false)
     _ = try await runGit(
@@ -231,6 +223,15 @@ struct GitClient {
         worktreePath,
       ]
     )
+    if !worktree.name.isEmpty {
+      let names = try await localBranchNames(for: worktree.repositoryRootURL)
+      if names.contains(worktree.name.lowercased()) {
+        _ = try await runGit(
+          operation: .branchDelete,
+          arguments: ["-C", rootPath, "branch", "-D", worktree.name]
+        )
+      }
+    }
     return worktree.workingDirectory
   }
 
