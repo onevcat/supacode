@@ -340,12 +340,22 @@ jobs:
           curl -fsSL "https://supacode.sh/download/latest/appcast.xml" -o "$STAGING/appcast.xml" || true
 
           RELEASE_REPO_SH="supabitapp/supacode-sh"
+          SEEN_VERSIONS=""
           for i in $(seq 1 5); do
             PREV_TAG=$(gh release list --limit $i --exclude-drafts --exclude-pre-releases -R "$RELEASE_REPO_SH" --json tagName --jq ".[$((i-1))].tagName" 2>/dev/null || true)
             if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
               echo "Downloading $PREV_TAG for delta generation..."
               gh release download "$PREV_TAG" -p "supacode.app.zip" -O "$STAGING/supacode-$PREV_TAG.app.zip" -R "$RELEASE_REPO_SH" 2>/dev/null || true
-              gh release view "$PREV_TAG" -R "$RELEASE_REPO_SH" --json body --jq '.body' > "$STAGING/supacode-$PREV_TAG.app.md" 2>/dev/null || true
+              if [ -f "$STAGING/supacode-$PREV_TAG.app.zip" ]; then
+                BUNDLE_VERSION=$(unzip -p "$STAGING/supacode-$PREV_TAG.app.zip" "supacode.app/Contents/Info.plist" 2>/dev/null | /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /dev/stdin 2>/dev/null || echo "")
+                if [ -n "$BUNDLE_VERSION" ] && echo "$SEEN_VERSIONS" | grep -q "^$BUNDLE_VERSION$"; then
+                  echo "Skipping $PREV_TAG (duplicate bundle version $BUNDLE_VERSION)"
+                  rm -f "$STAGING/supacode-$PREV_TAG.app.zip"
+                else
+                  [ -n "$BUNDLE_VERSION" ] && SEEN_VERSIONS="$SEEN_VERSIONS$BUNDLE_VERSION"$'\n'
+                  gh release view "$PREV_TAG" -R "$RELEASE_REPO_SH" --json body --jq '.body' > "$STAGING/supacode-$PREV_TAG.app.md" 2>/dev/null || true
+                fi
+              fi
             fi
           done
 
