@@ -143,7 +143,7 @@ bump-version: # Bump app version (usage: make bump-version [VERSION=x.x.x] [BUIL
 		"$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
 	git add "$(CURRENT_MAKEFILE_DIR)/supacode.xcodeproj/project.pbxproj"; \
 	git commit -m "bump v$$version"; \
-	git tag "v$$version"; \
+	git tag -a "v$$version" -m "v$$version"; \
 	echo "version bumped to $$version (build $$build), tagged v$$version"
 
 bump-and-release: bump-version # Bump version and push tags to trigger release
