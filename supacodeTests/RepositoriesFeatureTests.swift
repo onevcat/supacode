@@ -145,6 +145,131 @@ struct RepositoriesFeatureTests {
     await store.receive(.delegate(.repositoriesChanged([repository])))
   }
 
+  @Test func repositoriesLoadedUpdatesSelectedWorktreeDelegateOnChange() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let updatedWorktree = makeWorktree(id: "/tmp/repo/main", name: "main-updated", repoRoot: repoRoot)
+    let updatedRepository = makeRepository(id: repoRoot, worktrees: [updatedWorktree])
+    var initialState = RepositoriesFeature.State(repositories: [repository])
+    initialState.selectedWorktreeID = worktree.id
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [updatedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.repositories = [updatedRepository]
+    }
+    await store.receive(.delegate(.repositoriesChanged([updatedRepository])))
+    await store.receive(.delegate(.selectedWorktreeChanged(updatedWorktree)))
+  }
+
+  @Test func worktreeRemovedPrunesStateAndSendsDelegates() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
+    let removedWorktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, removedWorktree])
+    let updatedRepository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var initialState = RepositoriesFeature.State(repositories: [repository])
+    initialState.selectedWorktreeID = mainWorktree.id
+    initialState.deletingWorktreeIDs = [removedWorktree.id]
+    initialState.pendingSetupScriptWorktreeIDs = [removedWorktree.id]
+    initialState.pendingTerminalFocusWorktreeIDs = [removedWorktree.id]
+    initialState.pendingWorktrees = [
+      PendingWorktree(
+        id: removedWorktree.id,
+        repositoryID: repository.id,
+        name: "pending",
+        detail: ""
+      ),
+    ]
+    initialState.pinnedWorktreeIDs = [removedWorktree.id]
+    initialState.worktreeInfoByID = [
+      removedWorktree.id: WorktreeInfoEntry(addedLines: 1, removedLines: 2, pullRequest: nil)
+    ]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+    }
+
+    await store.send(
+      .worktreeRemoved(
+        removedWorktree.id,
+        repositoryID: repository.id,
+        selectionWasRemoved: false,
+        nextSelection: nil
+      )
+    ) {
+      $0.deletingWorktreeIDs = []
+      $0.pendingSetupScriptWorktreeIDs = []
+      $0.pendingTerminalFocusWorktreeIDs = []
+      $0.pendingWorktrees = []
+      $0.pinnedWorktreeIDs = []
+      $0.worktreeInfoByID = [:]
+      $0.repositories = [updatedRepository]
+    }
+    await store.receive(.delegate(.repositoriesChanged([updatedRepository])))
+    await store.receive(.reloadRepositories(animated: true))
+    await store.receive(
+      .repositoriesLoaded(
+        [updatedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: true
+      )
+    )
+    await store.receive(.delegate(.repositoriesChanged([updatedRepository])))
+  }
+
+  @Test func worktreeRemovedResetsSelectionWhenDriftedToDeletingWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
+    let removedWorktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, removedWorktree])
+    let updatedRepository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var initialState = RepositoriesFeature.State(repositories: [repository])
+    initialState.selectedWorktreeID = removedWorktree.id
+    initialState.deletingWorktreeIDs = [removedWorktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+    }
+
+    await store.send(
+      .worktreeRemoved(
+        removedWorktree.id,
+        repositoryID: repository.id,
+        selectionWasRemoved: false,
+        nextSelection: nil
+      )
+    ) {
+      $0.deletingWorktreeIDs = []
+      $0.repositories = [updatedRepository]
+      $0.selectedWorktreeID = mainWorktree.id
+    }
+    await store.receive(.delegate(.repositoriesChanged([updatedRepository])))
+    await store.receive(.delegate(.selectedWorktreeChanged(mainWorktree)))
+    await store.receive(.reloadRepositories(animated: true))
+    await store.receive(
+      .repositoriesLoaded(
+        [updatedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: true
+      )
+    )
+    await store.receive(.delegate(.repositoriesChanged([updatedRepository])))
+  }
+
   @Test func createRandomWorktreeSucceededSendsRepositoriesChanged() async {
     let repoRoot = "/tmp/repo"
     let existingWorktree = makeWorktree(id: "/tmp/repo/wt-main", name: "main", repoRoot: repoRoot)
