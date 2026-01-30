@@ -8,7 +8,6 @@ struct GitClientDependency {
   var createWorktree:
     @Sendable (_ name: String, _ repoRoot: URL, _ copyIgnored: Bool, _ copyUntracked: Bool) async throws
       -> Worktree
-  var isWorktreeDirty: @Sendable (URL) async -> Bool
   var removeWorktree: @Sendable (_ worktree: Worktree) async throws -> URL
   var branchName: @Sendable (URL) async -> String?
   var lineChanges: @Sendable (URL) async -> (added: Int, removed: Int)?
@@ -29,7 +28,6 @@ extension GitClientDependency: DependencyKey {
         copyUntracked: copyUntracked
       )
     },
-    isWorktreeDirty: { await GitClient().isWorktreeDirty(at: $0) },
     removeWorktree: { worktree in
       try await GitClient().removeWorktree(worktree)
     },

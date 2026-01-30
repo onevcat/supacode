@@ -443,14 +443,7 @@ struct RepositoriesFeature {
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
-        return .run { send in
-          let dirty = await gitClient.isWorktreeDirty(worktree.workingDirectory)
-          if dirty {
-            await send(.presentWorktreeRemovalConfirmation(worktree.id, repository.id))
-          } else {
-            await send(.removeWorktreeConfirmed(worktree.id, repository.id))
-          }
-        }
+        return .send(.presentWorktreeRemovalConfirmation(worktree.id, repository.id))
 
       case .presentWorktreeRemovalConfirmation(let worktreeID, let repositoryID):
         guard let repository = state.repositories.first(where: { $0.id == repositoryID }),
@@ -459,10 +452,10 @@ struct RepositoriesFeature {
           return .none
         }
         state.alert = AlertState {
-          TextState("Worktree has uncommitted changes")
+          TextState("Remove worktree?")
         } actions: {
           ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-            TextState("Remove anyway")
+            TextState("Remove")
           }
           ButtonState(role: .cancel) {
             TextState("Cancel")

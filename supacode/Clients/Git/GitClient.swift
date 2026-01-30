@@ -9,7 +9,6 @@ enum GitOperation: String {
   case branchNames = "branch_names"
   case branchRename = "branch_rename"
   case branchDelete = "branch_delete"
-  case dirtyCheck = "dirty_check"
   case lineChanges = "line_changes"
   case remoteInfo = "remote_info"
 }
@@ -165,19 +164,6 @@ struct GitClient {
       operation: .branchRename,
       arguments: ["-C", path, "branch", "-m", branchName]
     )
-  }
-
-  nonisolated func isWorktreeDirty(at worktreeURL: URL) async -> Bool {
-    let path = worktreeURL.path(percentEncoded: false)
-    do {
-      let output = try await runGit(
-        operation: .dirtyCheck,
-        arguments: ["-C", path, "status", "--porcelain"]
-      )
-      return WorktreeDirtCheck.isDirty(statusOutput: output)
-    } catch {
-      return true
-    }
   }
 
   nonisolated func branchName(for worktreeURL: URL) async -> String? {
