@@ -9,6 +9,7 @@ struct TerminalPressTrackingButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
+      .contentShape(.rect)
       .onChange(of: configuration.isPressed) { _, pressed in
         isPressed = pressed
       }
