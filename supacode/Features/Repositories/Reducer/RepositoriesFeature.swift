@@ -452,7 +452,7 @@ struct RepositoriesFeature {
           return .none
         }
         state.alert = AlertState {
-          TextState("Remove worktree?")
+          TextState("🚨 Remove worktree?")
         } actions: {
           ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
             TextState("Remove")

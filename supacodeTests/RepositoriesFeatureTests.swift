@@ -47,7 +47,7 @@ struct RepositoriesFeatureTests {
     }
 
     let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("Remove worktree?")
+      TextState("🚨 Remove worktree?")
     } actions: {
       ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
         TextState("Remove")
