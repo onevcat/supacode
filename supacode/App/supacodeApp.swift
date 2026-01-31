@@ -9,6 +9,7 @@ import ComposableArchitecture
 import Foundation
 import GhosttyKit
 import Sentry
+import PostHog
 import SwiftUI
 
 private enum GhosttyCLI {
@@ -41,6 +42,10 @@ struct SupacodeApp: App {
         options.tracesSampleRate = 1.0
         options.enableAppHangTracking = false
       }
+      let POSTHOG_API_KEY = "phc_3hNmki5nVyvW3o2GxqRB12cK7EKXOg2ehJLkCO3sL0S"
+      let POSTHOG_HOST = "https://us.i.posthog.com"
+      let config = PostHogConfig(apiKey: POSTHOG_API_KEY, host: POSTHOG_HOST)
+      PostHogSDK.shared.setup(config)
     #endif
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
