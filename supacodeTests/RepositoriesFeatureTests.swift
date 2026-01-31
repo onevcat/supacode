@@ -50,7 +50,7 @@ struct RepositoriesFeatureTests {
       TextState("🚨 Remove worktree?")
     } actions: {
       ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-        TextState("Remove")
+        TextState("Remove (⌘↩)")
       }
       ButtonState(role: .cancel) {
         TextState("Cancel")

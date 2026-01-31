@@ -455,7 +455,7 @@ struct RepositoriesFeature {
           TextState("🚨 Remove worktree?")
         } actions: {
           ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-            TextState("Remove")
+            TextState("Remove (⌘↩)")
           }
           ButtonState(role: .cancel) {
             TextState("Cancel")
@@ -1019,6 +1019,16 @@ extension RepositoriesFeature.State {
 
   func isWorktreePinned(_ worktree: Worktree) -> Bool {
     pinnedWorktreeIDs.contains(worktree.id)
+  }
+
+  var confirmRemoveWorktreeIDs: (worktreeID: Worktree.ID, repositoryID: Repository.ID)? {
+    guard let alert else { return nil }
+    for button in alert.buttons {
+      if case let .confirmRemoveWorktree(worktreeID, repositoryID)? = button.action.action {
+        return (worktreeID: worktreeID, repositoryID: repositoryID)
+      }
+    }
+    return nil
   }
 
   func isRemovingRepository(_ repository: Repository) -> Bool {

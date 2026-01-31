@@ -6,6 +6,7 @@ struct WorktreeCommands: Commands {
   let store: StoreOf<AppFeature>
   @ObservedObject private var viewStore: ViewStore<AppFeature.State, AppFeature.Action>
   @FocusedValue(\.openSelectedWorktreeAction) private var openSelectedWorktreeAction
+  @FocusedValue(\.confirmRemoveWorktreeAction) private var confirmRemoveWorktreeAction
   @FocusedValue(\.removeWorktreeAction) private var removeWorktreeAction
   @FocusedValue(\.runScriptAction) private var runScriptAction
   @FocusedValue(\.stopRunScriptAction) private var stopRunScriptAction
@@ -68,6 +69,12 @@ struct WorktreeCommands: Commands {
       .keyboardShortcut(.delete, modifiers: .command)
       .help("Remove Worktree (⌘⌫)")
       .disabled(removeWorktreeAction == nil)
+      Button("Confirm Remove Worktree") {
+        confirmRemoveWorktreeAction?()
+      }
+      .keyboardShortcut(.return, modifiers: .command)
+      .help("Confirm Remove Worktree (⌘↩)")
+      .disabled(confirmRemoveWorktreeAction == nil)
       Button("Refresh Worktrees") {
         store.send(.repositories(.refreshWorktrees))
       }
@@ -146,6 +153,11 @@ extension FocusedValues {
     set { self[OpenSelectedWorktreeActionKey.self] = newValue }
   }
 
+  var confirmRemoveWorktreeAction: (() -> Void)? {
+    get { self[ConfirmRemoveWorktreeActionKey.self] }
+    set { self[ConfirmRemoveWorktreeActionKey.self] = newValue }
+  }
+
   var removeWorktreeAction: (() -> Void)? {
     get { self[RemoveWorktreeActionKey.self] }
     set { self[RemoveWorktreeActionKey.self] = newValue }
@@ -167,5 +179,9 @@ private struct RunScriptActionKey: FocusedValueKey {
 }
 
 private struct StopRunScriptActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct ConfirmRemoveWorktreeActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
