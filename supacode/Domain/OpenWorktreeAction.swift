@@ -4,8 +4,15 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case alacritty
   case finder
   case cursor
+  case githubDesktop
+  case fork
+  case gitkraken
+  case gitup
   case ghostty
   case kitty
+  case smartgit
+  case sourcetree
+  case sublimeMerge
   case terminal
   case vscode
   case wezterm
@@ -19,12 +26,19 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "Open Finder"
     case .alacritty: "Alacritty"
     case .cursor: "Cursor"
+    case .githubDesktop: "GitHub Desktop"
+    case .gitkraken: "GitKraken"
+    case .gitup: "GitUp"
     case .ghostty: "Ghostty"
     case .kitty: "Kitty"
+    case .smartgit: "SmartGit"
+    case .sourcetree: "Sourcetree"
+    case .sublimeMerge: "Sublime Merge"
     case .terminal: "Terminal"
     case .vscode: "VS Code"
     case .wezterm: "WezTerm"
     case .xcode: "Xcode"
+    case .fork: "Fork"
     case .zed: "Zed"
     }
   }
@@ -32,7 +46,9 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   var labelTitle: String {
     switch self {
     case .finder: "Finder"
-    case .alacritty, .cursor, .ghostty, .kitty, .terminal, .vscode, .wezterm, .xcode, .zed: title
+    case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
+        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
+      title
     }
   }
 
@@ -46,7 +62,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder:
       return true
-    case .alacritty, .cursor, .ghostty, .kitty, .terminal, .vscode, .wezterm, .xcode, .zed:
+    case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
+        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -56,8 +73,15 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "finder"
     case .alacritty: "alacritty"
     case .cursor: "cursor"
+    case .fork: "fork"
+    case .githubDesktop: "github-desktop"
+    case .gitkraken: "gitkraken"
+    case .gitup: "gitup"
     case .ghostty: "ghostty"
     case .kitty: "kitty"
+    case .smartgit: "smartgit"
+    case .sourcetree: "sourcetree"
+    case .sublimeMerge: "sublime-merge"
     case .terminal: "terminal"
     case .vscode: "vscode"
     case .wezterm: "wezterm"
@@ -71,8 +95,15 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "com.apple.finder"
     case .alacritty: "org.alacritty"
     case .cursor: "com.todesktop.230313mzl4w4u92"
+    case .fork: "com.DanPristupov.Fork"
+    case .githubDesktop: "com.github.GitHubClient"
+    case .gitkraken: "com.axosoft.gitkraken"
+    case .gitup: "co.gitup.mac"
     case .ghostty: "com.mitchellh.ghostty"
     case .kitty: "net.kovidgoyal.kitty"
+    case .smartgit: "com.syntevo.smartgit"
+    case .sourcetree: "com.torusknot.SourceTreeNotMAS"
+    case .sublimeMerge: "com.sublimemerge"
     case .terminal: "com.apple.Terminal"
     case .vscode: "com.microsoft.VSCode"
     case .wezterm: "com.github.wez.wezterm"
@@ -91,36 +122,25 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     .kitty,
     .terminal,
   ]
-  static let defaultPriority: [OpenWorktreeAction] = editorPriority + [.xcode, .finder] + terminalPriority
-  static let menuOrder: [OpenWorktreeAction] = editorPriority + [.xcode] + [.finder] + terminalPriority
+  static let gitClientPriority: [OpenWorktreeAction] = [
+    .githubDesktop,
+    .sourcetree,
+    .fork,
+    .gitkraken,
+    .sublimeMerge,
+    .smartgit,
+    .gitup,
+  ]
+  static let defaultPriority: [OpenWorktreeAction] =
+    editorPriority + [.xcode, .finder] + terminalPriority + gitClientPriority
+  static let menuOrder: [OpenWorktreeAction] =
+    editorPriority + [.xcode] + [.finder] + terminalPriority + gitClientPriority
 
   static func fromSettingsID(_ settingsID: String?) -> OpenWorktreeAction {
-    switch settingsID {
-    case nil, automaticSettingsID:
-      return preferredDefault()
-    case OpenWorktreeAction.finder.settingsID:
-      return .finder
-    case OpenWorktreeAction.alacritty.settingsID:
-      return .alacritty
-    case OpenWorktreeAction.cursor.settingsID:
-      return .cursor
-    case OpenWorktreeAction.ghostty.settingsID:
-      return .ghostty
-    case OpenWorktreeAction.kitty.settingsID:
-      return .kitty
-    case OpenWorktreeAction.terminal.settingsID:
-      return .terminal
-    case OpenWorktreeAction.vscode.settingsID:
-      return .vscode
-    case OpenWorktreeAction.wezterm.settingsID:
-      return .wezterm
-    case OpenWorktreeAction.xcode.settingsID:
-      return .xcode
-    case OpenWorktreeAction.zed.settingsID:
-      return .zed
-    default:
+    guard let settingsID, settingsID != automaticSettingsID else {
       return preferredDefault()
     }
+    return allCases.first(where: { $0.settingsID == settingsID }) ?? preferredDefault()
   }
 
   static var availableCases: [OpenWorktreeAction] {
@@ -139,7 +159,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
-    case .alacritty, .cursor, .ghostty, .kitty, .terminal, .vscode, .wezterm, .xcode, .zed:
+    case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
+        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier
