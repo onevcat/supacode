@@ -1,7 +1,7 @@
 import ComposableArchitecture
 
 struct GithubIntegrationClient {
-  var isAvailable: @Sendable () async -> Bool
+  var isAvailable: @MainActor @Sendable () async -> Bool
 }
 
 extension GithubIntegrationClient: DependencyKey {
