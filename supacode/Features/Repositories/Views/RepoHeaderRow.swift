@@ -14,6 +14,7 @@ struct RepoHeaderRow: View {
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+        .animation(.easeOut(duration: 0.2), value: isExpanded)
         .frame(width: 10, alignment: .center)
       ZStack {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
