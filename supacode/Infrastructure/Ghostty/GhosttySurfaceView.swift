@@ -453,153 +453,85 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard let surface = keyEquivalentSurface(for: event) else { return false }
-    if handleGhosttyBinding(event, surface: surface) { return true }
-    if handleControlReturn(event) { return true }
-    if handleControlSlash(event) { return true }
-    if handleRepeatKeyEquivalent(event) { return true }
-    return false
+    guard event.type == .keyDown else { return false }
+    guard let surface else { return false }
+    guard window?.firstResponder === self else { return false }
+
+    if let bindingFlags = bindingFlags(for: event, surface: surface) {
+      if shouldAttemptMenu(for: bindingFlags),
+        let menu = NSApp.mainMenu,
+        menu.performKeyEquivalent(with: event)
+      {
+        return true
+      }
+      keyDown(with: event)
+      return true
+    }
+
+    guard let equivalent = equivalentKey(for: event) else { return false }
+
+    guard
+      let finalEvent = NSEvent.keyEvent(
+        with: .keyDown,
+        location: event.locationInWindow,
+        modifierFlags: event.modifierFlags,
+        timestamp: event.timestamp,
+        windowNumber: event.windowNumber,
+        context: nil,
+        characters: equivalent,
+        charactersIgnoringModifiers: equivalent,
+        isARepeat: event.isARepeat,
+        keyCode: event.keyCode
+      )
+    else {
+      return false
+    }
+    keyDown(with: finalEvent)
+    return true
   }
 
-  private func keyEquivalentSurface(for event: NSEvent) -> ghostty_surface_t? {
-    guard event.type == .keyDown else { return nil }
-    guard let surface else { return nil }
-    guard window?.firstResponder === self else { return nil }
-    return surface
-  }
-
-  private func handleGhosttyBinding(_ event: NSEvent, surface: ghostty_surface_t) -> Bool {
-    let (translationEvent, translationMods) = translationState(event, surface: surface)
+  private func bindingFlags(
+    for event: NSEvent,
+    surface: ghostty_surface_t
+  ) -> ghostty_binding_flags_e? {
     var key = ghosttyKeyEvent(
-      translationEvent,
+      event,
       action: GHOSTTY_ACTION_PRESS,
       originalMods: event.modifierFlags,
-      translationMods: translationMods
+      translationMods: event.modifierFlags
     )
-    let text = ghosttyCharacters(translationEvent) ?? ""
-    if let codepoint = text.utf8.first, codepoint >= 0x20 {
-      return handleTextBinding(text, event: event, key: &key, surface: surface)
-    }
-    return handleNonTextBinding(event: event, key: &key, surface: surface)
-  }
-
-  private func handleTextBinding(
-    _ text: String,
-    event: NSEvent,
-    key: inout ghostty_input_key_s,
-    surface: ghostty_surface_t
-  ) -> Bool {
     var flags = ghostty_binding_flags_e(0)
-    let isBinding = text.withCString { ptr in
+    let isBinding = (event.characters ?? "").withCString { ptr in
       key.text = ptr
       return ghostty_surface_key_is_binding(surface, key, &flags)
     }
-    guard isBinding else { return false }
-    if shouldAttemptMenu(for: flags),
-      let menu = NSApp.mainMenu,
-      menu.performKeyEquivalent(with: event)
-    {
-      return true
-    }
-    return text.withCString { ptr in
-      key.text = ptr
-      return ghostty_surface_key(surface, key)
-    }
+    return isBinding ? flags : nil
   }
 
-  private func handleNonTextBinding(
-    event: NSEvent,
-    key: inout ghostty_input_key_s,
-    surface: ghostty_surface_t
-  ) -> Bool {
-    var flags = ghostty_binding_flags_e(0)
-    key.text = nil
-    guard ghostty_surface_key_is_binding(surface, key, &flags) else { return false }
-    if shouldAttemptMenu(for: flags),
-      let menu = NSApp.mainMenu,
-      menu.performKeyEquivalent(with: event)
-    {
-      return true
-    }
-    return ghostty_surface_key(surface, key)
-  }
-
-  private func handleControlReturn(_ event: NSEvent) -> Bool {
-    guard event.charactersIgnoringModifiers == "\r" else { return false }
-    guard event.modifierFlags.contains(.control) else { return false }
-    guard
-      let finalEvent = NSEvent.keyEvent(
-        with: .keyDown,
-        location: event.locationInWindow,
-        modifierFlags: event.modifierFlags,
-        timestamp: event.timestamp,
-        windowNumber: event.windowNumber,
-        context: nil,
-        characters: "\r",
-        charactersIgnoringModifiers: "\r",
-        isARepeat: event.isARepeat,
-        keyCode: event.keyCode
-      )
-    else {
-      return false
-    }
-    sendKey(action: GHOSTTY_ACTION_PRESS, event: finalEvent)
-    return true
-  }
-
-  private func handleControlSlash(_ event: NSEvent) -> Bool {
-    guard event.charactersIgnoringModifiers == "/" else { return false }
-    guard event.modifierFlags.contains(.control) else { return false }
-    guard event.modifierFlags.isDisjoint(with: [.shift, .command, .option]) else { return false }
-    guard
-      let finalEvent = NSEvent.keyEvent(
-        with: .keyDown,
-        location: event.locationInWindow,
-        modifierFlags: event.modifierFlags,
-        timestamp: event.timestamp,
-        windowNumber: event.windowNumber,
-        context: nil,
-        characters: "_",
-        charactersIgnoringModifiers: "_",
-        isARepeat: event.isARepeat,
-        keyCode: event.keyCode
-      )
-    else {
-      return false
-    }
-    sendKey(action: GHOSTTY_ACTION_PRESS, event: finalEvent)
-    return true
-  }
-
-  private func handleRepeatKeyEquivalent(_ event: NSEvent) -> Bool {
-    guard event.timestamp != 0 else { return false }
-    if !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.control) {
-      lastPerformKeyEvent = nil
-      return false
-    }
-    if let lastPerformKeyEvent {
-      self.lastPerformKeyEvent = nil
-      if lastPerformKeyEvent == event.timestamp {
-        let equivalent = event.characters ?? ""
-        if let finalEvent = NSEvent.keyEvent(
-          with: .keyDown,
-          location: event.locationInWindow,
-          modifierFlags: event.modifierFlags,
-          timestamp: event.timestamp,
-          windowNumber: event.windowNumber,
-          context: nil,
-          characters: equivalent,
-          charactersIgnoringModifiers: equivalent,
-          isARepeat: event.isARepeat,
-          keyCode: event.keyCode
-        ) {
-          sendKey(action: GHOSTTY_ACTION_PRESS, event: finalEvent)
-          return true
+  private func equivalentKey(for event: NSEvent) -> String? {
+    switch event.charactersIgnoringModifiers {
+    case "\r":
+      guard event.modifierFlags.contains(.control) else { return nil }
+      return "\r"
+    case "/":
+      guard event.modifierFlags.contains(.control) else { return nil }
+      guard event.modifierFlags.isDisjoint(with: [.shift, .command, .option]) else { return nil }
+      return "_"
+    default:
+      if event.timestamp == 0 { return nil }
+      if !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.control) {
+        lastPerformKeyEvent = nil
+        return nil
+      }
+      if let lastPerformKeyEvent {
+        self.lastPerformKeyEvent = nil
+        if lastPerformKeyEvent == event.timestamp {
+          return event.characters ?? ""
         }
       }
+      lastPerformKeyEvent = event.timestamp
+      return nil
     }
-    lastPerformKeyEvent = event.timestamp
-    return false
   }
 
   override func doCommand(by selector: Selector) {
