@@ -10,6 +10,7 @@ enum GitOperation: String {
   case branchNames = "branch_names"
   case branchRefs = "branch_refs"
   case defaultRemoteBranchRef = "default_remote_branch_ref"
+  case localHeadRef = "local_head_ref"
   case branchRename = "branch_rename"
   case branchDelete = "branch_delete"
   case lineChanges = "line_changes"
@@ -178,7 +179,12 @@ struct GitClient {
 
   nonisolated func automaticWorktreeBaseRef(for repoRoot: URL) async -> String? {
     let resolved = try? await defaultRemoteBranchRef(for: repoRoot)
-    return resolved ?? nil
+    if let resolved {
+      return Self.preferredBaseRef(remote: resolved, localHead: nil)
+    }
+    let localHead = try? await localHeadBranchRef(for: repoRoot)
+    let resolvedLocalHead = await resolveLocalHead(localHead, repoRoot: repoRoot)
+    return Self.preferredBaseRef(remote: nil, localHead: resolvedLocalHead)
   }
 
   nonisolated func createWorktree(
@@ -387,6 +393,28 @@ struct GitClient {
       return String(trimmed.dropFirst(prefix.count))
     }
     return trimmed
+  }
+
+  nonisolated private func localHeadBranchRef(for repoRoot: URL) async throws -> String? {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .localHeadRef,
+      arguments: ["-C", path, "symbolic-ref", "--short", "HEAD"]
+    )
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  nonisolated private func resolveLocalHead(_ localHead: String?, repoRoot: URL) async -> String? {
+    guard let localHead else { return nil }
+    if await refExists(localHead, repoRoot: repoRoot) {
+      return localHead
+    }
+    return nil
+  }
+
+  static func preferredBaseRef(remote: String?, localHead: String?) -> String? {
+    remote ?? localHead
   }
 
   nonisolated private func refExists(_ ref: String, repoRoot: URL) async -> Bool {
