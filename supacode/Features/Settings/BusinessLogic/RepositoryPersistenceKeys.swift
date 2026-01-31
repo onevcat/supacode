@@ -87,6 +87,49 @@ nonisolated struct PinnedWorktreeIDsKey: SharedKey {
   }
 }
 
+nonisolated struct LastFocusedWorktreeIDKeyID: Hashable, Sendable {}
+
+nonisolated struct LastFocusedWorktreeIDKey: SharedKey {
+  var id: LastFocusedWorktreeIDKeyID {
+    LastFocusedWorktreeIDKeyID()
+  }
+
+  func load(
+    context _: LoadContext<Worktree.ID?>,
+    continuation: LoadContinuation<Worktree.ID?>
+  ) {
+    @Shared(.settingsFile) var settingsFile: SettingsFile
+    let id = $settingsFile.withLock { settings in
+      let normalized = RepositoryPathNormalizer.normalize(settings.lastFocusedWorktreeID)
+      if normalized != settings.lastFocusedWorktreeID {
+        settings.lastFocusedWorktreeID = normalized
+      }
+      return normalized
+    }
+    continuation.resume(returning: id)
+  }
+
+  func subscribe(
+    context _: LoadContext<Worktree.ID?>,
+    subscriber _: SharedSubscriber<Worktree.ID?>
+  ) -> SharedSubscription {
+    SharedSubscription {}
+  }
+
+  func save(
+    _ value: Worktree.ID?,
+    context _: SaveContext,
+    continuation: SaveContinuation
+  ) {
+    @Shared(.settingsFile) var settingsFile: SettingsFile
+    let normalized = RepositoryPathNormalizer.normalize(value)
+    $settingsFile.withLock {
+      $0.lastFocusedWorktreeID = normalized
+    }
+    continuation.resume()
+  }
+}
+
 nonisolated extension SharedReaderKey where Self == RepositoryRootsKey.Default {
   static var repositoryRoots: Self {
     Self[RepositoryRootsKey(), default: []]
@@ -96,6 +139,12 @@ nonisolated extension SharedReaderKey where Self == RepositoryRootsKey.Default {
 nonisolated extension SharedReaderKey where Self == PinnedWorktreeIDsKey.Default {
   static var pinnedWorktreeIDs: Self {
     Self[PinnedWorktreeIDsKey(), default: []]
+  }
+}
+
+nonisolated extension SharedReaderKey where Self == LastFocusedWorktreeIDKey.Default {
+  static var lastFocusedWorktreeID: Self {
+    Self[LastFocusedWorktreeIDKey(), default: nil]
   }
 }
 
@@ -115,5 +164,10 @@ nonisolated enum RepositoryPathNormalizer {
       }
     }
     return normalized
+  }
+
+  static func normalize(_ path: String?) -> String? {
+    guard let path else { return nil }
+    return normalize([path]).first
   }
 }

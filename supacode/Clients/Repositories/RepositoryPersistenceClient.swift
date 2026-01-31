@@ -6,6 +6,8 @@ struct RepositoryPersistenceClient {
   var saveRoots: @Sendable ([String]) async -> Void
   var loadPinnedWorktreeIDs: @Sendable () async -> [Worktree.ID]
   var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
+  var loadLastFocusedWorktreeID: @Sendable () async -> Worktree.ID?
+  var saveLastFocusedWorktreeID: @Sendable (Worktree.ID?) async -> Void
 }
 
 extension RepositoryPersistenceClient: DependencyKey {
@@ -30,6 +32,16 @@ extension RepositoryPersistenceClient: DependencyKey {
         $sharedPinned.withLock {
           $0 = ids
         }
+      },
+      loadLastFocusedWorktreeID: {
+        @Shared(.lastFocusedWorktreeID) var lastFocused: Worktree.ID?
+        return lastFocused
+      },
+      saveLastFocusedWorktreeID: { id in
+        @Shared(.lastFocusedWorktreeID) var sharedLastFocused: Worktree.ID?
+        $sharedLastFocused.withLock {
+          $0 = id
+        }
       }
     )
   }()
@@ -37,7 +49,9 @@ extension RepositoryPersistenceClient: DependencyKey {
     loadRoots: { [] },
     saveRoots: { _ in },
     loadPinnedWorktreeIDs: { [] },
-    savePinnedWorktreeIDs: { _ in }
+    savePinnedWorktreeIDs: { _ in },
+    loadLastFocusedWorktreeID: { nil },
+    saveLastFocusedWorktreeID: { _ in }
   )
 }
 

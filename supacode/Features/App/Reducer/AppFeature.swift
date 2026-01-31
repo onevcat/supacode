@@ -62,6 +62,7 @@ struct AppFeature {
   }
 
   @Dependency(\.repositorySettingsClient) private var repositorySettingsClient
+  @Dependency(\.repositoryPersistence) private var repositoryPersistence
   @Dependency(\.workspaceClient) private var workspaceClient
   @Dependency(\.terminalClient) private var terminalClient
   @Dependency(\.worktreeInfoWatcher) private var worktreeInfoWatcher
@@ -94,10 +95,15 @@ struct AppFeature {
         }
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
+        let lastFocusedWorktreeID = worktree?.id
+        let repositoryPersistence = repositoryPersistence
         guard let worktree else {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           return .merge(
+            .run { _ in
+              await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+            },
             .run { _ in
               await terminalClient.send(.setSelectedWorktreeID(nil))
             },
@@ -110,6 +116,9 @@ struct AppFeature {
         let worktreeID = worktree.id
         let repositorySettingsClient = repositorySettingsClient
         return .merge(
+          .run { _ in
+            await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+          },
           .run { _ in
             await terminalClient.send(.setSelectedWorktreeID(worktree.id))
             await terminalClient.send(.clearNotificationIndicator(worktree))

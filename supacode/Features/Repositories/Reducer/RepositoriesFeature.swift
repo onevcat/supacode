@@ -20,6 +20,8 @@ struct RepositoriesFeature {
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
+    var lastFocusedWorktreeID: Worktree.ID?
+    var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     @Presents var alert: AlertState<Alert>?
   }
@@ -29,6 +31,7 @@ struct RepositoriesFeature {
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
+    case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
@@ -107,12 +110,19 @@ struct RepositoriesFeature {
       case .task:
         return .run { send in
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
+          let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
           await send(.pinnedWorktreeIDsLoaded(pinned))
+          await send(.lastFocusedWorktreeIDLoaded(lastFocused))
           await send(.loadPersistedRepositories)
         }
 
       case .pinnedWorktreeIDsLoaded(let pinnedWorktreeIDs):
         state.pinnedWorktreeIDs = pinnedWorktreeIDs
+        return .none
+
+      case .lastFocusedWorktreeIDLoaded(let lastFocusedWorktreeID):
+        state.lastFocusedWorktreeID = lastFocusedWorktreeID
+        state.shouldRestoreLastFocusedWorktree = true
         return .none
 
       case .setOpenPanelPresented(let isPresented):
@@ -835,6 +845,14 @@ struct RepositoriesFeature {
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
     if !isSelectionValid(state.selectedWorktreeID, state: state) {
       state.selectedWorktreeID = nil
+    }
+    if state.shouldRestoreLastFocusedWorktree {
+      state.shouldRestoreLastFocusedWorktree = false
+      if state.selectedWorktreeID == nil,
+        isSelectionValid(state.lastFocusedWorktreeID, state: state)
+      {
+        state.selectedWorktreeID = state.lastFocusedWorktreeID
+      }
     }
     if state.selectedWorktreeID == nil, state.shouldSelectFirstAfterReload {
       state.selectedWorktreeID = firstAvailableWorktreeID(from: repositories, state: state)
