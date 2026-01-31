@@ -138,17 +138,50 @@ require_repo() {
   fi
 }
 
-main_worktree_path() {
-  local git_dir
-  git_dir=$(git rev-parse --git-dir)
-  if [[ "$git_dir" == *"/worktrees/"* ]]; then
-    while read -r key value; do
-      if [ "$key" = "worktree" ]; then
-        printf '%s\n' "$value"
-        return
-      fi
-    done < <(git worktree list --porcelain)
+common_git_dir_abs() {
+  local common
+  common=$(git rev-parse --git-common-dir)
+  local target
+  case "$common" in
+  /*) target="$common" ;;
+  *) target="$(abs_path "$common")" ;;
+  esac
+  if [ -d "$target" ]; then
+    (cd "$target" && pwd -P)
+    return
   fi
+  normalize_dir "$target"
+}
+
+repo_is_bare() {
+  local common="${1:-}"
+  if [ -z "$common" ]; then
+    common=$(common_git_dir_abs)
+  fi
+  local is_bare
+  is_bare=$(git --git-dir "$common" rev-parse --is-bare-repository)
+  [ "$is_bare" = "true" ]
+}
+
+require_not_bare_for_copy() {
+  if repo_is_bare; then
+    die "copy flags are not supported in bare repositories"
+  fi
+}
+
+main_worktree_path() {
+  local common
+  common=$(common_git_dir_abs)
+  if repo_is_bare "$common"; then
+    printf '%s\n' "$common"
+    return
+  fi
+  while read -r key value; do
+    if [ "$key" = "worktree" ]; then
+      printf '%s\n' "$value"
+      return
+    fi
+  done < <(git worktree list --porcelain)
   git rev-parse --show-toplevel
 }
 
@@ -197,15 +230,16 @@ resolve_path() {
 
 worktree_entries() {
   local root="$1"
-  local path="" head="" branch=""
+  local path="" head="" branch="" is_bare=0
   while IFS= read -r line || [ -n "$line" ]; do
     if [ -z "$line" ]; then
       if [ -n "$path" ]; then
-        printf '%s\t%s\t%s\n' "$path" "$head" "$branch"
+        printf '%s\t%s\t%s\t%s\n' "$path" "$head" "$branch" "$is_bare"
       fi
       path=""
       head=""
       branch=""
+      is_bare=0
       continue
     fi
     local key value
@@ -216,24 +250,36 @@ worktree_entries() {
     HEAD) head="$value" ;;
     branch) branch="${value#refs/heads/}" ;;
     detached) branch="" ;;
+    bare) is_bare=1 ;;
     esac
   done < <(git -C "$root" worktree list --porcelain)
   if [ -n "$path" ]; then
-    printf '%s\t%s\t%s\n' "$path" "$head" "$branch"
+    printf '%s\t%s\t%s\t%s\n' "$path" "$head" "$branch" "$is_bare"
   fi
+}
+
+parse_worktree_entry() {
+  local entry="$1"
+  local rest
+  path=${entry%%$'\t'*}
+  rest=${entry#*$'\t'}
+  head=${rest%%$'\t'*}
+  rest=${rest#*$'\t'}
+  branch=${rest%%$'\t'*}
+  is_bare=${rest#*$'\t'}
 }
 
 find_worktree_by_branch() {
   local root="$1"
-  local branch="$2"
+  local target_branch="$2"
   local entry
   while IFS= read -r entry; do
-    local path head name
-    path=${entry%%$'\t'*}
-    head=${entry#*$'\t'}
-    name=${head#*$'\t'}
-    head=${head%%$'\t'*}
-    if [ "$name" = "$branch" ]; then
+    local path head branch is_bare
+    parse_worktree_entry "$entry"
+    if [ "$is_bare" = "1" ]; then
+      continue
+    fi
+    if [ "$branch" = "$target_branch" ]; then
       printf '%s\n' "$path"
       return 0
     fi
@@ -246,8 +292,8 @@ find_worktree_by_path() {
   local target="$2"
   local entry
   while IFS= read -r entry; do
-    local path
-    path=${entry%%$'\t'*}
+    local path head branch is_bare
+    parse_worktree_entry "$entry"
     if [ "$path" = "$target" ]; then
       printf '%s\n' "$path"
       return 0
@@ -386,6 +432,9 @@ open_path() {
   local copymodified="${9:-0}"
   local copytracked="${10:-0}"
   require_repo
+  if [ "$copyignored" -eq 1 ] || [ "$copyuntracked" -eq 1 ] || [ "$copymodified" -eq 1 ] || [ "$copytracked" -eq 1 ]; then
+    require_not_bare_for_copy
+  fi
   local root base path
   root=$(main_worktree_path)
   base=$(base_dir "$root" "$base_override")
@@ -557,10 +606,11 @@ cmd_sync() {
   if [ -z "$from_branch" ] && [ -n "$to_branch" ]; then
     die "missing source branch"
   fi
+  require_repo
+  require_not_bare_for_copy
   if [ "$copyignored" -eq 0 ] && [ "$copyuntracked" -eq 0 ] && [ "$copymodified" -eq 0 ] && [ "$copytracked" -eq 0 ]; then
     die "missing copy flag"
   fi
-  require_repo
   local root src dst
   root=$(main_worktree_path)
   if [ -z "$from_branch" ]; then
@@ -617,11 +667,12 @@ cmd_ls() {
     base=$(base_dir "$root" "$BASE_DIR_OVERRIDE")
     while IFS= read -r entry; do
       [ -n "$entry" ] || continue
-      local path head branch
-      path=${entry%%$'\t'*}
-      head=${entry#*$'\t'}
-      branch=${head#*$'\t'}
-      head=${head%%$'\t'*}
+      local path head branch is_bare
+      parse_worktree_entry "$entry"
+      if [ "$is_bare" = "1" ]; then
+        filtered+="(bare)\t$path\t$head\n"
+        continue
+      fi
       case "$path" in
       "$base"/*)
         filtered+="$branch\t$path\t$head\n"
@@ -631,11 +682,11 @@ cmd_ls() {
   else
     while IFS= read -r entry; do
       [ -n "$entry" ] || continue
-      local path head branch
-      path=${entry%%$'\t'*}
-      head=${entry#*$'\t'}
-      branch=${head#*$'\t'}
-      head=${head%%$'\t'*}
+      local path head branch is_bare
+      parse_worktree_entry "$entry"
+      if [ "$is_bare" = "1" ]; then
+        branch="(bare)"
+      fi
       filtered+="$branch\t$path\t$head\n"
     done <<<"$entries"
   fi
@@ -736,13 +787,11 @@ cmd_here() {
   esac
   local entry
   while IFS= read -r entry; do
-    local path head name
-    path=${entry%%$'\t'*}
-    head=${entry#*$'\t'}
-    name=${head#*$'\t'}
+    local path head branch is_bare
+    parse_worktree_entry "$entry"
     if [ "$path" = "$current" ]; then
-      if [ -n "$name" ]; then
-        printf '%s\n' "$name"
+      if [ -n "$branch" ]; then
+        printf '%s\n' "$branch"
         exit 0
       fi
     fi
