@@ -69,8 +69,9 @@ struct RepositorySettingsFeature {
         guard isBareRepository, updatedSettings != settings else { return .none }
         let rootURL = state.rootURL
         let repositorySettingsClient = repositorySettingsClient
+        let settingsToSave = updatedSettings
         return .run { send in
-          repositorySettingsClient.save(updatedSettings, rootURL)
+          repositorySettingsClient.save(settingsToSave, rootURL)
           await send(.delegate(.settingsChanged(rootURL)))
         }
 

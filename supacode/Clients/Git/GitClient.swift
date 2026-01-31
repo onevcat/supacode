@@ -413,7 +413,7 @@ struct GitClient {
     return nil
   }
 
-  static func preferredBaseRef(remote: String?, localHead: String?) -> String? {
+  nonisolated static func preferredBaseRef(remote: String?, localHead: String?) -> String? {
     remote ?? localHead
   }
 
