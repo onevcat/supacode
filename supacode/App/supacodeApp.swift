@@ -5,6 +5,7 @@
 //  Created by khoi on 20/1/26.
 //
 
+import AppKit
 import ComposableArchitecture
 import Foundation
 import GhosttyKit
@@ -36,6 +37,7 @@ struct SupacodeApp: App {
   @State private var store: StoreOf<AppFeature>
 
   @MainActor init() {
+    NSWindow.allowsAutomaticWindowTabbing = false
     #if !DEBUG
       SentrySDK.start { options in
         options.dsn = "https://fb4d394e0bd3e72871b01c7ef3cac129@o1224589.ingest.us.sentry.io/4510770231050240"
@@ -100,7 +102,7 @@ struct SupacodeApp: App {
   }
 
   var body: some Scene {
-    WindowGroup {
+    Window("Supacode", id: "main") {
       GhosttyColorSchemeSyncView(ghostty: ghostty) {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
@@ -115,6 +117,17 @@ struct SupacodeApp: App {
       SidebarCommands()
       TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
       UpdateCommands(store: store.scope(state: \.updates, action: \.updates))
+      CommandGroup(replacing: .windowArrangement) {
+        Button("Minimize") {
+          NSApp.keyWindow?.miniaturize(nil)
+        }
+        .keyboardShortcut("m")
+        .help("Minimize (⌘M)")
+        Button("Zoom") {
+          NSApp.keyWindow?.zoom(nil)
+        }
+        .help("Zoom (no shortcut)")
+      }
       CommandGroup(replacing: .appSettings) {
         Button("Settings...") {
           SettingsWindowManager.shared.show()

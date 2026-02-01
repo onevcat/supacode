@@ -42,6 +42,7 @@ final class SettingsWindowManager {
     window.title = ""
     window.titleVisibility = .hidden
     window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+    window.tabbingMode = .disallowed
     window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified
     window.toolbar = NSToolbar(identifier: "SettingsToolbar")

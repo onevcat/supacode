@@ -68,6 +68,7 @@ struct ContentView: View {
     .alert(store: repositoriesStore.scope(state: \.$alert, action: \.alert))
     .alert(store: store.scope(state: \.$alert, action: \.alert))
     .focusedSceneValue(\.toggleLeftSidebarAction, toggleLeftSidebar)
+    .background(WindowTabbingDisabler())
   }
 
   private func toggleLeftSidebar() {
