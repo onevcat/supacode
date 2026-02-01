@@ -13,7 +13,7 @@ struct RepositorySettingsFeature {
     var isBranchDataLoaded = false
   }
 
-  enum Action: Equatable {
+  enum Action {
     case task
     case settingsLoaded(RepositorySettings, isBareRepository: Bool)
     case branchDataLoaded([String], defaultBaseRef: String)
@@ -25,6 +25,7 @@ struct RepositorySettingsFeature {
     case delegate(Delegate)
   }
 
+  @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(URL)
   }

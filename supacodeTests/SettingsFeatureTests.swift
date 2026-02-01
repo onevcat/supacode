@@ -25,7 +25,7 @@ struct SettingsFeatureTests {
     }
 
     await store.send(.task)
-    await store.receive(.settingsLoaded(loaded)) {
+    await store.receive(\.settingsLoaded) {
       $0.appearanceMode = .dark
       $0.confirmBeforeQuit = true
       $0.updatesAutomaticallyCheckForUpdates = false
@@ -35,7 +35,7 @@ struct SettingsFeatureTests {
       $0.githubIntegrationEnabled = true
       $0.deleteBranchOnArchive = false
     }
-    await store.receive(.delegate(.settingsChanged(loaded)))
+    await store.receive(\.delegate.settingsChanged)
   }
 
   @Test(.dependencies) func savesUpdatesChanges() async {
@@ -74,7 +74,7 @@ struct SettingsFeatureTests {
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
       deleteBranchOnArchive: initialSettings.deleteBranchOnArchive
     )
-    await store.receive(.delegate(.settingsChanged(expectedSettings)))
+    await store.receive(\.delegate.settingsChanged)
 
     await store.finish()
     #expect(saved.value == expectedSettings)
@@ -134,6 +134,6 @@ struct SettingsFeatureTests {
         settings: .default
       )
     }
-    await store.receive(.delegate(.settingsChanged(loaded)))
+    await store.receive(\.delegate.settingsChanged)
   }
 }

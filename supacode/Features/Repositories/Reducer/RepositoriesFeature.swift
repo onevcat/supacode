@@ -1,5 +1,6 @@
 import ComposableArchitecture
 import Foundation
+import IdentifiedCollections
 import SwiftUI
 
 private enum CancelID {
@@ -10,7 +11,7 @@ private enum CancelID {
 struct RepositoriesFeature {
   @ObservableState
   struct State: Equatable {
-    var repositories: [Repository] = []
+    var repositories: IdentifiedArrayOf<Repository> = []
     var repositoryRoots: [URL] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
     var selectedWorktreeID: Worktree.ID?
@@ -29,7 +30,7 @@ struct RepositoriesFeature {
     @Presents var alert: AlertState<Alert>?
   }
 
-  enum Action: Equatable {
+  enum Action {
     case task
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
@@ -98,9 +99,10 @@ struct RepositoriesFeature {
     case confirmRemoveRepository(Repository.ID)
   }
 
+  @CasePathable
   enum Delegate: Equatable {
     case selectedWorktreeChanged(Worktree?)
-    case repositoriesChanged([Repository])
+    case repositoriesChanged(IdentifiedArrayOf<Repository>)
     case openRepositorySettings(Repository.ID)
   }
 
@@ -110,6 +112,7 @@ struct RepositoriesFeature {
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
   @Dependency(\.repositorySettingsClient) private var repositorySettingsClient
   @Dependency(\.settingsClient) private var settingsClient
+  @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in
@@ -166,9 +169,8 @@ struct RepositoriesFeature {
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
-        let mergedRepositories = repositories
         let didPrunePinned = applyRepositories(
-          mergedRepositories,
+          repositories,
           state: &state,
           animated: animated
         )
@@ -180,7 +182,7 @@ struct RepositoriesFeature {
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
         let selectionChanged = previousSelectedWorktree != selectedWorktree
         var allEffects: [Effect<Action>] = [
-          .send(.delegate(.repositoriesChanged(mergedRepositories)))
+          .send(.delegate(.repositoriesChanged(state.repositories)))
         ]
         if selectionChanged {
           allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
@@ -230,9 +232,8 @@ struct RepositoriesFeature {
       case .openRepositoriesFinished(let repositories, let failures, let invalidRoots, let roots):
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
-        let mergedRepositories = repositories
         let didPrunePinned = applyRepositories(
-          mergedRepositories,
+          repositories,
           state: &state,
           animated: false
         )
@@ -251,7 +252,7 @@ struct RepositoriesFeature {
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
         let selectionChanged = previousSelectedWorktree != selectedWorktree
         var allEffects: [Effect<Action>] = [
-          .send(.delegate(.repositoriesChanged(mergedRepositories)))
+          .send(.delegate(.repositoriesChanged(state.repositories)))
         ]
         if selectionChanged {
           allEffects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
@@ -320,7 +321,7 @@ struct RepositoriesFeature {
         return .send(.createRandomWorktreeInRepository(repository.id))
 
       case .createRandomWorktreeInRepository(let repositoryID):
-        guard let repository = state.repositories.first(where: { $0.id == repositoryID }) else {
+        guard let repository = state.repositories[id: repositoryID] else {
           state.alert = errorAlert(
             title: "Unable to create worktree",
             message: "Unable to resolve a repository for the new worktree."
@@ -335,7 +336,7 @@ struct RepositoriesFeature {
           return .none
         }
         let previousSelection = state.selectedWorktreeID
-        let pendingID = "pending:\(UUID().uuidString)"
+        let pendingID = "pending:\(uuid().uuidString)"
         let repositorySettings = repositorySettingsClient.load(repository.rootURL)
         let selectedBaseRef = repositorySettings.worktreeBaseRef
         state.pendingWorktrees.append(
@@ -445,8 +446,8 @@ struct RepositoriesFeature {
         if state.removingRepositoryIDs.contains(repositoryID) {
           return .none
         }
-        guard let repository = state.repositories.first(where: { $0.id == repositoryID }),
-          let worktree = repository.worktrees.first(where: { $0.id == worktreeID })
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
         else {
           return .none
         }
@@ -473,8 +474,8 @@ struct RepositoriesFeature {
         let repositoryID,
         let deleteBranchOnArchive
       ):
-        guard let repository = state.repositories.first(where: { $0.id == repositoryID }),
-          let worktree = repository.worktrees.first(where: { $0.id == worktreeID })
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
         else {
           return .none
         }
@@ -503,8 +504,8 @@ struct RepositoriesFeature {
         return .send(.removeWorktreeConfirmed(worktreeID, repositoryID))
 
       case .removeWorktreeConfirmed(let worktreeID, let repositoryID):
-        guard let repository = state.repositories.first(where: { $0.id == repositoryID }),
-          let worktree = repository.worktrees.first(where: { $0.id == worktreeID })
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
         else {
           return .none
         }
@@ -621,7 +622,7 @@ struct RepositoriesFeature {
         .cancellable(id: CancelID.load, cancelInFlight: true)
 
       case .alert(.presented(.confirmRemoveRepository(let repositoryID))):
-        guard let repository = state.repositories.first(where: { $0.id == repositoryID }) else {
+        guard let repository = state.repositories[id: repositoryID] else {
           return .none
         }
         if state.removingRepositoryIDs.contains(repository.id) {
@@ -845,7 +846,7 @@ struct RepositoriesFeature {
           id: rootID,
           rootURL: normalizedRoot,
           name: name,
-          worktrees: worktrees
+          worktrees: IdentifiedArray(uniqueElements: worktrees)
         )
         loaded.append(repository)
       } catch {
@@ -892,9 +893,10 @@ struct RepositoriesFeature {
     let filteredWorktreeInfo = state.worktreeInfoByID.filter {
       availableWorktreeIDs.contains($0.key)
     }
+    let identifiedRepositories = IdentifiedArray(uniqueElements: repositories)
     if animated {
       withAnimation {
-        state.repositories = repositories
+        state.repositories = identifiedRepositories
         state.pendingWorktrees = filteredPendingWorktrees
         state.deletingWorktreeIDs = filteredDeletingIDs
         state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
@@ -902,7 +904,7 @@ struct RepositoriesFeature {
         state.worktreeInfoByID = filteredWorktreeInfo
       }
     } else {
-      state.repositories = repositories
+      state.repositories = identifiedRepositories
       state.pendingWorktrees = filteredPendingWorktrees
       state.deletingWorktreeIDs = filteredDeletingIDs
       state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
@@ -944,7 +946,7 @@ struct RepositoriesFeature {
     repositoryID: Repository.ID,
     state: State
   ) -> AlertState<Alert>? {
-    guard let repository = state.repositories.first(where: { $0.id == repositoryID }) else {
+    guard let repository = state.repositories[id: repositoryID] else {
       return nil
     }
     return AlertState {
@@ -983,7 +985,7 @@ extension RepositoriesFeature.State {
   func worktree(for id: Worktree.ID?) -> Worktree? {
     guard let id else { return nil }
     for repository in repositories {
-      if let worktree = repository.worktrees.first(where: { $0.id == id }) {
+      if let worktree = repository.worktrees[id: id] {
         return worktree
       }
     }
@@ -1017,7 +1019,7 @@ extension RepositoriesFeature.State {
       )
     }
     for repository in repositories {
-      if let worktree = repository.worktrees.first(where: { $0.id == id }) {
+      if let worktree = repository.worktrees[id: id] {
         let isDeleting =
           removingRepositoryIDs.contains(repository.id)
           || deletingWorktreeIDs.contains(worktree.id)
@@ -1039,7 +1041,7 @@ extension RepositoriesFeature.State {
   }
 
   func repositoryName(for id: Repository.ID) -> String? {
-    repositories.first(where: { $0.id == id })?.name
+    repositories[id: id]?.name
   }
 
   func repositoryID(for worktreeID: Worktree.ID?) -> Repository.ID? {
@@ -1188,9 +1190,9 @@ private func insertWorktree(
   repositoryID: Repository.ID,
   state: inout RepositoriesFeature.State
 ) {
-  guard let index = state.repositories.firstIndex(where: { $0.id == repositoryID }) else { return }
+  guard let index = state.repositories.index(id: repositoryID) else { return }
   let repository = state.repositories[index]
-  if repository.worktrees.contains(where: { $0.id == worktree.id }) {
+  if repository.worktrees[id: worktree.id] != nil {
     return
   }
   var worktrees = repository.worktrees
@@ -1209,15 +1211,16 @@ private func removeWorktree(
   repositoryID: Repository.ID,
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  guard let index = state.repositories.firstIndex(where: { $0.id == repositoryID }) else { return false }
+  guard let index = state.repositories.index(id: repositoryID) else { return false }
   let repository = state.repositories[index]
-  let filteredWorktrees = repository.worktrees.filter { $0.id != worktreeID }
-  guard filteredWorktrees.count != repository.worktrees.count else { return false }
+  guard repository.worktrees[id: worktreeID] != nil else { return false }
+  var worktrees = repository.worktrees
+  worktrees.remove(id: worktreeID)
   state.repositories[index] = Repository(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
-    worktrees: filteredWorktrees
+    worktrees: worktrees
   )
   return true
 }
@@ -1229,7 +1232,7 @@ private func updateWorktreeName(
 ) {
   for index in state.repositories.indices {
     var repository = state.repositories[index]
-    guard let worktreeIndex = repository.worktrees.firstIndex(where: { $0.id == worktreeID }) else {
+    guard let worktreeIndex = repository.worktrees.index(id: worktreeID) else {
       continue
     }
     let worktree = repository.worktrees[worktreeIndex]
@@ -1237,7 +1240,7 @@ private func updateWorktreeName(
       return
     }
     var worktrees = repository.worktrees
-    worktrees[worktreeIndex] = Worktree(
+    worktrees[id: worktreeID] = Worktree(
       id: worktree.id,
       name: name,
       detail: worktree.detail,
@@ -1315,10 +1318,10 @@ private func repositoryForWorktreeCreation(
 ) -> Repository? {
   if let selectedWorktreeID = state.selectedWorktreeID {
     if let pending = state.pendingWorktree(for: selectedWorktreeID) {
-      return state.repositories.first(where: { $0.id == pending.repositoryID })
+      return state.repositories[id: pending.repositoryID]
     }
     for repository in state.repositories
-    where repository.worktrees.contains(where: { $0.id == selectedWorktreeID }) {
+    where repository.worktrees[id: selectedWorktreeID] != nil {
       return repository
     }
   }
@@ -1359,7 +1362,7 @@ private func firstAvailableWorktreeID(
   in repositoryID: Repository.ID,
   state: RepositoriesFeature.State
 ) -> Worktree.ID? {
-  guard let repository = state.repositories.first(where: { $0.id == repositoryID }) else {
+  guard let repository = state.repositories[id: repositoryID] else {
     return nil
   }
   return state.orderedWorktrees(in: repository).first?.id

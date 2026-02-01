@@ -1,10 +1,11 @@
 import Foundation
+import IdentifiedCollections
 
 struct Repository: Identifiable, Hashable, Sendable {
   let id: String
   let rootURL: URL
   let name: String
-  let worktrees: [Worktree]
+  let worktrees: IdentifiedArrayOf<Worktree>
 
   var initials: String {
     Self.initials(from: name)

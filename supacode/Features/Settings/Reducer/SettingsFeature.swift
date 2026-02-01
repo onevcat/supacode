@@ -41,7 +41,7 @@ struct SettingsFeature {
     }
   }
 
-  enum Action: Equatable {
+  enum Action {
     case task
     case settingsLoaded(GlobalSettings)
     case setAppearanceMode(AppearanceMode)
@@ -57,6 +57,7 @@ struct SettingsFeature {
     case delegate(Delegate)
   }
 
+  @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
   }

@@ -32,7 +32,7 @@ struct AppFeature {
     }
   }
 
-  enum Action: Equatable {
+  enum Action {
     case task
     case scenePhaseChanged(ScenePhase)
     case repositories(RepositoriesFeature.Action)
@@ -177,7 +177,7 @@ struct AppFeature {
       case .settings(.setSelection(let selection)):
         switch selection {
         case .repository(let repositoryID):
-          guard let repository = state.repositories.repositories.first(where: { $0.id == repositoryID }) else {
+          guard let repository = state.repositories.repositories[id: repositoryID] else {
             state.settings.repositorySettings = nil
             return .none
           }

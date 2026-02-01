@@ -86,7 +86,7 @@ struct SettingsView: View {
             .navigationSubtitle("GitHub CLI integration")
         }
       case .repository(let repositoryID):
-        if let repository = repositories.first(where: { $0.id == repositoryID }) {
+        if let repository = repositories[id: repositoryID] {
           SettingsDetailView {
             IfLetStore(
               settingsStore.scope(state: \.repositorySettings, action: \.repositorySettings)

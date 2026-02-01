@@ -7,7 +7,7 @@ struct UpdatesFeature {
     var didConfigureUpdates = false
   }
 
-  enum Action: Equatable {
+  enum Action {
     case applySettings(
       automaticallyChecks: Bool,
       automaticallyDownloads: Bool

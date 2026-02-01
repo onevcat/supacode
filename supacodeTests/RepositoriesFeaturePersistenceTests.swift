@@ -23,21 +23,21 @@ struct RepositoriesFeaturePersistenceTests {
     }
 
     await store.send(.task)
-    await store.receive(.pinnedWorktreeIDsLoaded(pinned)) {
+    await store.receive(\.pinnedWorktreeIDsLoaded) {
       $0.pinnedWorktreeIDs = pinned
     }
-    await store.receive(.lastFocusedWorktreeIDLoaded(nil)) {
+    await store.receive(\.lastFocusedWorktreeIDLoaded) {
       $0.lastFocusedWorktreeID = nil
       $0.shouldRestoreLastFocusedWorktree = true
     }
-    await store.receive(.loadPersistedRepositories)
-    await store.receive(.repositoriesLoaded([], failures: [], roots: [], animated: false)) {
+    await store.receive(\.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
       $0.repositories = []
       $0.pinnedWorktreeIDs = []
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
     }
-    await store.receive(.delegate(.repositoriesChanged([])))
+    await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
   }
 }

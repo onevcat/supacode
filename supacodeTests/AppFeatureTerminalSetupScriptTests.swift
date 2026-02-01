@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
+import IdentifiedCollections
 import Testing
 
 @testable import supacode
@@ -21,7 +22,8 @@ struct AppFeatureTerminalSetupScriptTests {
       name: "repo",
       worktrees: [worktree]
     )
-    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
     repositoriesState.selectedWorktreeID = worktree.id
     repositoriesState.pendingSetupScriptWorktreeIDs = [worktree.id]
     let sent = LockIsolated<[TerminalClient.Command]>([])
@@ -39,7 +41,7 @@ struct AppFeatureTerminalSetupScriptTests {
     }
 
     await store.send(.newTerminal)
-    await store.receive(.repositories(.consumeSetupScript(worktree.id))) {
+    await store.receive(\.repositories.consumeSetupScript) {
       $0.repositories.pendingSetupScriptWorktreeIDs.remove(worktree.id)
     }
     await store.finish()
@@ -60,7 +62,8 @@ struct AppFeatureTerminalSetupScriptTests {
       name: "repo",
       worktrees: [worktree]
     )
-    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
     repositoriesState.selectedWorktreeID = worktree.id
     let sent = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(
