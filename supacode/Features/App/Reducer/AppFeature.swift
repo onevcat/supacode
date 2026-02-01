@@ -293,13 +293,22 @@ struct AppFeature {
         guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
           return .none
         }
-        let rootURL = worktree.repositoryRootURL
-        let repositorySettingsClient = repositorySettingsClient
+        let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+          state.alert = AlertState {
+            TextState("No Run Script Configured")
+          } actions: {
+            ButtonState(role: .cancel, action: .dismiss) {
+              TextState("OK")
+            }
+          } message: {
+            TextState("Configure a run script in Repository Settings.")
+          }
+          return .none
+        }
+        let script = state.selectedRunScript
         return .run { _ in
-          let settings = repositorySettingsClient.load(rootURL)
-          let trimmed = settings.runScript.trimmingCharacters(in: .whitespacesAndNewlines)
-          guard !trimmed.isEmpty else { return }
-          await terminalClient.send(.runScript(worktree, script: settings.runScript))
+          await terminalClient.send(.runScript(worktree, script: script))
         }
 
       case .stopRunScript:

@@ -188,55 +188,55 @@ nonisolated private func makeBatchPullRequestsQuery(
     aliasMap[alias] = branch
     let escapedBranch = escapeGraphQLString(branch)
     let selection = """
-    \(alias): pullRequests(first: 5, states: [OPEN, MERGED], headRefName: \"\(escapedBranch)\") {
-      nodes {
-        number
-        title
-        state
-        additions
-        deletions
-        isDraft
-        reviewDecision
-        url
-        updatedAt
-        headRefName
-        headRepository {
-          name
-          owner { login }
-        }
-        statusCheckRollup {
-          contexts(first: 100) {
-            nodes {
-              ... on CheckRun {
-                name
-                status
-                conclusion
-                startedAt
-                completedAt
-                detailsUrl
-              }
-              ... on StatusContext {
-                context
-                state
-                targetUrl
-                createdAt
+      \(alias): pullRequests(first: 5, states: [OPEN, MERGED], headRefName: \"\(escapedBranch)\") {
+        nodes {
+          number
+          title
+          state
+          additions
+          deletions
+          isDraft
+          reviewDecision
+          url
+          updatedAt
+          headRefName
+          headRepository {
+            name
+            owner { login }
+          }
+          statusCheckRollup {
+            contexts(first: 100) {
+              nodes {
+                ... on CheckRun {
+                  name
+                  status
+                  conclusion
+                  startedAt
+                  completedAt
+                  detailsUrl
+                }
+                ... on StatusContext {
+                  context
+                  state
+                  targetUrl
+                  createdAt
+                }
               }
             }
           }
         }
       }
-    }
-    """
+      """
     selections.append(selection)
   }
   let selectionBlock = selections.joined(separator: "\n")
   let query = """
-  query($owner: String!, $repo: String!) {
-    repository(owner: $owner, name: $repo) {
-  \(selectionBlock)
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+    \(selectionBlock)
+      }
     }
-  }
-  """
+    """
   return (query, aliasMap)
 }
 

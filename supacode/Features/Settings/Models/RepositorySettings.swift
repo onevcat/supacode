@@ -18,8 +18,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   }
 
   static let `default` = RepositorySettings(
-    setupScript: "echo \"Setup your startup script in repo settings\"",
-    runScript: "echo \"Configure run script in Settings, default hot key is CMD+R and CMD + . to stop\"",
+    setupScript: "",
+    runScript: "",
     openActionID: OpenWorktreeAction.automaticSettingsID,
     worktreeBaseRef: nil,
     copyIgnoredOnWorktreeCreate: false,

@@ -47,7 +47,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     switch self {
     case .finder: "Finder"
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
-        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
+      .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       title
     }
   }
@@ -63,7 +63,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder:
       return true
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
-        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
+      .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -160,7 +160,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
-        .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
+      .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier

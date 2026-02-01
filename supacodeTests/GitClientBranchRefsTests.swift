@@ -15,10 +15,10 @@ struct GitClientBranchRefsTests {
   @Test func branchRefsUsesUpstreamsOrLocalRefs() async throws {
     let store = ShellCallStore()
     let output = """
-    feature\torigin/feature
-    main\t
-    bugfix\torigin/bugfix
-    """
+      feature\torigin/feature
+      main\t
+      bugfix\torigin/bugfix
+      """
     let shell = ShellClient(
       run: { _, arguments, _ in
         await store.record(arguments)
@@ -45,9 +45,9 @@ struct GitClientBranchRefsTests {
 
   @Test func branchRefsDropsOriginHead() async throws {
     let output = """
-    head\torigin/HEAD
-    main\torigin/main
-    """
+      head\torigin/HEAD
+      main\torigin/main
+      """
     let shell = ShellClient(
       run: { _, _, _ in ShellOutput(stdout: output, stderr: "", exitCode: 0) },
       runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }

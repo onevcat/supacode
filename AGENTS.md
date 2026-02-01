@@ -4,7 +4,7 @@
 make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires mise)
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
-make lint                        # Run swiftlint
+make check                        # Run swiftformat and swiftlint
 make test                        # Run all tests
 make bump-version                # Bump patch version and create git tag
 make bump-and-release            # Bump version and push to trigger release

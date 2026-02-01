@@ -4,77 +4,79 @@ struct WorktreeDetailTitleView: View {
   let branchName: String
   let onSubmit: (String) -> Void
 
-  @State private var isEditing = false
+  @State private var isPresented = false
   @State private var draftName = ""
-  @FocusState private var isFocused: Bool
 
   var body: some View {
-    if isEditing {
+    Button {
+      draftName = branchName
+      isPresented = true
+    } label: {
       HStack(spacing: 6) {
         Image(systemName: "arrow.trianglehead.branch")
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
-        TextField("Branch", text: $draftName)
-          .textFieldStyle(.plain)
-          .focused($isFocused)
-          .onChange(of: draftName) { _, newValue in
-            let filtered = String(newValue.filter { !$0.isWhitespace })
-            if filtered != newValue {
-              draftName = filtered
-            }
-          }
-          .onSubmit { commit() }
-          .onExitCommand { cancel() }
-          .onChange(of: isFocused) { _, isFocused in
-            if !isFocused {
-              cancel()
-            }
-          }
+        Text(branchName)
       }
       .font(.headline)
       .monospaced()
-      .padding(.horizontal, 8)
-      .padding(.vertical, 4)
-      .task { isFocused = true }
-      .help("Rename branch (Return to confirm)")
-    } else {
-      Button {
-        beginEditing()
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "arrow.trianglehead.branch")
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
-          Text(branchName)
+    }
+    .help("Rename branch")
+    .popover(isPresented: $isPresented) {
+      RenameBranchPopover(
+        draftName: $draftName,
+        onCancel: { isPresented = false },
+        onSubmit: { newName in
+          isPresented = false
+          if newName != branchName {
+            onSubmit(newName)
+          }
         }
+      )
+    }
+  }
+}
+
+private struct RenameBranchPopover: View {
+  @Binding var draftName: String
+  let onCancel: () -> Void
+  let onSubmit: (String) -> Void
+  @FocusState private var isFocused: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Rename Branch")
         .font(.headline)
-        .monospaced()
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+
+      TextField("Branch name", text: $draftName)
+        .textFieldStyle(.roundedBorder)
+        .focused($isFocused)
+        .onChange(of: draftName) { _, newValue in
+          let filtered = String(newValue.filter { !$0.isWhitespace })
+          if filtered != newValue {
+            draftName = filtered
+          }
+        }
+        .onSubmit { submit() }
+        .onExitCommand { onCancel() }
+
+      HStack {
+        Spacer()
+        Button("Cancel", role: .cancel) { onCancel() }
+          .keyboardShortcut(.cancelAction)
+        Button("Rename") { submit() }
+          .keyboardShortcut(.defaultAction)
+          .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
-      .buttonStyle(.plain)
-      .help("Tap to rename branch")
     }
+    .padding()
+    .frame(width: 280)
+    .task { isFocused = true }
   }
 
-  private func beginEditing() {
-    draftName = branchName
-    isEditing = true
-  }
-
-  private func cancel() {
-    isEditing = false
-    draftName = branchName
-    isFocused = false
-  }
-
-  private func commit() {
+  private func submit() {
     let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-    isEditing = false
-    isFocused = false
     guard !trimmed.isEmpty else { return }
-    if trimmed != branchName {
-      onSubmit(trimmed)
-    }
+    onSubmit(trimmed)
   }
 }

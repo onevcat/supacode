@@ -118,7 +118,8 @@ final class GhosttyRuntime {
 
   func setColorScheme(_ scheme: ColorScheme) {
     guard let app else { return }
-    let ghosttyScheme: ghostty_color_scheme_e = scheme == .dark
+    let ghosttyScheme: ghostty_color_scheme_e =
+      scheme == .dark
       ? GHOSTTY_COLOR_SCHEME_DARK
       : GHOSTTY_COLOR_SCHEME_LIGHT
     lastColorScheme = ghosttyScheme

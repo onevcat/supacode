@@ -78,9 +78,8 @@ struct RepositorySettingsView: View {
           .monospaced()
           .frame(minHeight: 120)
           if store.settings.setupScript.isEmpty {
-            Text("echo 123")
+            Text("claude --dangerously-skip-permissions")
               .foregroundStyle(.secondary)
-              .padding(.top, 8)
               .padding(.leading, 6)
               .font(.body)
               .monospaced()
@@ -106,9 +105,8 @@ struct RepositorySettingsView: View {
           .monospaced()
           .frame(minHeight: 120)
           if store.settings.runScript.isEmpty {
-            Text("echo \"Run script\"")
+            Text("npm run dev")
               .foregroundStyle(.secondary)
-              .padding(.top, 8)
               .padding(.leading, 6)
               .font(.body)
               .monospaced()

@@ -294,7 +294,8 @@ struct GitClient {
     else {
       return nil
     }
-    let remotes = remotesOutput
+    let remotes =
+      remotesOutput
       .split(whereSeparator: \.isNewline)
       .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
@@ -368,7 +369,8 @@ struct GitClient {
           return nil
         }
         let localRef = String(local).trimmingCharacters(in: .whitespacesAndNewlines)
-        let upstreamRef = parts.count > 1
+        let upstreamRef =
+          parts.count > 1
           ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
           : ""
         if !upstreamRef.isEmpty {
