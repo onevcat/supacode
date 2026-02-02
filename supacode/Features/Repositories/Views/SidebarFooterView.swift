@@ -13,6 +13,7 @@ struct SidebarFooterView: View {
       } label: {
         HStack(spacing: 6) {
           Label("Add Repository", systemImage: "folder.badge.plus")
+            .ghosttyMonospaced(.callout)
           if commandKeyObserver.isPressed {
             ShortcutHintView(text: AppShortcuts.openRepository.display, color: .secondary)
           }
