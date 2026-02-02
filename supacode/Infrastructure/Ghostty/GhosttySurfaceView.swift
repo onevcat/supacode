@@ -151,11 +151,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+    if window == nil, focused {
+      focused = false
+      setSurfaceFocus(false)
+      onFocusChange?(false)
+      if passwordInput {
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: false)
+      }
+    }
     updateContentScale()
     updateSurfaceSize()
-    if pendingFocus {
+    if pendingFocus, let window {
       pendingFocus = false
-      window?.makeFirstResponder(self)
+      window.makeFirstResponder(self)
     }
   }
 
