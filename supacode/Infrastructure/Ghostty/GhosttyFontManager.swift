@@ -40,12 +40,6 @@ final class GhosttyFontManager {
     return .system(style, design: .monospaced)
   }
 
-  func nsFont(for style: Font.TextStyle, weight: Font.Weight? = nil) -> NSFont {
-    let size = preferredSize(for: style)
-    let resolvedWeight = nsWeight(for: weight ?? preferredWeight(for: style))
-    return nsFont(size: size, weight: resolvedWeight)
-  }
-
   func font(size: CGFloat, weight: Font.Weight? = nil) -> Font {
     if familyName != nil {
       let nsWeight = weight.map(nsWeight(for:)) ?? .regular
