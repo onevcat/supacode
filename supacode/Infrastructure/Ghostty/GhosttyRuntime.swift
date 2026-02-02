@@ -280,24 +280,27 @@ final class GhosttyRuntime {
     confirm: Bool
   ) {
     guard let content, len > 0 else { return }
-    var items: [(mime: String, data: String)] = []
-    items.reserveCapacity(len)
-    for index in 0..<len {
+    let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
       let item = content.advanced(by: index).pointee
-      guard let mimePtr = item.mime, let dataPtr = item.data else { continue }
-      items.append((mime: String(cString: mimePtr), data: String(cString: dataPtr)))
+      guard let mimePtr = item.mime, let dataPtr = item.data else { return nil }
+      return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
     }
     guard !items.isEmpty else { return }
-    Task { @MainActor in
+
+    let write = {
       guard let pasteboard = NSPasteboard.ghostty(location) else { return }
       let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
-      if !types.isEmpty {
-        pasteboard.declareTypes(types, owner: nil)
-      }
+      pasteboard.declareTypes(types, owner: nil)
       for item in items {
         guard let type = NSPasteboard.PasteboardType(mimeType: item.mime) else { continue }
         pasteboard.setString(item.data, forType: type)
       }
+    }
+
+    if Thread.isMainThread {
+      write()
+    } else {
+      DispatchQueue.main.async { write() }
     }
   }
 

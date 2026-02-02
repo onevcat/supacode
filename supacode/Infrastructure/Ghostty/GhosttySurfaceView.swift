@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import CoreText
 import GhosttyKit
+import QuartzCore
 
 final class GhosttySurfaceView: NSView, Identifiable {
   private struct ScrollbarState {
@@ -27,6 +28,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
+  private var eventMonitor: Any?
+  private var prevPressureStage: Int = 0
+  var passwordInput: Bool = false {
+    didSet {
+      let input = SecureInput.shared
+      let id = ObjectIdentifier(self)
+      if passwordInput {
+        input.setScoped(id, focused: focused)
+      } else {
+        input.removeScoped(id)
+      }
+    }
+  }
   weak var scrollWrapper: GhosttySurfaceScrollView? {
     didSet {
       if let lastScrollbar {
@@ -95,6 +109,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
       surfaceRef = runtime.registerSurface(surface)
     }
     registerForDraggedTypes(Array(Self.dropTypes))
+
+    eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .leftMouseDown]) {
+      [weak self] event in
+      self?.localEventHandler(event)
+    }
   }
 
   required init?(coder: NSCoder) {
@@ -102,6 +121,13 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   deinit {
+    if let eventMonitor {
+      NSEvent.removeMonitor(eventMonitor)
+    }
+    let id = ObjectIdentifier(self)
+    MainActor.assumeIsolated {
+      SecureInput.shared.removeScoped(id)
+    }
     closeSurface()
     if let workingDirectoryCString {
       free(workingDirectoryCString)
@@ -135,6 +161,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func viewDidChangeBackingProperties() {
     super.viewDidChangeBackingProperties()
+    if let window {
+      CATransaction.begin()
+      CATransaction.setDisableActions(true)
+      layer?.contentsScale = window.backingScaleFactor
+      CATransaction.commit()
+    }
     updateContentScale()
     updateSurfaceSize()
   }
@@ -168,6 +200,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
       focused = true
       setSurfaceFocus(true)
       onFocusChange?(true)
+      if passwordInput {
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: true)
+      }
     }
     return result
   }
@@ -178,6 +213,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
       focused = false
       setSurfaceFocus(false)
       onFocusChange?(false)
+      if passwordInput {
+        SecureInput.shared.setScoped(ObjectIdentifier(self), focused: false)
+      }
     }
     return result
   }
@@ -283,6 +321,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func mouseUp(with event: NSEvent) {
+    prevPressureStage = 0
     sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT)
   }
 
@@ -339,6 +378,63 @@ final class GhosttySurfaceView: NSView, Identifiable {
       scrollY *= 2
     }
     ghostty_surface_mouse_scroll(surface, scrollX, scrollY, scrollMods(for: event))
+  }
+
+  override func pressureChange(with event: NSEvent) {
+    guard let surface else { return }
+    ghostty_surface_mouse_pressure(surface, UInt32(event.stage), Double(event.pressure))
+    guard prevPressureStage < 2 else { return }
+    prevPressureStage = event.stage
+    guard event.stage == 2 else { return }
+    guard UserDefaults.standard.bool(forKey: "com.apple.trackpad.forceClick") else { return }
+    quickLook(with: event)
+  }
+
+  override func quickLook(with event: NSEvent) {
+    guard let surface else { return super.quickLook(with: event) }
+    var text = ghostty_text_s()
+    guard ghostty_surface_quicklook_word(surface, &text) else { return super.quickLook(with: event) }
+    defer { ghostty_surface_free_text(surface, &text) }
+    guard text.text_len > 0 else { return super.quickLook(with: event) }
+
+    var attributes: [NSAttributedString.Key: Any] = [:]
+    if let fontRaw = ghostty_surface_quicklook_font(surface) {
+      let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+      attributes[.font] = font.takeUnretainedValue()
+      font.release()
+    }
+
+    let pt = NSPoint(x: text.tl_px_x, y: frame.size.height - text.tl_px_y)
+    let str = NSAttributedString(string: String(cString: text.text), attributes: attributes)
+    showDefinition(for: str, at: pt)
+  }
+
+  private func localEventHandler(_ event: NSEvent) -> NSEvent? {
+    switch event.type {
+    case .keyUp:
+      localEventKeyUp(event)
+    case .leftMouseDown:
+      localEventLeftMouseDown(event)
+    default:
+      event
+    }
+  }
+
+  private func localEventKeyUp(_ event: NSEvent) -> NSEvent? {
+    if !event.modifierFlags.contains(.command) { return event }
+    guard focused else { return event }
+    keyUp(with: event)
+    return nil
+  }
+
+  private func localEventLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+    guard let window, event.window != nil, window == event.window else { return event }
+    let location = convert(event.locationInWindow, from: nil)
+    guard hitTest(location) == self else { return event }
+    guard !NSApp.isActive || !window.isKeyWindow else { return event }
+    guard !focused else { return event }
+    window.makeFirstResponder(self)
+    return event
   }
 
   func updateSurfaceSize() {
@@ -1043,6 +1139,49 @@ extension GhosttySurfaceView: NSTextInputClient {
     chars.withCString { ptr in
       ghostty_surface_text(surface, ptr, UInt(len - 1))
     }
+  }
+}
+
+extension GhosttySurfaceView: NSServicesMenuRequestor {
+  override func validRequestor(
+    forSendType sendType: NSPasteboard.PasteboardType?,
+    returnType: NSPasteboard.PasteboardType?
+  ) -> Any? {
+    let receivable: [NSPasteboard.PasteboardType] = [.string, .init("public.utf8-plain-text")]
+    let sendable = receivable
+    let sendableRequiresSelection = sendable
+
+    if (returnType == nil || receivable.contains(returnType!))
+      && (sendType == nil || sendable.contains(sendType!))
+    {
+      if let sendType, sendableRequiresSelection.contains(sendType) {
+        if surface == nil || !ghostty_surface_has_selection(surface) {
+          return super.validRequestor(forSendType: sendType, returnType: returnType)
+        }
+      }
+      return self
+    }
+    return super.validRequestor(forSendType: sendType, returnType: returnType)
+  }
+
+  func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+    guard let surface else { return false }
+    var text = ghostty_text_s()
+    guard ghostty_surface_read_selection(surface, &text) else { return false }
+    defer { ghostty_surface_free_text(surface, &text) }
+    pboard.declareTypes([.string], owner: nil)
+    pboard.setString(String(cString: text.text), forType: .string)
+    return true
+  }
+
+  func readSelection(from pboard: NSPasteboard) -> Bool {
+    guard let str = pboard.getOpinionatedStringContents() else { return false }
+    let len = str.utf8CString.count
+    if len == 0 { return true }
+    str.withCString { ptr in
+      ghostty_surface_text(surface, ptr, UInt(len - 1))
+    }
+    return true
   }
 }
 
