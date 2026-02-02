@@ -328,6 +328,19 @@ final class GhosttyRuntime {
     return Self.keyboardShortcut(for: trigger)
   }
 
+  func primaryFontFamilyName() -> String? {
+    guard let config else { return Self.defaultFontFamilyName }
+    var valuePtr: UnsafePointer<CChar>?
+    let key = "font-family"
+    if ghostty_config_get(config, &valuePtr, key, UInt(key.lengthOfBytes(using: .utf8))),
+      let ptr = valuePtr
+    {
+      let value = String(cString: ptr)
+      return value.isEmpty ? Self.defaultFontFamilyName : value
+    }
+    return Self.defaultFontFamilyName
+  }
+
   func shouldShowScrollbar() -> Bool {
     guard let config else { return true }
     var valuePtr: UnsafePointer<CChar>?
@@ -397,6 +410,8 @@ final class GhosttyRuntime {
     GHOSTTY_KEY_BACKSPACE: .delete,
     GHOSTTY_KEY_SPACE: .space,
   ]
+
+  private static let defaultFontFamilyName = "JetBrains Mono"
 }
 
 extension Notification.Name {

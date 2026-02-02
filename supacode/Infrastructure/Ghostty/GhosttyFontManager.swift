@@ -1,6 +1,4 @@
 import AppKit
-import CoreText
-import GhosttyKit
 import Observation
 import SwiftUI
 
@@ -19,7 +17,9 @@ final class GhosttyFontManager {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      self?.refresh()
+      Task { @MainActor in
+        self?.refresh()
+      }
     }
   }
 
@@ -68,19 +68,7 @@ final class GhosttyFontManager {
   }
 
   private func refresh() {
-    familyName = resolveFamilyName()
-  }
-
-  private func resolveFamilyName() -> String? {
-    let surfaceView = GhosttySurfaceView(runtime: runtime, workingDirectory: nil)
-    defer { surfaceView.closeSurface() }
-    guard let surface = surfaceView.surface else { return nil }
-    guard let fontRaw = ghostty_surface_quicklook_font(surface) else { return nil }
-    let unmanaged = Unmanaged<CTFont>.fromOpaque(fontRaw)
-    let font = unmanaged.takeUnretainedValue()
-    let name = CTFontCopyFamilyName(font) as String
-    unmanaged.release()
-    return name.isEmpty ? nil : name
+    familyName = runtime.primaryFontFamilyName()
   }
 
   private func preferredSize(for style: Font.TextStyle) -> CGFloat {
