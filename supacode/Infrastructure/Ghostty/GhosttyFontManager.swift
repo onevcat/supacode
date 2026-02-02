@@ -30,10 +30,9 @@ final class GhosttyFontManager {
   }
 
   func font(for style: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
-    let size = preferredSize(for: style)
-    if familyName != nil {
-      let nsWeight = weight.map(nsWeight(for:)) ?? preferredWeight(for: style)
-      return Font(nsFont(size: size, weight: nsWeight))
+    if let familyName {
+      let base = Font.custom(familyName, size: preferredSize(for: style), relativeTo: style)
+      return base.weight(weight ?? preferredWeight(for: style))
     }
     if let weight {
       return .system(style, design: .monospaced).weight(weight)
@@ -75,11 +74,34 @@ final class GhosttyFontManager {
     NSFont.preferredFont(forTextStyle: nsTextStyle(for: style)).pointSize
   }
 
-  private func preferredWeight(for style: Font.TextStyle) -> NSFont.Weight {
+  private func preferredWeight(for style: Font.TextStyle) -> Font.Weight {
     let font = NSFont.preferredFont(forTextStyle: nsTextStyle(for: style))
     let traits = font.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any]
-    let weight = traits?[.weight] as? CGFloat
-    return NSFont.Weight(weight ?? NSFont.Weight.regular.rawValue)
+    let weight = traits?[.weight] as? CGFloat ?? NSFont.Weight.regular.rawValue
+    return fontWeight(for: NSFont.Weight(weight))
+  }
+
+  private func fontWeight(for weight: NSFont.Weight) -> Font.Weight {
+    switch weight.rawValue {
+    case ..<(-0.7):
+      return .ultraLight
+    case ..<(-0.5):
+      return .thin
+    case ..<(-0.3):
+      return .light
+    case ..<(0.15):
+      return .regular
+    case ..<(0.28):
+      return .medium
+    case ..<(0.36):
+      return .semibold
+    case ..<(0.5):
+      return .bold
+    case ..<(0.7):
+      return .heavy
+    default:
+      return .black
+    }
   }
 
   private func nsWeight(for weight: Font.Weight) -> NSFont.Weight {
