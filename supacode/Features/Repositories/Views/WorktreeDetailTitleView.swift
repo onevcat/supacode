@@ -19,7 +19,7 @@ struct WorktreeDetailTitleView: View {
         Text(branchName)
       }
       .font(.headline)
-      .monospaced()
+      .ghosttyMonospaced(.headline)
     }
     .help("Rename branch")
     .popover(isPresented: $isPresented) {

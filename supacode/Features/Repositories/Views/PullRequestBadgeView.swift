@@ -38,7 +38,7 @@ struct PullRequestBadgeView: View {
   var body: some View {
     Text(text)
       .font(.caption2)
-      .monospaced()
+      .ghosttyMonospaced(.caption2)
       .foregroundStyle(color)
       .padding(.horizontal, 6)
       .padding(.vertical, 2)

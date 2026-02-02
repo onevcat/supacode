@@ -13,21 +13,21 @@ struct WorktreeLoadingView: View {
       ProgressView()
       Text(info.name)
         .font(.headline)
-        .monospaced()
+        .ghosttyMonospaced(.headline)
       if let repositoryName = info.repositoryName {
         Text("\(actionLabel) worktree in \(repositoryName)")
           .font(.subheadline)
-          .monospaced()
+          .ghosttyMonospaced(.subheadline)
           .foregroundStyle(.secondary)
       } else {
         Text("\(actionLabel) worktree...")
           .font(.subheadline)
-          .monospaced()
+          .ghosttyMonospaced(.subheadline)
           .foregroundStyle(.secondary)
       }
       Text(followup)
         .font(.subheadline)
-        .monospaced()
+        .ghosttyMonospaced(.subheadline)
         .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

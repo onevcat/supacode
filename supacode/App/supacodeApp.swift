@@ -31,6 +31,7 @@ private enum GhosttyCLI {
 struct SupacodeApp: App {
   @State private var ghostty: GhosttyRuntime
   @State private var ghosttyShortcuts: GhosttyShortcutManager
+  @State private var ghosttyFonts: GhosttyFontManager
   @State private var terminalManager: WorktreeTerminalManager
   @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
   @State private var commandKeyObserver: CommandKeyObserver
@@ -64,6 +65,8 @@ struct SupacodeApp: App {
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
+    let fonts = GhosttyFontManager(runtime: runtime)
+    _ghosttyFonts = State(initialValue: fonts)
     let initialSettings = GlobalSettings.default
     let terminalManager = WorktreeTerminalManager(runtime: runtime)
     _terminalManager = State(initialValue: terminalManager)
@@ -98,6 +101,7 @@ struct SupacodeApp: App {
     SettingsWindowManager.shared.configure(
       store: appStore,
       ghosttyShortcuts: shortcuts,
+      ghosttyFonts: fonts,
       commandKeyObserver: keyObserver
     )
   }
@@ -107,11 +111,13 @@ struct SupacodeApp: App {
       GhosttyColorSchemeSyncView(ghostty: ghostty) {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
+          .environment(ghosttyFonts)
           .environment(commandKeyObserver)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }
     .environment(ghosttyShortcuts)
+    .environment(ghosttyFonts)
     .environment(commandKeyObserver)
     .commands {
       WorktreeCommands(store: store)

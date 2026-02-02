@@ -130,13 +130,13 @@ struct GhosttySurfaceSearchOverlay: View {
       let totalLabel = state.searchTotal.map(String.init) ?? "?"
       Text("\(selected + 1)/\(totalLabel)")
         .font(.caption)
-        .monospaced()
+        .ghosttyMonospaced(.caption)
         .foregroundStyle(.secondary)
         .padding(.trailing, 8)
     } else if let total = state.searchTotal {
       Text("-/\(total)")
         .font(.caption)
-        .monospaced()
+        .ghosttyMonospaced(.caption)
         .foregroundStyle(.secondary)
         .padding(.trailing, 8)
     }
@@ -265,6 +265,7 @@ private struct GhosttySearchField: NSViewRepresentable {
   var isFocused: Bool
   var onSubmit: (Bool) -> Void
   var onEscape: () -> Void
+  @Environment(GhosttyFontManager.self) private var ghosttyFonts
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: $text)
@@ -290,7 +291,7 @@ private struct GhosttySearchField: NSViewRepresentable {
     }
     nsView.onSubmit = onSubmit
     nsView.onEscape = onEscape
-    nsView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    nsView.font = ghosttyFonts.nsFont(size: NSFont.systemFontSize, weight: .regular)
 
     if isFocused, nsView.window?.firstResponder !== nsView.currentEditor() {
       nsView.window?.makeFirstResponder(nsView)

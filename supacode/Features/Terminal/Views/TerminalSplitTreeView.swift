@@ -133,8 +133,7 @@ struct TerminalSplitTreeView: View {
         .overlay {
           if isHovering {
             Image(systemName: "ellipsis")
-              .font(.system(size: 14, weight: .semibold))
-              .monospaced()
+              .ghosttyMonospaced(size: 14, weight: .semibold)
               .foregroundStyle(.primary.opacity(0.5))
               .accessibilityHidden(true)
           }

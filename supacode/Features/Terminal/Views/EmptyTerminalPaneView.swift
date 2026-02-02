@@ -7,10 +7,10 @@ struct EmptyTerminalPaneView: View {
     VStack {
       Text(message)
         .font(.headline)
-        .monospaced()
+        .ghosttyMonospaced(.headline)
       Text("Use the plus button to open a terminal.")
         .font(.subheadline)
-        .monospaced()
+        .ghosttyMonospaced(.subheadline)
         .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

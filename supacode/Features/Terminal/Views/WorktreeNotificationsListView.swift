@@ -9,7 +9,7 @@ struct WorktreeNotificationsListView: View {
       VStack(alignment: .leading) {
         Text("Notifications")
           .font(.headline)
-          .monospaced()
+          .ghosttyMonospaced(.headline)
         ForEach(state.notifications) { notification in
           Button {
             _ = state.focusSurface(id: notification.surfaceId)

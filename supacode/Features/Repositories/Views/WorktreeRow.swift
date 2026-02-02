@@ -39,7 +39,7 @@ struct WorktreeRow: View {
         if showsNotificationIndicator {
           Image(systemName: "bell.fill")
             .font(.caption)
-            .monospaced()
+            .ghosttyMonospaced(.caption)
             .foregroundStyle(.orange)
             .opacity(showsSpinner ? 0 : 1)
             .help("Unread notifications")
@@ -47,7 +47,7 @@ struct WorktreeRow: View {
         } else {
           Image(systemName: branchIconName)
             .font(.caption)
-            .monospaced()
+            .ghosttyMonospaced(.caption)
             .foregroundStyle(.secondary)
             .opacity(showsSpinner ? 0 : 1)
             .accessibilityHidden(true)
@@ -61,18 +61,18 @@ struct WorktreeRow: View {
       if hasInfo {
         VStack(alignment: .leading, spacing: 2) {
           Text(name)
-            .monospaced()
+            .ghosttyMonospaced(.body)
           WorktreeRowInfoView(addedLines: displayAddedLines, removedLines: displayRemovedLines)
         }
       } else {
         Text(name)
-          .monospaced()
+          .ghosttyMonospaced(.body)
       }
       Spacer(minLength: 8)
       if isRunScriptRunning {
         Image(systemName: "play.fill")
           .font(.caption)
-          .monospaced()
+          .ghosttyMonospaced(.caption)
           .foregroundStyle(.green)
           .help("Run script active")
           .accessibilityLabel("Run script active")
@@ -118,7 +118,7 @@ private struct WorktreeRowInfoView: View {
       }
     }
     .font(.caption)
-    .monospaced()
+    .ghosttyMonospaced(.caption)
     .frame(minHeight: 14)
   }
 }
