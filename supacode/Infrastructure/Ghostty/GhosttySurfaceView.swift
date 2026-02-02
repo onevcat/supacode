@@ -27,6 +27,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
+  private var eventMonitor: Any?
   weak var scrollWrapper: GhosttySurfaceScrollView? {
     didSet {
       if let lastScrollbar {
@@ -95,6 +96,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
       surfaceRef = runtime.registerSurface(surface)
     }
     registerForDraggedTypes(Array(Self.dropTypes))
+
+    eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .leftMouseDown]) {
+      [weak self] event in
+      self?.localEventHandler(event)
+    }
   }
 
   required init?(coder: NSCoder) {
@@ -102,6 +108,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   deinit {
+    if let eventMonitor {
+      NSEvent.removeMonitor(eventMonitor)
+    }
     closeSurface()
     if let workingDirectoryCString {
       free(workingDirectoryCString)
@@ -339,6 +348,34 @@ final class GhosttySurfaceView: NSView, Identifiable {
       scrollY *= 2
     }
     ghostty_surface_mouse_scroll(surface, scrollX, scrollY, scrollMods(for: event))
+  }
+
+  private func localEventHandler(_ event: NSEvent) -> NSEvent? {
+    switch event.type {
+    case .keyUp:
+      localEventKeyUp(event)
+    case .leftMouseDown:
+      localEventLeftMouseDown(event)
+    default:
+      event
+    }
+  }
+
+  private func localEventKeyUp(_ event: NSEvent) -> NSEvent? {
+    if !event.modifierFlags.contains(.command) { return event }
+    guard focused else { return event }
+    keyUp(with: event)
+    return nil
+  }
+
+  private func localEventLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+    guard let window, event.window != nil, window == event.window else { return event }
+    let location = convert(event.locationInWindow, from: nil)
+    guard hitTest(location) == self else { return event }
+    guard !NSApp.isActive || !window.isKeyWindow else { return event }
+    guard !focused else { return event }
+    window.makeFirstResponder(self)
+    return event
   }
 
   func updateSurfaceSize() {
