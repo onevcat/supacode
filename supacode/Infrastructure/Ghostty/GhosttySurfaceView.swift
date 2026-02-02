@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import CoreText
 import GhosttyKit
+import QuartzCore
 
 final class GhosttySurfaceView: NSView, Identifiable {
   private struct ScrollbarState {
@@ -145,6 +146,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func viewDidChangeBackingProperties() {
     super.viewDidChangeBackingProperties()
+    if let window {
+      CATransaction.begin()
+      CATransaction.setDisableActions(true)
+      layer?.contentsScale = window.backingScaleFactor
+      CATransaction.commit()
+    }
     updateContentScale()
     updateSurfaceSize()
   }
