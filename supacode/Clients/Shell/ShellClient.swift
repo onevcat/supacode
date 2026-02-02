@@ -20,7 +20,7 @@ extension ShellClient: DependencyKey {
       let shellURL = URL(fileURLWithPath: defaultShellPath())
       let execCommand = shellExecCommand(for: shellURL)
       let shellArguments =
-        ["-l", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
+        ["-l", "-i", "-c", execCommand, "--", executableURL.path(percentEncoded: false)] + arguments
       print("[Shell] runLogin: \(shellURL.path) \(shellArguments.joined(separator: " "))")
       return try await runProcess(
         executableURL: shellURL,
