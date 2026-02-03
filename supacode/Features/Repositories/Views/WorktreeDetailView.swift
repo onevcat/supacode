@@ -23,7 +23,9 @@ struct WorktreeDetailView: View {
       pullRequest = nil
     }
     let openActionSelection = state.openActionSelection
-    let runScriptEnabled = hasActiveWorktree
+    let runScriptConfigured =
+      !state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    let runScriptEnabled = hasActiveWorktree && runScriptConfigured
     let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let content = Group {
       if let loadingInfo {
@@ -197,17 +199,19 @@ struct WorktreeDetailView: View {
       }
       ToolbarSpacer(.fixed)
 
-      ToolbarItem {
-        RunScriptToolbarButton(
-          isRunning: toolbarState.runScriptIsRunning,
-          isEnabled: toolbarState.runScriptEnabled,
-          runHelpText: toolbarState.runScriptHelpText,
-          stopHelpText: toolbarState.stopRunScriptHelpText,
-          runShortcut: AppShortcuts.runScript.display,
-          stopShortcut: AppShortcuts.stopRunScript.display,
-          runAction: onRunScript,
-          stopAction: onStopRunScript
-        )
+      if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
+        ToolbarItem {
+          RunScriptToolbarButton(
+            isRunning: toolbarState.runScriptIsRunning,
+            isEnabled: toolbarState.runScriptEnabled,
+            runHelpText: toolbarState.runScriptHelpText,
+            stopHelpText: toolbarState.stopRunScriptHelpText,
+            runShortcut: AppShortcuts.runScript.display,
+            stopShortcut: AppShortcuts.stopRunScript.display,
+            runAction: onRunScript,
+            stopAction: onStopRunScript
+          )
+        }
       }
 
     }
