@@ -989,11 +989,24 @@ struct RepositoriesFeature {
         return .none
 
       case .worktreePullRequestLoaded(let worktreeID, let pullRequest):
-        updateWorktreePullRequest(
-          worktreeID: worktreeID,
-          pullRequest: pullRequest,
-          state: &state
-        )
+        let previousMerged =
+          state.worktreeInfoByID[worktreeID]?.pullRequest?.state == "MERGED"
+        let nextMerged = pullRequest?.state == "MERGED"
+        if state.sortMergedWorktreesToBottom, previousMerged != nextMerged {
+          withAnimation(.easeOut(duration: 0.2)) {
+            updateWorktreePullRequest(
+              worktreeID: worktreeID,
+              pullRequest: pullRequest,
+              state: &state
+            )
+          }
+        } else {
+          updateWorktreePullRequest(
+            worktreeID: worktreeID,
+            pullRequest: pullRequest,
+            state: &state
+          )
+        }
         return .none
 
       case .setGithubIntegrationEnabled(let isEnabled):
