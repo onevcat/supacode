@@ -110,6 +110,18 @@ struct RepositoriesFeature {
     let didPruneWorktreeOrder: Bool
   }
 
+  private struct WorktreeSelectionSignature: Equatable {
+    let id: Worktree.ID
+    let workingDirectory: URL
+    let repositoryRootURL: URL
+
+    init(_ worktree: Worktree) {
+      id = worktree.id
+      workingDirectory = worktree.workingDirectory
+      repositoryRootURL = worktree.repositoryRootURL
+    }
+  }
+
   enum Alert: Equatable {
     case confirmRemoveWorktree(Worktree.ID, Repository.ID)
     case confirmRemoveRepository(Repository.ID)
@@ -213,7 +225,12 @@ struct RepositoriesFeature {
           uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
         )
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
-        let selectionChanged = previousSelectedWorktree != selectedWorktree
+        let selectionChanged = selectionDidChange(
+          previousSelectionID: previousSelection,
+          previousSelectedWorktree: previousSelectedWorktree,
+          selectedWorktreeID: state.selectedWorktreeID,
+          selectedWorktree: selectedWorktree
+        )
         var allEffects: [Effect<Action>] = []
         if repositoriesChanged {
           allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
@@ -300,7 +317,12 @@ struct RepositoriesFeature {
           )
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
-        let selectionChanged = previousSelectedWorktree != selectedWorktree
+        let selectionChanged = selectionDidChange(
+          previousSelectionID: previousSelection,
+          previousSelectedWorktree: previousSelectedWorktree,
+          selectedWorktreeID: state.selectedWorktreeID,
+          selectedWorktree: selectedWorktree
+        )
         var allEffects: [Effect<Action>] = [
           .send(.delegate(.repositoriesChanged(state.repositories)))
         ]
@@ -1176,6 +1198,20 @@ struct RepositoriesFeature {
           + "Worktrees and the main repository folder stay on disk."
       )
     }
+  }
+
+  private func selectionDidChange(
+    previousSelectionID: Worktree.ID?,
+    previousSelectedWorktree: Worktree?,
+    selectedWorktreeID: Worktree.ID?,
+    selectedWorktree: Worktree?
+  ) -> Bool {
+    if previousSelectionID != selectedWorktreeID {
+      return true
+    }
+    let previousSignature = previousSelectedWorktree.map(WorktreeSelectionSignature.init)
+    let selectedSignature = selectedWorktree.map(WorktreeSelectionSignature.init)
+    return previousSignature != selectedSignature
   }
 }
 
