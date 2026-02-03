@@ -45,18 +45,24 @@ struct GhosttySurfaceSearchOverlay: View {
             matchLabel
           }
 
-          Button(buttonLabel("Next", shortcut: "⌘G"), systemImage: "chevron.up") {
+          Button {
             navigateSearch(.next)
+          } label: {
+            SearchButtonLabel(title: "Next", shortcut: "⌘G", systemImage: "chevron.up")
           }
           .buttonStyle(GhosttySearchButtonStyle())
 
-          Button(buttonLabel("Previous", shortcut: "⇧⌘G"), systemImage: "chevron.down") {
+          Button {
             navigateSearch(.previous)
+          } label: {
+            SearchButtonLabel(title: "Previous", shortcut: "⇧⌘G", systemImage: "chevron.down")
           }
           .buttonStyle(GhosttySearchButtonStyle())
 
-          Button(buttonLabel("Close", shortcut: "⇧⌘F"), systemImage: "xmark") {
+          Button {
             closeSearch()
+          } label: {
+            SearchButtonLabel(title: "Close", shortcut: "⇧⌘F", systemImage: "xmark")
           }
           .buttonStyle(GhosttySearchButtonStyle())
         }
@@ -186,10 +192,6 @@ struct GhosttySurfaceSearchOverlay: View {
     }
   }
 
-  private func buttonLabel(_ title: String, shortcut: String) -> String {
-    "\(title) (\(shortcut))"
-  }
-
   private func centerPosition(
     for corner: GhosttySearchCorner,
     in containerSize: CGSize,
@@ -249,6 +251,20 @@ private struct GhosttySearchOverlayShape: Shape {
 private enum GhosttySearchDirection {
   case next
   case previous
+}
+
+private struct SearchButtonLabel: View {
+  let title: String
+  let shortcut: String
+  let systemImage: String
+
+  var body: some View {
+    Label {
+      Text("\(title) \(Text("(\(shortcut))").foregroundColor(.secondary.opacity(0.7)))")
+    } icon: {
+      Image(systemName: systemImage)
+    }
+  }
 }
 
 private struct GhosttySearchField: NSViewRepresentable {
