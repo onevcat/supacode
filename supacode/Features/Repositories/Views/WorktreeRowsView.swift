@@ -101,6 +101,7 @@ struct WorktreeRowsView: View {
           shortcutHint: shortcutHint
         )
         .tag(SidebarSelection.worktree(row.id))
+        .typeSelectEquivalent("")
         .listRowInsets(EdgeInsets())
         .transition(.opacity)
         .moveDisabled(moveDisabled)
@@ -142,6 +143,7 @@ struct WorktreeRowsView: View {
           shortcutHint: shortcutHint
         )
         .tag(SidebarSelection.worktree(row.id))
+        .typeSelectEquivalent("")
         .listRowInsets(EdgeInsets())
         .transition(.opacity)
         .moveDisabled(moveDisabled)
