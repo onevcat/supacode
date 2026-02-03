@@ -457,6 +457,72 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func createRandomWorktreeFailedCleansUpInsertedWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let repositoryRootURL = URL(fileURLWithPath: repoRoot)
+    let baseDirectory = SupacodePaths.repositoryDirectory(for: repositoryRootURL)
+    let failedName = "swift-goat-938"
+    let failedWorktreeURL = baseDirectory.appending(path: failedName, directoryHint: .isDirectory)
+    let failedWorktreeID = failedWorktreeURL.path(percentEncoded: false)
+    let existingWorktree = makeWorktree(id: "/tmp/repo/wt-main", name: "main", repoRoot: repoRoot)
+    let failedWorktree = makeWorktree(id: failedWorktreeID, name: failedName, repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [existingWorktree, failedWorktree])
+    let updatedRepository = makeRepository(id: repoRoot, worktrees: [existingWorktree])
+    let pendingID = "pending:\(UUID().uuidString)"
+    var initialState = makeState(repositories: [repository])
+    initialState.pendingWorktrees = [
+      PendingWorktree(
+        id: pendingID,
+        repositoryID: repository.id,
+        name: "Creating worktree...",
+        detail: ""
+      ),
+    ]
+    initialState.pendingSetupScriptWorktreeIDs = [failedWorktree.id]
+    initialState.pendingTerminalFocusWorktreeIDs = [failedWorktree.id]
+    initialState.deletingWorktreeIDs = [failedWorktree.id]
+    initialState.pinnedWorktreeIDs = [failedWorktree.id]
+    initialState.worktreeOrderByRepository = [repository.id: [failedWorktree.id]]
+    initialState.worktreeInfoByID = [
+      failedWorktree.id: WorktreeInfoEntry(addedLines: 1, removedLines: nil, pullRequest: nil)
+    ]
+    initialState.selectedWorktreeID = pendingID
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.pruneWorktrees = { _ in }
+      $0.gitClient.worktrees = { _ in [existingWorktree] }
+    }
+
+    await store.send(
+      .createRandomWorktreeFailed(
+        title: "Unable to create worktree",
+        message: "boom",
+        pendingID: pendingID,
+        previousSelection: existingWorktree.id,
+        repositoryID: repository.id,
+        name: failedName
+      )
+    ) {
+      $0.pendingWorktrees = []
+      $0.pendingSetupScriptWorktreeIDs = []
+      $0.pendingTerminalFocusWorktreeIDs = []
+      $0.deletingWorktreeIDs = []
+      $0.pinnedWorktreeIDs = []
+      $0.worktreeOrderByRepository = [:]
+      $0.worktreeInfoByID = [:]
+      $0.selectedWorktreeID = existingWorktree.id
+      $0.repositories = [updatedRepository]
+    }
+
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.reloadRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.isInitialLoadComplete = true
+    }
+  }
+
   private func makeWorktree(id: String, name: String, repoRoot: String = "/tmp/repo") -> Worktree {
     Worktree(
       id: id,
