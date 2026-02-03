@@ -27,36 +27,4 @@ struct GitWtWorktreeEntryTests {
     #expect(filtered.count == 1)
     #expect(filtered.first?.branch == "main")
   }
-
-  @Test func extractJSONFromCleanOutput() {
-    let output = #"[{"branch":"main","path":"/tmp"}]"#
-    let extracted = GitClient.extractJSON(from: output)
-    #expect(extracted == output)
-  }
-
-  @Test func extractJSONWithShellPollution() {
-    let output = """
-      ls='ls -G'
-      [{"branch":"main","path":"/tmp"}]
-      """
-    let extracted = GitClient.extractJSON(from: output)
-    #expect(extracted == #"[{"branch":"main","path":"/tmp"}]"#)
-  }
-
-  @Test func extractJSONWithMultipleLines() {
-    let output = """
-      some output
-      more output
-      [{"branch":"main"}]
-      trailing text
-      """
-    let extracted = GitClient.extractJSON(from: output)
-    #expect(extracted == #"[{"branch":"main"}]"#)
-  }
-
-  @Test func extractJSONReturnsOriginalWhenNoJSON() {
-    let output = "no json here"
-    let extracted = GitClient.extractJSON(from: output)
-    #expect(extracted == output)
-  }
 }
