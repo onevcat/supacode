@@ -24,7 +24,7 @@ struct GitClientBranchRefsTests {
         await store.record(arguments)
         return ShellOutput(stdout: output, stderr: "", exitCode: 0)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
@@ -50,7 +50,7 @@ struct GitClientBranchRefsTests {
       """
     let shell = ShellClient(
       run: { _, _, _ in ShellOutput(stdout: output, stderr: "", exitCode: 0) },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
     let repoRoot = URL(fileURLWithPath: "/tmp/repo")
@@ -65,7 +65,7 @@ struct GitClientBranchRefsTests {
       run: { _, _, _ in
         ShellOutput(stdout: "refs/remotes/origin/develop\n", stderr: "", exitCode: 0)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
 
@@ -79,7 +79,7 @@ struct GitClientBranchRefsTests {
       run: { _, _, _ in
         throw ShellClientError(command: "git", stdout: "", stderr: "boom", exitCode: 1)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
 
@@ -99,7 +99,7 @@ struct GitClientBranchRefsTests {
         }
         return ShellOutput(stdout: "", stderr: "", exitCode: 0)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
 
@@ -119,7 +119,7 @@ struct GitClientBranchRefsTests {
         }
         return ShellOutput(stdout: "", stderr: "", exitCode: 0)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
 
@@ -136,7 +136,7 @@ struct GitClientBranchRefsTests {
         }
         return ShellOutput(stdout: "", stderr: "", exitCode: 0)
       },
-      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+      _runLogin: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
     )
     let client = GitClient(shell: shell)
 

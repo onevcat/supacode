@@ -257,7 +257,8 @@ nonisolated private func runGh(
   let env = URL(fileURLWithPath: "/usr/bin/env")
   let command = ([env.path(percentEncoded: false)] + ["gh"] + arguments).joined(separator: " ")
   do {
-    return try await shell.runLogin(env, ["gh"] + arguments, repoRoot).stdout
+    let shouldLog = !arguments.contains("graphql")
+    return try await shell.runLogin(env, ["gh"] + arguments, repoRoot, log: shouldLog).stdout
   } catch {
     if let shellError = error as? ShellClientError {
       let message = shellError.errorDescription ?? "Command failed: \(command)"
