@@ -9,6 +9,7 @@ struct WorktreeRowsView: View {
   let terminalManager: WorktreeTerminalManager
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.colorScheme) private var colorScheme
+  @State private var draggingWorktreeIDs: Set<Worktree.ID> = []
 
   var body: some View {
     if isExpanded {
@@ -90,6 +91,7 @@ struct WorktreeRowsView: View {
         WorktreeRow(
           name: displayName,
           info: row.info,
+          showsPullRequestInfo: !draggingWorktreeIDs.contains(row.id),
           isPinned: row.isPinned,
           isMainWorktree: row.isMainWorktree,
           isLoading: row.isPending || row.isDeleting,
@@ -130,6 +132,7 @@ struct WorktreeRowsView: View {
         WorktreeRow(
           name: displayName,
           info: row.info,
+          showsPullRequestInfo: !draggingWorktreeIDs.contains(row.id),
           isPinned: row.isPinned,
           isMainWorktree: row.isMainWorktree,
           isLoading: row.isPending || row.isDeleting,
@@ -148,6 +151,24 @@ struct WorktreeRowsView: View {
     .contentShape(.dragPreview, .rect)
     .environment(\.colorScheme, colorScheme)
     .preferredColorScheme(colorScheme)
+    .onDragSessionUpdated { session in
+      let draggedIDs = Set(session.draggedItemIDs(for: Worktree.ID.self))
+      if case .ended = session.phase {
+        if !draggingWorktreeIDs.isEmpty {
+          draggingWorktreeIDs = []
+        }
+        return
+      }
+      if case .dataTransferCompleted = session.phase {
+        if !draggingWorktreeIDs.isEmpty {
+          draggingWorktreeIDs = []
+        }
+        return
+      }
+      if draggedIDs != draggingWorktreeIDs {
+        draggingWorktreeIDs = draggedIDs
+      }
+    }
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {

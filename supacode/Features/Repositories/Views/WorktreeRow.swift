@@ -3,6 +3,7 @@ import SwiftUI
 struct WorktreeRow: View {
   let name: String
   let info: WorktreeInfoEntry?
+  let showsPullRequestInfo: Bool
   let isPinned: Bool
   let isMainWorktree: Bool
   let isLoading: Bool
@@ -15,7 +16,7 @@ struct WorktreeRow: View {
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
-    let pullRequest = info?.pullRequest
+    let pullRequest = showsPullRequestInfo ? info?.pullRequest : nil
     let matchesWorktree =
       if let pullRequest {
         pullRequest.headRefName == nil || pullRequest.headRefName == name
