@@ -207,6 +207,9 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled))),
           .send(
+            .repositories(.setSortMergedWorktreesToBottom(settings.sortMergedWorktreesToBottom))
+          ),
+          .send(
             .updates(
               .applySettings(
                 automaticallyChecks: settings.updatesAutomaticallyCheckForUpdates,

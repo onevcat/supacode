@@ -27,6 +27,7 @@ struct RepositoriesFeature {
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
+    var sortMergedWorktreesToBottom = true
     var lastFocusedWorktreeID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -92,6 +93,7 @@ struct RepositoriesFeature {
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
     case worktreePullRequestLoaded(worktreeID: Worktree.ID, pullRequest: GithubPullRequest?)
     case setGithubIntegrationEnabled(Bool)
+    case setSortMergedWorktreesToBottom(Bool)
     case openRepositorySettings(Repository.ID)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -992,6 +994,10 @@ struct RepositoriesFeature {
         }
         return .none
 
+      case .setSortMergedWorktreesToBottom(let isEnabled):
+        state.sortMergedWorktreesToBottom = isEnabled
+        return .none
+
       case .openRepositorySettings(let repositoryID):
         return .send(.delegate(.openRepositorySettings(repositoryID)))
 
@@ -1347,6 +1353,9 @@ extension RepositoriesFeature.State {
       }
     }
     let unpinned = missing + ordered
+    guard sortMergedWorktreesToBottom else {
+      return unpinned
+    }
     var unmerged: [Worktree.ID] = []
     var merged: [Worktree.ID] = []
     for id in unpinned {

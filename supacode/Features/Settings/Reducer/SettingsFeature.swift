@@ -15,6 +15,7 @@ struct SettingsFeature {
     var notificationSoundEnabled: Bool
     var githubIntegrationEnabled: Bool
     var deleteBranchOnArchive: Bool
+    var sortMergedWorktreesToBottom: Bool
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
 
@@ -28,6 +29,7 @@ struct SettingsFeature {
       notificationSoundEnabled = settings.notificationSoundEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnArchive = settings.deleteBranchOnArchive
+      sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
     }
 
     var globalSettings: GlobalSettings {
@@ -40,7 +42,8 @@ struct SettingsFeature {
         dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
-        deleteBranchOnArchive: deleteBranchOnArchive
+        deleteBranchOnArchive: deleteBranchOnArchive,
+        sortMergedWorktreesToBottom: sortMergedWorktreesToBottom
       )
     }
   }
@@ -82,6 +85,7 @@ struct SettingsFeature {
         state.notificationSoundEnabled = settings.notificationSoundEnabled
         state.githubIntegrationEnabled = settings.githubIntegrationEnabled
         state.deleteBranchOnArchive = settings.deleteBranchOnArchive
+        state.sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
         return .send(.delegate(.settingsChanged(settings)))
 
       case .binding:
