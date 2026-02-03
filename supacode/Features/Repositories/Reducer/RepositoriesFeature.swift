@@ -1291,6 +1291,10 @@ extension RepositoriesFeature.State {
     worktree.workingDirectory.standardizedFileURL == worktree.repositoryRootURL.standardizedFileURL
   }
 
+  func isWorktreeMerged(_ worktree: Worktree) -> Bool {
+    worktreeInfoByID[worktree.id]?.pullRequest?.state == "MERGED"
+  }
+
   func orderedPinnedWorktreeIDs(in repository: Repository) -> [Worktree.ID] {
     pinnedWorktreeIDs.filter { id in
       if let worktree = repository.worktrees[id: id] {
@@ -1342,7 +1346,19 @@ extension RepositoriesFeature.State {
         ordered.append(id)
       }
     }
-    return missing + ordered
+    let unpinned = missing + ordered
+    var unmerged: [Worktree.ID] = []
+    var merged: [Worktree.ID] = []
+    for id in unpinned {
+      if let worktree = repository.worktrees[id: id],
+        isWorktreeMerged(worktree)
+      {
+        merged.append(id)
+      } else {
+        unmerged.append(id)
+      }
+    }
+    return unmerged + merged
   }
 
   func orderedUnpinnedWorktrees(in repository: Repository) -> [Worktree] {
