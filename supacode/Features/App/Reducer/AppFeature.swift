@@ -312,15 +312,9 @@ struct AppFeature {
         }
         analyticsClient.capture("terminal_tab_created", nil)
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        var effects: [Effect<Action>] = [
-          .run { _ in
-            await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
-          },
-        ]
-        if shouldRunSetupScript {
-          effects.append(.send(.repositories(.consumeSetupScript(worktree.id))))
+        return .run { _ in
+          await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
-        return .merge(effects)
 
       case .runScript:
         guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
@@ -484,10 +478,7 @@ struct AppFeature {
         }
         return .none
 
-      case .terminalEvent(.tabCreated(let worktreeID)):
-        guard state.repositories.pendingSetupScriptWorktreeIDs.contains(worktreeID) else {
-          return .none
-        }
+      case .terminalEvent(.setupScriptConsumed(let worktreeID)):
         return .send(.repositories(.consumeSetupScript(worktreeID)))
 
       case .terminalEvent:

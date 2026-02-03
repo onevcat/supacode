@@ -43,9 +43,6 @@ struct WorktreeDetailView: View {
         .id(selectedWorktree.id)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-          if shouldRunSetupScript {
-            store.send(.repositories(.consumeSetupScript(selectedWorktree.id)))
-          }
           if shouldFocusTerminal {
             store.send(.repositories(.consumeTerminalFocus(selectedWorktree.id)))
           }

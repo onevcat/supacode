@@ -101,6 +101,9 @@ final class WorktreeTerminalManager {
     state.onRunScriptStatusChanged = { [weak self] isRunning in
       self?.emit(.runScriptStatusChanged(worktreeID: worktree.id, isRunning: isRunning))
     }
+    state.onSetupScriptConsumed = { [weak self] in
+      self?.emit(.setupScriptConsumed(worktreeID: worktree.id))
+    }
     states[worktree.id] = state
     return state
   }
