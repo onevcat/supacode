@@ -70,7 +70,6 @@ struct RepositoriesFeature {
     case consumeSetupScript(Worktree.ID)
     case consumeTerminalFocus(Worktree.ID)
     case requestRemoveWorktree(Worktree.ID, Repository.ID)
-    case presentWorktreeRemovalConfirmation(Worktree.ID, Repository.ID, deleteBranchOnArchive: Bool)
     case removeWorktreeConfirmed(Worktree.ID, Repository.ID)
     case worktreeRemoved(
       Worktree.ID,
@@ -128,7 +127,6 @@ struct RepositoriesFeature {
   @Dependency(\.githubIntegration) private var githubIntegration
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
   @Dependency(\.repositorySettingsClient) private var repositorySettingsClient
-  @Dependency(\.settingsClient) private var settingsClient
   @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
@@ -533,28 +531,8 @@ struct RepositoriesFeature {
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
-        let settingsClient = settingsClient
-        return .run { send in
-          let settings = await settingsClient.load()
-          await send(
-            .presentWorktreeRemovalConfirmation(
-              worktree.id,
-              repository.id,
-              deleteBranchOnArchive: settings.deleteBranchOnArchive
-            )
-          )
-        }
-
-      case .presentWorktreeRemovalConfirmation(
-        let worktreeID,
-        let repositoryID,
-        let deleteBranchOnArchive
-      ):
-        guard let repository = state.repositories[id: repositoryID],
-          let worktree = repository.worktrees[id: worktreeID]
-        else {
-          return .none
-        }
+        @Shared(.settingsFile) var settingsFile
+        let deleteBranchOnArchive = settingsFile.global.deleteBranchOnArchive
         let removalMessage =
           deleteBranchOnArchive
           ? "This deletes the worktree directory and its local branch."
@@ -569,10 +547,7 @@ struct RepositoriesFeature {
             TextState("Cancel")
           }
         } message: {
-          TextState(
-            "Remove \(worktree.name)? "
-              + removalMessage
-          )
+          TextState("Remove \(worktree.name)? " + removalMessage)
         }
         return .none
 
@@ -595,13 +570,13 @@ struct RepositoriesFeature {
           selectionWasRemoved
           ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
           : nil
-        let settingsClient = settingsClient
+        @Shared(.settingsFile) var settingsFile
+        let deleteBranchOnArchive = settingsFile.global.deleteBranchOnArchive
         return .run { send in
           do {
-            let settings = await settingsClient.load()
             _ = try await gitClient.removeWorktree(
               worktree,
-              settings.deleteBranchOnArchive
+              deleteBranchOnArchive
             )
             await send(
               .worktreeRemoved(

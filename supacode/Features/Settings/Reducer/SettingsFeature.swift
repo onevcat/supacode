@@ -63,17 +63,14 @@ struct SettingsFeature {
   }
 
   @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.settingsClient) private var settingsClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
     Reduce { state, action in
       switch action {
       case .task:
-        return .run { send in
-          let settings = await settingsClient.load()
-          await send(.settingsLoaded(settings))
-        }
+        @Shared(.settingsFile) var settingsFile
+        return .send(.settingsLoaded(settingsFile.global))
 
       case .settingsLoaded(let settings):
         state.appearanceMode = settings.appearanceMode
@@ -91,12 +88,9 @@ struct SettingsFeature {
       case .binding:
         analyticsClient.capture("settings_changed", nil)
         let settings = state.globalSettings
-        return .merge(
-          .send(.delegate(.settingsChanged(settings))),
-          .run { _ in
-            await settingsClient.save(settings)
-          }
-        )
+        @Shared(.settingsFile) var settingsFile
+        $settingsFile.withLock { $0.global = settings }
+        return .send(.delegate(.settingsChanged(settings)))
 
       case .setSelection(let selection):
         state.selection = selection ?? .general
