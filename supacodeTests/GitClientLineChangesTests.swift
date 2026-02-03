@@ -78,4 +78,31 @@ struct GitClientLineChangesTests {
     #expect(changes?.added == 0)
     #expect(changes?.removed == 0)
   }
+
+  @Test func lineChangesSkipsWhenIndexLocked() async throws {
+    let fileManager = FileManager.default
+    let tempRoot = fileManager.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? fileManager.removeItem(at: tempRoot) }
+    let gitDirectory = tempRoot.appending(path: ".git")
+    try fileManager.createDirectory(at: gitDirectory, withIntermediateDirectories: true)
+    let headURL = gitDirectory.appending(path: "HEAD")
+    try "ref: refs/heads/main\n".write(to: headURL, atomically: true, encoding: .utf8)
+    let lockURL = gitDirectory.appending(path: "index.lock")
+    try Data().write(to: lockURL)
+    let store = LineChangesShellCallStore()
+    let shell = ShellClient(
+      run: { _, arguments, _ in
+        await store.record(arguments)
+        return ShellOutput(stdout: "", stderr: "", exitCode: 0)
+      },
+      runLogin: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) }
+    )
+    let client = GitClient(shell: shell)
+
+    let changes = await client.lineChanges(at: tempRoot)
+
+    #expect(changes == nil)
+    let calls = await store.calls
+    #expect(calls.isEmpty)
+  }
 }

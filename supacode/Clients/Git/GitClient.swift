@@ -280,6 +280,9 @@ struct GitClient {
   }
 
   nonisolated func lineChanges(at worktreeURL: URL) async -> (added: Int, removed: Int)? {
+    if isWorktreeIndexLocked(worktreeURL) {
+      return nil
+    }
     let path = worktreeURL.path(percentEncoded: false)
     do {
       let diff = try await runGit(
@@ -291,6 +294,20 @@ struct GitClient {
     } catch {
       return nil
     }
+  }
+
+  nonisolated private func isWorktreeIndexLocked(_ worktreeURL: URL) -> Bool {
+    guard
+      let headURL = GitWorktreeHeadResolver.headURL(
+        for: worktreeURL,
+        fileManager: .default
+      )
+    else {
+      return false
+    }
+    let gitDirectory = headURL.deletingLastPathComponent()
+    let lockURL = gitDirectory.appending(path: "index.lock")
+    return FileManager.default.fileExists(atPath: lockURL.path(percentEncoded: false))
   }
 
   nonisolated func remoteInfo(for repositoryRoot: URL) async -> GithubRemoteInfo? {
