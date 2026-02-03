@@ -31,3 +31,59 @@ extension RepositoriesFeature.State: CustomDumpRepresentable {
     )
   }
 }
+
+extension SettingsFeature.State: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    (
+      selection: selection,
+      hasRepoSettings: repositorySettings != nil
+    )
+  }
+}
+
+extension AppFeature.State: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    (
+      openAction: openActionSelection,
+      notificationCount: notificationIndicatorCount,
+      hasAlert: alert != nil
+    )
+  }
+}
+
+extension RepositorySettingsFeature.State: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    (
+      rootURL: rootURL.lastPathComponent,
+      isBare: isBareRepository,
+      branchOptions: branchOptions.count
+    )
+  }
+}
+
+extension GithubPullRequest: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    (
+      number: number,
+      state: state,
+      isDraft: isDraft,
+      reviewDecision: reviewDecision
+    )
+  }
+}
+
+extension GithubPullRequestStatusCheckRollup: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    checks.count
+  }
+}
+
+extension WorktreeInfoEntry: CustomDumpRepresentable {
+  var customDumpValue: Any {
+    (
+      added: addedLines,
+      removed: removedLines,
+      hasPR: pullRequest != nil
+    )
+  }
+}
