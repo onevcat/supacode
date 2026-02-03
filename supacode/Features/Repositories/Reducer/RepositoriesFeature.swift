@@ -995,7 +995,9 @@ struct RepositoriesFeature {
         return .none
 
       case .setSortMergedWorktreesToBottom(let isEnabled):
-        state.sortMergedWorktreesToBottom = isEnabled
+        withAnimation(.easeOut(duration: 0.2)) {
+          state.sortMergedWorktreesToBottom = isEnabled
+        }
         return .none
 
       case .openRepositorySettings(let repositoryID):
