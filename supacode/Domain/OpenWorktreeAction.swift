@@ -2,6 +2,7 @@ import AppKit
 
 enum OpenWorktreeAction: CaseIterable, Identifiable {
   case alacritty
+  case editor
   case finder
   case cursor
   case githubDesktop
@@ -24,6 +25,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   var title: String {
     switch self {
     case .finder: "Open Finder"
+    case .editor: "$EDITOR"
     case .alacritty: "Alacritty"
     case .cursor: "Cursor"
     case .githubDesktop: "GitHub Desktop"
@@ -46,6 +48,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   var labelTitle: String {
     switch self {
     case .finder: "Finder"
+    case .editor: "$EDITOR"
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
       .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
       title
@@ -60,7 +63,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
 
   var isInstalled: Bool {
     switch self {
-    case .finder:
+    case .finder, .editor:
       return true
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,
       .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .wezterm, .xcode, .zed:
@@ -71,6 +74,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   var settingsID: String {
     switch self {
     case .finder: "finder"
+    case .editor: "editor"
     case .alacritty: "alacritty"
     case .cursor: "cursor"
     case .fork: "fork"
@@ -93,6 +97,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   var bundleIdentifier: String {
     switch self {
     case .finder: "com.apple.finder"
+    case .editor: "com.apple.Terminal"
     case .alacritty: "org.alacritty"
     case .cursor: "com.todesktop.230313mzl4w4u92"
     case .fork: "com.DanPristupov.Fork"
@@ -134,7 +139,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   static let defaultPriority: [OpenWorktreeAction] =
     editorPriority + [.xcode, .finder] + terminalPriority + gitClientPriority
   static let menuOrder: [OpenWorktreeAction] =
-    editorPriority + [.xcode] + [.finder] + terminalPriority + gitClientPriority
+    [.editor] + editorPriority + [.xcode] + [.finder] + terminalPriority + gitClientPriority
 
   static func normalizedDefaultEditorID(_ settingsID: String?) -> String {
     guard let settingsID, settingsID != automaticSettingsID else {
@@ -180,6 +185,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
 
   func perform(with worktree: Worktree, onError: @escaping (OpenActionError) -> Void) {
     switch self {
+    case .editor:
+      return
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     case .alacritty, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty, .kitty,

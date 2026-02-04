@@ -45,7 +45,6 @@ struct AppFeature {
     case openSelectedWorktree
     case openWorktree(OpenWorktreeAction)
     case openWorktreeFailed(OpenActionError)
-    case openEditorInTerminal
     case requestQuit
     case newTerminal
     case runScript
@@ -287,6 +286,19 @@ struct AppFeature {
           return .none
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
+        if action == .editor {
+          let shouldRunSetupScript =
+            state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          return .run { _ in
+            await terminalClient.send(
+              .createTabWithInput(
+                worktree,
+                input: "$EDITOR",
+                runSetupScriptIfNew: shouldRunSetupScript
+              )
+            )
+          }
+        }
         return .run { send in
           await workspaceClient.open(action, worktree) { error in
             send(.openWorktreeFailed(error))
@@ -304,22 +316,6 @@ struct AppFeature {
           TextState(error.message)
         }
         return .none
-
-      case .openEditorInTerminal:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
-          return .none
-        }
-        let shouldRunSetupScript =
-          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        return .run { _ in
-          await terminalClient.send(
-            .createTabWithInput(
-              worktree,
-              input: "$EDITOR",
-              runSetupScriptIfNew: shouldRunSetupScript
-            )
-          )
-        }
 
       case .requestQuit:
         #if !DEBUG
