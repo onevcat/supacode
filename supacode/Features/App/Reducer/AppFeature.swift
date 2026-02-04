@@ -512,6 +512,9 @@ struct AppFeature {
       case .commandPalette(.delegate(.removeWorktree(let worktreeID, let repositoryID))):
         return .send(.repositories(.requestDeleteWorktree(worktreeID, repositoryID)))
 
+      case .commandPalette(.delegate(.archiveWorktree(let worktreeID, let repositoryID))):
+        return .send(.repositories(.requestArchiveWorktree(worktreeID, repositoryID)))
+
       case .commandPalette(.delegate(.runWorktree(let worktreeID))):
         guard let worktree = state.repositories.worktree(for: worktreeID) else {
           return .none

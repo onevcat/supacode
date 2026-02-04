@@ -41,12 +41,13 @@ struct CommandPaletteFeatureTests {
     #expect(ids.contains("worktree.\(keep.id).select"))
     #expect(ids.contains("worktree.\(keep.id).run"))
     #expect(ids.contains("worktree.\(keep.id).editor"))
+    #expect(ids.contains("worktree.\(keep.id).archive"))
     #expect(ids.contains("worktree.\(keep.id).remove"))
     #expect(ids.contains { $0.contains(deleting.id) } == false)
     #expect(ids.contains { $0.contains("wt-pending") } == false)
   }
 
-  @Test func commandPaletteItems_omitsRemoveForMainWorktree() {
+  @Test func commandPaletteItems_omitsArchiveAndRemoveForMainWorktree() {
     let rootPath = "/tmp/repo"
     let main = makeWorktree(
       id: rootPath,
@@ -69,6 +70,14 @@ struct CommandPaletteFeatureTests {
       } == false
     )
     #expect(
+      items.contains {
+        if case .archiveWorktree = $0.kind {
+          return true
+        }
+        return false
+      } == false
+    )
+    #expect(
       items.filter {
         if case .worktreeSelect = $0.kind {
           return true
@@ -78,7 +87,7 @@ struct CommandPaletteFeatureTests {
     )
   }
 
-  @Test func commandPaletteItems_includesRemoveForNonMainWorktree() {
+  @Test func commandPaletteItems_includesArchiveAndRemoveForNonMainWorktree() {
     let rootPath = "/tmp/repo"
     let main = makeWorktree(
       id: rootPath,
@@ -101,6 +110,14 @@ struct CommandPaletteFeatureTests {
     #expect(
       items.contains {
         if case .removeWorktree(let worktreeID, let repositoryID) = $0.kind {
+          return worktreeID == feature.id && repositoryID == repository.id
+        }
+        return false
+      }
+    )
+    #expect(
+      items.contains {
+        if case .archiveWorktree(let worktreeID, let repositoryID) = $0.kind {
           return worktreeID == feature.id && repositoryID == repository.id
         }
         return false
@@ -234,6 +251,12 @@ struct CommandPaletteFeatureTests {
       subtitle: "Open in Editor - main",
       kind: .openWorktreeInEditor("wt-fox")
     )
+    let archiveFox = CommandPaletteItem(
+      id: "worktree.fox.archive",
+      title: "Repo / fox",
+      subtitle: "Archive Worktree - main",
+      kind: .archiveWorktree("wt-fox", "repo-fox")
+    )
     let removeFox = CommandPaletteItem(
       id: "worktree.fox.remove",
       title: "Repo / fox",
@@ -243,7 +266,7 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(
-        items: [openSettings, newWorktree, selectFox, runFox, editorFox, removeFox],
+        items: [openSettings, newWorktree, selectFox, runFox, editorFox, archiveFox, removeFox],
         query: ""
       ),
       [openSettings, newWorktree]

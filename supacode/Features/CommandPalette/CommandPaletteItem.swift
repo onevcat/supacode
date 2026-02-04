@@ -11,6 +11,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case openSettings
     case newWorktree
     case removeWorktree(Worktree.ID, Repository.ID)
+    case archiveWorktree(Worktree.ID, Repository.ID)
     case runWorktree(Worktree.ID)
     case openWorktreeInEditor(Worktree.ID)
   }
@@ -19,7 +20,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     switch kind {
     case .openSettings, .newWorktree:
       return true
-    case .worktreeSelect, .removeWorktree, .runWorktree, .openWorktreeInEditor:
+    case .worktreeSelect, .removeWorktree, .archiveWorktree, .runWorktree, .openWorktreeInEditor:
       return false
     }
   }

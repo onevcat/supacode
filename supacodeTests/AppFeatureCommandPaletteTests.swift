@@ -86,6 +86,43 @@ struct AppFeatureCommandPaletteTests {
     }
   }
 
+  @Test(.dependencies) func archiveWorktreeDispatchesRequest() async {
+    let worktree = makeWorktree(
+      id: "/tmp/repo-archive/wt-1",
+      name: "wt-1",
+      repoRoot: "/tmp/repo-archive"
+    )
+    let repository = makeRepository(id: "/tmp/repo-archive", worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive worktree?")
+    } actions: {
+      ButtonState(role: .destructive, action: .confirmArchiveWorktree(worktree.id, repository.id)) {
+        TextState("Archive (⌘↩)")
+      }
+      ButtonState(role: .cancel) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Archive \(worktree.name)?")
+    }
+
+    await store.send(.commandPalette(.delegate(.archiveWorktree(worktree.id, repository.id))))
+    await store.receive(\.repositories.requestArchiveWorktree) {
+      $0.repositories.alert = expectedAlert
+    }
+  }
+
   @Test(.dependencies) func runWorktreeUsesRepositoryRunScript() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-run/wt-1",

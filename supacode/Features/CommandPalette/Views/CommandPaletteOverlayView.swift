@@ -343,6 +343,8 @@ private struct CommandPaletteRowView: View {
       return "Editor"
     case .removeWorktree:
       return "Remove"
+    case .archiveWorktree:
+      return "Archive"
     }
   }
 
@@ -360,6 +362,8 @@ private struct CommandPaletteRowView: View {
       return "pencil"
     case .removeWorktree:
       return "trash"
+    case .archiveWorktree:
+      return "archivebox"
     }
   }
 
@@ -367,7 +371,7 @@ private struct CommandPaletteRowView: View {
     switch row.kind {
     case .openSettings, .newWorktree:
       return true
-    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree:
+    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree, .archiveWorktree:
       return false
     }
   }
@@ -378,7 +382,7 @@ private struct CommandPaletteRowView: View {
       return AppShortcuts.openSettings.displaySymbols
     case .newWorktree:
       return AppShortcuts.newWorktree.displaySymbols
-    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree:
+    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree, .archiveWorktree:
       return nil
     }
   }
@@ -459,6 +463,8 @@ private struct CommandPaletteRowView: View {
       base = "New Worktree"
     case .removeWorktree:
       base = "Remove \(row.title)"
+    case .archiveWorktree:
+      base = "Archive \(row.title)"
     case .runWorktree:
       base = "Run \(row.title)"
     case .openWorktreeInEditor:
@@ -479,7 +485,7 @@ private struct CommandPaletteRowView: View {
       return AppShortcuts.openSettings.display
     case .newWorktree:
       return AppShortcuts.newWorktree.display
-    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree:
+    case .worktreeSelect, .runWorktree, .openWorktreeInEditor, .removeWorktree, .archiveWorktree:
       return nil
     }
   }

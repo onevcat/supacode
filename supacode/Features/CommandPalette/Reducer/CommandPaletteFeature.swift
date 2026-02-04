@@ -24,6 +24,7 @@ struct CommandPaletteFeature {
     case openSettings
     case newWorktree
     case removeWorktree(Worktree.ID, Repository.ID)
+    case archiveWorktree(Worktree.ID, Repository.ID)
     case runWorktree(Worktree.ID)
     case openWorktreeInEditor(Worktree.ID)
   }
@@ -133,6 +134,14 @@ struct CommandPaletteFeature {
       if row.isRemovable, !row.isMainWorktree {
         items.append(
           CommandPaletteItem(
+            id: "worktree.\(row.id).archive",
+            title: title,
+            subtitle: detail,
+            kind: .archiveWorktree(row.id, row.repositoryID)
+          )
+        )
+        items.append(
+          CommandPaletteItem(
             id: "worktree.\(row.id).remove",
             title: title,
             subtitle: detail,
@@ -155,6 +164,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .newWorktree
   case .removeWorktree(let worktreeID, let repositoryID):
     return .removeWorktree(worktreeID, repositoryID)
+  case .archiveWorktree(let worktreeID, let repositoryID):
+    return .archiveWorktree(worktreeID, repositoryID)
   case .runWorktree(let worktreeID):
     return .runWorktree(worktreeID)
   case .openWorktreeInEditor(let worktreeID):
