@@ -118,13 +118,11 @@ struct CommandPaletteFeature {
       let repositoryName = repositories.repositoryName(for: row.repositoryID) ?? "Repository"
       let displayName = row.name.split(separator: "/").last.map(String.init) ?? row.name
       let title = "\(repositoryName) / \(displayName)"
-      let trimmedDetail = row.detail.trimmingCharacters(in: .whitespacesAndNewlines)
-      let detail = trimmedDetail.isEmpty ? nil : trimmedDetail
       items.append(
         CommandPaletteItem(
           id: "worktree.\(row.id).select",
           title: title,
-          subtitle: detail,
+          subtitle: nil,
           kind: .worktreeSelect(row.id)
         )
       )
