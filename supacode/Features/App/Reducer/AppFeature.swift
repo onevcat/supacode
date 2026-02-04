@@ -298,11 +298,11 @@ struct AppFeature {
           state.alert = AlertState {
             TextState("Quit Supacode?")
           } actions: {
+            ButtonState(action: .confirmQuit) {
+              TextState("Quit")
+            }
             ButtonState(role: .cancel, action: .dismiss) {
               TextState("Cancel")
-            }
-            ButtonState(role: .destructive, action: .confirmQuit) {
-              TextState("Quit")
             }
           } message: {
             TextState("This will close all terminal sessions.")
