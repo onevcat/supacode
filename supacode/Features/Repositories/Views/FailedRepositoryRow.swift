@@ -2,28 +2,18 @@ import SwiftUI
 
 struct FailedRepositoryRow: View {
   let name: String
-  let initials: String
   let path: String
   let showFailure: () -> Void
   let removeRepository: () -> Void
 
   var body: some View {
     HStack(spacing: 8) {
-      ZStack {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-          .fill(.secondary.opacity(0.2))
-        Text(initials)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      .frame(width: 24, height: 24)
-      .clipShape(.rect(cornerRadius: 6, style: .continuous))
       VStack(alignment: .leading, spacing: 2) {
         Text(name)
-          .font(.headline)
+          .foregroundStyle(.secondary)
         Text(path)
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.tertiary)
       }
       Spacer(minLength: 8)
       Button("Show load failure", systemImage: "exclamationmark.triangle.fill", action: showFailure)

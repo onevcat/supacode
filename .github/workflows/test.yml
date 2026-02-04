@@ -17,7 +17,7 @@ jobs:
       MISE_HTTP_TIMEOUT: 120
       MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Mise cache

@@ -280,7 +280,7 @@ struct GitClient {
   }
 
   nonisolated func lineChanges(at worktreeURL: URL) async -> (added: Int, removed: Int)? {
-    if isWorktreeIndexLocked(worktreeURL) {
+    if await isWorktreeIndexLocked(worktreeURL) {
       return nil
     }
     let path = worktreeURL.path(percentEncoded: false)
@@ -296,13 +296,14 @@ struct GitClient {
     }
   }
 
-  nonisolated private func isWorktreeIndexLocked(_ worktreeURL: URL) -> Bool {
-    guard
-      let headURL = GitWorktreeHeadResolver.headURL(
+  nonisolated private func isWorktreeIndexLocked(_ worktreeURL: URL) async -> Bool {
+    let headURL = await MainActor.run {
+      GitWorktreeHeadResolver.headURL(
         for: worktreeURL,
         fileManager: .default
       )
-    else {
+    }
+    guard let headURL else {
       return false
     }
     let gitDirectory = headURL.deletingLastPathComponent()

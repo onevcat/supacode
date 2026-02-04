@@ -18,6 +18,7 @@ final class WorktreeTerminalState {
   private var tabIsRunningById: [TerminalTabID: Bool] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
+  private var isEnsuringInitialTab = false
   private var lastReportedTaskStatus: WorktreeTaskStatus?
   private var lastEmittedFocusSurfaceId: UUID?
   var notifications: [WorktreeTerminalNotification] = []
@@ -32,6 +33,7 @@ final class WorktreeTerminalState {
   var onTaskStatusChanged: ((WorktreeTaskStatus) -> Void)?
   var onRunScriptStatusChanged: ((Bool) -> Void)?
   var onCommandPaletteToggle: (() -> Void)?
+  var onSetupScriptConsumed: (() -> Void)?
 
   init(runtime: GhosttyRuntime, worktree: Worktree, runSetupScript: Bool = false) {
     self.runtime = runtime
@@ -57,35 +59,60 @@ final class WorktreeTerminalState {
   }
 
   func ensureInitialTab(focusing: Bool) {
-    if tabManager.tabs.isEmpty {
-      Task {
-        let setupScript: String?
-        if pendingSetupScript {
-          setupScript = repositorySettings.setupScript
-        } else {
-          setupScript = nil
-        }
-        await MainActor.run {
+    guard tabManager.tabs.isEmpty else { return }
+    guard !isEnsuringInitialTab else { return }
+    isEnsuringInitialTab = true
+    Task {
+      let setupScript: String?
+      if pendingSetupScript {
+        setupScript = repositorySettings.setupScript
+      } else {
+        setupScript = nil
+      }
+      await MainActor.run {
+        if tabManager.tabs.isEmpty {
           _ = createTab(focusing: focusing, setupScript: setupScript)
         }
+        isEnsuringInitialTab = false
       }
     }
   }
 
   @discardableResult
-  func createTab(focusing: Bool = true, setupScript: String? = nil) -> TerminalTabID? {
+  func createTab(
+    focusing: Bool = true,
+    setupScript: String? = nil,
+    initialInput: String? = nil
+  ) -> TerminalTabID? {
     let title = "\(worktree.name) \(nextTabIndex())"
-    let resolvedInput = setupScriptInput(setupScript: setupScript)
-    if pendingSetupScript, setupScript != nil {
+    let setupInput = setupScriptInput(setupScript: setupScript)
+    let commandInput = initialInput.flatMap { runScriptInput($0) }
+    let resolvedInput: String?
+    switch (setupInput, commandInput) {
+    case (nil, nil):
+      resolvedInput = nil
+    case (let setupInput?, nil):
+      resolvedInput = setupInput
+    case (nil, let commandInput?):
+      resolvedInput = commandInput
+    case (let setupInput?, let commandInput?):
+      resolvedInput = setupInput + commandInput
+    }
+    let shouldConsumeSetupScript = pendingSetupScript && setupScript != nil
+    if shouldConsumeSetupScript {
       pendingSetupScript = false
     }
-    return createTab(
+    let tabId = createTab(
       title: title,
       icon: "terminal",
       isTitleLocked: false,
       initialInput: resolvedInput,
       focusing: focusing
     )
+    if shouldConsumeSetupScript, tabId != nil {
+      onSetupScriptConsumed?()
+    }
+    return tabId
   }
 
   @discardableResult
@@ -138,6 +165,15 @@ final class WorktreeTerminalState {
   func focusSelectedTab() {
     guard let tabId = tabManager.selectedTabId else { return }
     focusSurface(in: tabId)
+  }
+
+  func focusAndInsertText(_ text: String) {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId],
+      let surface = surfaces[focusedId]
+    else { return }
+    surface.requestFocus()
+    surface.insertText(text, replacementRange: NSRange(location: 0, length: 0))
   }
 
   func syncFocus(windowIsKey: Bool) {
@@ -472,7 +508,6 @@ final class WorktreeTerminalState {
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
       self.focusedSurfaceIdByTab[tabId] = view.id
-      self.tabManager.selectTab(tabId)
       self.updateTabTitle(for: tabId)
       self.emitFocusChangedIfNeeded(view.id)
       self.emitTaskStatusIfChanged()
@@ -503,9 +538,10 @@ final class WorktreeTerminalState {
   private func focusSurface(_ surface: GhosttySurfaceView, in tabId: TerminalTabID) {
     let previousSurface = focusedSurfaceIdByTab[tabId].flatMap { surfaces[$0] }
     focusedSurfaceIdByTab[tabId] = surface.id
+    updateTabTitle(for: tabId)
+    guard tabId == tabManager.selectedTabId else { return }
     let fromSurface = (previousSurface === surface) ? nil : previousSurface
     GhosttySurfaceView.moveFocus(to: surface, from: fromSurface)
-    updateTabTitle(for: tabId)
     emitFocusChangedIfNeeded(surface.id)
   }
 

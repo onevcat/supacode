@@ -8,8 +8,22 @@ struct SidebarListView: View {
 
   var body: some View {
     let selection = Binding<SidebarSelection?>(
-      get: { store.selectedWorktreeID.map(SidebarSelection.worktree) },
-      set: { store.send(.selectWorktree($0?.worktreeID)) }
+      get: {
+        if store.isShowingArchivedWorktrees {
+          return .archivedWorktrees
+        }
+        return store.selectedWorktreeID.map(SidebarSelection.worktree)
+      },
+      set: { newValue in
+        switch newValue {
+        case .archivedWorktrees:
+          store.send(.selectArchivedWorktrees)
+        case .worktree(let id):
+          store.send(.selectWorktree(id))
+        case nil:
+          store.send(.selectWorktree(nil))
+        }
+      }
     )
     let state = store.state
     let orderedRoots = state.orderedRepositoryRoots()
@@ -29,11 +43,9 @@ struct SidebarListView: View {
           let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
           if let failureMessage = state.loadFailuresByID[repositoryID] {
             let name = Repository.name(for: rootURL.standardizedFileURL)
-            let initials = Repository.initials(from: name)
             let path = rootURL.standardizedFileURL.path(percentEncoded: false)
             FailedRepositoryRow(
               name: name,
-              initials: initials,
               path: path,
               showFailure: {
                 let message = "\(path)\n\n\(failureMessage)"
@@ -76,6 +88,26 @@ struct SidebarListView: View {
       guard !fileURLs.isEmpty else { return false }
       store.send(.openRepositories(fileURLs))
       return true
+    }
+    .onKeyPress { keyPress in
+      guard !keyPress.characters.isEmpty else { return .ignored }
+      let isNavigationKey =
+        keyPress.key == .upArrow
+        || keyPress.key == .downArrow
+        || keyPress.key == .leftArrow
+        || keyPress.key == .rightArrow
+        || keyPress.key == .home
+        || keyPress.key == .end
+        || keyPress.key == .pageUp
+        || keyPress.key == .pageDown
+      if isNavigationKey { return .ignored }
+      let hasCommandModifier = keyPress.modifiers.contains(.command)
+      if hasCommandModifier { return .ignored }
+      guard let worktreeID = store.selectedWorktreeID,
+        let terminalState = terminalManager.stateIfExists(for: worktreeID)
+      else { return .ignored }
+      terminalState.focusAndInsertText(keyPress.characters)
+      return .handled
     }
   }
 }

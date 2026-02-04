@@ -5,8 +5,9 @@ import SwiftUI
 struct WorktreeCommands: Commands {
   @Bindable var store: StoreOf<AppFeature>
   @FocusedValue(\.openSelectedWorktreeAction) private var openSelectedWorktreeAction
-  @FocusedValue(\.confirmRemoveWorktreeAction) private var confirmRemoveWorktreeAction
-  @FocusedValue(\.removeWorktreeAction) private var removeWorktreeAction
+  @FocusedValue(\.confirmWorktreeAction) private var confirmWorktreeAction
+  @FocusedValue(\.archiveWorktreeAction) private var archiveWorktreeAction
+  @FocusedValue(\.deleteWorktreeAction) private var deleteWorktreeAction
   @FocusedValue(\.runScriptAction) private var runScriptAction
   @FocusedValue(\.stopRunScriptAction) private var stopRunScriptAction
 
@@ -19,6 +20,8 @@ struct WorktreeCommands: Commands {
     let orderedRows = repositories.orderedWorktreeRows()
     let pullRequestURL = selectedPullRequestURL
     let githubIntegrationEnabled = store.settings.githubIntegrationEnabled
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
+    let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     CommandMenu("Worktrees") {
       ForEach(worktreeShortcuts.indices, id: \.self) { index in
         let shortcut = worktreeShortcuts[index]
@@ -62,18 +65,32 @@ struct WorktreeCommands: Commands {
       )
       .help("New Worktree (\(AppShortcuts.newWorktree.display))")
       .disabled(!repositories.canCreateWorktree)
-      Button("Remove Worktree") {
-        removeWorktreeAction?()
+      Button("Archived Worktrees") {
+        store.send(.repositories(.selectArchivedWorktrees))
+      }
+      .keyboardShortcut(
+        AppShortcuts.archivedWorktrees.keyEquivalent,
+        modifiers: AppShortcuts.archivedWorktrees.modifiers
+      )
+      .help("Archived Worktrees (\(AppShortcuts.archivedWorktrees.display))")
+      Button("Archive Worktree") {
+        archiveWorktreeAction?()
       }
       .keyboardShortcut(.delete, modifiers: .command)
-      .help("Remove Worktree (⌘⌫)")
-      .disabled(removeWorktreeAction == nil)
-      Button("Confirm Remove Worktree") {
-        confirmRemoveWorktreeAction?()
+      .help("Archive Worktree (\(archiveShortcut))")
+      .disabled(archiveWorktreeAction == nil)
+      Button("Delete Worktree") {
+        deleteWorktreeAction?()
+      }
+      .keyboardShortcut(.delete, modifiers: [.command, .shift])
+      .help("Delete Worktree (\(deleteShortcut))")
+      .disabled(deleteWorktreeAction == nil)
+      Button("Confirm Worktree Action") {
+        confirmWorktreeAction?()
       }
       .keyboardShortcut(.return, modifiers: .command)
-      .help("Confirm Remove Worktree (⌘↩)")
-      .disabled(confirmRemoveWorktreeAction == nil)
+      .help("Confirm Worktree Action (⌘↩)")
+      .disabled(confirmWorktreeAction == nil)
       Button("Refresh Worktrees") {
         store.send(.repositories(.refreshWorktrees))
       }
@@ -138,11 +155,19 @@ struct WorktreeCommands: Commands {
   }
 }
 
-private struct RemoveWorktreeActionKey: FocusedValueKey {
+private struct ArchiveWorktreeActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
 private struct OpenSelectedWorktreeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct DeleteWorktreeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct ConfirmWorktreeActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
@@ -152,14 +177,19 @@ extension FocusedValues {
     set { self[OpenSelectedWorktreeActionKey.self] = newValue }
   }
 
-  var confirmRemoveWorktreeAction: (() -> Void)? {
-    get { self[ConfirmRemoveWorktreeActionKey.self] }
-    set { self[ConfirmRemoveWorktreeActionKey.self] = newValue }
+  var confirmWorktreeAction: (() -> Void)? {
+    get { self[ConfirmWorktreeActionKey.self] }
+    set { self[ConfirmWorktreeActionKey.self] = newValue }
   }
 
-  var removeWorktreeAction: (() -> Void)? {
-    get { self[RemoveWorktreeActionKey.self] }
-    set { self[RemoveWorktreeActionKey.self] = newValue }
+  var archiveWorktreeAction: (() -> Void)? {
+    get { self[ArchiveWorktreeActionKey.self] }
+    set { self[ArchiveWorktreeActionKey.self] = newValue }
+  }
+
+  var deleteWorktreeAction: (() -> Void)? {
+    get { self[DeleteWorktreeActionKey.self] }
+    set { self[DeleteWorktreeActionKey.self] = newValue }
   }
 
   var runScriptAction: (() -> Void)? {
@@ -178,9 +208,5 @@ private struct RunScriptActionKey: FocusedValueKey {
 }
 
 private struct StopRunScriptActionKey: FocusedValueKey {
-  typealias Value = () -> Void
-}
-
-private struct ConfirmRemoveWorktreeActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }

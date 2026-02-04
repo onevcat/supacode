@@ -22,10 +22,21 @@ nonisolated enum SettingsFileStorageKey: DependencyKey {
   static var testValue: SettingsFileStorage { .inMemory() }
 }
 
+nonisolated enum SettingsFileURLKey: DependencyKey {
+  static var liveValue: URL { SupacodePaths.settingsURL }
+  static var previewValue: URL { SupacodePaths.settingsURL }
+  static var testValue: URL { SupacodePaths.settingsURL }
+}
+
 extension DependencyValues {
   nonisolated var settingsFileStorage: SettingsFileStorage {
     get { self[SettingsFileStorageKey.self] }
     set { self[SettingsFileStorageKey.self] = newValue }
+  }
+
+  nonisolated var settingsFileURL: URL {
+    get { self[SettingsFileURLKey.self] }
+    set { self[SettingsFileURLKey.self] = newValue }
   }
 }
 
@@ -71,8 +82,13 @@ nonisolated struct SettingsFileKeyID: Hashable, Sendable {
 nonisolated struct SettingsFileKey: SharedKey {
   let url: URL
 
-  init(url: URL = SupacodePaths.settingsURL) {
-    self.url = url
+  init(url: URL? = nil) {
+    if let url {
+      self.url = url
+      return
+    }
+    @Dependency(\.settingsFileURL) var settingsFileURL
+    self.url = settingsFileURL
   }
 
   var id: SettingsFileKeyID {

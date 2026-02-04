@@ -34,6 +34,13 @@ struct SidebarFooterView: View {
       }
       .menuIndicator(.hidden)
       .help("Help")
+      Button {
+        store.send(.selectArchivedWorktrees)
+      } label: {
+        Image(systemName: "archivebox")
+          .accessibilityLabel("Archived Worktrees")
+      }
+      .help("Archived Worktrees (\(AppShortcuts.archivedWorktrees.display))")
       Button("Settings", systemImage: "gearshape") {
         SettingsWindowManager.shared.show()
       }

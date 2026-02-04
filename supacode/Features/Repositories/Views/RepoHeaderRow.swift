@@ -2,27 +2,16 @@ import SwiftUI
 
 struct RepoHeaderRow: View {
   let name: String
-  let initials: String
   let isRemoving: Bool
 
   var body: some View {
     HStack {
-      ZStack {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-          .fill(.secondary.opacity(0.2))
-        Text(initials)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      .frame(width: 24, height: 24)
-      .clipShape(.rect(cornerRadius: 6, style: .continuous))
       Text(name)
-        .font(.headline)
-        .foregroundStyle(.primary)
+        .foregroundStyle(.secondary)
       if isRemoving {
         Text("Removing...")
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.tertiary)
       }
     }
   }

@@ -11,11 +11,15 @@ extension AnalyticsClient: DependencyKey {
   static let liveValue = AnalyticsClient(
     capture: { event, properties in
       #if !DEBUG
+        @Shared(.settingsFile) var settingsFile
+        guard settingsFile.global.analyticsEnabled else { return }
         PostHogSDK.shared.capture(event, properties: properties)
       #endif
     },
     identify: { distinctId in
       #if !DEBUG
+        @Shared(.settingsFile) var settingsFile
+        guard settingsFile.global.analyticsEnabled else { return }
         PostHogSDK.shared.identify(distinctId)
       #endif
     }

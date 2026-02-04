@@ -1,49 +1,58 @@
 import ComposableArchitecture
 import Foundation
-import PostHog
 
 @Reducer
 struct SettingsFeature {
   @ObservableState
   struct State: Equatable {
     var appearanceMode: AppearanceMode
+    var defaultEditorID: String
     var confirmBeforeQuit: Bool
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
     var dockBadgeEnabled: Bool
     var notificationSoundEnabled: Bool
+    var analyticsEnabled: Bool
+    var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
-    var deleteBranchOnArchive: Bool
-    var sortMergedWorktreesToBottom: Bool
+    var deleteBranchOnDeleteWorktree: Bool
+    var automaticallyArchiveMergedWorktrees: Bool
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
 
     init(settings: GlobalSettings = .default) {
+      let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
       appearanceMode = settings.appearanceMode
+      defaultEditorID = normalizedDefaultEditorID
       confirmBeforeQuit = settings.confirmBeforeQuit
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
       dockBadgeEnabled = settings.dockBadgeEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
+      analyticsEnabled = settings.analyticsEnabled
+      crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
-      deleteBranchOnArchive = settings.deleteBranchOnArchive
-      sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
+      deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
+      automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
     }
 
     var globalSettings: GlobalSettings {
       GlobalSettings(
         appearanceMode: appearanceMode,
+        defaultEditorID: defaultEditorID,
         confirmBeforeQuit: confirmBeforeQuit,
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
         dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
+        analyticsEnabled: analyticsEnabled,
+        crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
-        deleteBranchOnArchive: deleteBranchOnArchive,
-        sortMergedWorktreesToBottom: sortMergedWorktreesToBottom
+        deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
+        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees
       )
     }
   }
@@ -73,23 +82,39 @@ struct SettingsFeature {
         return .send(.settingsLoaded(settingsFile.global))
 
       case .settingsLoaded(let settings):
-        state.appearanceMode = settings.appearanceMode
-        state.confirmBeforeQuit = settings.confirmBeforeQuit
-        state.updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
-        state.updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
-        state.inAppNotificationsEnabled = settings.inAppNotificationsEnabled
-        state.dockBadgeEnabled = settings.dockBadgeEnabled
-        state.notificationSoundEnabled = settings.notificationSoundEnabled
-        state.githubIntegrationEnabled = settings.githubIntegrationEnabled
-        state.deleteBranchOnArchive = settings.deleteBranchOnArchive
-        state.sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
-        return .send(.delegate(.settingsChanged(settings)))
+        let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(settings.defaultEditorID)
+        let normalizedSettings: GlobalSettings
+        if normalizedDefaultEditorID == settings.defaultEditorID {
+          normalizedSettings = settings
+        } else {
+          var updatedSettings = settings
+          updatedSettings.defaultEditorID = normalizedDefaultEditorID
+          normalizedSettings = updatedSettings
+          @Shared(.settingsFile) var settingsFile
+          $settingsFile.withLock { $0.global = normalizedSettings }
+        }
+        state.appearanceMode = normalizedSettings.appearanceMode
+        state.defaultEditorID = normalizedSettings.defaultEditorID
+        state.confirmBeforeQuit = normalizedSettings.confirmBeforeQuit
+        state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
+        state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
+        state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
+        state.dockBadgeEnabled = normalizedSettings.dockBadgeEnabled
+        state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
+        state.analyticsEnabled = normalizedSettings.analyticsEnabled
+        state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
+        state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
+        state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
+        state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
-        analyticsClient.capture("settings_changed", nil)
         let settings = state.globalSettings
         @Shared(.settingsFile) var settingsFile
         $settingsFile.withLock { $0.global = settings }
+        if settings.analyticsEnabled {
+          analyticsClient.capture("settings_changed", nil)
+        }
         return .send(.delegate(.settingsChanged(settings)))
 
       case .setSelection(let selection):

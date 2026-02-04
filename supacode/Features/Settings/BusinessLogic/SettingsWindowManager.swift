@@ -43,6 +43,7 @@ final class SettingsWindowManager {
     let window = NSWindow(contentViewController: hostingController)
     window.title = ""
     window.titleVisibility = .hidden
+    window.identifier = NSUserInterfaceItemIdentifier("settings")
     window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
     window.tabbingMode = .disallowed
     window.titlebarAppearsTransparent = true

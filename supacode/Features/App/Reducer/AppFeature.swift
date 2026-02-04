@@ -109,20 +109,30 @@ struct AppFeature {
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
         let lastFocusedWorktreeID = worktree?.id
         let repositoryPersistence = repositoryPersistence
+        let worktreesForWatcher = state.repositories.worktreesForInfoWatcher()
         guard let worktree else {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
-          return .merge(
-            .run { _ in
-              await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
-            },
+          var effects: [Effect<Action>] = [
             .run { _ in
               await terminalClient.send(.setSelectedWorktreeID(nil))
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setSelectedWorktreeID(nil))
-            }
-          )
+            },
+            .run { _ in
+              await worktreeInfoWatcher.send(.setWorktrees(worktreesForWatcher))
+            },
+          ]
+          if !state.repositories.isShowingArchivedWorktrees {
+            effects.insert(
+              .run { _ in
+                await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+              },
+              at: 0
+            )
+          }
+          return .merge(effects)
         }
         let rootURL = worktree.repositoryRootURL
         let worktreeID = worktree.id
@@ -139,12 +149,28 @@ struct AppFeature {
           .run { _ in
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(worktree.id))
           },
+          .run { _ in
+            await worktreeInfoWatcher.send(.setWorktrees(worktreesForWatcher))
+          },
           .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID))
         )
 
+      case .repositories(.delegate(.worktreeCreated(let worktree))):
+        let shouldRunSetupScript =
+          state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        return .run { _ in
+          await terminalClient.send(
+            .ensureInitialTab(
+              worktree,
+              runSetupScriptIfNew: shouldRunSetupScript,
+              focusing: false
+            )
+          )
+        }
+
       case .repositories(.delegate(.repositoriesChanged(let repositories))):
         let ids = Set(repositories.flatMap { $0.worktrees.map(\.id) })
-        let worktrees = repositories.flatMap(\.worktrees)
+        let worktrees = state.repositories.worktreesForInfoWatcher()
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
@@ -193,7 +219,7 @@ struct AppFeature {
             rootURL: repository.rootURL,
             settings: repositorySettings
           )
-        case .general, .notifications, .worktree, .updates, .github:
+        case .general, .notifications, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }
         return .none
@@ -206,10 +232,22 @@ struct AppFeature {
           settings.dockBadgeEnabled
           ? (state.notificationIndicatorCount == 0 ? nil : String(state.notificationIndicatorCount))
           : nil
+        if let selectedWorktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) {
+          let rootURL = selectedWorktree.repositoryRootURL
+          @Shared(.repositorySettings(rootURL)) var repositorySettings
+          state.openActionSelection = OpenWorktreeAction.fromSettingsID(
+            repositorySettings.openActionID,
+            defaultEditorID: settings.defaultEditorID
+          )
+        }
         return .merge(
           .send(.repositories(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled))),
           .send(
-            .repositories(.setSortMergedWorktreesToBottom(settings.sortMergedWorktreesToBottom))
+            .repositories(
+              .setAutomaticallyArchiveMergedWorktrees(
+                settings.automaticallyArchiveMergedWorktrees
+              )
+            )
           ),
           .send(
             .updates(
@@ -253,6 +291,19 @@ struct AppFeature {
           return .none
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
+        if action == .editor {
+          let shouldRunSetupScript =
+            state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+          return .run { _ in
+            await terminalClient.send(
+              .createTabWithInput(
+                worktree,
+                input: "$EDITOR",
+                runSetupScriptIfNew: shouldRunSetupScript
+              )
+            )
+          }
+        }
         return .run { send in
           await workspaceClient.open(action, worktree) { error in
             send(.openWorktreeFailed(error))
@@ -282,11 +333,11 @@ struct AppFeature {
           state.alert = AlertState {
             TextState("Quit Supacode?")
           } actions: {
+            ButtonState(action: .confirmQuit) {
+              TextState("Quit")
+            }
             ButtonState(role: .cancel, action: .dismiss) {
               TextState("Cancel")
-            }
-            ButtonState(role: .destructive, action: .confirmQuit) {
-              TextState("Quit")
             }
           } message: {
             TextState("This will close all terminal sessions.")
@@ -304,15 +355,9 @@ struct AppFeature {
         }
         analyticsClient.capture("terminal_tab_created", nil)
         let shouldRunSetupScript = state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id)
-        var effects: [Effect<Action>] = [
-          .run { _ in
-            await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
-          },
-        ]
-        if shouldRunSetupScript {
-          effects.append(.send(.repositories(.consumeSetupScript(worktree.id))))
+        return .run { _ in
+          await terminalClient.send(.createTab(worktree, runSetupScriptIfNew: shouldRunSetupScript))
         }
-        return .merge(effects)
 
       case .runScript:
         guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
@@ -416,7 +461,14 @@ struct AppFeature {
         guard state.repositories.selectedWorktreeID == worktreeID else {
           return .none
         }
-        state.openActionSelection = OpenWorktreeAction.fromSettingsID(settings.openActionID)
+        @Shared(.settingsFile) var settingsFile
+        let normalizedDefaultEditorID = OpenWorktreeAction.normalizedDefaultEditorID(
+          settingsFile.global.defaultEditorID
+        )
+        state.openActionSelection = OpenWorktreeAction.fromSettingsID(
+          settings.openActionID,
+          defaultEditorID: normalizedDefaultEditorID
+        )
         state.selectedRunScript = settings.runScript
         return .none
 
@@ -458,7 +510,7 @@ struct AppFeature {
         return .send(.repositories(.createRandomWorktree))
 
       case .commandPalette(.delegate(.removeWorktree(let worktreeID, let repositoryID))):
-        return .send(.repositories(.requestRemoveWorktree(worktreeID, repositoryID)))
+        return .send(.repositories(.requestDeleteWorktree(worktreeID, repositoryID)))
 
       case .commandPalette(.delegate(.runWorktree(let worktreeID))):
         guard let worktree = state.repositories.worktree(for: worktreeID) else {
@@ -548,6 +600,8 @@ struct AppFeature {
           .send(.repositories(.selectWorktree(worktreeID))),
           .send(.commandPalette(.setPresented(true)))
         )
+      case .terminalEvent(.setupScriptConsumed(let worktreeID)):
+        return .send(.repositories(.consumeSetupScript(worktreeID)))
 
       case .terminalEvent:
         return .none

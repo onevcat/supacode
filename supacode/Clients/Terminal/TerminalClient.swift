@@ -7,6 +7,8 @@ struct TerminalClient {
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
+    case createTabWithInput(Worktree, input: String, runSetupScriptIfNew: Bool)
+    case ensureInitialTab(Worktree, runSetupScriptIfNew: Bool, focusing: Bool)
     case runScript(Worktree, script: String)
     case stopRunScript(Worktree)
     case closeFocusedTab(Worktree)
@@ -31,6 +33,7 @@ struct TerminalClient {
     case taskStatusChanged(worktreeID: Worktree.ID, status: WorktreeTaskStatus)
     case runScriptStatusChanged(worktreeID: Worktree.ID, isRunning: Bool)
     case commandPaletteToggleRequested(worktreeID: Worktree.ID)
+    case setupScriptConsumed(worktreeID: Worktree.ID)
   }
 }
 

@@ -24,7 +24,7 @@ extension RepositoriesFeature.State: CustomDumpRepresentable {
   var customDumpValue: Any {
     (
       repositories: repositories.count,
-      selectedWorktreeID: selectedWorktreeID,
+      selection: selection,
       pending: pendingWorktrees.count,
       deleting: deletingWorktreeIDs.count,
       hasAlert: alert != nil

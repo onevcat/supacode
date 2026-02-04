@@ -28,7 +28,7 @@ struct PullRequestStatusButton: View {
           Text("Open on GitHub \(AppShortcuts.openPullRequest.display)")
             .lineLimit(1)
         }
-        if model.state == "MERGED", !commandKeyObserver.isPressed {
+        if model.detailText == nil, !commandKeyObserver.isPressed {
           Text(model.title)
             .lineLimit(1)
         }

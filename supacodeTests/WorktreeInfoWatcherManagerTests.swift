@@ -21,9 +21,14 @@ struct WorktreeInfoWatcherManagerTests {
     let earlyHasFilesChanged = await collector.hasFilesChanged(worktreeID: worktree.id)
     #expect(earlyHasFilesChanged == false)
 
-    try? await Task.sleep(for: .milliseconds(80))
-    let laterHasFilesChanged = await collector.hasFilesChanged(worktreeID: worktree.id)
-    #expect(laterHasFilesChanged == true)
+    #expect(
+      await waitForFilesChangedCount(
+        collector,
+        worktreeID: worktree.id,
+        count: 1,
+        timeout: .seconds(1)
+      )
+    )
 
     manager.handleCommand(.stop)
     await task.value

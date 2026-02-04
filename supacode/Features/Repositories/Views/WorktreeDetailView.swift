@@ -1,3 +1,4 @@
+import AppKit
 import ComposableArchitecture
 import SwiftUI
 
@@ -16,19 +17,19 @@ struct WorktreeDetailView: View {
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let loadingInfo = loadingInfo(for: selectedRow, repositories: repositories)
     let hasActiveWorktree = selectedWorktree != nil && loadingInfo == nil
-    let pullRequest: GithubPullRequest?
-    if let selectedWorktree, !repositories.isMainWorktree(selectedWorktree) {
-      pullRequest = repositories.worktreeInfoByID[selectedWorktree.id]?.pullRequest
-    } else {
-      pullRequest = nil
-    }
+    let pullRequest = selectedWorktree.flatMap { repositories.worktreeInfoByID[$0.id]?.pullRequest }
     let openActionSelection = state.openActionSelection
     let runScriptConfigured =
       !state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     let runScriptEnabled = hasActiveWorktree && runScriptConfigured
     let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let content = Group {
-      if let loadingInfo {
+      if repositories.isShowingArchivedWorktrees {
+        ArchivedWorktreesDetailView(
+          store: store.scope(state: \.repositories, action: \.repositories)
+        )
+      } else if let loadingInfo {
         WorktreeLoadingView(info: loadingInfo)
       } else if let selectedWorktree {
         let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedWorktree.id)
@@ -43,9 +44,6 @@ struct WorktreeDetailView: View {
         .id(selectedWorktree.id)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-          if shouldRunSetupScript {
-            store.send(.repositories(.consumeSetupScript(selectedWorktree.id)))
-          }
           if shouldFocusTerminal {
             store.send(.repositories(.consumeTerminalFocus(selectedWorktree.id)))
           }
@@ -57,24 +55,37 @@ struct WorktreeDetailView: View {
     .toolbar(removing: .title)
     .toolbar {
       if hasActiveWorktree, let selectedWorktree {
+        let archiveEnabled =
+          !repositories.isMainWorktree(selectedWorktree)
+          && !repositories.isWorktreeArchived(selectedWorktree.id)
         let toolbarState = WorktreeToolbarState(
           branchName: selectedWorktree.name,
           pullRequest: pullRequest,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed,
           runScriptEnabled: runScriptEnabled,
-          runScriptIsRunning: runScriptIsRunning
+          runScriptIsRunning: runScriptIsRunning,
+          archiveEnabled: archiveEnabled,
+          archiveHelpText: "Archive Worktree (\(archiveShortcut))"
         )
         WorktreeToolbarContent(
           toolbarState: toolbarState,
           onRenameBranch: { newBranch in
             store.send(.repositories(.requestRenameBranch(selectedWorktree.id, newBranch)))
           },
+          onArchiveWorktree: {
+            let repositoryID = selectedWorktree.repositoryRootURL.path(percentEncoded: false)
+            store.send(.repositories(.requestArchiveWorktree(selectedWorktree.id, repositoryID)))
+          },
           onOpenWorktree: { action in
             store.send(.openWorktree(action))
           },
           onOpenActionSelectionChanged: { action in
             store.send(.openActionSelectionChanged(action))
+          },
+          onCopyPath: {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(selectedWorktree.workingDirectory.path, forType: .string)
           },
           onRunScript: { store.send(.runScript) },
           onStopRunScript: { store.send(.stopRunScript) }
@@ -151,6 +162,8 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
+    let archiveEnabled: Bool
+    let archiveHelpText: String
 
     var runScriptHelpText: String {
       "Run Script (\(AppShortcuts.runScript.display))"
@@ -164,8 +177,10 @@ struct WorktreeDetailView: View {
   fileprivate struct WorktreeToolbarContent: ToolbarContent {
     let toolbarState: WorktreeToolbarState
     let onRenameBranch: (String) -> Void
+    let onArchiveWorktree: () -> Void
     let onOpenWorktree: (OpenWorktreeAction) -> Void
     let onOpenActionSelectionChanged: (OpenWorktreeAction) -> Void
+    let onCopyPath: () -> Void
     let onRunScript: () -> Void
     let onStopRunScript: () -> Void
 
@@ -185,7 +200,6 @@ struct WorktreeDetailView: View {
         } else {
           MiddleStatusView().padding(.horizontal)
         }
-
       }
 
       ToolbarSpacer(.flexible)
@@ -198,6 +212,15 @@ struct WorktreeDetailView: View {
         )
       }
       ToolbarSpacer(.fixed)
+
+      if toolbarState.archiveEnabled {
+        ToolbarItem {
+          Button("Archive", systemImage: "archivebox") {
+            onArchiveWorktree()
+          }
+          .help(toolbarState.archiveHelpText)
+        }
+      }
 
       if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
         ToolbarItem {
@@ -242,6 +265,11 @@ struct WorktreeDetailView: View {
           .buttonStyle(.plain)
           .help(openActionHelpText(for: action, isDefault: isDefault))
         }
+        Divider()
+        Button("Copy Path") {
+          onCopyPath()
+        }
+        .help("Copy path")
       } label: {
         Image(systemName: "chevron.down")
           .font(.caption2)
@@ -376,7 +404,9 @@ private struct WorktreeToolbarPreview: View {
       openActionSelection: .finder,
       showExtras: false,
       runScriptEnabled: true,
-      runScriptIsRunning: false
+      runScriptIsRunning: false,
+      archiveEnabled: true,
+      archiveHelpText: "Archive Worktree (⌘⌫)"
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false
@@ -392,8 +422,10 @@ private struct WorktreeToolbarPreview: View {
       WorktreeDetailView.WorktreeToolbarContent(
         toolbarState: toolbarState,
         onRenameBranch: { _ in },
+        onArchiveWorktree: {},
         onOpenWorktree: { _ in },
         onOpenActionSelectionChanged: { _ in },
+        onCopyPath: {},
         onRunScript: {},
         onStopRunScript: {}
       )

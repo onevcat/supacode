@@ -11,6 +11,7 @@ import Foundation
 import GhosttyKit
 import PostHog
 import Sentry
+import Sharing
 import SwiftUI
 
 private enum GhosttyCLI {
@@ -29,17 +30,29 @@ private enum GhosttyCLI {
 @MainActor
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows _: Bool) -> Bool {
-    guard let window = sender.windows.first(where: { $0.identifier?.rawValue == "main" }) else {
-      return false
+    guard let window = mainWindow(from: sender) else {
+      return true
     }
-    if !window.isVisible {
-      window.makeKeyAndOrderFront(nil)
+    if window.isMiniaturized {
+      window.deminiaturize(nil)
     }
+    window.makeKeyAndOrderFront(nil)
+    sender.activate(ignoringOtherApps: true)
     return false
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     false
+  }
+
+  private func mainWindow(from sender: NSApplication) -> NSWindow? {
+    if let window = sender.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+      return window
+    }
+    if let window = sender.windows.first(where: { $0.identifier?.rawValue != "settings" }) {
+      return window
+    }
+    return sender.windows.first
   }
 }
 
@@ -57,19 +70,25 @@ struct SupacodeApp: App {
   @MainActor init() {
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
+    @Shared(.settingsFile) var settingsFile
+    let initialSettings = settingsFile.global
     #if !DEBUG
-      SentrySDK.start { options in
-        options.dsn = "https://fb4d394e0bd3e72871b01c7ef3cac129@o1224589.ingest.us.sentry.io/4510770231050240"
-        options.tracesSampleRate = 1.0
-        options.enableAppHangTracking = false
+      if initialSettings.crashReportsEnabled {
+        SentrySDK.start { options in
+          options.dsn = "https://fb4d394e0bd3e72871b01c7ef3cac129@o1224589.ingest.us.sentry.io/4510770231050240"
+          options.tracesSampleRate = 1.0
+          options.enableAppHangTracking = false
+        }
       }
-      let posthogAPIKey = "phc_3hNmki5nVyvW3o2GxqRB12cK7EKXOg2ehJLkCO3sL0S"
-      let posthogHost = "https://us.i.posthog.com"
-      let config = PostHogConfig(apiKey: posthogAPIKey, host: posthogHost)
-      config.enableSwizzling = false
-      PostHogSDK.shared.setup(config)
-      if let hardwareUUID = HardwareInfo.uuid {
-        PostHogSDK.shared.identify(hardwareUUID)
+      if initialSettings.analyticsEnabled {
+        let posthogAPIKey = "phc_3hNmki5nVyvW3o2GxqRB12cK7EKXOg2ehJLkCO3sL0S"
+        let posthogHost = "https://us.i.posthog.com"
+        let config = PostHogConfig(apiKey: posthogAPIKey, host: posthogHost)
+        config.enableSwizzling = false
+        PostHogSDK.shared.setup(config)
+        if let hardwareUUID = HardwareInfo.uuid {
+          PostHogSDK.shared.identify(hardwareUUID)
+        }
       }
     #endif
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
@@ -86,7 +105,6 @@ struct SupacodeApp: App {
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
-    let initialSettings = GlobalSettings.default
     let terminalManager = WorktreeTerminalManager(runtime: runtime)
     _terminalManager = State(initialValue: terminalManager)
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()

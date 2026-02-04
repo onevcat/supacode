@@ -10,10 +10,10 @@ struct WorktreeSettingsView: View {
         Section("Worktree") {
           VStack(alignment: .leading) {
             Toggle(
-              "Also delete local branch",
-              isOn: $store.deleteBranchOnArchive
+              "Also delete local branch when deleting a worktree",
+              isOn: $store.deleteBranchOnDeleteWorktree
             )
-            .help("Delete the local branch when archiving a worktree")
+            .help("Delete the local branch when deleting a worktree")
             Text("Removes the local branch along with the worktree. Remote branches must be deleted on GitHub.")
               .foregroundStyle(.secondary)
             Text("Uncommitted changes will be lost.")
@@ -21,10 +21,10 @@ struct WorktreeSettingsView: View {
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           Toggle(
-            "Sort merged worktrees to bottom",
-            isOn: $store.sortMergedWorktreesToBottom
+            "Automatically archive merged worktrees",
+            isOn: $store.automaticallyArchiveMergedWorktrees
           )
-          .help("Move merged PR worktrees to the bottom of each repository list.")
+          .help("Archive worktrees automatically when their pull requests are merged.")
         }
       }
       .formStyle(.grouped)

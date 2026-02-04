@@ -1,55 +1,70 @@
 nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var appearanceMode: AppearanceMode
+  var defaultEditorID: String
   var confirmBeforeQuit: Bool
   var updatesAutomaticallyCheckForUpdates: Bool
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
   var dockBadgeEnabled: Bool
   var notificationSoundEnabled: Bool
+  var analyticsEnabled: Bool
+  var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
-  var deleteBranchOnArchive: Bool
-  var sortMergedWorktreesToBottom: Bool
+  var deleteBranchOnDeleteWorktree: Bool
+  var automaticallyArchiveMergedWorktrees: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
+    defaultEditorID: OpenWorktreeAction.automaticSettingsID,
     confirmBeforeQuit: true,
     updatesAutomaticallyCheckForUpdates: true,
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
     dockBadgeEnabled: true,
     notificationSoundEnabled: true,
+    analyticsEnabled: true,
+    crashReportsEnabled: true,
     githubIntegrationEnabled: true,
-    deleteBranchOnArchive: true,
-    sortMergedWorktreesToBottom: true
+    deleteBranchOnDeleteWorktree: true,
+    automaticallyArchiveMergedWorktrees: false
   )
 
   init(
     appearanceMode: AppearanceMode,
+    defaultEditorID: String,
     confirmBeforeQuit: Bool,
     updatesAutomaticallyCheckForUpdates: Bool,
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
     dockBadgeEnabled: Bool,
     notificationSoundEnabled: Bool,
+    analyticsEnabled: Bool,
+    crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
-    deleteBranchOnArchive: Bool,
-    sortMergedWorktreesToBottom: Bool
+    deleteBranchOnDeleteWorktree: Bool,
+    automaticallyArchiveMergedWorktrees: Bool
   ) {
     self.appearanceMode = appearanceMode
+    self.defaultEditorID = defaultEditorID
     self.confirmBeforeQuit = confirmBeforeQuit
     self.updatesAutomaticallyCheckForUpdates = updatesAutomaticallyCheckForUpdates
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
     self.dockBadgeEnabled = dockBadgeEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
+    self.analyticsEnabled = analyticsEnabled
+    self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
-    self.deleteBranchOnArchive = deleteBranchOnArchive
-    self.sortMergedWorktreesToBottom = sortMergedWorktreesToBottom
+    self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
+    self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
   }
 
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     appearanceMode = try container.decode(AppearanceMode.self, forKey: .appearanceMode)
+    defaultEditorID =
+      try container.decodeIfPresent(String.self, forKey: .defaultEditorID)
+      ?? Self.default.defaultEditorID
     confirmBeforeQuit =
       try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeQuit)
       ?? Self.default.confirmBeforeQuit
@@ -64,14 +79,20 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
       ?? Self.default.notificationSoundEnabled
+    analyticsEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
+      ?? Self.default.analyticsEnabled
+    crashReportsEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .crashReportsEnabled)
+      ?? Self.default.crashReportsEnabled
     githubIntegrationEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .githubIntegrationEnabled)
       ?? Self.default.githubIntegrationEnabled
-    deleteBranchOnArchive =
-      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnArchive)
-      ?? Self.default.deleteBranchOnArchive
-    sortMergedWorktreesToBottom =
-      try container.decodeIfPresent(Bool.self, forKey: .sortMergedWorktreesToBottom)
-      ?? Self.default.sortMergedWorktreesToBottom
+    deleteBranchOnDeleteWorktree =
+      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
+      ?? Self.default.deleteBranchOnDeleteWorktree
+    automaticallyArchiveMergedWorktrees =
+      try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees)
+      ?? Self.default.automaticallyArchiveMergedWorktrees
   }
 }

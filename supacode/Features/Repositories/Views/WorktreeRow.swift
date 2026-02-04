@@ -11,6 +11,7 @@ struct WorktreeRow: View {
   let isRunScriptRunning: Bool
   let showsNotificationIndicator: Bool
   let shortcutHint: String?
+  let archiveAction: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
@@ -23,7 +24,7 @@ struct WorktreeRow: View {
       } else {
         false
       }
-    let displayPullRequest = isMainWorktree ? nil : (matchesWorktree ? pullRequest : nil)
+    let displayPullRequest = matchesWorktree ? pullRequest : nil
     let displayAddedLines = displayPullRequest == nil ? info?.addedLines : nil
     let displayRemovedLines = displayPullRequest == nil ? info?.removedLines : nil
     let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
@@ -32,10 +33,12 @@ struct WorktreeRow: View {
     let pullRequestURL = displayPullRequest.flatMap { URL(string: $0.url) }
     let pullRequestTitle = displayPullRequest?.title
     let pullRequestChecks = displayPullRequest?.statusCheckRollup?.checks ?? []
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let pullRequestBadgeStyle = PullRequestBadgeStyle.style(
       state: pullRequestState,
       number: pullRequestNumber
     )
+    let showsMergedArchiveAction = pullRequestState == "MERGED" && archiveAction != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     HStack(alignment: .center) {
       ZStack {
@@ -79,7 +82,7 @@ struct WorktreeRow: View {
           .help("Run script active")
           .accessibilityLabel("Run script active")
       }
-      if let pullRequestBadgeStyle {
+      if let pullRequestBadgeStyle, !showsMergedArchiveAction {
         PullRequestChecksPopoverButton(
           checks: pullRequestChecks,
           pullRequestURL: pullRequestURL,
@@ -95,6 +98,16 @@ struct WorktreeRow: View {
           }
         }
         .help("Show pull request checks")
+      }
+      if let archiveAction, pullRequestState == "MERGED" {
+        Button {
+          archiveAction()
+        } label: {
+          Image(systemName: "archivebox")
+            .accessibilityLabel("Archive worktree")
+        }
+        .buttonStyle(.plain)
+        .help("Archive Worktree (\(archiveShortcut))")
       }
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)

@@ -68,20 +68,20 @@ struct AppFeatureCommandPaletteTests {
     }
 
     let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("🚨 Remove worktree?")
+      TextState("🚨 Delete worktree?")
     } actions: {
-      ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-        TextState("Remove (⌘↩)")
+      ButtonState(role: .destructive, action: .confirmDeleteWorktree(worktree.id, repository.id)) {
+        TextState("Delete (⌘↩)")
       }
       ButtonState(role: .cancel) {
         TextState("Cancel")
       }
     } message: {
-      TextState("Remove \(worktree.name)? This deletes the worktree directory and its local branch.")
+      TextState("Delete \(worktree.name)? This deletes the worktree directory and its local branch.")
     }
 
     await store.send(.commandPalette(.delegate(.removeWorktree(worktree.id, repository.id))))
-    await store.receive(\.repositories.requestRemoveWorktree) {
+    await store.receive(\.repositories.requestDeleteWorktree) {
       $0.repositories.alert = expectedAlert
     }
   }
@@ -123,7 +123,7 @@ struct AppFeatureCommandPaletteTests {
 
     await store.send(.commandPalette(.delegate(.runWorktree(worktree.id))))
     await store.receive(\.repositories.selectWorktree) {
-      $0.repositories.selectedWorktreeID = worktree.id
+      $0.repositories.selection = .worktree(worktree.id)
     }
     await store.receive(\.repositories.delegate.selectedWorktreeChanged)
     await store.receive(\.worktreeSettingsLoaded) {
@@ -173,7 +173,7 @@ struct AppFeatureCommandPaletteTests {
 
     await store.send(.commandPalette(.delegate(.openWorktreeInEditor(worktree.id))))
     await store.receive(\.repositories.selectWorktree) {
-      $0.repositories.selectedWorktreeID = worktree.id
+      $0.repositories.selection = .worktree(worktree.id)
     }
     await store.receive(\.repositories.delegate.selectedWorktreeChanged)
     await store.receive(\.worktreeSettingsLoaded) {

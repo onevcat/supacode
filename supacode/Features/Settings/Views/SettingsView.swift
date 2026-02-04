@@ -37,6 +37,8 @@ struct SettingsView: View {
             .tag(SettingsSection.worktree)
           Label("Updates", systemImage: "arrow.down.circle")
             .tag(SettingsSection.updates)
+          Label("Advanced", systemImage: "gearshape.2")
+            .tag(SettingsSection.advanced)
           Label("GitHub", systemImage: "arrow.triangle.branch")
             .tag(SettingsSection.github)
 
@@ -78,6 +80,12 @@ struct SettingsView: View {
             .navigationTitle("Updates")
             .navigationSubtitle("Update preferences")
         }
+      case .advanced:
+        SettingsDetailView {
+          AdvancedSettingsView(store: settingsStore)
+            .navigationTitle("Advanced")
+            .navigationSubtitle("Analytics and diagnostics")
+        }
       case .github:
         SettingsDetailView {
           GithubSettingsView(store: settingsStore)
@@ -114,7 +122,10 @@ struct SettingsView: View {
     }
     .navigationSplitViewStyle(.balanced)
     .frame(minWidth: 750, minHeight: 500)
-    .background(WindowLevelSetter(level: .floating))
+    .background {
+      WindowAppearanceSetter(colorScheme: settingsStore.appearanceMode.colorScheme)
+      WindowLevelSetter(level: .floating)
+    }
     .ignoresSafeArea(.container, edges: .top)
   }
 }

@@ -16,7 +16,7 @@ struct RepositoriesFeature {
     var repositoryRoots: [URL] = []
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
-    var selectedWorktreeID: Worktree.ID?
+    var selection: SidebarSelection?
     var worktreeInfoByID: [Worktree.ID: WorktreeInfoEntry] = [:]
     var worktreeOrderByRepository: [Repository.ID: [Worktree.ID]] = [:]
     var isOpenPanelPresented = false
@@ -27,7 +27,8 @@ struct RepositoriesFeature {
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
-    var sortMergedWorktreesToBottom = true
+    var archivedWorktreeIDs: [Worktree.ID] = []
+    var automaticallyArchiveMergedWorktrees = false
     var lastFocusedWorktreeID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -39,12 +40,14 @@ struct RepositoriesFeature {
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
+    case archivedWorktreeIDsLoaded([Worktree.ID])
     case repositoryOrderIDsLoaded([Repository.ID])
     case worktreeOrderByRepositoryLoaded([Repository.ID: [Worktree.ID]])
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
+    case selectArchivedWorktrees
     case openRepositories([URL])
     case openRepositoriesFinished(
       [Repository],
@@ -71,9 +74,12 @@ struct RepositoriesFeature {
     )
     case consumeSetupScript(Worktree.ID)
     case consumeTerminalFocus(Worktree.ID)
-    case requestRemoveWorktree(Worktree.ID, Repository.ID)
-    case removeWorktreeConfirmed(Worktree.ID, Repository.ID)
-    case worktreeRemoved(
+    case requestArchiveWorktree(Worktree.ID, Repository.ID)
+    case archiveWorktreeConfirmed(Worktree.ID, Repository.ID)
+    case unarchiveWorktree(Worktree.ID)
+    case requestDeleteWorktree(Worktree.ID, Repository.ID)
+    case deleteWorktreeConfirmed(Worktree.ID, Repository.ID)
+    case worktreeDeleted(
       Worktree.ID,
       repositoryID: Repository.ID,
       selectionWasRemoved: Bool,
@@ -82,7 +88,7 @@ struct RepositoriesFeature {
     case repositoriesMoved(IndexSet, Int)
     case pinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
     case unpinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
-    case worktreeRemovalFailed(String, worktreeID: Worktree.ID)
+    case deleteWorktreeFailed(String, worktreeID: Worktree.ID)
     case requestRemoveRepository(Repository.ID)
     case removeFailedRepository(Repository.ID)
     case repositoryRemoved(Repository.ID, selectionWasRemoved: Bool)
@@ -95,7 +101,7 @@ struct RepositoriesFeature {
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
     case worktreePullRequestLoaded(worktreeID: Worktree.ID, pullRequest: GithubPullRequest?)
     case setGithubIntegrationEnabled(Bool)
-    case setSortMergedWorktreesToBottom(Bool)
+    case setAutomaticallyArchiveMergedWorktrees(Bool)
     case openRepositorySettings(Repository.ID)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -110,10 +116,12 @@ struct RepositoriesFeature {
     let didPrunePinned: Bool
     let didPruneRepositoryOrder: Bool
     let didPruneWorktreeOrder: Bool
+    let didPruneArchivedWorktreeIDs: Bool
   }
 
   enum Alert: Equatable {
-    case confirmRemoveWorktree(Worktree.ID, Repository.ID)
+    case confirmArchiveWorktree(Worktree.ID, Repository.ID)
+    case confirmDeleteWorktree(Worktree.ID, Repository.ID)
     case confirmRemoveRepository(Repository.ID)
   }
 
@@ -122,6 +130,7 @@ struct RepositoriesFeature {
     case selectedWorktreeChanged(Worktree?)
     case repositoriesChanged(IdentifiedArrayOf<Repository>)
     case openRepositorySettings(Repository.ID)
+    case worktreeCreated(Worktree)
   }
 
   @Dependency(\.analyticsClient) private var analyticsClient
@@ -137,11 +146,13 @@ struct RepositoriesFeature {
       case .task:
         return .run { send in
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
+          let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
           let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
           let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
           await send(.pinnedWorktreeIDsLoaded(pinned))
+          await send(.archivedWorktreeIDsLoaded(archived))
           await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
           await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
           await send(.lastFocusedWorktreeIDLoaded(lastFocused))
@@ -150,6 +161,10 @@ struct RepositoriesFeature {
 
       case .pinnedWorktreeIDsLoaded(let pinnedWorktreeIDs):
         state.pinnedWorktreeIDs = pinnedWorktreeIDs
+        return .none
+
+      case .archivedWorktreeIDsLoaded(let archivedWorktreeIDs):
+        state.archivedWorktreeIDs = archivedWorktreeIDs
         return .none
 
       case .repositoryOrderIDsLoaded(let repositoryOrderIDs):
@@ -204,6 +219,7 @@ struct RepositoriesFeature {
         let applyResult = applyRepositories(
           repositories,
           roots: roots,
+          shouldPruneArchivedWorktreeIDs: failures.isEmpty,
           state: &state,
           animated: animated
         )
@@ -247,6 +263,14 @@ struct RepositoriesFeature {
               await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
             })
         }
+        if applyResult.didPruneArchivedWorktreeIDs {
+          let archivedWorktreeIDs = state.archivedWorktreeIDs
+          allEffects.append(
+            .run { _ in
+              await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+            }
+          )
+        }
         return .merge(allEffects)
 
       case .openRepositories(let urls):
@@ -289,6 +313,7 @@ struct RepositoriesFeature {
         let applyResult = applyRepositories(
           repositories,
           roots: roots,
+          shouldPruneArchivedWorktreeIDs: failures.isEmpty,
           state: &state,
           animated: false
         )
@@ -338,10 +363,22 @@ struct RepositoriesFeature {
               await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
             })
         }
+        if applyResult.didPruneArchivedWorktreeIDs {
+          let archivedWorktreeIDs = state.archivedWorktreeIDs
+          allEffects.append(
+            .run { _ in
+              await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+            }
+          )
+        }
         return .merge(allEffects)
 
+      case .selectArchivedWorktrees:
+        state.selection = .archivedWorktrees
+        return .send(.delegate(.selectedWorktreeChanged(nil)))
+
       case .selectWorktree(let worktreeID):
-        state.selectedWorktreeID = worktreeID
+        state.selection = worktreeID.map(SidebarSelection.worktree)
         let selectedWorktree = state.worktree(for: worktreeID)
         return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
 
@@ -424,7 +461,7 @@ struct RepositoriesFeature {
             detail: ""
           )
         )
-        state.selectedWorktreeID = pendingID
+        state.selection = .worktree(pendingID)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         return .run { send in
           var newWorktreeName: String?
@@ -497,14 +534,15 @@ struct RepositoriesFeature {
         state.pendingSetupScriptWorktreeIDs.insert(worktree.id)
         state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
         removePendingWorktree(pendingID, state: &state)
-        if state.selectedWorktreeID == pendingID {
-          state.selectedWorktreeID = worktree.id
+        if state.selection == .worktree(pendingID) {
+          state.selection = .worktree(worktree.id)
         }
         insertWorktree(worktree, repositoryID: repositoryID, state: &state)
         return .merge(
           .send(.reloadRepositories(animated: false)),
           .send(.delegate(.repositoriesChanged(state.repositories))),
-          .send(.delegate(.selectedWorktreeChanged(state.worktree(for: state.selectedWorktreeID))))
+          .send(.delegate(.selectedWorktreeChanged(state.worktree(for: state.selectedWorktreeID)))),
+          .send(.delegate(.worktreeCreated(worktree)))
         )
 
       case .createRandomWorktreeFailed(
@@ -574,7 +612,134 @@ struct RepositoriesFeature {
         state.pendingTerminalFocusWorktreeIDs.remove(id)
         return .none
 
-      case .requestRemoveWorktree(let worktreeID, let repositoryID):
+      case .requestArchiveWorktree(let worktreeID, let repositoryID):
+        if state.removingRepositoryIDs.contains(repositoryID) {
+          return .none
+        }
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
+        else {
+          return .none
+        }
+        if state.isMainWorktree(worktree) {
+          return .none
+        }
+        if state.deletingWorktreeIDs.contains(worktree.id) {
+          return .none
+        }
+        if state.isWorktreeArchived(worktree.id) {
+          return .none
+        }
+        if state.isWorktreeMerged(worktree) {
+          return .send(.archiveWorktreeConfirmed(worktree.id, repository.id))
+        }
+        state.alert = AlertState {
+          TextState("Archive worktree?")
+        } actions: {
+          ButtonState(role: .destructive, action: .confirmArchiveWorktree(worktree.id, repository.id)) {
+            TextState("Archive (⌘↩)")
+          }
+          ButtonState(role: .cancel) {
+            TextState("Cancel")
+          }
+        } message: {
+          TextState("Archive \(worktree.name)?")
+        }
+        return .none
+
+      case .alert(.presented(.confirmArchiveWorktree(let worktreeID, let repositoryID))):
+        return .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
+
+      case .archiveWorktreeConfirmed(let worktreeID, let repositoryID):
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
+        else {
+          return .none
+        }
+        if state.isWorktreeArchived(worktreeID) {
+          state.alert = nil
+          return .none
+        }
+        let previousSelection = state.selectedWorktreeID
+        let previousSelectedWorktree = state.worktree(for: previousSelection)
+        let selectionWasRemoved = state.selectedWorktreeID == worktree.id
+        let nextSelection =
+          selectionWasRemoved
+          ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
+          : nil
+        var didUpdateWorktreeOrder = false
+        let wasPinned = state.pinnedWorktreeIDs.contains(worktreeID)
+        withAnimation {
+          state.alert = nil
+          state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
+          if var order = state.worktreeOrderByRepository[repositoryID] {
+            order.removeAll { $0 == worktreeID }
+            if order.isEmpty {
+              state.worktreeOrderByRepository.removeValue(forKey: repositoryID)
+            } else {
+              state.worktreeOrderByRepository[repositoryID] = order
+            }
+            didUpdateWorktreeOrder = true
+          }
+          state.archivedWorktreeIDs.append(worktreeID)
+          if selectionWasRemoved {
+            let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
+            state.selection = nextWorktreeID.map(SidebarSelection.worktree)
+          }
+        }
+        let archivedWorktreeIDs = state.archivedWorktreeIDs
+        let repositories = state.repositories
+        let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
+        let selectionChanged = selectionDidChange(
+          previousSelectionID: previousSelection,
+          previousSelectedWorktree: previousSelectedWorktree,
+          selectedWorktreeID: state.selectedWorktreeID,
+          selectedWorktree: selectedWorktree
+        )
+        var effects: [Effect<Action>] = [
+          .send(.delegate(.repositoriesChanged(repositories))),
+          .run { _ in
+            await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+          },
+        ]
+        if wasPinned {
+          let pinnedWorktreeIDs = state.pinnedWorktreeIDs
+          effects.append(
+            .run { _ in
+              await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
+            }
+          )
+        }
+        if didUpdateWorktreeOrder {
+          let worktreeOrderByRepository = state.worktreeOrderByRepository
+          effects.append(
+            .run { _ in
+              await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
+            }
+          )
+        }
+        if selectionChanged {
+          effects.append(.send(.delegate(.selectedWorktreeChanged(selectedWorktree))))
+        }
+        return .merge(effects)
+
+      case .unarchiveWorktree(let worktreeID):
+        if !state.isWorktreeArchived(worktreeID) {
+          return .none
+        }
+        withAnimation {
+          state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
+        }
+        let archivedWorktreeIDs = state.archivedWorktreeIDs
+        let repositories = state.repositories
+        return .merge(
+          .send(.delegate(.repositoriesChanged(repositories))),
+          .run { _ in
+            await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+          }
+        )
+
+      case .requestDeleteWorktree(let worktreeID, let repositoryID):
         if state.removingRepositoryIDs.contains(repositoryID) {
           return .none
         }
@@ -590,29 +755,29 @@ struct RepositoriesFeature {
           return .none
         }
         @Shared(.settingsFile) var settingsFile
-        let deleteBranchOnArchive = settingsFile.global.deleteBranchOnArchive
+        let deleteBranchOnDeleteWorktree = settingsFile.global.deleteBranchOnDeleteWorktree
         let removalMessage =
-          deleteBranchOnArchive
+          deleteBranchOnDeleteWorktree
           ? "This deletes the worktree directory and its local branch."
           : "This deletes the worktree directory and keeps the local branch."
         state.alert = AlertState {
-          TextState("🚨 Remove worktree?")
+          TextState("🚨 Delete worktree?")
         } actions: {
-          ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-            TextState("Remove (⌘↩)")
+          ButtonState(role: .destructive, action: .confirmDeleteWorktree(worktree.id, repository.id)) {
+            TextState("Delete (⌘↩)")
           }
           ButtonState(role: .cancel) {
             TextState("Cancel")
           }
         } message: {
-          TextState("Remove \(worktree.name)? " + removalMessage)
+          TextState("Delete \(worktree.name)? " + removalMessage)
         }
         return .none
 
-      case .alert(.presented(.confirmRemoveWorktree(let worktreeID, let repositoryID))):
-        return .send(.removeWorktreeConfirmed(worktreeID, repositoryID))
+      case .alert(.presented(.confirmDeleteWorktree(let worktreeID, let repositoryID))):
+        return .send(.deleteWorktreeConfirmed(worktreeID, repositoryID))
 
-      case .removeWorktreeConfirmed(let worktreeID, let repositoryID):
+      case .deleteWorktreeConfirmed(let worktreeID, let repositoryID):
         guard let repository = state.repositories[id: repositoryID],
           let worktree = repository.worktrees[id: worktreeID]
         else {
@@ -629,15 +794,15 @@ struct RepositoriesFeature {
           ? nextWorktreeID(afterRemoving: worktree, in: repository, state: state)
           : nil
         @Shared(.settingsFile) var settingsFile
-        let deleteBranchOnArchive = settingsFile.global.deleteBranchOnArchive
+        let deleteBranchOnDeleteWorktree = settingsFile.global.deleteBranchOnDeleteWorktree
         return .run { send in
           do {
             _ = try await gitClient.removeWorktree(
               worktree,
-              deleteBranchOnArchive
+              deleteBranchOnDeleteWorktree
             )
             await send(
-              .worktreeRemoved(
+              .worktreeDeleted(
                 worktree.id,
                 repositoryID: repository.id,
                 selectionWasRemoved: selectionWasRemoved,
@@ -645,27 +810,29 @@ struct RepositoriesFeature {
               )
             )
           } catch {
-            await send(.worktreeRemovalFailed(error.localizedDescription, worktreeID: worktree.id))
+            await send(.deleteWorktreeFailed(error.localizedDescription, worktreeID: worktree.id))
           }
         }
 
-      case .worktreeRemoved(
+      case .worktreeDeleted(
         let worktreeID,
         let repositoryID,
         _,
         let nextSelection
       ):
-        analyticsClient.capture("worktree_removed", nil)
+        analyticsClient.capture("worktree_deleted", nil)
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
         let wasPinned = state.pinnedWorktreeIDs.contains(worktreeID)
         var didUpdateWorktreeOrder = false
+        let wasArchived = state.isWorktreeArchived(worktreeID)
         state.deletingWorktreeIDs.remove(worktreeID)
         state.pendingWorktrees.removeAll { $0.id == worktreeID }
         state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
         state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
         state.worktreeInfoByID.removeValue(forKey: worktreeID)
         state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
+        state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
         if var order = state.worktreeOrderByRepository[repositoryID] {
           order.removeAll { $0 == worktreeID }
           if order.isEmpty {
@@ -676,15 +843,20 @@ struct RepositoriesFeature {
           didUpdateWorktreeOrder = true
         }
         _ = removeWorktree(worktreeID, repositoryID: repositoryID, state: &state)
-        let selectionNeedsUpdate = state.selectedWorktreeID == worktreeID
+        let selectionNeedsUpdate = state.selection == .worktree(worktreeID)
         if selectionNeedsUpdate {
-          state.selectedWorktreeID =
-            nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
+          let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
+          state.selection = nextWorktreeID.map(SidebarSelection.worktree)
         }
         let roots = state.repositories.map(\.rootURL)
         let repositories = state.repositories
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
-        let selectionChanged = previousSelectedWorktree != selectedWorktree
+        let selectionChanged = selectionDidChange(
+          previousSelectionID: previousSelection,
+          previousSelectedWorktree: previousSelectedWorktree,
+          selectedWorktreeID: state.selectedWorktreeID,
+          selectedWorktree: selectedWorktree
+        )
         var immediateEffects: [Effect<Action>] = [
           .send(.delegate(.repositoriesChanged(repositories)))
         ]
@@ -699,6 +871,14 @@ struct RepositoriesFeature {
           followupEffects.append(
             .run { _ in
               await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
+            }
+          )
+        }
+        if wasArchived {
+          let archivedWorktreeIDs = state.archivedWorktreeIDs
+          followupEffects.append(
+            .run { _ in
+              await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
             }
           )
         }
@@ -757,9 +937,9 @@ struct RepositoriesFeature {
           await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
         }
 
-      case .worktreeRemovalFailed(let message, let worktreeID):
+      case .deleteWorktreeFailed(let message, let worktreeID):
         state.deletingWorktreeIDs.remove(worktreeID)
-        state.alert = errorAlert(title: "Unable to remove worktree", message: message)
+        state.alert = errorAlert(title: "Unable to delete worktree", message: message)
         return .none
 
       case .requestRemoveRepository(let repositoryID):
@@ -810,7 +990,7 @@ struct RepositoriesFeature {
         analyticsClient.capture("repository_removed", nil)
         state.removingRepositoryIDs.remove(repositoryID)
         if selectionWasRemoved {
-          state.selectedWorktreeID = nil
+          state.selection = nil
           state.shouldSelectFirstAfterReload = true
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
@@ -940,6 +1120,9 @@ struct RepositoriesFeature {
         else {
           return .none
         }
+        if state.isWorktreeArchived(worktree.id) {
+          return .none
+        }
         if state.isMainWorktree(worktree) || state.isWorktreePinned(worktree) {
           return .none
         }
@@ -1048,20 +1231,22 @@ struct RepositoriesFeature {
         let previousMerged =
           state.worktreeInfoByID[worktreeID]?.pullRequest?.state == "MERGED"
         let nextMerged = pullRequest?.state == "MERGED"
-        if state.sortMergedWorktreesToBottom, previousMerged != nextMerged {
-          withAnimation(.easeOut(duration: 0.2)) {
-            updateWorktreePullRequest(
-              worktreeID: worktreeID,
-              pullRequest: pullRequest,
-              state: &state
-            )
-          }
-        } else {
-          updateWorktreePullRequest(
-            worktreeID: worktreeID,
-            pullRequest: pullRequest,
-            state: &state
-          )
+        updateWorktreePullRequest(
+          worktreeID: worktreeID,
+          pullRequest: pullRequest,
+          state: &state
+        )
+        if state.automaticallyArchiveMergedWorktrees,
+          !previousMerged,
+          nextMerged,
+          let repositoryID = state.repositoryID(containing: worktreeID),
+          let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID],
+          !state.isMainWorktree(worktree),
+          !state.isWorktreeArchived(worktreeID),
+          !state.deletingWorktreeIDs.contains(worktreeID)
+        {
+          return .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
         }
         return .none
 
@@ -1079,10 +1264,8 @@ struct RepositoriesFeature {
         }
         return .none
 
-      case .setSortMergedWorktreesToBottom(let isEnabled):
-        withAnimation(.easeOut(duration: 0.2)) {
-          state.sortMergedWorktreesToBottom = isEnabled
-        }
+      case .setAutomaticallyArchiveMergedWorktrees(let isEnabled):
+        state.automaticallyArchiveMergedWorktrees = isEnabled
         return .none
 
       case .openRepositorySettings(let repositoryID):
@@ -1146,6 +1329,7 @@ struct RepositoriesFeature {
   private func applyRepositories(
     _ repositories: [Repository],
     roots: [URL],
+    shouldPruneArchivedWorktreeIDs: Bool,
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
@@ -1202,25 +1386,31 @@ struct RepositoriesFeature {
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
     let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state)
     let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state)
-    if !isSelectionValid(state.selectedWorktreeID, state: state) {
-      state.selectedWorktreeID = nil
+    let didPruneArchivedWorktreeIDs =
+      shouldPruneArchivedWorktreeIDs
+      ? pruneArchivedWorktreeIDs(availableWorktreeIDs: availableWorktreeIDs, state: &state)
+      : false
+    if !state.isShowingArchivedWorktrees, !isSelectionValid(state.selectedWorktreeID, state: state) {
+      state.selection = nil
     }
     if state.shouldRestoreLastFocusedWorktree {
       state.shouldRestoreLastFocusedWorktree = false
-      if state.selectedWorktreeID == nil,
+      if state.selection == nil,
         isSelectionValid(state.lastFocusedWorktreeID, state: state)
       {
-        state.selectedWorktreeID = state.lastFocusedWorktreeID
+        state.selection = state.lastFocusedWorktreeID.map(SidebarSelection.worktree)
       }
     }
-    if state.selectedWorktreeID == nil, state.shouldSelectFirstAfterReload {
-      state.selectedWorktreeID = firstAvailableWorktreeID(from: repositories, state: state)
+    if state.selection == nil, state.shouldSelectFirstAfterReload {
+      state.selection = firstAvailableWorktreeID(from: repositories, state: state)
+        .map(SidebarSelection.worktree)
       state.shouldSelectFirstAfterReload = false
     }
     return ApplyRepositoriesResult(
       didPrunePinned: didPrunePinned,
       didPruneRepositoryOrder: didPruneRepositoryOrder,
-      didPruneWorktreeOrder: didPruneWorktreeOrder
+      didPruneWorktreeOrder: didPruneWorktreeOrder,
+      didPruneArchivedWorktreeIDs: didPruneArchivedWorktreeIDs
     )
   }
 
@@ -1280,8 +1470,45 @@ struct RepositoriesFeature {
 }
 
 extension RepositoriesFeature.State {
+  var selectedWorktreeID: Worktree.ID? {
+    selection?.worktreeID
+  }
+
+  var isShowingArchivedWorktrees: Bool {
+    selection == .archivedWorktrees
+  }
+
+  var archivedWorktreeIDSet: Set<Worktree.ID> {
+    Set(archivedWorktreeIDs)
+  }
+
+  func isWorktreeArchived(_ id: Worktree.ID) -> Bool {
+    archivedWorktreeIDSet.contains(id)
+  }
+
   func worktreeInfo(for worktreeID: Worktree.ID) -> WorktreeInfoEntry? {
     worktreeInfoByID[worktreeID]
+  }
+
+  func worktreesForInfoWatcher() -> [Worktree] {
+    let worktrees = repositories.flatMap(\.worktrees)
+    guard !isShowingArchivedWorktrees else {
+      return worktrees
+    }
+    let archivedSet = archivedWorktreeIDSet
+    return worktrees.filter { !archivedSet.contains($0.id) }
+  }
+
+  func archivedWorktreesByRepository() -> [(repository: Repository, worktrees: [Worktree])] {
+    let archivedSet = archivedWorktreeIDSet
+    var groups: [(repository: Repository, worktrees: [Worktree])] = []
+    for repository in repositories {
+      let worktrees = Array(repository.worktrees.filter { archivedSet.contains($0.id) })
+      if !worktrees.isEmpty {
+        groups.append((repository: repository, worktrees: worktrees))
+      }
+    }
+    return groups
   }
 
   var canCreateWorktree: Bool {
@@ -1354,6 +1581,9 @@ extension RepositoriesFeature.State {
 
   func selectedRow(for id: Worktree.ID?) -> WorktreeRowModel? {
     guard let id else { return nil }
+    if isWorktreeArchived(id) {
+      return nil
+    }
     if let pending = pendingWorktree(for: id) {
       return makePendingWorktreeRow(pending)
     }
@@ -1425,7 +1655,11 @@ extension RepositoriesFeature.State {
   }
 
   func orderedPinnedWorktreeIDs(in repository: Repository) -> [Worktree.ID] {
-    pinnedWorktreeIDs.filter { id in
+    let archivedSet = archivedWorktreeIDSet
+    return pinnedWorktreeIDs.filter { id in
+      if archivedSet.contains(id) {
+        return false
+      }
       if let worktree = repository.worktrees[id: id] {
         return !isMainWorktree(worktree)
       }
@@ -1454,8 +1688,11 @@ extension RepositoriesFeature.State {
   func orderedUnpinnedWorktreeIDs(in repository: Repository) -> [Worktree.ID] {
     let mainID = repository.worktrees.first(where: { isMainWorktree($0) })?.id
     let pinnedSet = Set(pinnedWorktreeIDs)
+    let archivedSet = archivedWorktreeIDSet
     let available = repository.worktrees.filter { worktree in
-      worktree.id != mainID && !pinnedSet.contains(worktree.id)
+      worktree.id != mainID
+        && !pinnedSet.contains(worktree.id)
+        && !archivedSet.contains(worktree.id)
     }
     let orderedIDs = worktreeOrderByRepository[repository.id] ?? []
     let availableIDs = Set(available.map(\.id))
@@ -1475,22 +1712,7 @@ extension RepositoriesFeature.State {
         ordered.append(id)
       }
     }
-    let unpinned = missing + ordered
-    guard sortMergedWorktreesToBottom else {
-      return unpinned
-    }
-    var unmerged: [Worktree.ID] = []
-    var merged: [Worktree.ID] = []
-    for id in unpinned {
-      if let worktree = repository.worktrees[id: id],
-        isWorktreeMerged(worktree)
-      {
-        merged.append(id)
-      } else {
-        unmerged.append(id)
-      }
-    }
-    return unmerged + merged
+    return missing + ordered
   }
 
   func orderedUnpinnedWorktrees(in repository: Repository) -> [Worktree] {
@@ -1500,7 +1722,9 @@ extension RepositoriesFeature.State {
   func orderedWorktrees(in repository: Repository) -> [Worktree] {
     var ordered: [Worktree] = []
     if let mainWorktree = repository.worktrees.first(where: { isMainWorktree($0) }) {
-      ordered.append(mainWorktree)
+      if !isWorktreeArchived(mainWorktree.id) {
+        ordered.append(mainWorktree)
+      }
     }
     ordered.append(contentsOf: orderedPinnedWorktrees(in: repository))
     ordered.append(contentsOf: orderedUnpinnedWorktrees(in: repository))
@@ -1511,11 +1735,14 @@ extension RepositoriesFeature.State {
     pinnedWorktreeIDs.contains(worktree.id)
   }
 
-  var confirmRemoveWorktreeIDs: (worktreeID: Worktree.ID, repositoryID: Repository.ID)? {
+  var confirmWorktreeAlert: RepositoriesFeature.Alert? {
     guard let alert else { return nil }
     for button in alert.buttons {
-      if case .confirmRemoveWorktree(let worktreeID, let repositoryID)? = button.action.action {
-        return (worktreeID: worktreeID, repositoryID: repositoryID)
+      if case .confirmArchiveWorktree(let worktreeID, let repositoryID)? = button.action.action {
+        return .confirmArchiveWorktree(worktreeID, repositoryID)
+      }
+      if case .confirmDeleteWorktree(let worktreeID, let repositoryID)? = button.action.action {
+        return .confirmDeleteWorktree(worktreeID, repositoryID)
       }
     }
     return nil
@@ -1530,14 +1757,17 @@ extension RepositoriesFeature.State {
     let pinnedWorktrees = orderedPinnedWorktrees(in: repository)
     let unpinnedWorktrees = orderedUnpinnedWorktrees(in: repository)
     let pendingEntries = pendingWorktrees.filter { $0.repositoryID == repository.id }
-    let mainRow: WorktreeRowModel? = mainWorktree.map { mainWorktree in
-      return makeWorktreeRow(
-        mainWorktree,
-        repositoryID: repository.id,
-        isPinned: false,
-        isMainWorktree: true
-      )
-    }
+    let mainRow: WorktreeRowModel? =
+      if let mainWorktree, !isWorktreeArchived(mainWorktree.id) {
+        makeWorktreeRow(
+          mainWorktree,
+          repositoryID: repository.id,
+          isPinned: false,
+          isMainWorktree: true
+        )
+      } else {
+        nil
+      }
     var pinnedRows: [WorktreeRowModel] = []
     for worktree in pinnedWorktrees {
       pinnedRows.append(
@@ -1821,11 +2051,11 @@ private func restoreSelection(
   pendingID: Worktree.ID,
   state: inout RepositoriesFeature.State
 ) {
-  guard state.selectedWorktreeID == pendingID else { return }
+  guard state.selection == .worktree(pendingID) else { return }
   if isSelectionValid(id, state: state) {
-    state.selectedWorktreeID = id
+    state.selection = id.map(SidebarSelection.worktree)
   } else {
-    state.selectedWorktreeID = nil
+    state.selection = nil
   }
 }
 
@@ -1861,7 +2091,12 @@ private func prunePinnedWorktreeIDs(state: inout RepositoriesFeature.State) -> B
       repository.worktrees.first(where: { state.isMainWorktree($0) })?.id
     }
   )
-  let pruned = state.pinnedWorktreeIDs.filter { availableIDs.contains($0) && !mainIDs.contains($0) }
+  let archivedSet = state.archivedWorktreeIDSet
+  let pruned = state.pinnedWorktreeIDs.filter {
+    availableIDs.contains($0)
+      && !mainIDs.contains($0)
+      && !archivedSet.contains($0)
+  }
   if pruned != state.pinnedWorktreeIDs {
     state.pinnedWorktreeIDs = pruned
     return true
@@ -1890,6 +2125,7 @@ private func pruneWorktreeOrderByRepository(
   let rootIDs = Set(roots.map { $0.standardizedFileURL.path(percentEncoded: false) })
   let repositoriesByID = Dictionary(uniqueKeysWithValues: state.repositories.map { ($0.id, $0) })
   let pinnedSet = Set(state.pinnedWorktreeIDs)
+  let archivedSet = state.archivedWorktreeIDSet
   var pruned: [Repository.ID: [Worktree.ID]] = [:]
   for (repoID, order) in state.worktreeOrderByRepository {
     guard let repository = repositoriesByID[repoID] else {
@@ -1906,6 +2142,7 @@ private func pruneWorktreeOrderByRepository(
       if availableIDs.contains(id),
         id != mainID,
         !pinnedSet.contains(id),
+        !archivedSet.contains(id),
         seen.insert(id).inserted
       {
         filtered.append(id)
@@ -1917,6 +2154,18 @@ private func pruneWorktreeOrderByRepository(
   }
   if pruned != state.worktreeOrderByRepository {
     state.worktreeOrderByRepository = pruned
+    return true
+  }
+  return false
+}
+
+private func pruneArchivedWorktreeIDs(
+  availableWorktreeIDs: Set<Worktree.ID>,
+  state: inout RepositoriesFeature.State
+) -> Bool {
+  let pruned = state.archivedWorktreeIDs.filter { availableWorktreeIDs.contains($0) }
+  if pruned != state.archivedWorktreeIDs {
+    state.archivedWorktreeIDs = pruned
     return true
   }
   return false

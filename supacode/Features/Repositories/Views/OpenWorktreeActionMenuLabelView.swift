@@ -20,10 +20,17 @@ struct OpenWorktreeActionMenuLabelView: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      if let icon = action.appIcon {
-        Image(nsImage: resizedIcon(icon, size: CGSize(width: 16, height: 16)))
-          .renderingMode(.original)
-          .accessibilityHidden(true)
+      if let icon = action.menuIcon {
+        switch icon {
+        case .app(let image):
+          Image(nsImage: resizedIcon(image, size: CGSize(width: 16, height: 16)))
+            .renderingMode(.original)
+            .accessibilityHidden(true)
+        case .symbol(let name):
+          Image(systemName: name)
+            .foregroundStyle(.primary)
+            .accessibilityHidden(true)
+        }
       }
       if let shortcutHint {
         HStack(spacing: 2) {
