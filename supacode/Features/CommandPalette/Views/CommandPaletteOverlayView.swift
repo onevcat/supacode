@@ -117,20 +117,19 @@ struct CommandPaletteOverlayView: View {
 
   private func submitSelected(rows: [CommandPaletteItem]) {
     let trimmed = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
+    guard !rows.isEmpty else { return }
     guard let selectedIndex = store.selectedIndex else {
-      if let first = rows.first {
-        store.send(.activate(first.kind))
+      if trimmed.isEmpty {
+        return
       }
+      store.send(.activate(rows[0].kind))
       return
     }
     if rows.indices.contains(selectedIndex) {
       store.send(.activate(rows[selectedIndex].kind))
       return
     }
-    if let last = rows.last {
-      store.send(.activate(last.kind))
-    }
+    store.send(.activate(rows[rows.count - 1].kind))
   }
 
   private func activateShortcut(_ index: Int, rows: [CommandPaletteItem]) {
