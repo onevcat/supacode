@@ -7,8 +7,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var dockBadgeEnabled: Bool
   var notificationSoundEnabled: Bool
   var githubIntegrationEnabled: Bool
-  var deleteBranchOnArchive: Bool
-  var sortMergedWorktreesToBottom: Bool
+  var deleteBranchOnDeleteWorktree: Bool
+  var automaticallyArchiveMergedWorktrees: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -19,8 +19,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dockBadgeEnabled: true,
     notificationSoundEnabled: true,
     githubIntegrationEnabled: true,
-    deleteBranchOnArchive: true,
-    sortMergedWorktreesToBottom: true
+    deleteBranchOnDeleteWorktree: true,
+    automaticallyArchiveMergedWorktrees: false
   )
 
   init(
@@ -32,8 +32,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     dockBadgeEnabled: Bool,
     notificationSoundEnabled: Bool,
     githubIntegrationEnabled: Bool,
-    deleteBranchOnArchive: Bool,
-    sortMergedWorktreesToBottom: Bool
+    deleteBranchOnDeleteWorktree: Bool,
+    automaticallyArchiveMergedWorktrees: Bool
   ) {
     self.appearanceMode = appearanceMode
     self.confirmBeforeQuit = confirmBeforeQuit
@@ -43,8 +43,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.dockBadgeEnabled = dockBadgeEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
-    self.deleteBranchOnArchive = deleteBranchOnArchive
-    self.sortMergedWorktreesToBottom = sortMergedWorktreesToBottom
+    self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
+    self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
   }
 
   init(from decoder: any Decoder) throws {
@@ -67,11 +67,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     githubIntegrationEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .githubIntegrationEnabled)
       ?? Self.default.githubIntegrationEnabled
-    deleteBranchOnArchive =
-      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnArchive)
-      ?? Self.default.deleteBranchOnArchive
-    sortMergedWorktreesToBottom =
-      try container.decodeIfPresent(Bool.self, forKey: .sortMergedWorktreesToBottom)
-      ?? Self.default.sortMergedWorktreesToBottom
+    deleteBranchOnDeleteWorktree =
+      try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
+      ?? Self.default.deleteBranchOnDeleteWorktree
+    automaticallyArchiveMergedWorktrees =
+      try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees)
+      ?? Self.default.automaticallyArchiveMergedWorktrees
   }
 }

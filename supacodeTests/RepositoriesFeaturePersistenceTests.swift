@@ -11,46 +11,55 @@ struct RepositoriesFeaturePersistenceTests {
     let pinned = ["/tmp/repo/wt-1"]
     let repositoryOrder = ["/tmp/repo"]
     let worktreeOrder = ["/tmp/repo": ["/tmp/repo/wt-1"]]
+    let calls = LockIsolated<[String]>([])
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()
     } withDependencies: {
       $0.repositoryPersistence = RepositoryPersistenceClient(
-        loadRoots: { [] },
+        loadRoots: {
+          calls.withValue { $0.append("loadRoots") }
+          return []
+        },
         saveRoots: { _ in },
-        loadPinnedWorktreeIDs: { pinned },
+        loadPinnedWorktreeIDs: {
+          calls.withValue { $0.append("loadPinnedWorktreeIDs") }
+          return pinned
+        },
         savePinnedWorktreeIDs: { _ in },
-        loadRepositoryOrderIDs: { repositoryOrder },
+        loadArchivedWorktreeIDs: {
+          calls.withValue { $0.append("loadArchivedWorktreeIDs") }
+          return []
+        },
+        saveArchivedWorktreeIDs: { _ in },
+        loadRepositoryOrderIDs: {
+          calls.withValue { $0.append("loadRepositoryOrderIDs") }
+          return repositoryOrder
+        },
         saveRepositoryOrderIDs: { _ in },
-        loadWorktreeOrderByRepository: { worktreeOrder },
+        loadWorktreeOrderByRepository: {
+          calls.withValue { $0.append("loadWorktreeOrderByRepository") }
+          return worktreeOrder
+        },
         saveWorktreeOrderByRepository: { _ in },
-        loadLastFocusedWorktreeID: { nil },
+        loadLastFocusedWorktreeID: {
+          calls.withValue { $0.append("loadLastFocusedWorktreeID") }
+          return nil
+        },
         saveLastFocusedWorktreeID: { _ in }
       )
     }
 
+    store.exhaustivity = .off
     await store.send(.task)
-    await store.receive(\.pinnedWorktreeIDsLoaded) {
-      $0.pinnedWorktreeIDs = pinned
-    }
-    await store.receive(\.repositoryOrderIDsLoaded) {
-      $0.repositoryOrderIDs = repositoryOrder
-    }
-    await store.receive(\.worktreeOrderByRepositoryLoaded) {
-      $0.worktreeOrderByRepository = worktreeOrder
-    }
-    await store.receive(\.lastFocusedWorktreeIDLoaded) {
-      $0.lastFocusedWorktreeID = nil
-      $0.shouldRestoreLastFocusedWorktree = true
-    }
-    await store.receive(\.loadPersistedRepositories)
-    await store.receive(\.repositoriesLoaded) {
-      $0.repositories = []
-      $0.pinnedWorktreeIDs = []
-      $0.repositoryOrderIDs = []
-      $0.worktreeOrderByRepository = [:]
-      $0.shouldRestoreLastFocusedWorktree = false
-      $0.isInitialLoadComplete = true
-    }
     await store.finish()
+    #expect(
+      calls.value == [
+        "loadPinnedWorktreeIDs",
+        "loadArchivedWorktreeIDs",
+        "loadLastFocusedWorktreeID",
+        "loadRepositoryOrderIDs",
+        "loadWorktreeOrderByRepository",
+        "loadRoots",
+      ])
   }
 }

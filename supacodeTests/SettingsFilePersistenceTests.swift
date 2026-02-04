@@ -104,7 +104,8 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.dockBadgeEnabled == true)
     #expect(settings.global.notificationSoundEnabled == true)
     #expect(settings.global.githubIntegrationEnabled == true)
-    #expect(settings.global.deleteBranchOnArchive == true)
+    #expect(settings.global.deleteBranchOnDeleteWorktree == true)
+    #expect(settings.global.automaticallyArchiveMergedWorktrees == false)
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
   }

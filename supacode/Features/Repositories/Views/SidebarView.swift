@@ -17,20 +17,27 @@ struct SidebarView: View {
   var body: some View {
     let state = store.state
     let selectedRow = state.selectedRow(for: state.selectedWorktreeID)
-    let confirmRemoveWorktreeAction: (() -> Void)? = {
-      guard let ids = state.confirmRemoveWorktreeIDs else { return nil }
+    let confirmWorktreeAction: (() -> Void)? = {
+      guard let alert = state.confirmWorktreeAlert else { return nil }
       return {
-        store.send(.alert(.presented(.confirmRemoveWorktree(ids.worktreeID, ids.repositoryID))))
+        store.send(.alert(.presented(alert)))
       }
     }()
-    let removeWorktreeAction: (() -> Void)? = {
+    let archiveWorktreeAction: (() -> Void)? = {
       guard let selectedRow, selectedRow.isRemovable, !selectedRow.isMainWorktree else { return nil }
       return {
-        store.send(.requestRemoveWorktree(selectedRow.id, selectedRow.repositoryID))
+        store.send(.requestArchiveWorktree(selectedRow.id, selectedRow.repositoryID))
+      }
+    }()
+    let deleteWorktreeAction: (() -> Void)? = {
+      guard let selectedRow, selectedRow.isRemovable, !selectedRow.isMainWorktree else { return nil }
+      return {
+        store.send(.requestDeleteWorktree(selectedRow.id, selectedRow.repositoryID))
       }
     }()
     SidebarListView(store: store, expandedRepoIDs: $expandedRepoIDs, terminalManager: terminalManager)
-      .focusedSceneValue(\.confirmRemoveWorktreeAction, confirmRemoveWorktreeAction)
-      .focusedSceneValue(\.removeWorktreeAction, removeWorktreeAction)
+      .focusedSceneValue(\.confirmWorktreeAction, confirmWorktreeAction)
+      .focusedSceneValue(\.archiveWorktreeAction, archiveWorktreeAction)
+      .focusedSceneValue(\.deleteWorktreeAction, deleteWorktreeAction)
   }
 }

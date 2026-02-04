@@ -41,7 +41,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func requestRemoveWorktreeShowsConfirmation() async {
+  @Test func requestDeleteWorktreeShowsConfirmation() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     let store = TestStore(initialState: makeState(repositories: [repository])) {
@@ -49,19 +49,44 @@ struct RepositoriesFeatureTests {
     }
 
     let expectedAlert = AlertState<RepositoriesFeature.Alert> {
-      TextState("🚨 Remove worktree?")
+      TextState("🚨 Delete worktree?")
     } actions: {
-      ButtonState(role: .destructive, action: .confirmRemoveWorktree(worktree.id, repository.id)) {
-        TextState("Remove (⌘↩)")
+      ButtonState(role: .destructive, action: .confirmDeleteWorktree(worktree.id, repository.id)) {
+        TextState("Delete (⌘↩)")
       }
       ButtonState(role: .cancel) {
         TextState("Cancel")
       }
     } message: {
-      TextState("Remove \(worktree.name)? This deletes the worktree directory and its local branch.")
+      TextState("Delete \(worktree.name)? This deletes the worktree directory and its local branch.")
     }
 
-    await store.send(.requestRemoveWorktree(worktree.id, repository.id)) {
+    await store.send(.requestDeleteWorktree(worktree.id, repository.id)) {
+      $0.alert = expectedAlert
+    }
+  }
+
+  @Test func requestArchiveWorktreeShowsConfirmation() async {
+    let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive worktree?")
+    } actions: {
+      ButtonState(role: .destructive, action: .confirmArchiveWorktree(worktree.id, repository.id)) {
+        TextState("Archive (⌘↩)")
+      }
+      ButtonState(role: .cancel) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Archive \(worktree.name)?")
+    }
+
+    await store.send(.requestArchiveWorktree(worktree.id, repository.id)) {
       $0.alert = expectedAlert
     }
   }
@@ -325,7 +350,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
-  @Test func worktreeRemovedPrunesStateAndSendsDelegates() async {
+  @Test func worktreeDeletedPrunesStateAndSendsDelegates() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
     let removedWorktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: repoRoot)
@@ -355,7 +380,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .worktreeRemoved(
+      .worktreeDeleted(
         removedWorktree.id,
         repositoryID: repository.id,
         selectionWasRemoved: false,
@@ -377,7 +402,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func worktreeRemovedResetsSelectionWhenDriftedToDeletingWorktree() async {
+  @Test func worktreeDeletedResetsSelectionWhenDriftedToDeletingWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
     let removedWorktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: repoRoot)
@@ -393,7 +418,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .worktreeRemoved(
+      .worktreeDeleted(
         removedWorktree.id,
         repositoryID: repository.id,
         selectionWasRemoved: false,

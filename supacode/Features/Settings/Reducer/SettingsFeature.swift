@@ -14,8 +14,8 @@ struct SettingsFeature {
     var dockBadgeEnabled: Bool
     var notificationSoundEnabled: Bool
     var githubIntegrationEnabled: Bool
-    var deleteBranchOnArchive: Bool
-    var sortMergedWorktreesToBottom: Bool
+    var deleteBranchOnDeleteWorktree: Bool
+    var automaticallyArchiveMergedWorktrees: Bool
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
 
@@ -28,8 +28,8 @@ struct SettingsFeature {
       dockBadgeEnabled = settings.dockBadgeEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
-      deleteBranchOnArchive = settings.deleteBranchOnArchive
-      sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
+      deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
+      automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
     }
 
     var globalSettings: GlobalSettings {
@@ -42,8 +42,8 @@ struct SettingsFeature {
         dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
-        deleteBranchOnArchive: deleteBranchOnArchive,
-        sortMergedWorktreesToBottom: sortMergedWorktreesToBottom
+        deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
+        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees
       )
     }
   }
@@ -81,8 +81,8 @@ struct SettingsFeature {
         state.dockBadgeEnabled = settings.dockBadgeEnabled
         state.notificationSoundEnabled = settings.notificationSoundEnabled
         state.githubIntegrationEnabled = settings.githubIntegrationEnabled
-        state.deleteBranchOnArchive = settings.deleteBranchOnArchive
-        state.sortMergedWorktreesToBottom = settings.sortMergedWorktreesToBottom
+        state.deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
+        state.automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
         return .send(.delegate(.settingsChanged(settings)))
 
       case .binding:

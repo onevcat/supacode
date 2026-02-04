@@ -7,6 +7,8 @@ struct RepositoryPersistenceClient {
   var saveRoots: @Sendable ([String]) async -> Void
   var loadPinnedWorktreeIDs: @Sendable () async -> [Worktree.ID]
   var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
+  var loadArchivedWorktreeIDs: @Sendable () async -> [Worktree.ID]
+  var saveArchivedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
   var loadRepositoryOrderIDs: @Sendable () async -> [Repository.ID]
   var saveRepositoryOrderIDs: @Sendable ([Repository.ID]) async -> Void
   var loadWorktreeOrderByRepository: @Sendable () async -> [Repository.ID: [Worktree.ID]]
@@ -36,6 +38,17 @@ extension RepositoryPersistenceClient: DependencyKey {
         @Shared(.pinnedWorktreeIDs) var sharedPinned: [Worktree.ID]
         $sharedPinned.withLock {
           $0 = ids
+        }
+      },
+      loadArchivedWorktreeIDs: {
+        @Shared(.appStorage("archivedWorktreeIDs")) var archived: [Worktree.ID] = []
+        return RepositoryPathNormalizer.normalize(archived)
+      },
+      saveArchivedWorktreeIDs: { ids in
+        @Shared(.appStorage("archivedWorktreeIDs")) var sharedArchived: [Worktree.ID] = []
+        let normalized = RepositoryPathNormalizer.normalize(ids)
+        $sharedArchived.withLock {
+          $0 = normalized
         }
       },
       loadRepositoryOrderIDs: {
@@ -77,6 +90,8 @@ extension RepositoryPersistenceClient: DependencyKey {
     saveRoots: { _ in },
     loadPinnedWorktreeIDs: { [] },
     savePinnedWorktreeIDs: { _ in },
+    loadArchivedWorktreeIDs: { [] },
+    saveArchivedWorktreeIDs: { _ in },
     loadRepositoryOrderIDs: { [] },
     saveRepositoryOrderIDs: { _ in },
     loadWorktreeOrderByRepository: { [:] },

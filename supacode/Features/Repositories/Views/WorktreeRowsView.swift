@@ -85,7 +85,13 @@ struct WorktreeRowsView: View {
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
     let isSelected = row.id == store.state.selectedWorktreeID
     let showsNotificationIndicator = !isSelected && terminalManager.hasUnseenNotifications(for: row.id)
-    let displayName = row.isDeleting ? "\(row.name) (removing...)" : row.name
+    let displayName = row.isDeleting ? "\(row.name) (deleting...)" : row.name
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
+    let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    let archiveAction: (() -> Void)? =
+      row.isRemovable && !row.isMainWorktree && !isRepositoryRemoving
+      ? { store.send(.requestArchiveWorktree(row.id, repository.id)) }
+      : nil
     Group {
       if row.isRemovable, let worktree = store.state.worktree(for: row.id), !isRepositoryRemoving {
         WorktreeRow(
@@ -98,7 +104,8 @@ struct WorktreeRowsView: View {
           taskStatus: taskStatus,
           isRunScriptRunning: isRunScriptRunning,
           showsNotificationIndicator: showsNotificationIndicator,
-          shortcutHint: shortcutHint
+          shortcutHint: shortcutHint,
+          archiveAction: archiveAction
         )
         .tag(SidebarSelection.worktree(row.id))
         .typeSelectEquivalent("")
@@ -123,10 +130,23 @@ struct WorktreeRowsView: View {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
           }
-          Button("Remove worktree (⌘⌫)") {
-            store.send(.requestRemoveWorktree(worktree.id, repository.id))
+          Button("Archive Worktree (\(archiveShortcut))") {
+            store.send(.requestArchiveWorktree(worktree.id, repository.id))
           }
-          .help(row.isMainWorktree ? "Main worktree can't be removed" : "Remove worktree (⌘⌫)")
+          .help(
+            row.isMainWorktree
+              ? "Main worktree can't be archived"
+              : "Archive Worktree (\(archiveShortcut))"
+          )
+          .disabled(row.isMainWorktree)
+          Button("Delete Worktree (\(deleteShortcut))", role: .destructive) {
+            store.send(.requestDeleteWorktree(worktree.id, repository.id))
+          }
+          .help(
+            row.isMainWorktree
+              ? "Main worktree can't be deleted"
+              : "Delete Worktree (\(deleteShortcut))"
+          )
           .disabled(row.isMainWorktree)
         }
       } else {
@@ -140,7 +160,8 @@ struct WorktreeRowsView: View {
           taskStatus: taskStatus,
           isRunScriptRunning: isRunScriptRunning,
           showsNotificationIndicator: showsNotificationIndicator,
-          shortcutHint: shortcutHint
+          shortcutHint: shortcutHint,
+          archiveAction: archiveAction
         )
         .tag(SidebarSelection.worktree(row.id))
         .typeSelectEquivalent("")

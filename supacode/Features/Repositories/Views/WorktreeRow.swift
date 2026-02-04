@@ -11,6 +11,7 @@ struct WorktreeRow: View {
   let isRunScriptRunning: Bool
   let showsNotificationIndicator: Bool
   let shortcutHint: String?
+  let archiveAction: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
@@ -32,6 +33,7 @@ struct WorktreeRow: View {
     let pullRequestURL = displayPullRequest.flatMap { URL(string: $0.url) }
     let pullRequestTitle = displayPullRequest?.title
     let pullRequestChecks = displayPullRequest?.statusCheckRollup?.checks ?? []
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let pullRequestBadgeStyle = PullRequestBadgeStyle.style(
       state: pullRequestState,
       number: pullRequestNumber
@@ -95,6 +97,13 @@ struct WorktreeRow: View {
           }
         }
         .help("Show pull request checks")
+      }
+      if let archiveAction, pullRequestState == "MERGED" {
+        Button("Archive") {
+          archiveAction()
+        }
+        .buttonStyle(.plain)
+        .help("Archive Worktree (\(archiveShortcut))")
       }
       if let shortcutHint {
         ShortcutHintView(text: shortcutHint, color: .secondary)
