@@ -32,7 +32,7 @@ struct PullRequestChecksPopoverView: View {
     let titleLine =
       Text("\(draftLabel) - ").foregroundStyle(.secondary)
       + Text(pullRequest.title)
-      + Text(" #\(pullRequest.number)").foregroundStyle(.secondary)
+      + Text(verbatim: " #\(pullRequest.number)").foregroundStyle(.secondary)
     let authorLogin = pullRequest.authorLogin ?? "Someone"
     let commitsCount = pullRequest.commitsCount ?? 0
     let commitsLabel = commitsCount == 1 ? "commit" : "commits"
