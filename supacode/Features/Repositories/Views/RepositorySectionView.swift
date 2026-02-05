@@ -86,6 +86,7 @@ struct RepositorySectionView: View {
       }
       .onHover { isHovering = $0 }
       .contentShape(.rect)
+      .tag(SidebarSelection.repository(repository.id))
       .onTapGesture {
         toggleExpanded()
       }
@@ -103,7 +104,6 @@ struct RepositorySectionView: View {
       .contentShape(.dragPreview, .rect)
       .environment(\.colorScheme, colorScheme)
       .preferredColorScheme(colorScheme)
-      .selectionDisabled()
 
       if isExpanded {
         WorktreeRowsView(

@@ -20,6 +20,8 @@ struct SidebarListView: View {
           store.send(.selectArchivedWorktrees)
         case .worktree(let id):
           store.send(.selectWorktree(id))
+        case .repository:
+          break
         case nil:
           store.send(.selectWorktree(nil))
         }
