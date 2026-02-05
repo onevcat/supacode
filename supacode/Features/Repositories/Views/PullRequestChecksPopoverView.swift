@@ -27,32 +27,30 @@ struct PullRequestChecksPopoverView: View {
 
   var body: some View {
     let pullRequestURL = URL(string: pullRequest.url)
-    let titleLine =
-      Text(pullRequest.title)
-      + Text(" #\(pullRequest.number)").foregroundStyle(.secondary)
     let stateLabel = pullRequest.state.uppercased()
     let draftLabel = pullRequest.isDraft ? "\(stateLabel)/DRAFT" : stateLabel
-    let statusTags = PullRequestStatus.statusTags(
-      reviewDecision: pullRequest.reviewDecision,
-      mergeable: pullRequest.mergeable,
-      mergeStateStatus: pullRequest.mergeStateStatus
-    )
+    let titleLine =
+      Text("\(draftLabel) - ").foregroundStyle(.secondary)
+      + Text(pullRequest.title)
+      + Text(" #\(pullRequest.number)").foregroundStyle(.secondary)
     let authorLogin = pullRequest.authorLogin ?? "Someone"
     let commitsCount = pullRequest.commitsCount ?? 0
     let commitsLabel = commitsCount == 1 ? "commit" : "commits"
     let baseRefName = pullRequest.baseRefName ?? "base"
     let headRefName = pullRequest.headRefName ?? "branch"
-    let tagLine = statusTags.reduce(Text(draftLabel).foregroundStyle(.secondary)) { partial, tag in
-      partial + Text(" • ").foregroundStyle(.secondary) + Text(tag.text).foregroundStyle(tag.color)
-    }
     let summaryLine =
-      tagLine
-      + Text(" - \(authorLogin) wants to merge ").foregroundStyle(.secondary)
+      Text("\(authorLogin) wants to merge ").foregroundStyle(.secondary)
       + Text(commitsCount, format: .number).foregroundStyle(.secondary)
-      + Text(" \(commitsLabel) into `\(baseRefName)` from `\(headRefName)`")
-      .foregroundStyle(.secondary)
+      + Text(" \(commitsLabel) into ").foregroundStyle(.secondary)
+      + Text("`\(baseRefName)`").foregroundStyle(.secondary).monospaced()
+      + Text(" from ").foregroundStyle(.secondary)
+      + Text("`\(headRefName)`").foregroundStyle(.secondary).monospaced()
     let additionsText = Text("+") + Text(pullRequest.additions, format: .number)
     let deletionsText = Text("-") + Text(pullRequest.deletions, format: .number)
+    let hasConflicts = PullRequestStatus.hasConflicts(
+      mergeable: pullRequest.mergeable,
+      mergeStateStatus: pullRequest.mergeStateStatus
+    )
     ScrollView {
       VStack(alignment: .leading) {
         if let pullRequestURL {
@@ -83,6 +81,11 @@ struct PullRequestChecksPopoverView: View {
             .foregroundStyle(.red)
         }
         .font(.subheadline)
+        if hasConflicts {
+          Text("Merge Conflicts")
+            .foregroundStyle(.red)
+            .font(.subheadline)
+        }
 
         if breakdown.total > 0 {
           HStack {
