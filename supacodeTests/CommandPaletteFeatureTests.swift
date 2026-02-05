@@ -422,7 +422,7 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
-    #expect(ordered.first?.title == "Merge PR")
+    #expect(ordered.first?.title == "Merge Ready")
   }
 
   @Test func recencyBreaksFuzzyTiesWithinGroup() {

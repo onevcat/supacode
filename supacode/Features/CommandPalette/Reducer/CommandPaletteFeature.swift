@@ -295,11 +295,16 @@ private func pullRequestItems(
   }
 
   if canMerge {
+    let successfulChecks = breakdown.passed
+    let successfulChecksLabel =
+      successfulChecks == 1
+      ? "1 successful check"
+      : "\(successfulChecks) successful checks"
     items.append(
       CommandPaletteItem(
         id: "pr.\(worktreeID).merge",
-        title: "Merge PR",
-        subtitle: pullRequest.title,
+        title: "Merge Ready",
+        subtitle: successfulChecksLabel,
         kind: .mergePullRequest(worktreeID),
         priorityTier: 0
       )
