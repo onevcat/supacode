@@ -45,10 +45,7 @@ struct PullRequestChecksPopoverView: View {
     ).foregroundStyle(.secondary)
     let additionsText = Text("+\(pullRequest.additions, format: .number)")
     let deletionsText = Text("-\(pullRequest.deletions, format: .number)")
-    let hasConflicts = PullRequestStatus.hasConflicts(
-      mergeable: pullRequest.mergeable,
-      mergeStateStatus: pullRequest.mergeStateStatus
-    )
+    let hasConflicts = PullRequestMergeReadiness(pullRequest: pullRequest).isConflicting
     ScrollView {
       VStack(alignment: .leading) {
         if let pullRequestURL {

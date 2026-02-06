@@ -246,19 +246,14 @@ private func pullRequestItems(
   let state = pullRequest.state.uppercased()
   let isOpen = state == "OPEN"
   let isDraft = pullRequest.isDraft
-  let reviewDecision = pullRequest.reviewDecision?.uppercased()
+  let mergeReadiness = PullRequestMergeReadiness(pullRequest: pullRequest)
   let checks = pullRequest.statusCheckRollup?.checks ?? []
   let breakdown = PullRequestCheckBreakdown(checks: checks)
   let hasFailingChecks = breakdown.failed > 0
-  let mergeable = pullRequest.mergeable?.uppercased() == "MERGEABLE"
-  let mergeStateClean = pullRequest.mergeStateStatus?.uppercased() == "CLEAN"
   let canMerge =
     isOpen
     && !isDraft
-    && reviewDecision != "CHANGES_REQUESTED"
-    && mergeable
-    && mergeStateClean
-    && !hasFailingChecks
+    && !mergeReadiness.isBlocking
 
   func makeReadyItem() -> CommandPaletteItem? {
     guard isOpen && isDraft else { return nil }

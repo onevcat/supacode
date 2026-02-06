@@ -1,13 +1,5 @@
 import SwiftUI
 
-enum PullRequestStatus {
-  static func hasConflicts(mergeable: String?, mergeStateStatus: String?) -> Bool {
-    let mergeable = mergeable?.uppercased()
-    let mergeStateStatus = mergeStateStatus?.uppercased()
-    return mergeable == "CONFLICTING" || mergeStateStatus == "DIRTY"
-  }
-}
-
 struct PullRequestStatusButton: View {
   let model: PullRequestStatusModel
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
@@ -72,9 +64,7 @@ struct PullRequestStatusModel: Equatable {
     }
     let isDraft = pullRequest.isDraft
     let prefix = isDraft ? "(Drafted) " : ""
-    let mergeable = pullRequest.mergeable?.uppercased()
-    let mergeStateStatus = pullRequest.mergeStateStatus?.uppercased()
-    let hasConflicts = mergeable == "CONFLICTING" || mergeStateStatus == "DIRTY"
+    let mergeReadiness = PullRequestMergeReadiness(pullRequest: pullRequest)
     let checks = pullRequest.statusCheckRollup?.checks ?? []
     self.statusChecks = checks
     let checksDetail: String?
@@ -85,11 +75,11 @@ struct PullRequestStatusModel: Equatable {
       let checksLabel = breakdown.total == 1 ? "check" : "checks"
       checksDetail = breakdown.summaryText + " \(checksLabel)"
     }
-    if hasConflicts {
+    if mergeReadiness.isBlocking {
       if let checksDetail {
-        self.detailText = prefix + "Merge conflicts - " + checksDetail
+        self.detailText = prefix + mergeReadiness.label + " - " + checksDetail
       } else {
-        self.detailText = prefix + "Merge conflicts"
+        self.detailText = prefix + mergeReadiness.label
       }
       return
     }

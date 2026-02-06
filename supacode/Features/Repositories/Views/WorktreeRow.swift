@@ -26,7 +26,8 @@ struct WorktreeRow: View {
     )
     let displayAddedLines = info?.addedLines
     let displayRemovedLines = info?.removedLines
-    let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
+    let mergeReadiness = pullRequestMergeReadiness(for: display.pullRequest)
+    let hasInfo = displayAddedLines != nil || displayRemovedLines != nil || mergeReadiness != nil
     let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let showsMergedArchiveAction = display.pullRequestState == "MERGED" && archiveAction != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
@@ -62,7 +63,11 @@ struct WorktreeRow: View {
           Text(name)
             .font(.body)
             .foregroundStyle(nameColor)
-          WorktreeRowInfoView(addedLines: displayAddedLines, removedLines: displayRemovedLines)
+          WorktreeRowInfoView(
+            addedLines: displayAddedLines,
+            removedLines: displayRemovedLines,
+            mergeReadiness: mergeReadiness
+          )
         }
       } else {
         Text(name)
@@ -96,24 +101,40 @@ struct WorktreeRow: View {
     }
   }
 
+  private func pullRequestMergeReadiness(
+    for pullRequest: GithubPullRequest?
+  ) -> PullRequestMergeReadiness? {
+    guard let pullRequest, pullRequest.state.uppercased() == "OPEN" else {
+      return nil
+    }
+    return PullRequestMergeReadiness(pullRequest: pullRequest)
+  }
 }
 
 private struct WorktreeRowInfoView: View {
   let addedLines: Int?
   let removedLines: Int?
+  let mergeReadiness: PullRequestMergeReadiness?
 
   var body: some View {
     HStack {
       if let addedLines, let removedLines {
-        HStack {
-          Text("+\(addedLines)")
-            .foregroundStyle(.green)
-          Text("-\(removedLines)")
-            .foregroundStyle(.red)
+        Text("+\(addedLines)")
+          .foregroundStyle(.green)
+        Text("-\(removedLines)")
+          .foregroundStyle(.red)
+      }
+      if let mergeReadiness {
+        if addedLines != nil && removedLines != nil {
+          Text("•")
+            .foregroundStyle(.secondary)
         }
+        Text(mergeReadiness.label)
+          .foregroundStyle(mergeReadiness.isBlocking ? .red : .green)
       }
     }
     .font(.caption)
+    .lineLimit(1)
     .frame(minHeight: 14)
   }
 }

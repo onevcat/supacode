@@ -429,6 +429,25 @@ struct CommandPaletteFeatureTests {
     #expect(ordered.first?.title == "Merge PR")
   }
 
+  @Test func commandPaletteDoesNotShowMergeActionWhenBlocked() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-blocked", name: "blocked", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(
+        mergeable: "MERGEABLE",
+        mergeStateStatus: "BEHIND"
+      )
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    #expect(!items.contains(where: { $0.title == "Merge PR" }))
+  }
+
   @Test func recencyBreaksFuzzyTiesWithinGroup() {
     let now = Date(timeIntervalSince1970: 1_000_000)
     let recent = CommandPaletteItem(
