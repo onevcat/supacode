@@ -20,26 +20,15 @@ struct WorktreeRow: View {
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
     let branchIconName = isMainWorktree ? "star.fill" : (isPinned ? "pin.fill" : "arrow.triangle.branch")
-    let pullRequest = showsPullRequestInfo ? info?.pullRequest : nil
-    let matchesWorktree =
-      if let pullRequest {
-        pullRequest.headRefName == nil || pullRequest.headRefName == name
-      } else {
-        false
-      }
-    let displayPullRequest = matchesWorktree ? pullRequest : nil
+    let display = WorktreePullRequestDisplay(
+      worktreeName: name,
+      pullRequest: showsPullRequestInfo ? info?.pullRequest : nil
+    )
     let displayAddedLines = info?.addedLines
     let displayRemovedLines = info?.removedLines
     let hasInfo = displayAddedLines != nil || displayRemovedLines != nil
-    let pullRequestState = displayPullRequest?.state.uppercased()
-    let pullRequestNumber = displayPullRequest?.number
-    let pullRequestChecks = displayPullRequest?.statusCheckRollup?.checks ?? []
     let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
-    let pullRequestBadgeStyle = PullRequestBadgeStyle.style(
-      state: pullRequestState,
-      number: pullRequestNumber
-    )
-    let showsMergedArchiveAction = pullRequestState == "MERGED" && archiveAction != nil
+    let showsMergedArchiveAction = display.pullRequestState == "MERGED" && archiveAction != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     HStack(alignment: .center) {
       ZStack {
@@ -88,21 +77,10 @@ struct WorktreeRow: View {
           .help("Run script active")
           .accessibilityLabel("Run script active")
       }
-      if let pullRequestBadgeStyle, let displayPullRequest, !showsMergedArchiveAction {
-        PullRequestChecksPopoverButton(
-          pullRequest: displayPullRequest
-        ) {
-          let breakdown = PullRequestCheckBreakdown(checks: pullRequestChecks)
-          let showsChecksRing = breakdown.total > 0 && pullRequestState != "MERGED"
-          HStack(spacing: 6) {
-            if showsChecksRing {
-              PullRequestChecksRingView(breakdown: breakdown)
-            }
-            PullRequestBadgeView(text: pullRequestBadgeStyle.text, color: pullRequestBadgeStyle.color)
-          }
-        }
+      if !showsMergedArchiveAction {
+        WorktreePullRequestAccessoryView(display: display)
       }
-      if let archiveAction, pullRequestState == "MERGED" {
+      if let archiveAction, display.pullRequestState == "MERGED" {
         Button {
           archiveAction()
         } label: {

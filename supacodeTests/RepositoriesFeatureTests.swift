@@ -69,6 +69,7 @@ struct RepositoriesFeatureTests {
   @Test func requestDeleteMainWorktreeShowsNotAllowedAlert() async {
     let mainWorktree = makeWorktree(id: "/tmp/repo", name: "main")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [mainWorktree])
+
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
     }
@@ -84,6 +85,35 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.requestDeleteWorktree(mainWorktree.id, repository.id)) {
+      $0.alert = expectedAlert
+    }
+  }
+  @Test func requestDeleteWorktreesShowsBatchConfirmation() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "owl", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "hawk", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    let targets = [
+      RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree1.id, repositoryID: repository.id),
+      RepositoriesFeature.DeleteWorktreeTarget(worktreeID: worktree2.id, repositoryID: repository.id),
+    ]
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("🚨 Delete 2 worktrees?")
+    } actions: {
+      ButtonState(role: .destructive, action: .confirmDeleteWorktrees(targets)) {
+        TextState("Delete 2 (⌘↩)")
+      }
+      ButtonState(role: .cancel) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Delete 2 worktrees? This deletes the worktree directories and their local branches.")
+    }
+
+    await store.send(.requestDeleteWorktrees(targets)) {
       $0.alert = expectedAlert
     }
   }
@@ -190,6 +220,31 @@ struct RepositoriesFeatureTests {
     await store.send(.requestRenameBranch(worktree.id, "feature branch")) {
       $0.alert = expectedAlert
     }
+  }
+
+  @Test func worktreeBranchNameLoadedPreservesCreatedAt() async {
+    let createdAt = Date(timeIntervalSince1970: 1_737_303_600)
+    let worktree = makeWorktree(id: "/tmp/wt", name: "eagle", createdAt: createdAt)
+    let renamedWorktree = makeWorktree(id: "/tmp/wt", name: "falcon", createdAt: createdAt)
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeBranchNameLoaded(worktreeID: worktree.id, name: "falcon")) {
+      var repository = $0.repositories[id: repository.id]!
+      var worktrees = repository.worktrees
+      worktrees[id: worktree.id] = renamedWorktree
+      repository = Repository(
+        id: repository.id,
+        rootURL: repository.rootURL,
+        name: repository.name,
+        worktrees: worktrees
+      )
+      $0.repositories[id: repository.id] = repository
+    }
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: worktree.id]?.name == "falcon")
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: worktree.id]?.createdAt == createdAt)
   }
 
   @Test func orderedWorktreeRowsAreGlobal() {
@@ -654,13 +709,19 @@ struct RepositoriesFeatureTests {
     expectNoDifference(store.state.archivedWorktreeIDs, [])
   }
 
-  private func makeWorktree(id: String, name: String, repoRoot: String = "/tmp/repo") -> Worktree {
+  private func makeWorktree(
+    id: String,
+    name: String,
+    repoRoot: String = "/tmp/repo",
+    createdAt: Date? = nil
+  ) -> Worktree {
     Worktree(
       id: id,
       name: name,
       detail: "detail",
       workingDirectory: URL(fileURLWithPath: id),
-      repositoryRootURL: URL(fileURLWithPath: repoRoot)
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      createdAt: createdAt
     )
   }
 

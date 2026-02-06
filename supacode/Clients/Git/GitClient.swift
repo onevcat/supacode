@@ -79,17 +79,18 @@ struct GitClient {
       let resourceValues = try? worktreeURL.resourceValues(forKeys: [
         .creationDateKey, .contentModificationDateKey,
       ])
-      let createdAt =
-        resourceValues?.creationDate ?? resourceValues?.contentModificationDate ?? .distantPast
+      let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
+      let sortDate = createdAt ?? .distantPast
       return WorktreeSortEntry(
         worktree: Worktree(
           id: id,
           name: name,
           detail: detail,
           workingDirectory: worktreeURL,
-          repositoryRootURL: repositoryRootURL
+          repositoryRootURL: repositoryRootURL,
+          createdAt: createdAt
         ),
-        createdAt: createdAt,
+        createdAt: sortDate,
         index: index
       )
     }
@@ -232,12 +233,17 @@ struct GitClient {
     let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
     let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
     let id = worktreeURL.path(percentEncoded: false)
+    let resourceValues = try? worktreeURL.resourceValues(forKeys: [
+      .creationDateKey, .contentModificationDateKey,
+    ])
+    let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
     return Worktree(
       id: id,
       name: name,
       detail: detail,
       workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL
+      repositoryRootURL: repositoryRootURL,
+      createdAt: createdAt
     )
   }
 

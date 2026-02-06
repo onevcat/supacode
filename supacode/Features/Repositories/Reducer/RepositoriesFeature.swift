@@ -79,6 +79,7 @@ struct RepositoriesFeature {
     case archiveWorktreeConfirmed(Worktree.ID, Repository.ID)
     case unarchiveWorktree(Worktree.ID)
     case requestDeleteWorktree(Worktree.ID, Repository.ID)
+    case requestDeleteWorktrees([DeleteWorktreeTarget])
     case deleteWorktreeConfirmed(Worktree.ID, Repository.ID)
     case worktreeDeleted(
       Worktree.ID,
@@ -114,6 +115,11 @@ struct RepositoriesFeature {
     let message: String
   }
 
+  struct DeleteWorktreeTarget: Equatable {
+    let worktreeID: Worktree.ID
+    let repositoryID: Repository.ID
+  }
+
   private struct ApplyRepositoriesResult {
     let didPrunePinned: Bool
     let didPruneRepositoryOrder: Bool
@@ -124,6 +130,7 @@ struct RepositoriesFeature {
   enum Alert: Equatable {
     case confirmArchiveWorktree(Worktree.ID, Repository.ID)
     case confirmDeleteWorktree(Worktree.ID, Repository.ID)
+    case confirmDeleteWorktrees([DeleteWorktreeTarget])
     case confirmRemoveRepository(Repository.ID)
   }
 
@@ -789,8 +796,57 @@ struct RepositoriesFeature {
         }
         return .none
 
+      case .requestDeleteWorktrees(let targets):
+        var validTargets: [DeleteWorktreeTarget] = []
+        var seenWorktreeIDs: Set<Worktree.ID> = []
+        for target in targets {
+          guard seenWorktreeIDs.insert(target.worktreeID).inserted else { continue }
+          if state.removingRepositoryIDs.contains(target.repositoryID) {
+            continue
+          }
+          guard let repository = state.repositories[id: target.repositoryID],
+            let worktree = repository.worktrees[id: target.worktreeID]
+          else {
+            continue
+          }
+          if state.isMainWorktree(worktree) || state.deletingWorktreeIDs.contains(worktree.id) {
+            continue
+          }
+          validTargets.append(target)
+        }
+        guard !validTargets.isEmpty else {
+          return .none
+        }
+        @Shared(.settingsFile) var settingsFile
+        let deleteBranchOnDeleteWorktree = settingsFile.global.deleteBranchOnDeleteWorktree
+        let removalMessage =
+          deleteBranchOnDeleteWorktree
+          ? "This deletes the worktree directories and their local branches."
+          : "This deletes the worktree directories and keeps their local branches."
+        let count = validTargets.count
+        state.alert = AlertState {
+          TextState("🚨 Delete \(count) worktrees?")
+        } actions: {
+          ButtonState(role: .destructive, action: .confirmDeleteWorktrees(validTargets)) {
+            TextState("Delete \(count) (⌘↩)")
+          }
+          ButtonState(role: .cancel) {
+            TextState("Cancel")
+          }
+        } message: {
+          TextState("Delete \(count) worktrees? " + removalMessage)
+        }
+        return .none
+
       case .alert(.presented(.confirmDeleteWorktree(let worktreeID, let repositoryID))):
         return .send(.deleteWorktreeConfirmed(worktreeID, repositoryID))
+
+      case .alert(.presented(.confirmDeleteWorktrees(let targets))):
+        return .merge(
+          targets.map { target in
+            .send(.deleteWorktreeConfirmed(target.worktreeID, target.repositoryID))
+          }
+        )
 
       case .deleteWorktreeConfirmed(let worktreeID, let repositoryID):
         guard let repository = state.repositories[id: repositoryID],
@@ -841,27 +897,29 @@ struct RepositoriesFeature {
         let wasPinned = state.pinnedWorktreeIDs.contains(worktreeID)
         var didUpdateWorktreeOrder = false
         let wasArchived = state.isWorktreeArchived(worktreeID)
-        state.deletingWorktreeIDs.remove(worktreeID)
-        state.pendingWorktrees.removeAll { $0.id == worktreeID }
-        state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
-        state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
-        state.worktreeInfoByID.removeValue(forKey: worktreeID)
-        state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
-        state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
-        if var order = state.worktreeOrderByRepository[repositoryID] {
-          order.removeAll { $0 == worktreeID }
-          if order.isEmpty {
-            state.worktreeOrderByRepository.removeValue(forKey: repositoryID)
-          } else {
-            state.worktreeOrderByRepository[repositoryID] = order
+        withAnimation(.easeOut(duration: 0.2)) {
+          state.deletingWorktreeIDs.remove(worktreeID)
+          state.pendingWorktrees.removeAll { $0.id == worktreeID }
+          state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
+          state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
+          state.worktreeInfoByID.removeValue(forKey: worktreeID)
+          state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
+          state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
+          if var order = state.worktreeOrderByRepository[repositoryID] {
+            order.removeAll { $0 == worktreeID }
+            if order.isEmpty {
+              state.worktreeOrderByRepository.removeValue(forKey: repositoryID)
+            } else {
+              state.worktreeOrderByRepository[repositoryID] = order
+            }
+            didUpdateWorktreeOrder = true
           }
-          didUpdateWorktreeOrder = true
-        }
-        _ = removeWorktree(worktreeID, repositoryID: repositoryID, state: &state)
-        let selectionNeedsUpdate = state.selection == .worktree(worktreeID)
-        if selectionNeedsUpdate {
-          let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
-          state.selection = nextWorktreeID.map(SidebarSelection.worktree)
+          _ = removeWorktree(worktreeID, repositoryID: repositoryID, state: &state)
+          let selectionNeedsUpdate = state.selection == .worktree(worktreeID)
+          if selectionNeedsUpdate {
+            let nextWorktreeID = nextSelection ?? firstAvailableWorktreeID(in: repositoryID, state: state)
+            state.selection = nextWorktreeID.map(SidebarSelection.worktree)
+          }
         }
         let roots = state.repositories.map(\.rootURL)
         let repositories = state.repositories
@@ -1975,6 +2033,9 @@ extension RepositoriesFeature.State {
       if case .confirmDeleteWorktree(let worktreeID, let repositoryID)? = button.action.action {
         return .confirmDeleteWorktree(worktreeID, repositoryID)
       }
+      if case .confirmDeleteWorktrees(let targets)? = button.action.action {
+        return .confirmDeleteWorktrees(targets)
+      }
     }
     return nil
   }
@@ -2215,7 +2276,8 @@ private func updateWorktreeName(
       name: name,
       detail: worktree.detail,
       workingDirectory: worktree.workingDirectory,
-      repositoryRootURL: worktree.repositoryRootURL
+      repositoryRootURL: worktree.repositoryRootURL,
+      createdAt: worktree.createdAt
     )
     repository = Repository(
       id: repository.id,
