@@ -773,6 +773,10 @@ struct RepositoriesFeature {
           return .none
         }
         if state.isMainWorktree(worktree) {
+          state.alert = messageAlert(
+            title: "Delete not allowed",
+            message: "Deleting the main worktree is not allowed."
+          )
           return .none
         }
         if state.deletingWorktreeIDs.contains(worktree.id) {

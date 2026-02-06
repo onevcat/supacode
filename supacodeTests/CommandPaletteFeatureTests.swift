@@ -302,7 +302,7 @@ struct CommandPaletteFeatureTests {
     }
   }
 
-  @Test func queryMatchesGlobalItemsBeforeWorktrees() {
+  @Test func queryRanksByFuzzyScoreAcrossAllItems() {
     let openSettings = CommandPaletteItem(
       id: "global.open-settings",
       title: "Open Settings",
@@ -318,7 +318,7 @@ struct CommandPaletteFeatureTests {
 
     expectNoDifference(
       CommandPaletteFeature.filterItems(items: [selectSettings, openSettings], query: "set"),
-      [openSettings, selectSettings]
+      [selectSettings, openSettings]
     )
   }
 
@@ -457,6 +457,311 @@ struct CommandPaletteFeatureTests {
       ),
       [recent, older]
     )
+  }
+
+  // MARK: - Unified Ranking Tests
+
+  @Test func worktreeOutranksGlobalWhenBetterMatch() {
+    let checkForUpdates = CommandPaletteItem(
+      id: "global.check-for-updates",
+      title: "Check for Updates",
+      subtitle: nil,
+      kind: .checkForUpdates
+    )
+    let worktreeFox = CommandPaletteItem(
+      id: "worktree.fox.select",
+      title: "Repo / fox",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-fox")
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [checkForUpdates, worktreeFox], query: "fox"),
+      [worktreeFox]
+    )
+  }
+
+  @Test func worktreeExactPrefixOutranksGlobalSubstringMatch() {
+    let openSettings = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let worktreeOpen = CommandPaletteItem(
+      id: "worktree.open.select",
+      title: "open",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-open")
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [openSettings, worktreeOpen],
+      query: "open"
+    )
+    #expect(result.first?.id == worktreeOpen.id)
+  }
+
+  @Test func globalAndWorktreeItemsInterleavedByScore() {
+    let openRepo = CommandPaletteItem(
+      id: "global.open-repository",
+      title: "Open Repository",
+      subtitle: nil,
+      kind: .openRepository
+    )
+    let worktreeRepo = CommandPaletteItem(
+      id: "worktree.repo.select",
+      title: "repo",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-repo")
+    )
+    let refreshWorktrees = CommandPaletteItem(
+      id: "global.refresh-worktrees",
+      title: "Refresh Worktrees",
+      subtitle: nil,
+      kind: .refreshWorktrees
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [openRepo, worktreeRepo, refreshWorktrees],
+      query: "repo"
+    )
+
+    #expect(result.contains { $0.id == worktreeRepo.id })
+    #expect(result.contains { $0.id == openRepo.id })
+    #expect(!result.contains { $0.id == refreshWorktrees.id })
+  }
+
+  @Test func nonMatchingItemsExcludedRegardlessOfType() {
+    let checkForUpdates = CommandPaletteItem(
+      id: "global.check-for-updates",
+      title: "Check for Updates",
+      subtitle: nil,
+      kind: .checkForUpdates
+    )
+    let worktreeFox = CommandPaletteItem(
+      id: "worktree.fox.select",
+      title: "Repo / fox",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-fox")
+    )
+
+    expectNoDifference(
+      CommandPaletteFeature.filterItems(items: [checkForUpdates, worktreeFox], query: "zzz"),
+      []
+    )
+  }
+
+  @Test func multipleWorktreesCanAppearBeforeGlobalItems() {
+    let openSettings = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let worktreeAlpha = CommandPaletteItem(
+      id: "worktree.alpha.select",
+      title: "set",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-alpha")
+    )
+    let worktreeBeta = CommandPaletteItem(
+      id: "worktree.beta.select",
+      title: "sett",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-beta")
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [openSettings, worktreeAlpha, worktreeBeta],
+      query: "set"
+    )
+
+    #expect(result.count == 3)
+    #expect(result[0].id == worktreeAlpha.id)
+    #expect(result[1].id == worktreeBeta.id)
+  }
+
+  @Test func priorityTierBreaksTiesAcrossItemTypes() {
+    let prAction = CommandPaletteItem(
+      id: "pr.merge",
+      title: "Merge PR",
+      subtitle: "Ready",
+      kind: .mergePullRequest("wt-1"),
+      priorityTier: 0
+    )
+    let worktreeMerge = CommandPaletteItem(
+      id: "worktree.merge.select",
+      title: "Merge",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-merge")
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [worktreeMerge, prAction],
+      query: "merge"
+    )
+
+    #expect(result.count == 2)
+    let prIndex = result.firstIndex { $0.id == prAction.id }!
+    let wtIndex = result.firstIndex { $0.id == worktreeMerge.id }!
+    #expect(wtIndex < prIndex)
+  }
+
+  @Test func recencyBreaksTiesAcrossItemTypes() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let globalItem = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let worktreeItem = CommandPaletteItem(
+      id: "worktree.settings.select",
+      title: "Repo / settings",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-settings")
+    )
+    let recency: [CommandPaletteItem.ID: TimeInterval] = [
+      worktreeItem.id: now.timeIntervalSince1970 - 1 * 86_400,
+      globalItem.id: now.timeIntervalSince1970 - 20 * 86_400,
+    ]
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [globalItem, worktreeItem],
+      query: "settings",
+      recencyByID: recency,
+      now: now
+    )
+
+    #expect(result.first?.id == worktreeItem.id)
+  }
+
+  @Test func worktreeWithLabelMatchOutranksGlobalWithDescriptionMatch() {
+    let globalItem = CommandPaletteItem(
+      id: "global.pr.open",
+      title: "Open PR on GitHub",
+      subtitle: "deploy-fixes",
+      kind: .openPullRequest("wt-1")
+    )
+    let worktreeItem = CommandPaletteItem(
+      id: "worktree.deploy.select",
+      title: "Repo / deploy-fixes",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-deploy")
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [globalItem, worktreeItem],
+      query: "deploy"
+    )
+
+    #expect(result.first?.id == worktreeItem.id)
+  }
+
+  @Test func shorterWorktreeLabelWinsOverLongerGlobalLabel() {
+    let globalItem = CommandPaletteItem(
+      id: "global.new-worktree",
+      title: "New Worktree",
+      subtitle: nil,
+      kind: .newWorktree
+    )
+    let worktreeItem = CommandPaletteItem(
+      id: "worktree.new.select",
+      title: "new",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-new")
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [globalItem, worktreeItem],
+      query: "new"
+    )
+
+    #expect(result.first?.id == worktreeItem.id)
+  }
+
+  @Test func emptyQueryStillHidesRootActionsAndWorktrees() {
+    let checkForUpdates = CommandPaletteItem(
+      id: "global.check-for-updates",
+      title: "Check for Updates",
+      subtitle: nil,
+      kind: .checkForUpdates
+    )
+    let worktreeFox = CommandPaletteItem(
+      id: "worktree.fox.select",
+      title: "Repo / fox",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-fox")
+    )
+    let prAction = CommandPaletteItem(
+      id: "pr.open",
+      title: "Open PR on GitHub",
+      subtitle: "PR title",
+      kind: .openPullRequest("wt-1"),
+      priorityTier: 2
+    )
+
+    let result = CommandPaletteFeature.filterItems(
+      items: [checkForUpdates, worktreeFox, prAction],
+      query: ""
+    )
+
+    #expect(!result.contains { $0.id == checkForUpdates.id })
+    #expect(!result.contains { $0.id == worktreeFox.id })
+    #expect(result.contains { $0.id == prAction.id })
+  }
+
+  @Test func whitespaceOnlyQueryTreatedAsEmpty() {
+    let checkForUpdates = CommandPaletteItem(
+      id: "global.check-for-updates",
+      title: "Check for Updates",
+      subtitle: nil,
+      kind: .checkForUpdates
+    )
+    let worktreeFox = CommandPaletteItem(
+      id: "worktree.fox.select",
+      title: "Repo / fox",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-fox")
+    )
+
+    let emptyResult = CommandPaletteFeature.filterItems(
+      items: [checkForUpdates, worktreeFox],
+      query: ""
+    )
+    let whitespaceResult = CommandPaletteFeature.filterItems(
+      items: [checkForUpdates, worktreeFox],
+      query: "   "
+    )
+
+    expectNoDifference(emptyResult, whitespaceResult)
+  }
+
+  @Test func inputOrderDoesNotAffectScoreBasedRanking() {
+    let globalItem = CommandPaletteItem(
+      id: "global.open-settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    let worktreeItem = CommandPaletteItem(
+      id: "worktree.open.select",
+      title: "open",
+      subtitle: nil,
+      kind: .worktreeSelect("wt-open")
+    )
+
+    let resultAB = CommandPaletteFeature.filterItems(
+      items: [globalItem, worktreeItem],
+      query: "open"
+    )
+    let resultBA = CommandPaletteFeature.filterItems(
+      items: [worktreeItem, globalItem],
+      query: "open"
+    )
+
+    #expect(resultAB.first?.id == resultBA.first?.id)
   }
 
   @Test func activateDispatchesDelegateAndUpdatesRecency() async {

@@ -21,6 +21,17 @@ struct SidebarListView: View {
           store.send(.selectArchivedWorktrees)
         case .worktree(let id):
           store.send(.selectWorktree(id))
+        case .repository(let id):
+          guard let repo = store.state.repositories[id: id],
+            !store.state.isRemovingRepository(repo)
+          else { return }
+          withAnimation(.easeOut(duration: 0.2)) {
+            if expandedRepoIDs.contains(id) {
+              expandedRepoIDs.remove(id)
+            } else {
+              expandedRepoIDs.insert(id)
+            }
+          }
         case nil:
           store.send(.selectWorktree(nil))
         }

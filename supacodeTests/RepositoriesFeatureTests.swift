@@ -66,6 +66,28 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func requestDeleteMainWorktreeShowsNotAllowedAlert() async {
+    let mainWorktree = makeWorktree(id: "/tmp/repo", name: "main")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [mainWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Delete not allowed")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Deleting the main worktree is not allowed.")
+    }
+
+    await store.send(.requestDeleteWorktree(mainWorktree.id, repository.id)) {
+      $0.alert = expectedAlert
+    }
+  }
+
   @Test func requestArchiveWorktreeShowsConfirmation() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])

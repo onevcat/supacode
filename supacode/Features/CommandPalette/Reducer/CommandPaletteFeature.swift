@@ -153,9 +153,8 @@ struct CommandPaletteFeature {
       let visibleItems = globalItems.filter { !$0.isRootAction }
       return prioritizeItems(items: visibleItems, recencyByID: recencyByID, now: now)
     }
-    let worktreeItems = items.filter { !$0.isGlobal }
     let scorer = CommandPaletteFuzzyScorer(query: trimmed, recencyByID: recencyByID, now: now)
-    return scorer.rankedItems(from: globalItems) + scorer.rankedItems(from: worktreeItems)
+    return scorer.rankedItems(from: items)
   }
 
   static func commandPaletteItems(

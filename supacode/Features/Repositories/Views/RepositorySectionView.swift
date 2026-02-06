@@ -89,10 +89,6 @@ struct RepositorySectionView: View {
       }
       .onHover { isHovering = $0 }
       .contentShape(.rect)
-      .accessibilityAddTraits(.isButton)
-      .onTapGesture {
-        toggleExpanded()
-      }
       .contextMenu {
         Button("Repo Settings") {
           openRepoSettings()
@@ -105,9 +101,9 @@ struct RepositorySectionView: View {
         .disabled(isRemovingRepository)
       }
       .contentShape(.dragPreview, .rect)
+      .tag(SidebarSelection.repository(repository.id))
       .environment(\.colorScheme, colorScheme)
       .preferredColorScheme(colorScheme)
-      .selectionDisabled()
 
       if isExpanded {
         WorktreeRowsView(

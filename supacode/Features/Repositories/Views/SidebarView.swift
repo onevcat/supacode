@@ -30,7 +30,7 @@ struct SidebarView: View {
       }
     }()
     let deleteWorktreeAction: (() -> Void)? = {
-      guard let selectedRow, selectedRow.isRemovable, !selectedRow.isMainWorktree else { return nil }
+      guard let selectedRow, selectedRow.isRemovable else { return nil }
       return {
         store.send(.requestDeleteWorktree(selectedRow.id, selectedRow.repositoryID))
       }

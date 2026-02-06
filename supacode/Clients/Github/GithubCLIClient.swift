@@ -242,8 +242,9 @@ nonisolated private func makeBatchPullRequestsQuery(
     let alias = "branch\(index)"
     aliasMap[alias] = branch
     let escapedBranch = escapeGraphQLString(branch)
+    let orderBy = "orderBy: {field: UPDATED_AT, direction: DESC}"
     let selection = """
-      \(alias): pullRequests(first: 5, states: [OPEN, MERGED], headRefName: \"\(escapedBranch)\") {
+      \(alias): pullRequests(first: 5, states: [OPEN, MERGED], headRefName: \"\(escapedBranch)\", \(orderBy)) {
         nodes {
           number
           title
