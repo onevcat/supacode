@@ -184,6 +184,7 @@ struct WorktreeDetailView: View {
 
       ToolbarItem {
         ToolbarStatusView(toast: toolbarState.statusToast, pullRequest: toolbarState.pullRequest)
+          .buttonStyle(.plain)
       }
 
       ToolbarSpacer(.flexible)
