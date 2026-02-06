@@ -1,11 +1,18 @@
 # Supacode
 
-A macOS app for running multiple coding agents in parallel, powered by [Ghostty](https://github.com/ghostty-org/ghostty).
+A macOS app for running multiple coding agents in isolated worktrees.
+
+<img width="3600" height="2260" alt="image" src="https://github.com/user-attachments/assets/31eb062c-f2d6-406d-8c60-d2f1664a0c21" />
+
+## Technical Stack
+
+- [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture)
+- [libghostty](https://github.com/ghostty-org/ghostty)
 
 ## Requirements
 
 - macOS 26.0+
-- [mise](https://mise.jdx.dev/) (for building GhosttyKit)
+- [mise](https://mise.jdx.dev/) (for dependencies)
 
 ## Building
 
