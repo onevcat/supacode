@@ -74,7 +74,6 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 
 ## Code Guidelines
 
-Always read `./docs/swift-rules.md` before writing Swift code. Key points:
 - Target macOS 26.0+, Swift 6.2+
 - Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
 - Always mark `@Observable` classes with `@MainActor`
