@@ -36,6 +36,9 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
+    #if DEBUG
+      case debugTestToast(RepositoriesFeature.StatusToast)
+    #endif
   }
 
   var isGlobal: Bool {
@@ -51,6 +54,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return true
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
+    #if DEBUG
+      case .debugTestToast:
+        return true
+    #endif
     }
   }
 
@@ -68,6 +75,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .removeWorktree,
       .archiveWorktree:
       return false
+    #if DEBUG
+      case .debugTestToast:
+        return false
+    #endif
     }
   }
 
@@ -94,6 +105,10 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .removeWorktree,
       .archiveWorktree:
       return nil
+    #if DEBUG
+      case .debugTestToast:
+        return nil
+    #endif
     }
   }
 

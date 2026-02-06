@@ -45,6 +45,9 @@ struct CommandPaletteFeature {
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
+    #if DEBUG
+      case debugTestToast(RepositoriesFeature.StatusToast)
+    #endif
   }
 
   @Dependency(\.date.now) private var now
@@ -203,6 +206,9 @@ struct CommandPaletteFeature {
       )
       items.append(contentsOf: pullRequestActions)
     }
+    #if DEBUG
+      items.append(contentsOf: debugToastItems())
+    #endif
     for row in repositories.orderedWorktreeRows() {
       guard !row.isPending, !row.isDeleting else { continue }
       let repositoryName = repositories.repositoryName(for: row.repositoryID) ?? "Repository"
@@ -339,6 +345,25 @@ private func pullRequestItems(
   return items
 }
 
+#if DEBUG
+  private func debugToastItems() -> [CommandPaletteItem] {
+    [
+      CommandPaletteItem(
+        id: "debug.toast.inProgress",
+        title: "[Debug] Toast: In Progress",
+        subtitle: "Simulates an in-progress toast",
+        kind: .debugTestToast(.inProgress("Merging pull request…"))
+      ),
+      CommandPaletteItem(
+        id: "debug.toast.success",
+        title: "[Debug] Toast: Success",
+        subtitle: "Simulates a success toast",
+        kind: .debugTestToast(.success("Pull request merged"))
+      ),
+    ]
+  }
+#endif
+
 private enum CommandPaletteItemID {
   static let globalCheckForUpdates = "global.check-for-updates"
   static let globalOpenSettings = "global.open-settings"
@@ -458,6 +483,10 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .rerunFailedJobs(worktreeID)
   case .openFailingCheckDetails(let worktreeID):
     return .openFailingCheckDetails(worktreeID)
+  #if DEBUG
+    case .debugTestToast(let toast):
+      return .debugTestToast(toast)
+  #endif
   }
 }
 

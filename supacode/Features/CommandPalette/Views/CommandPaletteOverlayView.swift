@@ -348,6 +348,10 @@ private struct CommandPaletteRowView: View {
       return "Remove"
     case .archiveWorktree:
       return "Archive"
+    #if DEBUG
+      case .debugTestToast:
+        return "Debug"
+    #endif
     }
   }
 
@@ -381,6 +385,10 @@ private struct CommandPaletteRowView: View {
       return "trash"
     case .archiveWorktree:
       return "archivebox"
+    #if DEBUG
+      case .debugTestToast:
+        return "ladybug"
+    #endif
     }
   }
 
@@ -392,6 +400,10 @@ private struct CommandPaletteRowView: View {
       return true
     case .worktreeSelect, .removeWorktree, .archiveWorktree:
       return false
+    #if DEBUG
+      case .debugTestToast:
+        return true
+    #endif
     }
   }
 
@@ -490,6 +502,10 @@ private struct CommandPaletteRowView: View {
       base = "Re-run failed jobs"
     case .openFailingCheckDetails:
       base = "Open failing check details"
+    #if DEBUG
+      case .debugTestToast:
+        base = row.title
+    #endif
     }
     if let explicitShortcutLabel {
       return "\(base) (\(explicitShortcutLabel))"

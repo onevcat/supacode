@@ -560,6 +560,11 @@ struct AppFeature {
       case .commandPalette(.delegate(.openFailingCheckDetails(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .openFailingCheckDetails)))
 
+      #if DEBUG
+        case .commandPalette(.delegate(.debugTestToast(let toast))):
+          return .send(.repositories(.showToast(toast)))
+      #endif
+
       case .commandPalette:
         return .none
 
