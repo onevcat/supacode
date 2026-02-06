@@ -3,7 +3,6 @@ import SwiftUI
 struct WorktreePullRequestDisplay {
   let pullRequest: GithubPullRequest?
   let pullRequestState: String?
-  let pullRequestChecks: [GithubPullRequestStatusCheck]
   let pullRequestBadgeStyle: (text: String, color: Color)?
 
   init(worktreeName: String, pullRequest: GithubPullRequest?) {
@@ -18,7 +17,6 @@ struct WorktreePullRequestDisplay {
     let pullRequestNumber = displayPullRequest?.number
     self.pullRequest = displayPullRequest
     self.pullRequestState = pullRequestState
-    self.pullRequestChecks = displayPullRequest?.statusCheckRollup?.checks ?? []
     self.pullRequestBadgeStyle = PullRequestBadgeStyle.style(
       state: pullRequestState,
       number: pullRequestNumber
@@ -36,14 +34,7 @@ struct WorktreePullRequestAccessoryView: View {
       PullRequestChecksPopoverButton(
         pullRequest: pullRequest
       ) {
-        let breakdown = PullRequestCheckBreakdown(checks: display.pullRequestChecks)
-        let showsChecksRing = breakdown.total > 0 && display.pullRequestState != "MERGED"
-        HStack(spacing: 6) {
-          if showsChecksRing {
-            PullRequestChecksRingView(breakdown: breakdown)
-          }
-          PullRequestBadgeView(text: pullRequestBadgeStyle.text, color: pullRequestBadgeStyle.color)
-        }
+        PullRequestBadgeView(text: pullRequestBadgeStyle.text, color: pullRequestBadgeStyle.color)
       }
     }
   }
