@@ -78,6 +78,104 @@ struct WorktreeTerminalManagerTests {
     #expect(second == .setupScriptConsumed(worktreeID: worktree.id))
   }
 
+  @Test func hasUnseenNotificationsReflectsUnreadEntries() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    state.notifications = [
+      makeNotification(isRead: true),
+      makeNotification(isRead: true),
+    ]
+
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
+
+    state.notifications.append(makeNotification(isRead: false))
+
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == true)
+  }
+
+  @Test func markAllNotificationsReadEmitsUpdatedIndicatorCount() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    state.notifications = [
+      makeNotification(isRead: false),
+      makeNotification(isRead: true),
+    ]
+
+    let stream = manager.eventStream()
+    var iterator = stream.makeAsyncIterator()
+
+    let first = await iterator.next()
+    state.markAllNotificationsRead()
+    let second = await iterator.next()
+
+    #expect(first == .notificationIndicatorChanged(count: 1))
+    #expect(second == .notificationIndicatorChanged(count: 0))
+    #expect(state.notifications.map(\.isRead) == [true, true])
+  }
+
+  @Test func markNotificationsReadOnlyAffectsMatchingSurface() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let surfaceA = UUID()
+    let surfaceB = UUID()
+
+    state.notifications = [
+      makeNotification(surfaceId: surfaceA, isRead: false),
+      makeNotification(surfaceId: surfaceB, isRead: false),
+      makeNotification(surfaceId: surfaceB, isRead: true),
+    ]
+
+    state.markNotificationsRead(forSurfaceID: surfaceB)
+
+    let aNotifications = state.notifications.filter { $0.surfaceId == surfaceA }
+    let bNotifications = state.notifications.filter { $0.surfaceId == surfaceB }
+
+    #expect(aNotifications.map(\.isRead) == [false])
+    #expect(bNotifications.map(\.isRead) == [true, true])
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == true)
+
+    state.markNotificationsRead(forSurfaceID: surfaceA)
+
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
+  }
+
+  @Test func setNotificationsDisabledMarksAllRead() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    state.notifications = [
+      makeNotification(isRead: false),
+      makeNotification(isRead: false),
+    ]
+
+    state.setNotificationsEnabled(false)
+
+    #expect(state.notifications.map(\.isRead) == [true, true])
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
+  }
+
+  @Test func dismissAllNotificationsClearsState() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    state.notifications = [
+      makeNotification(isRead: false),
+      makeNotification(isRead: true),
+    ]
+
+    state.dismissAllNotifications()
+
+    #expect(state.notifications.isEmpty)
+    #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",
@@ -96,5 +194,17 @@ struct WorktreeTerminalManagerTests {
       return event
     }
     return nil
+  }
+
+  private func makeNotification(
+    surfaceId: UUID = UUID(),
+    isRead: Bool
+  ) -> WorktreeTerminalNotification {
+    WorktreeTerminalNotification(
+      surfaceId: surfaceId,
+      title: "Title",
+      body: "Body",
+      isRead: isRead
+    )
   }
 }
