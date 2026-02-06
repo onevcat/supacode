@@ -55,6 +55,7 @@ struct WorktreeDetailView: View {
       if hasActiveWorktree, let selectedWorktree {
         let toolbarState = WorktreeToolbarState(
           branchName: selectedWorktree.name,
+          statusToast: repositories.statusToast,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed,
           runScriptEnabled: runScriptEnabled,
@@ -145,6 +146,7 @@ struct WorktreeDetailView: View {
 
   fileprivate struct WorktreeToolbarState {
     let branchName: String
+    let statusToast: RepositoriesFeature.StatusToast?
     let openActionSelection: OpenWorktreeAction
     let showExtras: Bool
     let runScriptEnabled: Bool
@@ -174,6 +176,12 @@ struct WorktreeDetailView: View {
           branchName: toolbarState.branchName,
           onSubmit: onRenameBranch
         )
+      }
+
+      ToolbarSpacer(.flexible)
+
+      ToolbarItem {
+        ToolbarStatusView(toast: toolbarState.statusToast)
       }
 
       ToolbarSpacer(.flexible)
@@ -352,6 +360,7 @@ private struct WorktreeToolbarPreview: View {
   init() {
     toolbarState = WorktreeDetailView.WorktreeToolbarState(
       branchName: "feature/toolbar-preview",
+      statusToast: nil,
       openActionSelection: .finder,
       showExtras: false,
       runScriptEnabled: true,

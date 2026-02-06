@@ -7,6 +7,8 @@ import SwiftUI
 
 private enum CancelID {
   static let load = "repositories.load"
+  static let toastAutoDismiss = "repositories.toastAutoDismiss"
+  static let delayedPRRefresh = "repositories.delayedPRRefresh"
 }
 
 @Reducer
@@ -33,6 +35,7 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
+    var statusToast: StatusToast?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -104,6 +107,9 @@ struct RepositoriesFeature {
     case setGithubIntegrationEnabled(Bool)
     case setAutomaticallyArchiveMergedWorktrees(Bool)
     case pullRequestAction(Worktree.ID, PullRequestAction)
+    case showToast(StatusToast)
+    case dismissToast
+    case delayedPullRequestRefresh(Worktree.ID)
     case openRepositorySettings(Repository.ID)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -119,6 +125,11 @@ struct RepositoriesFeature {
     let didPruneRepositoryOrder: Bool
     let didPruneWorktreeOrder: Bool
     let didPruneArchivedWorktreeIDs: Bool
+  }
+
+  enum StatusToast: Equatable {
+    case inProgress(String)
+    case success(String)
   }
 
   enum Alert: Equatable {
@@ -1124,6 +1135,45 @@ struct RepositoriesFeature {
         state.alert = messageAlert(title: title, message: message)
         return .none
 
+      case .showToast(let toast):
+        state.statusToast = toast
+        switch toast {
+        case .inProgress:
+          return .cancel(id: CancelID.toastAutoDismiss)
+        case .success:
+          return .run { send in
+            try? await Task.sleep(for: .seconds(2.5))
+            await send(.dismissToast)
+          }
+          .cancellable(id: CancelID.toastAutoDismiss, cancelInFlight: true)
+        }
+
+      case .dismissToast:
+        state.statusToast = nil
+        return .none
+
+      case .delayedPullRequestRefresh(let worktreeID):
+        guard let worktree = state.worktree(for: worktreeID),
+          let repositoryID = state.repositoryID(containing: worktreeID),
+          let repository = state.repositories[id: repositoryID]
+        else {
+          return .none
+        }
+        let repositoryRootURL = worktree.repositoryRootURL
+        let worktreeIDs = repository.worktrees.map(\.id)
+        return .run { send in
+          try? await Task.sleep(for: .seconds(2))
+          await send(
+            .worktreeInfoEvent(
+              .repositoryPullRequestRefresh(
+                repositoryRootURL: repositoryRootURL,
+                worktreeIDs: worktreeIDs
+              )
+            )
+          )
+        }
+        .cancellable(id: CancelID.delayedPRRefresh, cancelInFlight: true)
+
       case .worktreeNotificationReceived(let worktreeID):
         guard let repositoryID = state.repositoryID(containing: worktreeID),
           let repository = state.repositories[id: repositoryID],
@@ -1319,15 +1369,13 @@ struct RepositoriesFeature {
               )
               return
             }
+            await send(.showToast(.inProgress("Marking PR ready…")))
             do {
               try await githubCLI.markPullRequestReady(worktreeRoot, pullRequest.number)
-              await send(
-                .presentAlert(
-                  title: "Pull request marked ready",
-                  message: "Supacode marked this pull request as ready for review."
-                )
-              )
+              await send(.showToast(.success("Pull request marked ready")))
+              await send(.delayedPullRequestRefresh(worktreeID))
             } catch {
+              await send(.dismissToast)
               await send(
                 .presentAlert(
                   title: "Failed to mark pull request ready",
@@ -1352,15 +1400,13 @@ struct RepositoriesFeature {
             }
             @Shared(.repositorySettings(repoRoot)) var repositorySettings
             let strategy = repositorySettings.pullRequestMergeStrategy
+            await send(.showToast(.inProgress("Merging pull request…")))
             do {
               try await githubCLI.mergePullRequest(worktreeRoot, pullRequest.number, strategy)
-              await send(
-                .presentAlert(
-                  title: "Pull request merged",
-                  message: "Supacode merged this pull request."
-                )
-              )
+              await send(.showToast(.success("Pull request merged")))
+              await send(.delayedPullRequestRefresh(worktreeID))
             } catch {
+              await send(.dismissToast)
               await send(
                 .presentAlert(
                   title: "Failed to merge pull request",
@@ -1392,8 +1438,10 @@ struct RepositoriesFeature {
               )
               return
             }
+            await send(.showToast(.inProgress("Fetching CI logs…")))
             do {
               guard let run = try await githubCLI.latestRun(worktreeRoot, branchName) else {
+                await send(.dismissToast)
                 await send(
                   .presentAlert(
                     title: "No workflow runs found",
@@ -1403,6 +1451,7 @@ struct RepositoriesFeature {
                 return
               }
               guard run.conclusion?.lowercased() == "failure" else {
+                await send(.dismissToast)
                 await send(
                   .presentAlert(
                     title: "No failing workflow run",
@@ -1416,7 +1465,9 @@ struct RepositoriesFeature {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(logs, forType: .string)
               }
+              await send(.showToast(.success("CI failure logs copied")))
             } catch {
+              await send(.dismissToast)
               await send(
                 .presentAlert(
                   title: "Failed to copy CI failure logs",
@@ -1448,8 +1499,10 @@ struct RepositoriesFeature {
               )
               return
             }
+            await send(.showToast(.inProgress("Re-running failed jobs…")))
             do {
               guard let run = try await githubCLI.latestRun(worktreeRoot, branchName) else {
+                await send(.dismissToast)
                 await send(
                   .presentAlert(
                     title: "No workflow runs found",
@@ -1459,6 +1512,7 @@ struct RepositoriesFeature {
                 return
               }
               guard run.conclusion?.lowercased() == "failure" else {
+                await send(.dismissToast)
                 await send(
                   .presentAlert(
                     title: "No failing workflow run",
@@ -1468,7 +1522,10 @@ struct RepositoriesFeature {
                 return
               }
               try await githubCLI.rerunFailedJobs(worktreeRoot, run.databaseId)
+              await send(.showToast(.success("Failed jobs re-run started")))
+              await send(.delayedPullRequestRefresh(worktreeID))
             } catch {
+              await send(.dismissToast)
               await send(
                 .presentAlert(
                   title: "Failed to re-run failed jobs",
