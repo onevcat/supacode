@@ -14,11 +14,13 @@ struct TerminalTabBarTrailingAccessories: View {
   @State private var isHoveringButton = false
   @State private var isHoveringPopover = false
   @State private var isHoverPopoverPresented = false
+  @State private var openTask: Task<Void, Never>?
   @State private var closeTask: Task<Void, Never>?
 
   var body: some View {
     Button {
       createTab()
+      isHoverPopoverPresented = false
     } label: {
       if commandKeyObserver.isPressed {
         HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
@@ -39,7 +41,11 @@ struct TerminalTabBarTrailingAccessories: View {
       isHoveringButton = hovering
       updateHoverPopoverVisibility()
     }
-    .popover(isPresented: $isHoverPopoverPresented, arrowEdge: .top) {
+    .popover(
+      isPresented: $isHoverPopoverPresented,
+      attachmentAnchor: .rect(.bounds),
+      arrowEdge: .top
+    ) {
       hoverPopoverContent
         .onHover { hovering in
           isHoveringPopover = hovering
@@ -52,6 +58,25 @@ struct TerminalTabBarTrailingAccessories: View {
 
   private var hoverPopoverContent: some View {
     VStack(alignment: .leading, spacing: 8) {
+      Button {
+        createTab()
+        isHoverPopoverPresented = false
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "plus")
+          Text("New Tab")
+          Spacer(minLength: 0)
+          if let shortcut = ghosttyShortcuts.display(for: "new_tab") {
+            ShortcutHintView(text: shortcut, color: TerminalTabBarColors.inactiveText)
+          }
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help(helpText("New Tab", shortcut: ghosttyShortcuts.display(for: "new_tab")))
+
+      Divider()
+
       Button {
         splitVertically()
         isHoverPopoverPresented = false
@@ -101,16 +126,25 @@ struct TerminalTabBarTrailingAccessories: View {
     if isHoveringButton || isHoveringPopover {
       closeTask?.cancel()
       closeTask = nil
-      isHoverPopoverPresented = true
-      return
-    }
+      guard !isHoverPopoverPresented else { return }
+      openTask?.cancel()
+      openTask = Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(250))
+        if isHoveringButton || isHoveringPopover {
+          isHoverPopoverPresented = true
+        }
+      }
+    } else {
+      openTask?.cancel()
+      openTask = nil
 
-    // Avoid flicker when moving the cursor from the button into the popover.
-    closeTask?.cancel()
-    closeTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(150))
-      if !isHoveringButton && !isHoveringPopover {
-        isHoverPopoverPresented = false
+      // Avoid flicker when moving the cursor from the button into the popover.
+      closeTask?.cancel()
+      closeTask = Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(150))
+        if !isHoveringButton && !isHoveringPopover {
+          isHoverPopoverPresented = false
+        }
       }
     }
   }
