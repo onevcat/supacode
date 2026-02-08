@@ -302,6 +302,7 @@ final class TerminalSplitAXContainerView: NSView {
   private var hostingView: NSHostingView<AnyView>?
   private var panes: [GhosttySurfaceView] = []
   private var panesLabel: String = "Terminal split: 0 panes"
+  private var lastPaneIDs: [UUID] = []
 
   func update(rootView: AnyView, panes: [GhosttySurfaceView]) {
     if let hostingView {
@@ -319,11 +320,20 @@ final class TerminalSplitAXContainerView: NSView {
       self.hostingView = hostingView
     }
 
+    let newPaneIDs = panes.map(\.id)
+    if newPaneIDs != lastPaneIDs {
+      lastPaneIDs = newPaneIDs
+      // Assistive tech may cache the AX tree; nudge it to re-query when pane membership/order changes.
+      NSAccessibility.post(element: self, notification: .layoutChanged)
+    }
+
     self.panes = panes
     panesLabel = "Terminal split: \(panes.count) pane" + (panes.count == 1 ? "" : "s")
 
     for (index, pane) in panes.enumerated() {
       pane.setAccessibilityPaneIndex(index: index + 1, total: panes.count)
+      // Expose panes as direct children of this split group for predictable navigation.
+      pane.setAccessibilityParent(self)
     }
   }
 
@@ -332,7 +342,7 @@ final class TerminalSplitAXContainerView: NSView {
   }
 
   override func accessibilityRole() -> NSAccessibility.Role? {
-    // Use raw value to avoid SDK availability issues while still exposing the correct AX role.
+    // AppKit doesn't provide a named constant for this role.
     NSAccessibility.Role(rawValue: "AXSplitGroup")
   }
 

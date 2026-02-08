@@ -182,8 +182,8 @@ final class GhosttySurfaceBridge {
       state.pwd = string(from: action.action.pwd.pwd)
       if let surfaceView {
         NSAccessibility.post(element: surfaceView, notification: .valueChanged)
-        // If the title is empty, the surface view's accessibility label falls back to PWD.
-        // Posting a title change here helps VoiceOver re-announce the updated label.
+        // VoiceOver does not reliably re-read the label on `.valueChanged` alone.
+        // If the surface view's label falls back to PWD, post `.titleChanged` to trigger re-announcement.
         let title = state.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if title.isEmpty {
           NSAccessibility.post(element: surfaceView, notification: .titleChanged)

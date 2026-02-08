@@ -198,7 +198,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
     setSurfaceFocus(focused)
     onFocusChange?(focused)
     if focused {
-      NSAccessibility.post(element: self, notification: .focusedUIElementChanged)
+      // Post on the window so assistive tech can query the focused element from it.
+      if let window {
+        NSAccessibility.post(element: window, notification: .focusedUIElementChanged)
+      } else {
+        NSAccessibility.post(element: self, notification: .focusedUIElementChanged)
+      }
     }
     if passwordInput {
       SecureInput.shared.setScoped(ObjectIdentifier(self), focused: focused)
@@ -206,7 +211,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   func setAccessibilityPaneIndex(index: Int, total: Int) {
-    guard total > 0, index > 0 else {
+    guard total > 0, index > 0, index <= total else {
       accessibilityPaneIndexHelp = nil
       return
     }
@@ -214,11 +219,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func isAccessibilityElement() -> Bool {
-    true
+    // Avoid interacting with panes after teardown.
+    surface != nil
   }
 
   override func accessibilityRole() -> NSAccessibility.Role? {
-    // Use raw value to avoid SDK availability issues while still exposing the correct AX role.
+    // De facto role used by terminal emulators; AppKit doesn't provide a named constant for it.
     NSAccessibility.Role(rawValue: "AXTerminal")
   }
 
