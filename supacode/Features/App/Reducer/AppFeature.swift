@@ -391,6 +391,9 @@ struct AppFeature {
         }
         let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+          if state.isRunScriptPromptPresented {
+            return .none
+          }
           state.runScriptDraft = state.selectedRunScript
           state.isRunScriptPromptPresented = true
           return .none

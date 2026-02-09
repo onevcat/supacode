@@ -74,6 +74,30 @@ struct AppFeatureRunScriptTests {
     #expect(savedRunScript == "npm run dev")
   }
 
+  @Test(.dependencies) func runScriptDoesNotOverwriteDraftWhenPromptAlreadyPresented() async {
+    let worktree = makeWorktree()
+    let repositories = makeRepositoriesState(worktree: worktree)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositories,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    }
+
+    await store.send(.runScript) {
+      $0.runScriptDraft = ""
+      $0.isRunScriptPromptPresented = true
+    }
+    await store.send(.runScriptDraftChanged("pnpm dev")) {
+      $0.runScriptDraft = "pnpm dev"
+    }
+    await store.send(.runScript)
+    #expect(store.state.runScriptDraft == "pnpm dev")
+    #expect(store.state.isRunScriptPromptPresented)
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",
