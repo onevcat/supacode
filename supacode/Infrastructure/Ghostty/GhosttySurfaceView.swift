@@ -18,6 +18,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
   private let workingDirectoryCString: UnsafeMutablePointer<CChar>?
   private let initialInputCString: UnsafeMutablePointer<CChar>?
+  private let fontSize: Float32
+  private let context: ghostty_surface_context_e
   private var trackingArea: NSTrackingArea?
   private var lastBackingSize: CGSize = .zero
   private var lastPerformKeyEvent: TimeInterval?
@@ -88,9 +90,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override var acceptsFirstResponder: Bool { true }
 
-  init(runtime: GhosttyRuntime, workingDirectory: URL?, initialInput: String? = nil) {
+  init(
+    runtime: GhosttyRuntime,
+    workingDirectory: URL?,
+    initialInput: String? = nil,
+    fontSize: Float32? = nil,
+    context: ghostty_surface_context_e
+  ) {
     self.runtime = runtime
     self.bridge = GhosttySurfaceBridge()
+    self.fontSize = fontSize ?? 0
+    self.context = context
     if let workingDirectory {
       let path = workingDirectory.path(percentEncoded: false)
       workingDirectoryCString = path.withCString { strdup($0) }
@@ -561,9 +571,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
         nsview: Unmanaged.passUnretained(self).toOpaque()
       ))
     config.scale_factor = backingScaleFactor()
+    config.font_size = fontSize
     config.working_directory = workingDirectoryCString.map { UnsafePointer($0) }
     config.initial_input = initialInputCString.map { UnsafePointer($0) }
-    config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW
+    config.context = context
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
     updateSurfaceSize()
