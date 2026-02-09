@@ -68,6 +68,7 @@ struct TerminalTabBarTrailingAccessories: View {
       } label: {
         HStack(spacing: 8) {
           Image(systemName: "plus")
+            .accessibilityHidden(true)
           Text("New Tab")
           Spacer(minLength: 0)
           if let shortcut = ghosttyShortcuts.display(for: "new_tab") {
@@ -87,6 +88,7 @@ struct TerminalTabBarTrailingAccessories: View {
       } label: {
         HStack(spacing: 8) {
           Image(systemName: "rectangle.righthalf.inset.filled")
+            .accessibilityHidden(true)
           Text("Split Vertically")
           Spacer(minLength: 0)
           if let shortcut = ghosttyShortcuts.display(for: "new_split:right") {
@@ -105,6 +107,7 @@ struct TerminalTabBarTrailingAccessories: View {
       } label: {
         HStack(spacing: 8) {
           Image(systemName: "rectangle.bottomhalf.inset.filled")
+            .accessibilityHidden(true)
           Text("Split Horizontally")
           Spacer(minLength: 0)
           if let shortcut = ghosttyShortcuts.display(for: "new_split:down") {
