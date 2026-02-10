@@ -134,6 +134,7 @@ struct WorktreeRowsView: View {
     }
     .contentShape(.dragPreview, .rect)
     .contentShape(.interaction, .rect)
+    .accessibilityAddTraits(.isButton)
     .onTapGesture {
       store.send(.selectWorktree(row.id))
     }

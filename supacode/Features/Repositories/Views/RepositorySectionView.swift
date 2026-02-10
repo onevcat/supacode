@@ -101,6 +101,7 @@ struct RepositorySectionView: View {
       }
       .onHover { isHovering = $0 }
       .contentShape(.rect)
+      .accessibilityAddTraits(.isButton)
       .onTapGesture {
         toggleExpanded()
       }
