@@ -211,9 +211,10 @@ final class WorktreeTerminalState {
     var surfaceToFocus: GhosttySurfaceView?
     for (tabId, tree) in trees {
       let focusedId = focusedSurfaceIdByTab[tabId]
-      let shouldFocusTab = windowIsKey && tabId == selectedTabId
+      let isSelectedTab = windowIsKey && tabId == selectedTabId
       for surface in tree.leaves() {
-        let isFocused = shouldFocusTab && surface.id == focusedId
+        surface.setOcclusion(isSelectedTab)
+        let isFocused = isSelectedTab && surface.id == focusedId
         surface.focusDidChange(isFocused)
         if isFocused {
           surfaceToFocus = surface
@@ -430,6 +431,13 @@ final class WorktreeTerminalState {
 
     case .equalize:
       trees[tabId] = tree.equalized()
+    }
+  }
+
+  func setAllSurfacesOccluded() {
+    for surface in surfaces.values {
+      surface.setOcclusion(false)
+      surface.focusDidChange(false)
     }
   }
 

@@ -596,6 +596,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
     return 2.0
   }
 
+  func setOcclusion(_ visible: Bool) {
+    guard let surface else { return }
+    ghostty_surface_set_occlusion(surface, visible)
+  }
+
   private func setSurfaceFocus(_ focused: Bool) {
     guard let surface else { return }
     ghostty_surface_set_focus(surface, focused)
