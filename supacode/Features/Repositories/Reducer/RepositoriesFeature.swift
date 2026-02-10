@@ -1006,7 +1006,7 @@ struct RepositoriesFeature {
         guard currentPinned.count > 1 else { return .none }
         var reordered = currentPinned
         reordered.move(fromOffsets: offsets, toOffset: destination)
-        withAnimation {
+        withAnimation(.snappy(duration: 0.2)) {
           state.pinnedWorktreeIDs = state.replacingPinnedWorktreeIDs(
             in: repository,
             with: reordered
