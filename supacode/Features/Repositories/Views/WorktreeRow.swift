@@ -112,6 +112,7 @@ struct WorktreeRow: View {
         showsPullRequestTag: showsPullRequestTag,
         pullRequestNumber: display.pullRequest?.number,
         mergeReadiness: mergeReadiness,
+        isSelected: isSelected,
         shortcutHint: shortcutHint
       )
       .padding(.leading, 22)
@@ -144,13 +145,12 @@ private struct WorktreeRowInfoView: View {
   let showsPullRequestTag: Bool
   let pullRequestNumber: Int?
   let mergeReadiness: PullRequestMergeReadiness?
+  let isSelected: Bool
   let shortcutHint: String?
 
   var body: some View {
-    let summary = summaryText
     HStack(spacing: 4) {
-      Text(summary)
-        .foregroundStyle(.secondary)
+      summaryText
         .lineLimit(2)
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
@@ -164,18 +164,34 @@ private struct WorktreeRowInfoView: View {
     .frame(minHeight: 14)
   }
 
-  private var summaryText: String {
-    var segments: [String] = []
+  private var summaryText: Text {
+    var result = AttributedString()
+    func appendSeparator() {
+      if !result.characters.isEmpty {
+        var sep = AttributedString(" \u{2022} ")
+        sep.foregroundColor = .secondary
+        result.append(sep)
+      }
+    }
     if !worktreeName.isEmpty {
-      segments.append(worktreeName)
+      var segment = AttributedString(worktreeName)
+      segment.foregroundColor = .secondary
+      result.append(segment)
     }
     if showsPullRequestTag, let pullRequestNumber {
-      segments.append("PR #\(pullRequestNumber)")
+      appendSeparator()
+      var segment = AttributedString("PR #\(pullRequestNumber)")
+      segment.foregroundColor = .secondary
+      result.append(segment)
     }
     if let mergeReadiness {
-      segments.append(mergeReadiness.label)
+      appendSeparator()
+      let isMergeable = mergeReadiness.blockingReason == nil
+      var segment = AttributedString(mergeReadiness.label)
+      segment.foregroundColor = isMergeable ? (isSelected ? Color.primary : .green) : .secondary
+      result.append(segment)
     }
-    return segments.joined(separator: " • ")
+    return Text(result)
   }
 }
 
