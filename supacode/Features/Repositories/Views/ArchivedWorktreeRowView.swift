@@ -19,6 +19,7 @@ struct ArchivedWorktreeRowView: View {
         Image(systemName: "archivebox")
           .font(.caption)
           .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
           .frame(width: 16, height: 16)
           .alignmentGuide(.firstTextBaseline) { _ in
             bodyFont.ascender
