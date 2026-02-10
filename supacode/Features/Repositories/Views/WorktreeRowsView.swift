@@ -134,10 +134,6 @@ struct WorktreeRowsView: View {
     }
     .contentShape(.dragPreview, .rect)
     .contentShape(.interaction, .rect)
-    .accessibilityAddTraits(.isButton)
-    .onTapGesture {
-      store.send(.selectWorktree(row.id))
-    }
     .environment(\.colorScheme, colorScheme)
     .preferredColorScheme(colorScheme)
     .onHover { hovering in
@@ -202,6 +198,7 @@ struct WorktreeRowsView: View {
       pinAction: config.pinAction,
       archiveAction: config.archiveAction
     )
+    .tag(SidebarSelection.worktree(row.id))
     .typeSelectEquivalent("")
     .listRowInsets(EdgeInsets())
     .listRowSeparator(.hidden)

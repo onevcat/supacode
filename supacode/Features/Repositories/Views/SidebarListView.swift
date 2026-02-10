@@ -8,10 +8,39 @@ struct SidebarListView: View {
   @State private var isDragActive = false
 
   var body: some View {
+    let selection = Binding<SidebarSelection?>(
+      get: {
+        if store.isShowingArchivedWorktrees {
+          return .archivedWorktrees
+        }
+        return store.selectedWorktreeID.map(SidebarSelection.worktree)
+      },
+      set: { newValue in
+        switch newValue {
+        case .archivedWorktrees:
+          store.send(.selectArchivedWorktrees)
+        case .worktree(let id):
+          store.send(.selectWorktree(id))
+        case .repository(let id):
+          guard let repo = store.state.repositories[id: id],
+            !store.state.isRemovingRepository(repo)
+          else { return }
+          withAnimation(.easeOut(duration: 0.2)) {
+            if expandedRepoIDs.contains(id) {
+              expandedRepoIDs.remove(id)
+            } else {
+              expandedRepoIDs.insert(id)
+            }
+          }
+        case nil:
+          store.send(.selectWorktree(nil))
+        }
+      }
+    )
     let state = store.state
     let orderedRoots = state.orderedRepositoryRoots()
     let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
-    List {
+    List(selection: selection) {
       if orderedRoots.isEmpty {
         let repositories = store.repositories
         ForEach(Array(repositories.enumerated()), id: \.element.id) { index, repository in
