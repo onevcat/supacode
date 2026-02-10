@@ -323,6 +323,14 @@ final class GhosttyRuntime {
     return Self.keyboardShortcut(for: trigger)
   }
 
+  func focusFollowsMouse() -> Bool {
+    guard let config else { return false }
+    var value = false
+    let key = "focus-follows-mouse"
+    _ = ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8)))
+    return value
+  }
+
   func shouldShowScrollbar() -> Bool {
     guard let config else { return true }
     var valuePtr: UnsafePointer<CChar>?
