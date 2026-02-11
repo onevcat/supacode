@@ -62,6 +62,8 @@ struct RepositoriesFeature {
       roots: [URL]
     )
     case selectWorktree(Worktree.ID?)
+    case selectNextWorktree
+    case selectPreviousWorktree
     case requestRenameBranch(Worktree.ID, String)
     case createRandomWorktree
     case createRandomWorktreeInRepository(Repository.ID)
@@ -412,6 +414,32 @@ struct RepositoriesFeature {
         state.selection = worktreeID.map(SidebarSelection.worktree)
         let selectedWorktree = state.worktree(for: worktreeID)
         return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+
+      case .selectNextWorktree:
+        let rows = state.orderedWorktreeRows()
+        guard !rows.isEmpty else { return .none }
+        let nextID: Worktree.ID
+        if let currentID = state.selectedWorktreeID,
+          let currentIndex = rows.firstIndex(where: { $0.id == currentID })
+        {
+          nextID = rows[(currentIndex + 1) % rows.count].id
+        } else {
+          nextID = rows[0].id
+        }
+        return .send(.selectWorktree(nextID))
+
+      case .selectPreviousWorktree:
+        let rows = state.orderedWorktreeRows()
+        guard !rows.isEmpty else { return .none }
+        let previousID: Worktree.ID
+        if let currentID = state.selectedWorktreeID,
+          let currentIndex = rows.firstIndex(where: { $0.id == currentID })
+        {
+          previousID = rows[(currentIndex - 1 + rows.count) % rows.count].id
+        } else {
+          previousID = rows[rows.count - 1].id
+        }
+        return .send(.selectWorktree(previousID))
 
       case .requestRenameBranch(let worktreeID, let branchName):
         guard let worktree = state.worktree(for: worktreeID) else { return .none }

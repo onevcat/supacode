@@ -1,11 +1,20 @@
 import SwiftUI
 
 struct AppShortcut {
-  let key: Character
+  let keyEquivalent: KeyEquivalent
   let modifiers: EventModifiers
+  private let ghosttyKeyName: String
 
-  var keyEquivalent: KeyEquivalent {
-    KeyEquivalent(key)
+  init(key: Character, modifiers: EventModifiers) {
+    self.keyEquivalent = KeyEquivalent(key)
+    self.modifiers = modifiers
+    self.ghosttyKeyName = String(key).lowercased()
+  }
+
+  init(keyEquivalent: KeyEquivalent, ghosttyKeyName: String, modifiers: EventModifiers) {
+    self.keyEquivalent = keyEquivalent
+    self.modifiers = modifiers
+    self.ghosttyKeyName = ghosttyKeyName
   }
 
   var keyboardShortcut: KeyboardShortcut {
@@ -13,12 +22,12 @@ struct AppShortcut {
   }
 
   var ghosttyKeybind: String {
-    let parts = ghosttyModifierParts + [String(key).lowercased()]
+    let parts = ghosttyModifierParts + [ghosttyKeyName]
     return parts.joined(separator: "+")
   }
 
   var display: String {
-    let parts = displayModifierParts + [String(key).uppercased()]
+    let parts = displayModifierParts + [keyEquivalent.display]
     return parts.joined()
   }
 
@@ -58,6 +67,12 @@ enum AppShortcuts {
   static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
+  static let selectNextWorktree = AppShortcut(
+    keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .control]
+  )
+  static let selectPreviousWorktree = AppShortcut(
+    keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .control]
+  )
   static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.command, .control])
   static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.command, .control])
   static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.command, .control])
@@ -93,6 +108,8 @@ enum AppShortcuts {
     stopRunScript,
     checkForUpdates,
     archivedWorktrees,
+    selectNextWorktree,
+    selectPreviousWorktree,
     selectWorktree1,
     selectWorktree2,
     selectWorktree3,
