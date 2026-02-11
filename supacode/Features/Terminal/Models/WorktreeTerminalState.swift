@@ -211,10 +211,12 @@ final class WorktreeTerminalState {
     var surfaceToFocus: GhosttySurfaceView?
     for (tabId, tree) in trees {
       let focusedId = focusedSurfaceIdByTab[tabId]
-      let isSelectedTab = windowIsKey && tabId == selectedTabId
+      // Occlusion: only selected tab is visible, regardless of window focus
+      let isSelectedTab = (tabId == selectedTabId)
       for surface in tree.leaves() {
         surface.setOcclusion(isSelectedTab)
-        let isFocused = isSelectedTab && surface.id == focusedId
+        // Focus: requires both selected tab AND window key
+        let isFocused = windowIsKey && isSelectedTab && surface.id == focusedId
         surface.focusDidChange(isFocused)
         if isFocused {
           surfaceToFocus = surface
