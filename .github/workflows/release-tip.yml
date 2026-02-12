@@ -61,9 +61,10 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
-      - name: Override build number to timestamp
+      - name: Override build number for tip
         run: |
-          BUILD_NUMBER=$(date -u +%Y%m%d%H%M%S)
+          BASE=$(awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+/{gsub(/;/,""); print $2; exit}' supacode.xcodeproj/project.pbxproj)
+          BUILD_NUMBER=$((BASE * 1000 + ${{ github.run_number }} % 999 + 1))
           sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER/g" supacode.xcodeproj/project.pbxproj
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
       - name: Setup keychain
@@ -184,6 +185,8 @@ jobs:
             --download-url-prefix "https://supacode.sh/download/tip/" \
             --maximum-versions 1 \
             --ed-key-file - "$STAGING"
+          # Inject sparkle:channel tag into the tip item
+          sed -i '' 's|<enclosure |<sparkle:channel>tip</sparkle:channel>\n            <enclosure |' "$STAGING/appcast.xml"
           cp "$STAGING/appcast.xml" build/appcast.xml
       - uses: actions/upload-artifact@v6
         with:
@@ -246,3 +249,46 @@ jobs:
           gh release create tip --prerelease --title 'Supacode Tip ("Nightly")' --target "${{ github.sha }}" --notes "" -R "${{ github.repository }}" 2>/dev/null ||
           gh release edit tip --prerelease --title 'Supacode Tip ("Nightly")' --target "${{ github.sha }}" -R "${{ github.repository }}"
           gh release upload tip build/supacode.dmg build/supacode.app.zip build/appcast.xml --clobber -R "${{ github.repository }}"
+      - name: Merge tip item into production appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG=$(gh release list --exclude-drafts --exclude-pre-releases -R "${{ github.repository }}" --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No stable release found, skipping appcast merge"
+            exit 0
+          fi
+          gh release download "$LATEST_TAG" -p "appcast.xml" -O stable_appcast.xml -R "${{ github.repository }}" 2>/dev/null || exit 0
+
+          python3 - stable_appcast.xml build/appcast.xml merged_appcast.xml <<'PYEOF'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ET.register_namespace('sparkle', 'http://www.andymatuschak.org/xml-namespaces/sparkle')
+          ET.register_namespace('dc', 'http://purl.org/dc/elements/1.1/')
+
+          stable_path, tip_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+          stable_tree = ET.parse(stable_path)
+          stable_root = stable_tree.getroot()
+          tip_tree = ET.parse(tip_path)
+          tip_root = tip_tree.getroot()
+
+          ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
+          stable_channel = stable_root.find('.//channel')
+
+          # Remove existing tip items from stable appcast
+          for item in stable_channel.findall('item'):
+              ch = item.find('sparkle:channel', ns)
+              if ch is not None and ch.text == 'tip':
+                  stable_channel.remove(item)
+
+          # Add new tip items from tip appcast
+          tip_channel = tip_root.find('.//channel')
+          for item in tip_channel.findall('item'):
+              stable_channel.append(item)
+
+          stable_tree.write(out_path, xml_declaration=True, encoding='utf-8')
+          PYEOF
+
+          gh release upload "$LATEST_TAG" merged_appcast.xml#appcast.xml --clobber -R "${{ github.repository }}"

@@ -3,15 +3,32 @@ import Sparkle
 
 struct UpdaterClient {
   var configure: @MainActor @Sendable (_ checks: Bool, _ downloads: Bool, _ checkInBackground: Bool) -> Void
-  var setFeedURL: @MainActor @Sendable (URL) -> Void
+  var setUpdateChannel: @MainActor @Sendable (UpdateChannel) -> Void
   var checkForUpdates: @MainActor @Sendable () -> Void
+}
+
+@MainActor
+class SparkleUpdateDelegate: NSObject, SPUUpdaterDelegate {
+  var updateChannel: UpdateChannel = .stable
+
+  nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+    MainActor.assumeIsolated {
+      switch updateChannel {
+      case .stable:
+        []
+      case .tip:
+        ["tip"]
+      }
+    }
+  }
 }
 
 extension UpdaterClient: DependencyKey {
   static let liveValue: UpdaterClient = {
+    let delegate = SparkleUpdateDelegate()
     let controller = SPUStandardUpdaterController(
       startingUpdater: true,
-      updaterDelegate: nil,
+      updaterDelegate: delegate,
       userDriverDelegate: nil
     )
     let updater = controller.updater
@@ -24,9 +41,9 @@ extension UpdaterClient: DependencyKey {
           updater.checkForUpdatesInBackground()
         }
       },
-      setFeedURL: { url in
+      setUpdateChannel: { channel in
         _ = controller
-        updater.setFeedURL(url)
+        delegate.updateChannel = channel
       },
       checkForUpdates: {
         _ = controller
@@ -37,7 +54,7 @@ extension UpdaterClient: DependencyKey {
 
   static let testValue = UpdaterClient(
     configure: { _, _, _ in },
-    setFeedURL: { _ in },
+    setUpdateChannel: { _ in },
     checkForUpdates: {}
   )
 }

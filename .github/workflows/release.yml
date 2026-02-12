@@ -52,6 +52,11 @@ jobs:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
       - run: echo "TAG=${{ github.event.release.tag_name }}" >> "$GITHUB_ENV"
+      - name: Override build number for versioning scheme
+        run: |
+          BASE=$(awk -F' = ' '/CURRENT_PROJECT_VERSION = [0-9]+/{gsub(/;/,""); print $2; exit}' supacode.xcodeproj/project.pbxproj)
+          BUILD_NUMBER=$((BASE * 1000))
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER/g" supacode.xcodeproj/project.pbxproj
       - name: Setup keychain
         run: |
           echo "$DEVELOPER_ID_CERT_P12" | base64 --decode > build-cert.p12

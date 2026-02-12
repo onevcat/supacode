@@ -27,7 +27,7 @@ struct UpdatesFeature {
         let checkInBackground = !state.didConfigureUpdates
         state.didConfigureUpdates = true
         return .run { _ in
-          await updaterClient.setFeedURL(channel.feedURL)
+          await updaterClient.setUpdateChannel(channel)
           await updaterClient.configure(checks, downloads, checkInBackground)
         }
 
