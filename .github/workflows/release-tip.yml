@@ -183,16 +183,34 @@ jobs:
           APP_PATH="$(find build/export -name "supacode.app" -maxdepth 3 -print -quit)"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" build/supacode.app.zip
       - name: Generate tip appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          MAX_DELTAS=10
           STAGING=$(mktemp -d)
           cp build/supacode.app.zip "$STAGING/"
+
+          # Download previous tip builds stored as history assets
+          ASSETS=$(gh release view tip -R "${{ github.repository }}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          for asset in $ASSETS; do
+            case "$asset" in
+              supacode-history-*.app.zip)
+                gh release download tip -p "$asset" -O "$STAGING/$asset" -R "${{ github.repository }}" 2>/dev/null || true
+                ;;
+            esac
+          done
+
           printf "%s" "$SPARKLE_PRIVATE_KEY" | tr -d '\r\n\t ' | ./bins/generate_appcast \
             --download-url-prefix "https://supacode.sh/download/tip/" \
-            --maximum-versions 1 \
+            --maximum-versions $((MAX_DELTAS + 1)) \
+            --maximum-deltas $MAX_DELTAS \
+            --delta-compression lzma \
             --ed-key-file - "$STAGING"
-          # Inject sparkle:channel tag into the tip item
+          # Inject sparkle:channel tag into the tip items
           sed -i '' 's|<enclosure |<sparkle:channel>tip</sparkle:channel>\n            <enclosure |' "$STAGING/appcast.xml"
           cp "$STAGING/appcast.xml" build/appcast.xml
+          find "$STAGING" -name "*.delta" -exec cp {} build/ \; 2>/dev/null || true
       - uses: actions/upload-artifact@v6
         with:
           name: build-artifacts
@@ -200,6 +218,7 @@ jobs:
             build/supacode.dmg
             build/supacode.app.zip
             build/appcast.xml
+            build/*.delta
 
   tag:
     runs-on: ubuntu-latest
@@ -253,7 +272,27 @@ jobs:
         run: |
           gh release create tip --prerelease --title 'Supacode Tip ("Nightly")' --target "${{ github.sha }}" --notes "" -R "${{ github.repository }}" 2>/dev/null ||
           gh release edit tip --prerelease --title 'Supacode Tip ("Nightly")' --target "${{ github.sha }}" -R "${{ github.repository }}"
-          gh release upload tip build/supacode.dmg build/supacode.app.zip build/appcast.xml --clobber -R "${{ github.repository }}"
+
+          # Delete stale delta files from previous tip
+          STALE_DELTAS=$(gh release view tip -R "${{ github.repository }}" --json assets --jq '.assets[].name | select(endswith(".delta"))' 2>/dev/null || true)
+          for d in $STALE_DELTAS; do
+            gh release delete-asset tip "$d" -R "${{ github.repository }}" -y 2>/dev/null || true
+          done
+
+          DELTA_FILES=$(find build -name "*.delta" -type f 2>/dev/null | tr '\n' ' ' || true)
+          gh release upload tip build/supacode.dmg build/supacode.app.zip build/appcast.xml $DELTA_FILES --clobber -R "${{ github.repository }}"
+
+          # Store current build as history asset for future delta generation
+          MAX_DELTAS=10
+          cp build/supacode.app.zip "build/supacode-history-${{ github.run_number }}.app.zip"
+          gh release upload tip "build/supacode-history-${{ github.run_number }}.app.zip" --clobber -R "${{ github.repository }}"
+
+          # Prune oldest history assets beyond MAX_DELTAS
+          HISTORY=$(gh release view tip -R "${{ github.repository }}" --json assets --jq '[.assets[].name | select(startswith("supacode-history-"))] | sort | reverse' 2>/dev/null || echo "[]")
+          PRUNE=$(echo "$HISTORY" | jq -r ".[$MAX_DELTAS:][]" 2>/dev/null || true)
+          for old in $PRUNE; do
+            gh release delete-asset tip "$old" -R "${{ github.repository }}" -y 2>/dev/null || true
+          done
       - name: Merge tip item into production appcast
         env:
           GH_TOKEN: ${{ github.token }}
