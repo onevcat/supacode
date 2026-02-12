@@ -145,7 +145,9 @@ final class GhosttyRuntime {
   func reloadConfig(soft: Bool, target: ghostty_target_s) {
     guard let app else { return }
     if soft, let config {
-      applyConfig(config, target: target, app: app)
+      guard let clone = ghostty_config_clone(config) else { return }
+      applyConfig(clone, target: target, app: app)
+      ghostty_config_free(clone)
       return
     }
     guard let config = Self.loadConfig() else { return }
