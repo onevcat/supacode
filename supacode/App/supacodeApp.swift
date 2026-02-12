@@ -35,15 +35,15 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     appStore?.send(.appLaunched)
   }
 
+  func applicationDidBecomeActive(_ notification: Notification) {
+    let app = NSApplication.shared
+    guard !app.windows.contains(where: \.isVisible) else { return }
+    _ = showMainWindow(from: app)
+  }
+
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if flag { return true }
-    guard let window = mainWindow(from: sender) else { return true }
-    if window.isMiniaturized {
-      window.deminiaturize(nil)
-    }
-    window.makeKeyAndOrderFront(nil)
-    sender.activate()
-    return false
+    return showMainWindow(from: sender) ? false : true
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -58,6 +58,16 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       return window
     }
     return sender.windows.first
+  }
+
+  private func showMainWindow(from sender: NSApplication) -> Bool {
+    guard let window = mainWindow(from: sender) else { return false }
+    if window.isMiniaturized {
+      window.deminiaturize(nil)
+    }
+    sender.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+    return true
   }
 }
 
