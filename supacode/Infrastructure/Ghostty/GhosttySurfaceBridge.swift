@@ -23,6 +23,12 @@ final class GhosttySurfaceBridge {
     progressResetTask?.cancel()
   }
 
+  func willHandleAction(_ action: ghostty_action_s) -> Bool {
+    if let handled = willHandleAppAction(action) { return handled }
+    if let handled = willHandleSplitAction(action) { return handled }
+    return false
+  }
+
   func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
     if let handled = handleAppAction(action) { return handled }
     if let handled = handleSplitAction(action) { return handled }
@@ -33,6 +39,49 @@ final class GhosttySurfaceBridge {
     if handleSizeAndKey(action) { return false }
     if handleConfigAndShell(action) { return false }
     return false
+  }
+
+  private func willHandleAppAction(_ action: ghostty_action_s) -> Bool? {
+    switch action.tag {
+    case GHOSTTY_ACTION_NEW_TAB:
+      return onNewTab != nil
+    case GHOSTTY_ACTION_CLOSE_TAB:
+      return onCloseTab != nil
+    case GHOSTTY_ACTION_GOTO_TAB:
+      return onGotoTab != nil
+    case GHOSTTY_ACTION_MOVE_TAB:
+      return onMoveTab != nil
+    case GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE:
+      return onCommandPaletteToggle != nil
+    case GHOSTTY_ACTION_UNDO, GHOSTTY_ACTION_REDO:
+      return true
+    case GHOSTTY_ACTION_GOTO_WINDOW,
+      GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL,
+      GHOSTTY_ACTION_CLOSE_ALL_WINDOWS:
+      return false
+    default:
+      return nil
+    }
+  }
+
+  private func willHandleSplitAction(_ action: ghostty_action_s) -> Bool? {
+    switch action.tag {
+    case GHOSTTY_ACTION_NEW_SPLIT:
+      guard splitDirection(from: action.action.new_split) != nil else { return false }
+      return onSplitAction != nil
+    case GHOSTTY_ACTION_GOTO_SPLIT:
+      guard focusDirection(from: action.action.goto_split) != nil else { return false }
+      return onSplitAction != nil
+    case GHOSTTY_ACTION_RESIZE_SPLIT:
+      let resize = action.action.resize_split
+      guard resizeDirection(from: resize.direction) != nil else { return false }
+      return onSplitAction != nil
+    case GHOSTTY_ACTION_EQUALIZE_SPLITS,
+      GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+      return onSplitAction != nil
+    default:
+      return nil
+    }
   }
 
   func sendText(_ text: String) {

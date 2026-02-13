@@ -7,6 +7,8 @@ struct WorktreeTerminalTabsView: View {
   let shouldRunSetupScript: Bool
   let forceAutoFocus: Bool
   let createTab: () -> Void
+  @State private var windowIsVisible = true
+  @State private var windowIsKey = false
 
   var body: some View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
@@ -35,7 +37,7 @@ struct WorktreeTerminalTabsView: View {
         }
       )
       if let selectedId = state.tabManager.selectedTabId {
-        TerminalTabContentStack(tabs: state.tabManager.tabs, selectedTabId: selectedId) { tabId in
+        TerminalTabContentStack(selectedTabId: selectedId) { tabId in
           TerminalSplitTreeAXContainer(tree: state.splitTree(for: tabId)) { operation in
             state.performSplitOperation(operation, in: tabId)
           }
@@ -45,21 +47,40 @@ struct WorktreeTerminalTabsView: View {
       }
     }
     .background(
-      WindowFocusObserverView { isKey in
-        state.syncFocus(windowIsKey: isKey)
-      }
+      WindowFocusObserverView(
+        onWindowKeyChanged: { isKey in
+          windowIsKey = isKey
+          applyWindowState()
+        },
+        onWindowOcclusionChanged: { isVisible in
+          windowIsVisible = isVisible
+          applyWindowState()
+        }
+      )
     )
     .onAppear {
       state.ensureInitialTab(focusing: false)
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
       }
+      if let window = NSApp.keyWindow {
+        windowIsKey = window.isKeyWindow
+        windowIsVisible = window.occlusionState.contains(.visible)
+      } else {
+        windowIsKey = false
+        windowIsVisible = false
+      }
+      applyWindowState()
     }
-    .onChange(of: state.tabManager.selectedTabId) { _, _ in
+    .onChange(of: state.tabManager.selectedTabId) { oldTabId, _ in
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
       }
-      state.syncFocus(windowIsKey: NSApp.keyWindow?.isKeyWindow ?? false)
+      state.syncTabSelection(
+        previousTabId: oldTabId,
+        windowIsKey: windowIsKey,
+        windowIsVisible: windowIsVisible
+      )
     }
   }
 
@@ -69,5 +90,9 @@ struct WorktreeTerminalTabsView: View {
     }
     guard let responder = NSApp.keyWindow?.firstResponder else { return true }
     return !(responder is NSTableView) && !(responder is NSOutlineView)
+  }
+
+  private func applyWindowState() {
+    manager.setWindowOcclusion(visible: windowIsVisible, windowIsKey: windowIsKey)
   }
 }

@@ -3,21 +3,25 @@ import SwiftUI
 
 struct WindowFocusObserverView: NSViewRepresentable {
   let onWindowKeyChanged: (Bool) -> Void
+  let onWindowOcclusionChanged: (Bool) -> Void
 
   func makeNSView(context: Context) -> WindowFocusObserverNSView {
     let view = WindowFocusObserverNSView()
     view.onWindowKeyChanged = onWindowKeyChanged
+    view.onWindowOcclusionChanged = onWindowOcclusionChanged
     return view
   }
 
   func updateNSView(_ nsView: WindowFocusObserverNSView, context: Context) {
     nsView.onWindowKeyChanged = onWindowKeyChanged
+    nsView.onWindowOcclusionChanged = onWindowOcclusionChanged
     nsView.notifyCurrentState()
   }
 }
 
 final class WindowFocusObserverNSView: NSView {
   var onWindowKeyChanged: (Bool) -> Void = { _ in }
+  var onWindowOcclusionChanged: (Bool) -> Void = { _ in }
   private var observers: [NSObjectProtocol] = []
   private weak var observedWindow: NSWindow?
 
@@ -27,12 +31,18 @@ final class WindowFocusObserverNSView: NSView {
   }
 
   func notifyCurrentState() {
-    onWindowKeyChanged(windowIsEffectivelyKey)
+    onWindowKeyChanged(windowIsKey)
+    onWindowOcclusionChanged(windowIsVisible)
   }
 
-  private var windowIsEffectivelyKey: Bool {
+  private var windowIsKey: Bool {
     guard let window else { return false }
-    return window.isKeyWindow && window.occlusionState.contains(.visible)
+    return window.isKeyWindow
+  }
+
+  private var windowIsVisible: Bool {
+    guard let window else { return false }
+    return window.occlusionState.contains(.visible)
   }
 
   private func updateObservers() {
@@ -44,6 +54,7 @@ final class WindowFocusObserverNSView: NSView {
     observedWindow = window
     guard let window else {
       onWindowKeyChanged(false)
+      onWindowOcclusionChanged(false)
       return
     }
     let center = NotificationCenter.default
@@ -53,8 +64,7 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        guard let self else { return }
-        self.onWindowKeyChanged(self.windowIsEffectivelyKey)
+        self?.notifyCurrentState()
       })
     observers.append(
       center.addObserver(
@@ -62,7 +72,7 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        self?.onWindowKeyChanged(false)
+        self?.notifyCurrentState()
       })
     observers.append(
       center.addObserver(
@@ -70,10 +80,9 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        guard let self else { return }
-        self.onWindowKeyChanged(self.windowIsEffectivelyKey)
+        self?.notifyCurrentState()
       })
-    onWindowKeyChanged(windowIsEffectivelyKey)
+    notifyCurrentState()
   }
 
   private func clearObservers() {

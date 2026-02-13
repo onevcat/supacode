@@ -8,6 +8,7 @@ struct GhosttyTerminalView: NSViewRepresentable {
   }
 
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
+    guard view.window != nil else { return }
     view.updateSurfaceSize()
   }
 }

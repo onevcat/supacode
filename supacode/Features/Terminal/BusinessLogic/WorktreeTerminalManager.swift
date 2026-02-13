@@ -221,6 +221,19 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.hasUnseenNotification == true
   }
 
+  func setWindowOcclusion(visible: Bool, windowIsKey: Bool) {
+    if !visible {
+      for state in states.values {
+        state.setAllSurfacesOccluded()
+      }
+      return
+    }
+    guard let selectedWorktreeID, let selectedState = states[selectedWorktreeID] else {
+      return
+    }
+    selectedState.syncFocus(windowIsKey: windowIsKey, windowIsVisible: true)
+  }
+
   private func emit(_ event: TerminalClient.Event) {
     guard let eventContinuation else {
       pendingEvents.append(event)

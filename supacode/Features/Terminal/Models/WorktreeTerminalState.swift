@@ -206,26 +206,29 @@ final class WorktreeTerminalState {
     surface.insertText(text, replacementRange: NSRange(location: 0, length: 0))
   }
 
-  func syncFocus(windowIsKey: Bool) {
-    let selectedTabId = tabManager.selectedTabId
-    var surfaceToFocus: GhosttySurfaceView?
-    for (tabId, tree) in trees {
-      let focusedId = focusedSurfaceIdByTab[tabId]
-      // Occlusion: only selected tab is visible, regardless of window focus
-      let isSelectedTab = (tabId == selectedTabId)
-      for surface in tree.leaves() {
-        surface.setOcclusion(isSelectedTab)
-        // Focus: requires both selected tab AND window key
-        let isFocused = windowIsKey && isSelectedTab && surface.id == focusedId
-        surface.focusDidChange(isFocused)
-        if isFocused {
-          surfaceToFocus = surface
-        }
-      }
-    }
+  func syncFocus(windowIsKey: Bool, windowIsVisible: Bool) {
+    guard let selectedTabId = tabManager.selectedTabId else { return }
+    let surfaceToFocus = syncTabSurfaces(
+      tabId: selectedTabId,
+      visible: windowIsVisible,
+      windowIsKey: windowIsKey
+    )
     if let surfaceToFocus, surfaceToFocus.window?.firstResponder is GhosttySurfaceView {
       surfaceToFocus.window?.makeFirstResponder(surfaceToFocus)
     }
+  }
+
+  func syncTabSelection(
+    previousTabId: TerminalTabID?,
+    windowIsKey: Bool,
+    windowIsVisible: Bool
+  ) {
+    let selectedTabId = tabManager.selectedTabId
+    if let previousTabId, previousTabId != selectedTabId {
+      _ = syncTabSurfaces(tabId: previousTabId, visible: false, windowIsKey: false)
+    }
+    guard selectedTabId != nil else { return }
+    syncFocus(windowIsKey: windowIsKey, windowIsVisible: windowIsVisible)
   }
 
   @discardableResult
@@ -891,5 +894,24 @@ final class WorktreeTerminalState {
       maxIndex = max(maxIndex, value)
     }
     return maxIndex + 1
+  }
+
+  private func syncTabSurfaces(
+    tabId: TerminalTabID,
+    visible: Bool,
+    windowIsKey: Bool
+  ) -> GhosttySurfaceView? {
+    guard let tree = trees[tabId] else { return nil }
+    let focusedId = focusedSurfaceIdByTab[tabId]
+    var surfaceToFocus: GhosttySurfaceView?
+    for surface in tree.leaves() {
+      surface.setOcclusion(visible)
+      let isFocused = visible && windowIsKey && surface.id == focusedId
+      surface.focusDidChange(isFocused)
+      if isFocused {
+        surfaceToFocus = surface
+      }
+    }
+    return surfaceToFocus
   }
 }
