@@ -4,19 +4,25 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var baseRef: String?
   var copyIgnored: Bool?
   var copyUntracked: Bool?
+  var ignoredFilesToCopyCount: Int?
+  var untrackedFilesToCopyCount: Int?
 
   init(
     stage: WorktreeCreationStage,
     worktreeName: String? = nil,
     baseRef: String? = nil,
     copyIgnored: Bool? = nil,
-    copyUntracked: Bool? = nil
+    copyUntracked: Bool? = nil,
+    ignoredFilesToCopyCount: Int? = nil,
+    untrackedFilesToCopyCount: Int? = nil
   ) {
     self.stage = stage
     self.worktreeName = worktreeName
     self.baseRef = baseRef
     self.copyIgnored = copyIgnored
     self.copyUntracked = copyUntracked
+    self.ignoredFilesToCopyCount = ignoredFilesToCopyCount
+    self.untrackedFilesToCopyCount = untrackedFilesToCopyCount
   }
 
   var titleText: String {
@@ -37,9 +43,12 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     case .resolvingBaseReference:
       return "Resolving base reference (\(baseRefDisplay))"
     case .creatingWorktree:
-      let ignored = copyIgnored.map { $0 ? "on" : "off" } ?? "off"
-      let untracked = copyUntracked.map { $0 ? "on" : "off" } ?? "off"
-      return "Creating from \(baseRefDisplay) (copy ignored: \(ignored), copy untracked: \(untracked))"
+      let ignoredCount = copyIgnored == true ? (ignoredFilesToCopyCount ?? 0) : 0
+      let untrackedCount = copyUntracked == true ? (untrackedFilesToCopyCount ?? 0) : 0
+      let copySummary =
+        "Copying \(ignoredCount) ignored files and copying \(untrackedCount) untracked files"
+      return
+        "Creating from \(baseRefBranchDisplay). \(copySummary)"
     }
   }
 
@@ -48,6 +57,17 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       return "HEAD"
     }
     return baseRef
+  }
+
+  private var baseRefBranchDisplay: String {
+    let normalized = baseRefDisplay.lowercased()
+    if normalized == "main" || normalized == "origin/main" {
+      return "main branch"
+    }
+    if normalized == "head" {
+      return "HEAD"
+    }
+    return "\(baseRefDisplay) branch"
   }
 }
 

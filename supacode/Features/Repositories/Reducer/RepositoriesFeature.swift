@@ -578,6 +578,10 @@ struct RepositoriesFeature {
             progress.baseRef = resolvedBaseRef
             progress.copyIgnored = copyIgnored
             progress.copyUntracked = copyUntracked
+            progress.ignoredFilesToCopyCount =
+              copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+            progress.untrackedFilesToCopyCount =
+              copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
             progress.stage = .creatingWorktree
             await send(
               .pendingWorktreeProgressUpdated(

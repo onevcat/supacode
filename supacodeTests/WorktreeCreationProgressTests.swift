@@ -19,13 +19,15 @@ struct WorktreeCreationProgressTests {
       worktreeName: "swift-otter",
       baseRef: "origin/main",
       copyIgnored: true,
-      copyUntracked: false
+      copyUntracked: false,
+      ignoredFilesToCopyCount: 12,
+      untrackedFilesToCopyCount: 5
     )
 
     #expect(progress.titleText == "Creating swift-otter")
     #expect(
       progress.detailText
-        == "Creating from origin/main (copy ignored: on, copy untracked: off)"
+        == "Creating from main branch. Copying 12 ignored files and copying 0 untracked files"
     )
   }
 }
