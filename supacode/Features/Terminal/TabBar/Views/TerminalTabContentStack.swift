@@ -16,16 +16,13 @@ struct TerminalTabContentStack<Content: View>: View {
   }
 
   var body: some View {
-    ZStack {
-      ForEach(tabs) { tab in
-        content(tab.id)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .opacity(tab.id == selectedTabId ? 1 : 0)
-          .zIndex(tab.id == selectedTabId ? 1 : 0)
-          .allowsHitTesting(tab.id == selectedTabId)
-          .accessibilityHidden(tab.id != selectedTabId)
-      }
+    if let selectedTabID = Self.selectedTabID(in: tabs, selectedTabId: selectedTabId) {
+      content(selectedTabID)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  static func selectedTabID(in tabs: [TerminalTabItem], selectedTabId: TerminalTabID) -> TerminalTabID? {
+    tabs.contains { $0.id == selectedTabId } ? selectedTabId : nil
   }
 }

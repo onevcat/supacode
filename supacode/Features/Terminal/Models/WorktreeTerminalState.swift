@@ -8,6 +8,11 @@ import Sharing
 @MainActor
 @Observable
 final class WorktreeTerminalState {
+  struct SurfaceActivity: Equatable {
+    let isVisible: Bool
+    let isFocused: Bool
+  }
+
   let tabManager: TerminalTabManager
   private let runtime: GhosttyRuntime
   private let worktree: Worktree
@@ -202,19 +207,23 @@ final class WorktreeTerminalState {
     surface.insertText(text, replacementRange: NSRange(location: 0, length: 0))
   }
 
-  func syncFocus(windowIsKey: Bool) {
+  func syncFocus(windowIsKey: Bool, windowIsVisible: Bool) {
     let selectedTabId = tabManager.selectedTabId
     var surfaceToFocus: GhosttySurfaceView?
     for (tabId, tree) in trees {
       let focusedId = focusedSurfaceIdByTab[tabId]
-      // Occlusion: only selected tab is visible, regardless of window focus
       let isSelectedTab = (tabId == selectedTabId)
       for surface in tree.leaves() {
-        surface.setOcclusion(isSelectedTab)
-        // Focus: requires both selected tab AND window key
-        let isFocused = windowIsKey && isSelectedTab && surface.id == focusedId
-        surface.focusDidChange(isFocused)
-        if isFocused {
+        let activity = Self.surfaceActivity(
+          isSelectedTab: isSelectedTab,
+          windowIsVisible: windowIsVisible,
+          windowIsKey: windowIsKey,
+          focusedSurfaceID: focusedId,
+          surfaceID: surface.id
+        )
+        surface.setOcclusion(activity.isVisible)
+        surface.focusDidChange(activity.isFocused)
+        if activity.isFocused {
           surfaceToFocus = surface
         }
       }
@@ -222,6 +231,18 @@ final class WorktreeTerminalState {
     if let surfaceToFocus, surfaceToFocus.window?.firstResponder is GhosttySurfaceView {
       surfaceToFocus.window?.makeFirstResponder(surfaceToFocus)
     }
+  }
+
+  static func surfaceActivity(
+    isSelectedTab: Bool,
+    windowIsVisible: Bool,
+    windowIsKey: Bool,
+    focusedSurfaceID: UUID?,
+    surfaceID: UUID
+  ) -> SurfaceActivity {
+    let isVisible = isSelectedTab && windowIsVisible
+    let isFocused = isVisible && windowIsKey && focusedSurfaceID == surfaceID
+    return SurfaceActivity(isVisible: isVisible, isFocused: isFocused)
   }
 
   @discardableResult

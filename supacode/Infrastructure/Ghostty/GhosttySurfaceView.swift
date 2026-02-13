@@ -29,6 +29,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
+  private var lastOcclusion: Bool?
+  private var lastSurfaceFocus: Bool?
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
   private var prevPressureStage: Int = 0
@@ -160,6 +162,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
       ghostty_surface_free(surface)
       self.surface = nil
       bridge.surface = nil
+      lastOcclusion = nil
+      lastSurfaceFocus = nil
     }
   }
 
@@ -640,6 +644,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.context = context
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
+    lastOcclusion = nil
+    lastSurfaceFocus = nil
     updateSurfaceSize()
   }
 
@@ -661,11 +667,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else { return }
+    if lastOcclusion == visible {
+      return
+    }
+    lastOcclusion = visible
     ghostty_surface_set_occlusion(surface, visible)
   }
 
   private func setSurfaceFocus(_ focused: Bool) {
     guard let surface else { return }
+    if lastSurfaceFocus == focused {
+      return
+    }
+    lastSurfaceFocus = focused
     ghostty_surface_set_focus(surface, focused)
   }
 
