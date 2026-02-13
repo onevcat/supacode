@@ -4,6 +4,11 @@ import GhosttyKit
 
 @MainActor
 final class GhosttySurfaceBridge {
+  private enum ActionDispatchMode {
+    case execute
+    case predict
+  }
+
   let state = GhosttySurfaceState()
   var surface: ghostty_surface_t?
   weak var surfaceView: GhosttySurfaceView?
@@ -24,14 +29,14 @@ final class GhosttySurfaceBridge {
   }
 
   func willHandleAction(_ action: ghostty_action_s) -> Bool {
-    if let handled = willHandleAppAction(action) { return handled }
-    if let handled = willHandleSplitAction(action) { return handled }
+    if let handled = appActionResult(action, mode: .predict) { return handled }
+    if let handled = splitActionResult(action, mode: .predict) { return handled }
     return false
   }
 
   func handleAction(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
-    if let handled = handleAppAction(action) { return handled }
-    if let handled = handleSplitAction(action) { return handled }
+    if let handled = appActionResult(action, mode: .execute) { return handled }
+    if let handled = splitActionResult(action, mode: .execute) { return handled }
     if handleTitleAndPath(action) { return false }
     if handleCommandStatus(action) { return false }
     if handleMouseAndLink(action) { return false }
@@ -41,19 +46,45 @@ final class GhosttySurfaceBridge {
     return false
   }
 
-  private func willHandleAppAction(_ action: ghostty_action_s) -> Bool? {
+  private func appActionResult(_ action: ghostty_action_s, mode: ActionDispatchMode) -> Bool? {
+    if let handled = appActionCallbackResult(action, mode: mode) {
+      return handled
+    }
+    return appActionSystemResult(action, mode: mode)
+  }
+
+  private func appActionCallbackResult(_ action: ghostty_action_s, mode: ActionDispatchMode)
+    -> Bool?
+  {
     switch action.tag {
     case GHOSTTY_ACTION_NEW_TAB:
-      return onNewTab != nil
+      return callbackResult(onNewTab, mode: mode)
     case GHOSTTY_ACTION_CLOSE_TAB:
-      return onCloseTab != nil
+      return callbackResult(onCloseTab, argument: action.action.close_tab_mode, mode: mode)
     case GHOSTTY_ACTION_GOTO_TAB:
-      return onGotoTab != nil
+      return callbackResult(onGotoTab, argument: action.action.goto_tab, mode: mode)
     case GHOSTTY_ACTION_MOVE_TAB:
-      return onMoveTab != nil
+      return callbackResult(onMoveTab, argument: action.action.move_tab, mode: mode)
     case GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE:
-      return onCommandPaletteToggle != nil
+      return callbackResult(onCommandPaletteToggle, mode: mode)
+    default:
+      return nil
+    }
+  }
+
+  private func appActionSystemResult(_ action: ghostty_action_s, mode: ActionDispatchMode) -> Bool? {
+    switch action.tag {
     case GHOSTTY_ACTION_UNDO, GHOSTTY_ACTION_REDO:
+      switch mode {
+      case .execute:
+        let selector =
+          action.tag == GHOSTTY_ACTION_UNDO
+          ? #selector(UndoManager.undo)
+          : #selector(UndoManager.redo)
+        NSApp.sendAction(selector, to: nil, from: nil)
+      case .predict:
+        break
+      }
       return true
     case GHOSTTY_ACTION_GOTO_WINDOW,
       GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL,
@@ -64,23 +95,58 @@ final class GhosttySurfaceBridge {
     }
   }
 
-  private func willHandleSplitAction(_ action: ghostty_action_s) -> Bool? {
+  private func splitActionResult(_ action: ghostty_action_s, mode: ActionDispatchMode) -> Bool? {
     switch action.tag {
     case GHOSTTY_ACTION_NEW_SPLIT:
-      guard splitDirection(from: action.action.new_split) != nil else { return false }
-      return onSplitAction != nil
+      guard let direction = splitDirection(from: action.action.new_split) else { return false }
+      return splitActionCallbackResult(.newSplit(direction: direction), mode: mode)
     case GHOSTTY_ACTION_GOTO_SPLIT:
-      guard focusDirection(from: action.action.goto_split) != nil else { return false }
-      return onSplitAction != nil
+      guard let direction = focusDirection(from: action.action.goto_split) else { return false }
+      return splitActionCallbackResult(.gotoSplit(direction: direction), mode: mode)
     case GHOSTTY_ACTION_RESIZE_SPLIT:
       let resize = action.action.resize_split
-      guard resizeDirection(from: resize.direction) != nil else { return false }
-      return onSplitAction != nil
+      guard let direction = resizeDirection(from: resize.direction) else { return false }
+      return splitActionCallbackResult(.resizeSplit(direction: direction, amount: resize.amount), mode: mode)
     case GHOSTTY_ACTION_EQUALIZE_SPLITS,
       GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
-      return onSplitAction != nil
+      let actionValue: GhosttySplitAction =
+        action.tag == GHOSTTY_ACTION_EQUALIZE_SPLITS
+        ? .equalizeSplits
+        : .toggleSplitZoom
+      return splitActionCallbackResult(actionValue, mode: mode)
     default:
       return nil
+    }
+  }
+
+  private func splitActionCallbackResult(_ action: GhosttySplitAction, mode: ActionDispatchMode) -> Bool {
+    switch mode {
+    case .execute:
+      return onSplitAction?(action) ?? false
+    case .predict:
+      return onSplitAction != nil
+    }
+  }
+
+  private func callbackResult(_ callback: (() -> Bool)?, mode: ActionDispatchMode) -> Bool {
+    switch mode {
+    case .execute:
+      return callback?() ?? false
+    case .predict:
+      return callback != nil
+    }
+  }
+
+  private func callbackResult<T>(
+    _ callback: ((T) -> Bool)?,
+    argument: T,
+    mode: ActionDispatchMode
+  ) -> Bool {
+    switch mode {
+    case .execute:
+      return callback?(argument) ?? false
+    case .predict:
+      return callback != nil
     }
   }
 
@@ -98,62 +164,6 @@ final class GhosttySurfaceBridge {
 
   func closeSurface(processAlive: Bool) {
     onCloseRequest?(processAlive)
-  }
-
-  private func handleAppAction(_ action: ghostty_action_s) -> Bool? {
-    switch action.tag {
-    case GHOSTTY_ACTION_NEW_TAB:
-      return onNewTab?() ?? false
-    case GHOSTTY_ACTION_CLOSE_TAB:
-      return onCloseTab?(action.action.close_tab_mode) ?? false
-    case GHOSTTY_ACTION_GOTO_TAB:
-      return onGotoTab?(action.action.goto_tab) ?? false
-    case GHOSTTY_ACTION_MOVE_TAB:
-      return onMoveTab?(action.action.move_tab) ?? false
-    case GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE:
-      return onCommandPaletteToggle?() ?? false
-    case GHOSTTY_ACTION_GOTO_WINDOW,
-      GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL,
-      GHOSTTY_ACTION_CLOSE_ALL_WINDOWS:
-      return false
-    case GHOSTTY_ACTION_UNDO:
-      NSApp.sendAction(#selector(UndoManager.undo), to: nil, from: nil)
-      return true
-    case GHOSTTY_ACTION_REDO:
-      NSApp.sendAction(#selector(UndoManager.redo), to: nil, from: nil)
-      return true
-    default:
-      return nil
-    }
-  }
-
-  private func handleSplitAction(_ action: ghostty_action_s) -> Bool? {
-    switch action.tag {
-    case GHOSTTY_ACTION_NEW_SPLIT:
-      let direction = splitDirection(from: action.action.new_split)
-      guard let direction else { return false }
-      return onSplitAction?(.newSplit(direction: direction)) ?? false
-
-    case GHOSTTY_ACTION_GOTO_SPLIT:
-      let direction = focusDirection(from: action.action.goto_split)
-      guard let direction else { return false }
-      return onSplitAction?(.gotoSplit(direction: direction)) ?? false
-
-    case GHOSTTY_ACTION_RESIZE_SPLIT:
-      let resize = action.action.resize_split
-      let direction = resizeDirection(from: resize.direction)
-      guard let direction else { return false }
-      return onSplitAction?(.resizeSplit(direction: direction, amount: resize.amount)) ?? false
-
-    case GHOSTTY_ACTION_EQUALIZE_SPLITS:
-      return onSplitAction?(.equalizeSplits) ?? false
-
-    case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
-      return onSplitAction?(.toggleSplitZoom) ?? false
-
-    default:
-      return nil
-    }
   }
 
   private func splitDirection(from value: ghostty_action_split_direction_e) -> GhosttySplitAction

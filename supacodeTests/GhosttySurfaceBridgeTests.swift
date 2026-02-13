@@ -104,4 +104,40 @@ struct GhosttySurfaceBridgeTests {
     action.tag = GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM
     #expect(bridge.willHandleAction(action) == true)
   }
+
+  @Test func willHandleActionUsesCallbackPresenceForHandledActions() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+    let target = ghostty_target_s()
+
+    action.tag = GHOSTTY_ACTION_NEW_TAB
+    bridge.onNewTab = { false }
+
+    #expect(bridge.willHandleAction(action) == true)
+    #expect(bridge.handleAction(target: target, action: action) == false)
+  }
+
+  @Test func willHandleActionReturnsFalseForUnsupportedWindowActions() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+
+    action.tag = GHOSTTY_ACTION_GOTO_WINDOW
+    #expect(bridge.willHandleAction(action) == false)
+
+    action.tag = GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL
+    #expect(bridge.willHandleAction(action) == false)
+
+    action.tag = GHOSTTY_ACTION_CLOSE_ALL_WINDOWS
+    #expect(bridge.willHandleAction(action) == false)
+  }
+
+  @Test func willHandleActionReturnsFalseForInvalidSplitDirections() {
+    let bridge = GhosttySurfaceBridge()
+    var action = ghostty_action_s()
+    bridge.onSplitAction = { _ in true }
+
+    action.tag = GHOSTTY_ACTION_NEW_SPLIT
+    action.action.new_split = ghostty_action_split_direction_e(rawValue: UInt32.max)
+    #expect(bridge.willHandleAction(action) == false)
+  }
 }

@@ -49,10 +49,12 @@ struct WorktreeTerminalTabsView: View {
     .background(
       WindowFocusObserverView(
         onWindowKeyChanged: { isKey in
+          guard windowIsKey != isKey else { return }
           windowIsKey = isKey
           applyWindowState()
         },
         onWindowOcclusionChanged: { isVisible in
+          guard windowIsVisible != isVisible else { return }
           windowIsVisible = isVisible
           applyWindowState()
         }

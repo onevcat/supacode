@@ -22,8 +22,6 @@ final class GhosttyRuntime {
   private var observers: [NSObjectProtocol] = []
   private var surfaceRefs: [SurfaceReference] = []
   private var lastColorScheme: ghostty_color_scheme_e?
-  private var tickScheduled = false
-  private let tickScheduledLock = NSLock()
   var onConfigChange: (() -> Void)?
 
   init() {
@@ -205,17 +203,7 @@ final class GhosttyRuntime {
 
   private static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
     guard let runtime = runtime(from: userdata) else { return }
-    runtime.tickScheduledLock.lock()
-    if runtime.tickScheduled {
-      runtime.tickScheduledLock.unlock()
-      return
-    }
-    runtime.tickScheduled = true
-    runtime.tickScheduledLock.unlock()
     DispatchQueue.main.async {
-      runtime.tickScheduledLock.lock()
-      runtime.tickScheduled = false
-      runtime.tickScheduledLock.unlock()
       runtime.tick()
     }
   }
@@ -254,7 +242,9 @@ final class GhosttyRuntime {
     if Thread.isMainThread {
       return bridge.handleAction(target: target, action: action)
     }
-    let willHandle = bridge.willHandleAction(action)
+    let willHandle = DispatchQueue.main.sync {
+      bridge.willHandleAction(action)
+    }
     DispatchQueue.main.async {
       _ = bridge.handleAction(target: target, action: action)
     }

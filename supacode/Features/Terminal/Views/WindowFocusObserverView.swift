@@ -15,7 +15,6 @@ struct WindowFocusObserverView: NSViewRepresentable {
   func updateNSView(_ nsView: WindowFocusObserverNSView, context: Context) {
     nsView.onWindowKeyChanged = onWindowKeyChanged
     nsView.onWindowOcclusionChanged = onWindowOcclusionChanged
-    nsView.notifyCurrentState()
   }
 }
 

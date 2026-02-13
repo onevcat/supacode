@@ -8,6 +8,7 @@ final class WorktreeTerminalManager {
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
   private var lastNotificationIndicatorCount: Int?
+  private var lastWindowState: (visible: Bool, windowIsKey: Bool)?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
   var selectedWorktreeID: Worktree.ID?
@@ -81,6 +82,7 @@ final class WorktreeTerminalManager {
         previousState.setAllSurfacesOccluded()
       }
       selectedWorktreeID = id
+      applyWindowStateToSelectedWorktree()
     default:
       return
     }
@@ -153,6 +155,9 @@ final class WorktreeTerminalManager {
       self?.emit(.setupScriptConsumed(worktreeID: worktree.id))
     }
     states[worktree.id] = state
+    if selectedWorktreeID == worktree.id {
+      applyWindowStateToSelectedWorktree()
+    }
     return state
   }
 
@@ -222,7 +227,13 @@ final class WorktreeTerminalManager {
   }
 
   func setWindowOcclusion(visible: Bool, windowIsKey: Bool) {
-    if !visible {
+    lastWindowState = (visible, windowIsKey)
+    applyWindowStateToSelectedWorktree()
+  }
+
+  private func applyWindowStateToSelectedWorktree() {
+    guard let lastWindowState else { return }
+    if !lastWindowState.visible {
       for state in states.values {
         state.setAllSurfacesOccluded()
       }
@@ -231,7 +242,7 @@ final class WorktreeTerminalManager {
     guard let selectedWorktreeID, let selectedState = states[selectedWorktreeID] else {
       return
     }
-    selectedState.syncFocus(windowIsKey: windowIsKey, windowIsVisible: true)
+    selectedState.syncFocus(windowIsKey: lastWindowState.windowIsKey, windowIsVisible: true)
   }
 
   private func emit(_ event: TerminalClient.Event) {
