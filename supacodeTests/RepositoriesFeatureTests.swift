@@ -95,6 +95,97 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func pendingProgressUpdateUpdatesPendingWorktreeState() async {
+    let repoRoot = "/tmp/repo"
+    let repository = makeRepository(
+      id: repoRoot,
+      worktrees: [makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)]
+    )
+    let pendingID = "pending:test"
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(pendingID)
+    state.pendingWorktrees = [
+      PendingWorktree(
+        id: pendingID,
+        repositoryID: repository.id,
+        progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
+      ),
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    let nextProgress = WorktreeCreationProgress(
+      stage: .creatingWorktree,
+      worktreeName: "swift-otter",
+      baseRef: "origin/main",
+      copyIgnored: false,
+      copyUntracked: true
+    )
+    await store.send(
+      .pendingWorktreeProgressUpdated(
+        id: pendingID,
+        progress: nextProgress
+      )
+    ) {
+      $0.pendingWorktrees[0].progress = nextProgress
+    }
+  }
+
+  @Test func pendingProgressUpdateIsIgnoredAfterCreateFailureRemovesPendingWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let repository = makeRepository(id: repoRoot, worktrees: [makeWorktree(id: repoRoot, name: "main")])
+    let pendingID = "pending:test"
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(pendingID)
+    state.pendingWorktrees = [
+      PendingWorktree(
+        id: pendingID,
+        repositoryID: repository.id,
+        progress: WorktreeCreationProgress(
+          stage: .checkingRepositoryMode,
+          worktreeName: "swift-otter"
+        )
+      ),
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("boom")
+    }
+
+    await store.send(
+      .createRandomWorktreeFailed(
+        title: "Unable to create worktree",
+        message: "boom",
+        pendingID: pendingID,
+        previousSelection: nil,
+        repositoryID: repository.id,
+        name: nil
+      )
+    ) {
+      $0.pendingWorktrees = []
+      $0.selection = nil
+      $0.alert = expectedAlert
+    }
+
+    await store.send(
+      .pendingWorktreeProgressUpdated(
+        id: pendingID,
+        progress: WorktreeCreationProgress(stage: .creatingWorktree)
+      )
+    )
+    #expect(store.state.pendingWorktrees.isEmpty)
+  }
+
   @Test func requestDeleteWorktreeShowsConfirmation() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "owl")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
@@ -637,8 +728,7 @@ struct RepositoriesFeatureTests {
       PendingWorktree(
         id: removedWorktree.id,
         repositoryID: repository.id,
-        name: "pending",
-        detail: ""
+        progress: WorktreeCreationProgress(stage: .choosingWorktreeName)
       ),
     ]
     initialState.pinnedWorktreeIDs = [removedWorktree.id]
@@ -721,8 +811,7 @@ struct RepositoriesFeatureTests {
       PendingWorktree(
         id: pendingID,
         repositoryID: repository.id,
-        name: "Creating worktree...",
-        detail: ""
+        progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
       ),
     ]
     initialState.selection = .worktree(pendingID)

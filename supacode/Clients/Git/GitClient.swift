@@ -12,6 +12,8 @@ enum GitOperation: String {
   case branchRefs = "branch_refs"
   case defaultRemoteBranchRef = "default_remote_branch_ref"
   case localHeadRef = "local_head_ref"
+  case ignoredFileCount = "ignored_file_count"
+  case untrackedFileCount = "untracked_file_count"
   case branchRename = "branch_rename"
   case branchDelete = "branch_delete"
   case lineChanges = "line_changes"
@@ -194,6 +196,24 @@ struct GitClient {
     let localHead = try? await localHeadBranchRef(for: repoRoot)
     let resolvedLocalHead = await resolveLocalHead(localHead, repoRoot: repoRoot)
     return Self.preferredBaseRef(remote: nil, localHead: resolvedLocalHead)
+  }
+
+  nonisolated func ignoredFileCount(for repoRoot: URL) async throws -> Int {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .ignoredFileCount,
+      arguments: ["-C", path, "ls-files", "--others", "-i", "--exclude-standard"]
+    )
+    return parseFileListCount(output)
+  }
+
+  nonisolated func untrackedFileCount(for repoRoot: URL) async throws -> Int {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .untrackedFileCount,
+      arguments: ["-C", path, "ls-files", "--others", "--exclude-standard"]
+    )
+    return parseFileListCount(output)
   }
 
   nonisolated func createWorktree(
@@ -408,6 +428,14 @@ struct GitClient {
       removed = Int(match.1) ?? 0
     }
     return (added, removed)
+  }
+
+  nonisolated private func parseFileListCount(_ output: String) -> Int {
+    output
+      .split(whereSeparator: \.isNewline)
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .count
   }
 
   nonisolated private func parseLocalRefsWithUpstream(_ output: String) -> [String] {

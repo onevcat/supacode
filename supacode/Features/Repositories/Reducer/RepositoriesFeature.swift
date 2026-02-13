@@ -68,6 +68,7 @@ struct RepositoriesFeature {
     case requestRenameBranch(Worktree.ID, String)
     case createRandomWorktree
     case createRandomWorktreeInRepository(Repository.ID)
+    case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)
     case createRandomWorktreeSucceeded(
       Worktree,
       repositoryID: Repository.ID,
@@ -506,16 +507,29 @@ struct RepositoriesFeature {
           PendingWorktree(
             id: pendingID,
             repositoryID: repository.id,
-            name: "Creating worktree...",
-            detail: ""
+            progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
           )
         )
         state.selection = .worktree(pendingID)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         return .run { send in
           var newWorktreeName: String?
+          var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
           do {
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let branchNames = try await gitClient.localBranchNames(repository.rootURL)
+            progress.stage = .choosingWorktreeName
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let existing = existingNames.union(branchNames)
             let name = await MainActor.run {
               WorktreeNameGenerator.nextName(excluding: existing)
@@ -537,15 +551,44 @@ struct RepositoriesFeature {
               return
             }
             newWorktreeName = name
+            progress.worktreeName = name
+            progress.stage = .checkingRepositoryMode
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let isBareRepository = (try? await gitClient.isBareRepository(repository.rootURL)) ?? false
             let copyIgnored = isBareRepository ? false : copyIgnoredOnWorktreeCreate
             let copyUntracked = isBareRepository ? false : copyUntrackedOnWorktreeCreate
+            progress.stage = .resolvingBaseReference
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let resolvedBaseRef: String
             if (selectedBaseRef ?? "").isEmpty {
               resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
             } else {
               resolvedBaseRef = selectedBaseRef ?? ""
             }
+            progress.baseRef = resolvedBaseRef
+            progress.copyIgnored = copyIgnored
+            progress.copyUntracked = copyUntracked
+            progress.ignoredFilesToCopyCount =
+              copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+            progress.untrackedFilesToCopyCount =
+              copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+            progress.stage = .creatingWorktree
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let newWorktree = try await gitClient.createWorktree(
               name,
               repository.rootURL,
@@ -573,6 +616,10 @@ struct RepositoriesFeature {
             )
           }
         }
+
+      case .pendingWorktreeProgressUpdated(let id, let progress):
+        updatePendingWorktreeProgress(id, progress: progress, state: &state)
+        return .none
 
       case .createRandomWorktreeSucceeded(
         let worktree,
@@ -1945,8 +1992,8 @@ extension RepositoriesFeature.State {
     return WorktreeRowModel(
       id: pending.id,
       repositoryID: pending.repositoryID,
-      name: pending.name,
-      detail: pending.detail,
+      name: pending.progress.titleText,
+      detail: pending.progress.detailText,
       info: worktreeInfo(for: pending.id),
       isPinned: false,
       isMainWorktree: false,
@@ -2248,6 +2295,17 @@ private struct FailedWorktreeCleanup {
 
 private func removePendingWorktree(_ id: String, state: inout RepositoriesFeature.State) {
   state.pendingWorktrees.removeAll { $0.id == id }
+}
+
+private func updatePendingWorktreeProgress(
+  _ id: String,
+  progress: WorktreeCreationProgress,
+  state: inout RepositoriesFeature.State
+) {
+  guard let index = state.pendingWorktrees.firstIndex(where: { $0.id == id }) else {
+    return
+  }
+  state.pendingWorktrees[index].progress = progress
 }
 
 private func insertWorktree(

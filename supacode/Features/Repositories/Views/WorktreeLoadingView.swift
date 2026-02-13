@@ -5,24 +5,18 @@ struct WorktreeLoadingView: View {
 
   var body: some View {
     let actionLabel = info.state == .creating ? "Creating" : "Removing"
-    let followup =
-      info.state == .creating
-      ? "We will open the terminal when it's ready."
-      : "We will close the terminal when it's ready."
+    let fallbackStatus =
+      if let repositoryName = info.repositoryName {
+        "\(actionLabel) worktree in \(repositoryName)"
+      } else {
+        "\(actionLabel) worktree..."
+      }
+    let statusLine = info.statusDetail ?? info.statusTitle ?? fallbackStatus
     VStack {
       ProgressView()
       Text(info.name)
         .font(.headline)
-      if let repositoryName = info.repositoryName {
-        Text("\(actionLabel) worktree in \(repositoryName)")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-      } else {
-        Text("\(actionLabel) worktree...")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-      }
-      Text(followup)
+      Text(statusLine)
         .font(.subheadline)
         .foregroundStyle(.secondary)
     }

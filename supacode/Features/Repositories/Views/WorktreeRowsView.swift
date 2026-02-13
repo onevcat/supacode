@@ -266,6 +266,9 @@ struct WorktreeRowsView: View {
     if row.isMainWorktree {
       return "Default"
     }
+    if row.isPending {
+      return row.detail
+    }
     if row.id.contains("/") {
       let pathName = URL(fileURLWithPath: row.id).lastPathComponent
       if !pathName.isEmpty {

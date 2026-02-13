@@ -41,8 +41,13 @@ struct CommandPaletteFeatureTests {
       PendingWorktree(
         id: "\(rootPath)/wt-pending",
         repositoryID: repository.id,
-        name: "pending",
-        detail: "pending"
+        progress: WorktreeCreationProgress(
+          stage: .creatingWorktree,
+          worktreeName: "pending",
+          baseRef: "origin/main",
+          copyIgnored: false,
+          copyUntracked: false
+        )
       ),
     ]
 
