@@ -1,6 +1,6 @@
 import OSLog
 
-struct SupaLogger: Sendable {
+nonisolated struct SupaLogger: Sendable {
   private let category: String
   #if !DEBUG
     private let logger: Logger
