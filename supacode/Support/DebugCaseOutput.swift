@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import CustomDump
 import Foundation
+import OSLog
 import Sentry
 
 extension Reducer where State: Equatable {
@@ -13,6 +14,8 @@ extension Reducer where State: Equatable {
 struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
   let base: Base
 
+  private static let logger = Logger.supacode("TCA")
+
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
     let actionLabel = debugCaseOutput(action)
     #if DEBUG
@@ -24,6 +27,7 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
       }
       return effects
     #else
+      Self.logger.debug("\(actionLabel)")
       let breadcrumb = Breadcrumb(level: .debug, category: "action")
       breadcrumb.message = actionLabel
       SentrySDK.addBreadcrumb(breadcrumb)

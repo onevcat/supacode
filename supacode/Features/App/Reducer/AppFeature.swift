@@ -1,6 +1,7 @@
 import AppKit
 import ComposableArchitecture
 import Foundation
+import OSLog
 import PostHog
 import Sentry
 import SwiftUI
@@ -672,11 +673,14 @@ struct AppFeature {
 }
 
 private struct ActionLabelReducer<Base: Reducer>: Reducer {
+  private static var logger: Logger { Logger.supacode("TCA") }
+
   let base: Base
 
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
     let actionLabel = debugCaseOutput(action)
     #if !DEBUG
+      Self.logger.debug("received action: \(actionLabel)")
       SentrySDK.logger.info("received action: \(actionLabel)")
     #endif
     return base.reduce(into: &state, action: action)

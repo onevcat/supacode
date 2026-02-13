@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Darwin
 import Foundation
+import OSLog
 
 nonisolated struct ShellClient {
   var run: @Sendable (URL, [String], URL?) async throws -> ShellOutput
@@ -33,7 +34,11 @@ extension ShellClient: DependencyKey {
       if log {
         let cwd = currentDirectoryURL?.path(percentEncoded: false) ?? "nil"
         let cmd = shellArguments.joined(separator: " ")
-        print("[Shell] runLogin\n\tcwd: \(cwd)\n\tcmd: \(shellURL.path) \(cmd)")
+        #if DEBUG
+          print("[Shell] runLogin\n\tcwd: \(cwd)\n\tcmd: \(shellURL.path) \(cmd)")
+        #else
+          shellLogger.debug("runLogin cwd=\(cwd) cmd=\(shellURL.path) \(cmd)")
+        #endif
       }
       let result = try await runProcess(
         executableURL: shellURL,
@@ -56,6 +61,8 @@ extension DependencyValues {
     set { self[ShellClient.self] = newValue }
   }
 }
+
+private let shellLogger = Logger.supacode("Shell")
 
 nonisolated private func runProcess(
   executableURL: URL,
@@ -106,7 +113,11 @@ nonisolated private func shellExecCommand(for shellURL: URL) -> String {
 
 nonisolated private func defaultShellPath() -> String {
   if let env = ProcessInfo.processInfo.environment["SHELL"], !env.isEmpty {
-    print("[Shell] Using SHELL env: \(env)")
+    #if DEBUG
+      print("[Shell] Using SHELL env: \(env)")
+    #else
+      shellLogger.info("Using SHELL env: \(env)")
+    #endif
     return env
   }
 
@@ -119,11 +130,19 @@ nonisolated private func defaultShellPath() -> String {
   if lookup == 0, let result, let shell = result.pointee.pw_shell {
     let value = String(cString: shell)
     if !value.isEmpty {
-      print("[Shell] Using passwd shell: \(value)")
+      #if DEBUG
+        print("[Shell] Using passwd shell: \(value)")
+      #else
+        shellLogger.info("Using passwd shell: \(value)")
+      #endif
       return value
     }
   }
 
-  print("[Shell] Using fallback: /bin/zsh")
+  #if DEBUG
+    print("[Shell] Using fallback: /bin/zsh")
+  #else
+    shellLogger.info("Using fallback: /bin/zsh")
+  #endif
   return "/bin/zsh"
 }

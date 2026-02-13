@@ -6,10 +6,7 @@ import OSLog
 final class SecureInput: Observable {
   static let shared = SecureInput()
 
-  private static let logger = Logger(
-    subsystem: Bundle.main.bundleIdentifier!,
-    category: String(describing: SecureInput.self)
-  )
+  private static let logger = Logger.supacode("SecureInput")
 
   var global: Bool = false {
     didSet { apply() }

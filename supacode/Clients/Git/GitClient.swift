@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Sentry
 
 enum GitOperation: String {
@@ -175,10 +176,16 @@ struct GitClient {
       }
     } catch {
       let rootPath = repoRoot.path(percentEncoded: false)
-      print(
-        "Default remote branch ref failed for \(rootPath): "
-          + error.localizedDescription
-      )
+      #if DEBUG
+        print(
+          "Default remote branch ref failed for \(rootPath): "
+            + error.localizedDescription
+        )
+      #else
+        gitLogger.warning(
+          "Default remote branch ref failed for \(rootPath): \(error.localizedDescription)"
+        )
+      #endif
     }
     let fallback = "origin/main"
     if await refExists(fallback, repoRoot: repoRoot) {
@@ -654,6 +661,8 @@ struct GitClient {
 
 }
 
+private let gitLogger = Logger.supacode("Git")
+
 nonisolated private func wrapShellError(
   _ error: Error,
   operation: GitOperation,
@@ -676,6 +685,7 @@ nonisolated private func wrapShellError(
     gitError = .commandFailed(command: command, message: error.localizedDescription)
   }
   #if !DEBUG
+    gitLogger.warning("git command failed operation=\(operation.rawValue) exit_code=\(exitCode)")
     SentrySDK.logger.error(
       "git command failed",
       attributes: [

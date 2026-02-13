@@ -1,5 +1,8 @@
+import OSLog
 import Observation
 import Sharing
+
+private let terminalLogger = Logger.supacode("Terminal")
 
 @MainActor
 @Observable
@@ -83,6 +86,9 @@ final class WorktreeTerminalManager {
       }
       selectedWorktreeID = id
       applyWindowStateToSelectedWorktree()
+      #if !DEBUG
+        terminalLogger.info("Selected worktree \(id ?? "nil")")
+      #endif
     default:
       return
     }
@@ -158,6 +164,9 @@ final class WorktreeTerminalManager {
     if selectedWorktreeID == worktree.id {
       applyWindowStateToSelectedWorktree()
     }
+    #if !DEBUG
+      terminalLogger.info("Created terminal state for worktree \(worktree.id)")
+    #endif
     return state
   }
 
@@ -198,6 +207,11 @@ final class WorktreeTerminalManager {
     for state in removed {
       state.closeAllSurfaces()
     }
+    #if !DEBUG
+      if !removed.isEmpty {
+        terminalLogger.info("Pruned \(removed.count) terminal state(s)")
+      }
+    #endif
     states = states.filter { worktreeIDs.contains($0.key) }
     emitNotificationIndicatorCountIfNeeded()
   }
