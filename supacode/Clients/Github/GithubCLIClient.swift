@@ -53,173 +53,22 @@ struct GithubCLIClient {
 }
 
 extension GithubCLIClient: DependencyKey {
-  static let liveValue = {
-    let shell = ShellClient.liveValue
-    return GithubCLIClient(
-      defaultBranch: { repoRoot in
-        let output = try await runGh(
-          shell: shell,
-          arguments: ["repo", "view", "--json", "defaultBranchRef"],
-          repoRoot: repoRoot
-        )
-        let data = Data(output.utf8)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let response = try decoder.decode(GithubRepoViewResponse.self, from: data)
-        return response.defaultBranchRef.name
-      },
-      latestRun: { repoRoot, branch in
-        let output = try await runGh(
-          shell: shell,
-          arguments: [
-            "run",
-            "list",
-            "--branch",
-            branch,
-            "--limit",
-            "1",
-            "--json",
-            "databaseId,workflowName,name,displayTitle,status,conclusion,createdAt,updatedAt",
-          ],
-          repoRoot: repoRoot
-        )
-        if output.isEmpty {
-          return nil
-        }
-        let data = Data(output.utf8)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let runs = try decoder.decode([GithubWorkflowRun].self, from: data)
-        return runs.first
-      },
-      batchPullRequests: { host, owner, repo, branches in
-        let dedupedBranches = deduplicatedBranches(branches)
-        guard !dedupedBranches.isEmpty else {
-          return [:]
-        }
-        let chunkSize = 25
-        var results: [String: GithubPullRequest] = [:]
-        var index = 0
-        while index < dedupedBranches.count {
-          let end = min(index + chunkSize, dedupedBranches.count)
-          let chunk = Array(dedupedBranches[index..<end])
-          let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
-          let output = try await runGh(
-            shell: shell,
-            arguments: [
-              "api",
-              "graphql",
-              "--hostname",
-              host,
-              "-f",
-              "query=\(query)",
-              "-f",
-              "owner=\(owner)",
-              "-f",
-              "repo=\(repo)",
-            ],
-            repoRoot: nil
-          )
-          if !output.isEmpty {
-            let data = Data(output.utf8)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let response = try decoder.decode(GithubGraphQLPullRequestResponse.self, from: data)
-            let prsByBranch = response.pullRequestsByBranch(
-              aliasMap: aliasMap,
-              owner: owner,
-              repo: repo
-            )
-            results.merge(prsByBranch) { _, new in new }
-          }
-          index = end
-        }
-        return results
-      },
-      mergePullRequest: { repoRoot, pullRequestNumber, strategy in
-        _ = try await runGh(
-          shell: shell,
-          arguments: [
-            "pr",
-            "merge",
-            "\(pullRequestNumber)",
-            "--\(strategy.ghArgument)",
-          ],
-          repoRoot: repoRoot
-        )
-      },
-      markPullRequestReady: { repoRoot, pullRequestNumber in
-        _ = try await runGh(
-          shell: shell,
-          arguments: [
-            "pr",
-            "ready",
-            "\(pullRequestNumber)",
-          ],
-          repoRoot: repoRoot
-        )
-      },
-      rerunFailedJobs: { repoRoot, runID in
-        _ = try await runGh(
-          shell: shell,
-          arguments: [
-            "run",
-            "rerun",
-            "\(runID)",
-            "--failed",
-          ],
-          repoRoot: repoRoot
-        )
-      },
-      failedRunLogs: { repoRoot, runID in
-        try await runGh(
-          shell: shell,
-          arguments: [
-            "run",
-            "view",
-            "\(runID)",
-            "--log-failed",
-          ],
-          repoRoot: repoRoot
-        )
-      },
-      runLogs: { repoRoot, runID in
-        try await runGh(
-          shell: shell,
-          arguments: [
-            "run",
-            "view",
-            "\(runID)",
-            "--log",
-          ],
-          repoRoot: repoRoot
-        )
-      },
-      isAvailable: {
-        do {
-          _ = try await runGh(shell: shell, arguments: ["--version"], repoRoot: nil)
-          return true
-        } catch {
-          return false
-        }
-      },
-      authStatus: {
-        let output = try await runGh(
-          shell: shell,
-          arguments: ["auth", "status", "--json", "hosts"],
-          repoRoot: nil
-        )
-        let data = Data(output.utf8)
-        let response = try decodeAuthStatusResponse(from: data)
-        guard let (host, accounts) = response.hosts.first,
-          let activeAccount = accounts.first(where: { $0.active })
-        else {
-          return nil
-        }
-        return GithubAuthStatus(username: activeAccount.login, host: host)
-      }
+  static let liveValue = live()
+
+  static func live(shell: ShellClient = .liveValue) -> GithubCLIClient {
+    GithubCLIClient(
+      defaultBranch: defaultBranchFetcher(shell: shell),
+      latestRun: latestRunFetcher(shell: shell),
+      batchPullRequests: batchPullRequestsFetcher(shell: shell),
+      mergePullRequest: mergePullRequestFetcher(shell: shell),
+      markPullRequestReady: markPullRequestReadyFetcher(shell: shell),
+      rerunFailedJobs: rerunFailedJobsFetcher(shell: shell),
+      failedRunLogs: failedRunLogsFetcher(shell: shell),
+      runLogs: runLogsFetcher(shell: shell),
+      isAvailable: isAvailableFetcher(shell: shell),
+      authStatus: authStatusFetcher(shell: shell)
     )
-  }()
+  }
 
   static let testValue = GithubCLIClient(
     defaultBranch: { _ in "main" },
@@ -242,9 +91,324 @@ extension DependencyValues {
   }
 }
 
+private struct GithubPullRequestsRequest: Sendable {
+  let host: String
+  let owner: String
+  let repo: String
+}
+
+nonisolated private func defaultBranchFetcher(
+  shell: ShellClient
+) -> @Sendable (URL) async throws -> String {
+  { repoRoot in
+    let output = try await runGh(
+      shell: shell,
+      arguments: ["repo", "view", "--json", "defaultBranchRef"],
+      repoRoot: repoRoot
+    )
+    let data = Data(output.utf8)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let response = try decoder.decode(GithubRepoViewResponse.self, from: data)
+    return response.defaultBranchRef.name
+  }
+}
+
+nonisolated private func latestRunFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, String) async throws -> GithubWorkflowRun? {
+  { repoRoot, branch in
+    let output = try await runGh(
+      shell: shell,
+      arguments: [
+        "run",
+        "list",
+        "--branch",
+        branch,
+        "--limit",
+        "1",
+        "--json",
+        "databaseId,workflowName,name,displayTitle,status,conclusion,createdAt,updatedAt",
+      ],
+      repoRoot: repoRoot
+    )
+    if output.isEmpty {
+      return nil
+    }
+    let data = Data(output.utf8)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let runs = try decoder.decode([GithubWorkflowRun].self, from: data)
+    return runs.first
+  }
+}
+
+nonisolated private func batchPullRequestsFetcher(
+  shell: ShellClient
+) -> @Sendable (String, String, String, [String]) async throws -> [String: GithubPullRequest] {
+  { host, owner, repo, branches in
+    let dedupedBranches = deduplicatedBranches(branches)
+    guard !dedupedBranches.isEmpty else {
+      return [:]
+    }
+    let request = GithubPullRequestsRequest(host: host, owner: owner, repo: repo)
+    let chunks = makeBranchChunks(
+      dedupedBranches,
+      chunkSize: batchPullRequestsChunkSize
+    )
+    let chunkResults = try await loadPullRequestChunks(
+      shell: shell,
+      request: request,
+      chunks: chunks
+    )
+    return mergePullRequestChunkResults(
+      chunkResults,
+      chunkCount: chunks.count
+    )
+  }
+}
+
+nonisolated private func mergePullRequestFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, Int, PullRequestMergeStrategy) async throws -> Void {
+  { repoRoot, pullRequestNumber, strategy in
+    _ = try await runGh(
+      shell: shell,
+      arguments: [
+        "pr",
+        "merge",
+        "\(pullRequestNumber)",
+        "--\(strategy.ghArgument)",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func markPullRequestReadyFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, Int) async throws -> Void {
+  { repoRoot, pullRequestNumber in
+    _ = try await runGh(
+      shell: shell,
+      arguments: [
+        "pr",
+        "ready",
+        "\(pullRequestNumber)",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func rerunFailedJobsFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, Int) async throws -> Void {
+  { repoRoot, runID in
+    _ = try await runGh(
+      shell: shell,
+      arguments: [
+        "run",
+        "rerun",
+        "\(runID)",
+        "--failed",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func failedRunLogsFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, Int) async throws -> String {
+  { repoRoot, runID in
+    try await runGh(
+      shell: shell,
+      arguments: [
+        "run",
+        "view",
+        "\(runID)",
+        "--log-failed",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func runLogsFetcher(
+  shell: ShellClient
+) -> @Sendable (URL, Int) async throws -> String {
+  { repoRoot, runID in
+    try await runGh(
+      shell: shell,
+      arguments: [
+        "run",
+        "view",
+        "\(runID)",
+        "--log",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func isAvailableFetcher(
+  shell: ShellClient
+) -> @Sendable () async -> Bool {
+  {
+    do {
+      _ = try await runGh(shell: shell, arguments: ["--version"], repoRoot: nil)
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+nonisolated private func authStatusFetcher(
+  shell: ShellClient
+) -> @Sendable () async throws -> GithubAuthStatus? {
+  {
+    let output = try await runGh(
+      shell: shell,
+      arguments: ["auth", "status", "--json", "hosts"],
+      repoRoot: nil
+    )
+    let data = Data(output.utf8)
+    let response = try decodeAuthStatusResponse(from: data)
+    guard let (host, accounts) = response.hosts.first,
+      let activeAccount = accounts.first(where: { $0.active })
+    else {
+      return nil
+    }
+    return GithubAuthStatus(username: activeAccount.login, host: host)
+  }
+}
+
 nonisolated private func deduplicatedBranches(_ branches: [String]) -> [String] {
   var seen = Set<String>()
   return branches.filter { !$0.isEmpty && seen.insert($0).inserted }
+}
+
+nonisolated private let batchPullRequestsChunkSize = 25
+nonisolated private let batchPullRequestsMaxConcurrentRequests = 3
+
+nonisolated private func makeBranchChunks(
+  _ branches: [String],
+  chunkSize: Int
+) -> [[String]] {
+  guard !branches.isEmpty else {
+    return []
+  }
+
+  var chunks: [[String]] = []
+  var index = 0
+  while index < branches.count {
+    let end = min(index + chunkSize, branches.count)
+    chunks.append(Array(branches[index..<end]))
+    index = end
+  }
+
+  return chunks
+}
+
+nonisolated private func loadPullRequestChunks(
+  shell: ShellClient,
+  request: GithubPullRequestsRequest,
+  chunks: [[String]]
+) async throws -> [Int: [String: GithubPullRequest]] {
+  try await withThrowingTaskGroup(
+    of: (Int, [String: GithubPullRequest]).self
+  ) { group in
+    var nextChunkIndex = 0
+    let initialCount = min(batchPullRequestsMaxConcurrentRequests, chunks.count)
+    while nextChunkIndex < initialCount {
+      let chunkIndex = nextChunkIndex
+      let chunk = chunks[chunkIndex]
+      group.addTask {
+        try await fetchPullRequestsChunk(
+          shell: shell,
+          request: request,
+          chunk: chunk,
+          chunkIndex: chunkIndex
+        )
+      }
+      nextChunkIndex += 1
+    }
+
+    var resultsByChunkIndex: [Int: [String: GithubPullRequest]] = [:]
+    while let (chunkIndex, prsByBranch) = try await group.next() {
+      resultsByChunkIndex[chunkIndex] = prsByBranch
+      if nextChunkIndex < chunks.count {
+        let candidateIndex = nextChunkIndex
+        let candidateChunk = chunks[candidateIndex]
+        group.addTask {
+          try await fetchPullRequestsChunk(
+            shell: shell,
+            request: request,
+            chunk: candidateChunk,
+            chunkIndex: candidateIndex
+          )
+        }
+        nextChunkIndex += 1
+      }
+    }
+
+    return resultsByChunkIndex
+  }
+}
+
+nonisolated private func mergePullRequestChunkResults(
+  _ chunkResults: [Int: [String: GithubPullRequest]],
+  chunkCount: Int
+) -> [String: GithubPullRequest] {
+  var results: [String: GithubPullRequest] = [:]
+  for chunkIndex in 0..<chunkCount {
+    guard let prsByBranch = chunkResults[chunkIndex] else {
+      continue
+    }
+    results.merge(prsByBranch) { _, new in new }
+  }
+  return results
+}
+
+nonisolated private func fetchPullRequestsChunk(
+  shell: ShellClient,
+  request: GithubPullRequestsRequest,
+  chunk: [String],
+  chunkIndex: Int
+) async throws -> (Int, [String: GithubPullRequest]) {
+  let (query, aliasMap) = makeBatchPullRequestsQuery(branches: chunk)
+  let output = try await runGh(
+    shell: shell,
+    arguments: [
+      "api",
+      "graphql",
+      "--hostname",
+      request.host,
+      "-f",
+      "query=\(query)",
+      "-f",
+      "owner=\(request.owner)",
+      "-f",
+      "repo=\(request.repo)",
+    ],
+    repoRoot: nil
+  )
+  guard !output.isEmpty else {
+    return (chunkIndex, [:])
+  }
+
+  let data = Data(output.utf8)
+  let decoder = JSONDecoder()
+  decoder.dateDecodingStrategy = .iso8601
+  let response = try decoder.decode(GithubGraphQLPullRequestResponse.self, from: data)
+  let prsByBranch = response.pullRequestsByBranch(
+    aliasMap: aliasMap,
+    owner: request.owner,
+    repo: request.repo
+  )
+  return (chunkIndex, prsByBranch)
 }
 
 nonisolated private func makeBatchPullRequestsQuery(

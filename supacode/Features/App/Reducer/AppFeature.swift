@@ -249,9 +249,6 @@ struct AppFeature {
         }
         return .none
 
-      case .repositories(.worktreePullRequestLoaded):
-        return .none
-
       case .settings(.delegate(.settingsChanged(let settings))):
         let badgeLabel =
           settings.dockBadgeEnabled

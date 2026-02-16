@@ -844,7 +844,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func worktreePullRequestLoadedAutoArchivesWhenEnabled() async {
+  @Test func repositoryPullRequestsLoadedAutoArchivesWhenEnabled() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let featureWorktree = makeWorktree(
@@ -861,7 +861,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: featureWorktree.name)
 
     await store.send(
-      .worktreePullRequestLoaded(worktreeID: featureWorktree.id, pullRequest: mergedPullRequest)
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: [featureWorktree.id: mergedPullRequest]
+      )
     ) {
       $0.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -875,7 +878,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.repositoriesChanged)
   }
 
-  @Test func worktreePullRequestLoadedSkipsAutoArchiveForMainWorktree() async {
+  @Test func repositoryPullRequestsLoadedSkipsAutoArchiveForMainWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
@@ -887,7 +890,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: mainWorktree.name)
 
     await store.send(
-      .worktreePullRequestLoaded(worktreeID: mainWorktree.id, pullRequest: mergedPullRequest)
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
+      )
     ) {
       $0.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -896,6 +902,77 @@ struct RepositoriesFeatureTests {
       )
     }
     await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshSendsSingleBatchAction() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let featurePullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name)
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.gitClient.remoteInfo = { _ in
+        GithubRemoteInfo(host: "github.com", owner: "khoi", repo: "repo")
+      }
+      $0.githubCLI.batchPullRequests = { _, _, _, branches in
+        #expect(branches == [mainWorktree.name, featureWorktree.name])
+        return [featureWorktree.name: featurePullRequest]
+      }
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    )
+    await store.receive(\.repositoryPullRequestsLoaded) {
+      $0.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+        addedLines: nil,
+        removedLines: nil,
+        pullRequest: featurePullRequest
+      )
+    }
+    await store.finish()
+  }
+
+  @Test func repositoryPullRequestsLoadedClearsStalePullRequestWhenNil() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "OPEN", headRefName: featureWorktree.name)
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    let pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [featureWorktree.id: nil]
+
+    await store.send(
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: pullRequestsByWorktreeID
+      )
+    ) {
+      $0.worktreeInfoByID.removeValue(forKey: featureWorktree.id)
+    }
   }
 
   @Test func unarchiveWorktreeNoopsWhenNotArchived() async {

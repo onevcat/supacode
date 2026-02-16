@@ -110,7 +110,10 @@ struct RepositoriesFeature {
     case worktreeNotificationReceived(Worktree.ID)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
-    case worktreePullRequestLoaded(worktreeID: Worktree.ID, pullRequest: GithubPullRequest?)
+    case repositoryPullRequestsLoaded(
+      repositoryID: Repository.ID,
+      pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?]
+    )
     case setGithubIntegrationEnabled(Bool)
     case setAutomaticallyArchiveMergedWorktrees(Bool)
     case pullRequestAction(Worktree.ID, PullRequestAction)
@@ -1372,6 +1375,11 @@ struct RepositoriesFeature {
           }
         case .repositoryPullRequestRefresh(let repositoryRootURL, let worktreeIDs):
           let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }
+          guard let firstWorktree = worktrees.first,
+            let repositoryID = state.repositoryID(containing: firstWorktree.id)
+          else {
+            return .none
+          }
           var seen = Set<String>()
           let branches =
             worktrees
@@ -1397,12 +1405,16 @@ struct RepositoriesFeature {
                 remoteInfo.repo,
                 branches
               )
+              var pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
               for worktree in worktrees {
-                let pullRequest = prsByBranch[worktree.name]
-                await send(
-                  .worktreePullRequestLoaded(worktreeID: worktree.id, pullRequest: pullRequest)
-                )
+                pullRequestsByWorktreeID[worktree.id] = prsByBranch[worktree.name]
               }
+              await send(
+                .repositoryPullRequestsLoaded(
+                  repositoryID: repositoryID,
+                  pullRequestsByWorktreeID: pullRequestsByWorktreeID
+                )
+              )
             } catch {
               return
             }
@@ -1422,28 +1434,41 @@ struct RepositoriesFeature {
         )
         return .none
 
-      case .worktreePullRequestLoaded(let worktreeID, let pullRequest):
-        let previousMerged =
-          state.worktreeInfoByID[worktreeID]?.pullRequest?.state == "MERGED"
-        let nextMerged = pullRequest?.state == "MERGED"
-        updateWorktreePullRequest(
-          worktreeID: worktreeID,
-          pullRequest: pullRequest,
-          state: &state
-        )
-        if state.automaticallyArchiveMergedWorktrees,
-          !previousMerged,
-          nextMerged,
-          let repositoryID = state.repositoryID(containing: worktreeID),
-          let repository = state.repositories[id: repositoryID],
-          let worktree = repository.worktrees[id: worktreeID],
-          !state.isMainWorktree(worktree),
-          !state.isWorktreeArchived(worktreeID),
-          !state.deletingWorktreeIDs.contains(worktreeID)
-        {
-          return .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
+      case .repositoryPullRequestsLoaded(let repositoryID, let pullRequestsByWorktreeID):
+        guard let repository = state.repositories[id: repositoryID] else {
+          return .none
         }
-        return .none
+        var archiveWorktreeIDs: [Worktree.ID] = []
+        for worktreeID in pullRequestsByWorktreeID.keys.sorted() {
+          guard let worktree = repository.worktrees[id: worktreeID] else {
+            continue
+          }
+          let pullRequest = pullRequestsByWorktreeID[worktreeID] ?? nil
+          let previousMerged = state.worktreeInfoByID[worktreeID]?.pullRequest?.state == "MERGED"
+          let nextMerged = pullRequest?.state == "MERGED"
+          updateWorktreePullRequest(
+            worktreeID: worktreeID,
+            pullRequest: pullRequest,
+            state: &state
+          )
+          if state.automaticallyArchiveMergedWorktrees,
+            !previousMerged,
+            nextMerged,
+            !state.isMainWorktree(worktree),
+            !state.isWorktreeArchived(worktreeID),
+            !state.deletingWorktreeIDs.contains(worktreeID)
+          {
+            archiveWorktreeIDs.append(worktreeID)
+          }
+        }
+        guard !archiveWorktreeIDs.isEmpty else {
+          return .none
+        }
+        return .merge(
+          archiveWorktreeIDs.map { worktreeID in
+            .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
+          }
+        )
 
       case .pullRequestAction(let worktreeID, let action):
         guard let worktree = state.worktree(for: worktreeID),
