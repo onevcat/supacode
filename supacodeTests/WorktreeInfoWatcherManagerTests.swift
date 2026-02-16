@@ -34,6 +34,61 @@ struct WorktreeInfoWatcherManagerTests {
     await task.value
     try FileManager.default.removeItem(at: tempWorktree.tempRoot)
   }
+
+  @Test func selectionRefreshUsesCooldownWithinRepository() async throws {
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .seconds(3_600),
+      pullRequestSelectionRefreshCooldown: .milliseconds(200)
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees(tempRepository.worktrees))
+    #expect(
+      await waitForPullRequestRefreshCount(
+        collector,
+        repositoryRootURL: tempRepository.tempRoot,
+        count: 1,
+        timeout: .seconds(1)
+      )
+    )
+    let baselineCount = await collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot)
+    let firstWorktree = try #require(tempRepository.worktrees.first)
+    let secondWorktree = try #require(tempRepository.worktrees.dropFirst().first)
+
+    manager.handleCommand(.setSelectedWorktreeID(firstWorktree.id))
+    try? await Task.sleep(for: .milliseconds(20))
+    manager.handleCommand(.setSelectedWorktreeID(secondWorktree.id))
+    #expect(
+      await waitForPullRequestRefreshCount(
+        collector,
+        repositoryRootURL: tempRepository.tempRoot,
+        count: baselineCount + 1,
+        timeout: .seconds(1)
+      )
+    )
+
+    try? await Task.sleep(for: .milliseconds(80))
+    #expect(
+      await collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot) == baselineCount + 1
+    )
+
+    try? await Task.sleep(for: .milliseconds(220))
+    manager.handleCommand(.setSelectedWorktreeID(firstWorktree.id))
+    #expect(
+      await waitForPullRequestRefreshCount(
+        collector,
+        repositoryRootURL: tempRepository.tempRoot,
+        count: baselineCount + 2,
+        timeout: .seconds(1)
+      )
+    )
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
+  }
 }
 
 actor EventCollector {
@@ -55,12 +110,24 @@ actor EventCollector {
     filesChangedCount(worktreeID: worktreeID) > 0
   }
 
+  func pullRequestRefreshCount(repositoryRootURL: URL) -> Int {
+    events.reduce(into: 0) { result, event in
+      if case .repositoryPullRequestRefresh(let rootURL, _) = event, rootURL == repositoryRootURL {
+        result += 1
+      }
+    }
+  }
 }
 
 private struct TempWorktree {
   let worktree: Worktree
   let tempRoot: URL
   let headURL: URL
+}
+
+private struct TempRepository {
+  let worktrees: [Worktree]
+  let tempRoot: URL
 }
 
 private func makeTempWorktree() throws -> TempWorktree {
@@ -79,6 +146,28 @@ private func makeTempWorktree() throws -> TempWorktree {
     repositoryRootURL: tempRoot
   )
   return TempWorktree(worktree: worktree, tempRoot: tempRoot, headURL: headURL)
+}
+
+private func makeTempRepository(worktreeNames: [String]) throws -> TempRepository {
+  let fileManager = FileManager.default
+  let tempRoot = fileManager.temporaryDirectory.appending(path: UUID().uuidString)
+  var worktrees: [Worktree] = []
+  for name in worktreeNames {
+    let worktreeDirectory = tempRoot.appending(path: name)
+    let gitDirectory = worktreeDirectory.appending(path: ".git")
+    try fileManager.createDirectory(at: gitDirectory, withIntermediateDirectories: true)
+    let headURL = gitDirectory.appending(path: "HEAD")
+    try "ref: refs/heads/\(name)\n".write(to: headURL, atomically: true, encoding: .utf8)
+    let worktree = Worktree(
+      id: worktreeDirectory.path(percentEncoded: false),
+      name: name,
+      detail: "detail",
+      workingDirectory: worktreeDirectory,
+      repositoryRootURL: tempRoot
+    )
+    worktrees.append(worktree)
+  }
+  return TempRepository(worktrees: worktrees, tempRoot: tempRoot)
 }
 
 private func startCollecting(
@@ -106,6 +195,23 @@ private func waitForFilesChangedCount(
   let deadline = clock.now.advanced(by: timeout)
   while clock.now < deadline {
     if await collector.filesChangedCount(worktreeID: worktreeID) >= count {
+      return true
+    }
+    try? await Task.sleep(for: .milliseconds(10))
+  }
+  return false
+}
+
+private func waitForPullRequestRefreshCount(
+  _ collector: EventCollector,
+  repositoryRootURL: URL,
+  count: Int,
+  timeout: Duration
+) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now.advanced(by: timeout)
+  while clock.now < deadline {
+    if await collector.pullRequestRefreshCount(repositoryRootURL: repositoryRootURL) >= count {
       return true
     }
     try? await Task.sleep(for: .milliseconds(10))

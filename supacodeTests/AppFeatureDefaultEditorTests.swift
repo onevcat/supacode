@@ -39,6 +39,34 @@ struct AppFeatureDefaultEditorTests {
     await store.finish()
   }
 
+  @Test func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
+    let worktree = makeWorktree()
+    let repositoriesState = makeRepositoriesState(worktree: worktree)
+    let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveLastFocusedWorktreeID = { _ in }
+      $0.terminalClient.send = { _ in }
+      $0.worktreeInfoWatcher.send = { command in
+        watcherCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.repositories(.delegate(.selectedWorktreeChanged(worktree))))
+    await store.receive(\.worktreeSettingsLoaded) {
+      $0.openActionSelection = .zed
+    }
+    await store.finish()
+
+    #expect(watcherCommands.value == [.setSelectedWorktreeID(worktree.id)])
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",

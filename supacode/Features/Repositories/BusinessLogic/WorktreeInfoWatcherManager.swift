@@ -28,7 +28,9 @@ final class WorktreeInfoWatcherManager {
   }
 
   private let filesChangedDebounceInterval: Duration
+  private let pullRequestSelectionRefreshCooldown: Duration
   private let refreshTiming: RefreshTiming
+  private let clock: ContinuousClock
   private var worktrees: [Worktree.ID: Worktree] = [:]
   private var headWatchers: [Worktree.ID: HeadWatcher] = [:]
   private var branchDebounceTasks: [Worktree.ID: Task<Void, Never>] = [:]
@@ -39,15 +41,20 @@ final class WorktreeInfoWatcherManager {
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
+  private var lastImmediatePullRequestRefreshByRepo: [URL: ContinuousClock.Instant] = [:]
   private var eventContinuation: AsyncStream<WorktreeInfoWatcherClient.Event>.Continuation?
 
   init(
     focusedInterval: Duration = .seconds(30),
     unfocusedInterval: Duration = .seconds(60),
-    filesChangedDebounceInterval: Duration = .seconds(5)
+    filesChangedDebounceInterval: Duration = .seconds(5),
+    pullRequestSelectionRefreshCooldown: Duration = .seconds(7),
+    clock: ContinuousClock = ContinuousClock()
   ) {
     refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
     self.filesChangedDebounceInterval = filesChangedDebounceInterval
+    self.pullRequestSelectionRefreshCooldown = pullRequestSelectionRefreshCooldown
+    self.clock = clock
   }
 
   func handleCommand(_ command: WorktreeInfoWatcherClient.Command) {
@@ -101,6 +108,9 @@ final class WorktreeInfoWatcherManager {
     for repositoryRootURL in obsoleteRepositories {
       pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
     }
+    lastImmediatePullRequestRefreshByRepo = lastImmediatePullRequestRefreshByRepo.filter {
+      repositoryRoots.contains($0.key)
+    }
   }
 
   private func setSelectedWorktreeID(_ worktreeID: Worktree.ID?) {
@@ -118,14 +128,20 @@ final class WorktreeInfoWatcherManager {
       updateLineChangeSchedule(worktreeID: worktreeID, immediate: true)
     }
     if let previousRepository, previousRepository == nextRepository {
-      updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: true)
+      updatePullRequestSchedule(
+        repositoryRootURL: previousRepository,
+        immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: previousRepository)
+      )
       return
     }
     if let previousRepository {
       updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: false)
     }
     if let nextRepository {
-      updatePullRequestSchedule(repositoryRootURL: nextRepository, immediate: true)
+      updatePullRequestSchedule(
+        repositoryRootURL: nextRepository,
+        immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: nextRepository)
+      )
     }
   }
 
@@ -279,6 +295,7 @@ final class WorktreeInfoWatcherManager {
     pullRequestTasks.removeAll()
     lineChangeTasks.removeAll()
     deferredLineChangeIDs.removeAll()
+    lastImmediatePullRequestRefreshByRepo.removeAll()
     worktrees.removeAll()
     selectedWorktreeID = nil
     pullRequestTrackingEnabled = true
@@ -301,6 +318,7 @@ final class WorktreeInfoWatcherManager {
       task.task.cancel()
     }
     pullRequestTasks.removeAll()
+    lastImmediatePullRequestRefreshByRepo.removeAll()
   }
 
   private func updatePullRequestSchedule(repositoryRootURL: URL, immediate: Bool) {
@@ -324,7 +342,14 @@ final class WorktreeInfoWatcherManager {
     }
     let task = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: interval)
+        do {
+          try await Task.sleep(for: interval)
+        } catch {
+          break
+        }
+        guard !Task.isCancelled else {
+          break
+        }
         await MainActor.run {
           self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
         }
@@ -392,7 +417,14 @@ final class WorktreeInfoWatcherManager {
     }
     let task = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: request.interval)
+        do {
+          try await Task.sleep(for: request.interval)
+        } catch {
+          break
+        }
+        guard !Task.isCancelled else {
+          break
+        }
         await MainActor.run {
           self?.emit(request.makeEvent(worktreeID))
         }
@@ -408,5 +440,18 @@ final class WorktreeInfoWatcherManager {
       return
     }
     eventContinuation?.yield(event)
+  }
+
+  private func shouldImmediatelyRefreshPullRequests(repositoryRootURL: URL) -> Bool {
+    let now = clock.now
+    guard let lastRefresh = lastImmediatePullRequestRefreshByRepo[repositoryRootURL] else {
+      lastImmediatePullRequestRefreshByRepo[repositoryRootURL] = now
+      return true
+    }
+    guard lastRefresh.duration(to: now) >= pullRequestSelectionRefreshCooldown else {
+      return false
+    }
+    lastImmediatePullRequestRefreshByRepo[repositoryRootURL] = now
+    return true
   }
 }
