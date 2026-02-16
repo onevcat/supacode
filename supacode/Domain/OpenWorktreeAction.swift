@@ -17,6 +17,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case gitup
   case ghostty
   case kitty
+  case pycharm
   case smartgit
   case sourcetree
   case sublimeMerge
@@ -24,6 +25,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case vscode
   case vscodeInsiders
   case warp
+  case webstorm
   case wezterm
   case windsurf
   case xcode
@@ -43,6 +45,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitup: "GitUp"
     case .ghostty: "Ghostty"
     case .kitty: "Kitty"
+    case .pycharm: "PyCharm"
     case .smartgit: "SmartGit"
     case .sourcetree: "Sourcetree"
     case .sublimeMerge: "Sublime Merge"
@@ -51,6 +54,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .vscodeInsiders: "VS Code Insiders"
     case .warp: "Warp"
     case .wezterm: "WezTerm"
+    case .webstorm: "WebStorm"
     case .windsurf: "Windsurf"
     case .xcode: "Xcode"
     case .fork: "Fork"
@@ -63,8 +67,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "Finder"
     case .editor: "$EDITOR"
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .warp,
-      .wezterm, .windsurf, .xcode, .zed:
+      .kitty, .pycharm, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders,
+      .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       title
     }
   }
@@ -85,8 +89,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder, .editor:
       return true
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .warp,
-      .wezterm, .windsurf, .xcode, .zed:
+      .kitty, .pycharm, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders,
+      .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -104,6 +108,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitup: "gitup"
     case .ghostty: "ghostty"
     case .kitty: "kitty"
+    case .pycharm: "pycharm"
     case .smartgit: "smartgit"
     case .sourcetree: "sourcetree"
     case .sublimeMerge: "sublime-merge"
@@ -111,6 +116,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .vscode: "vscode"
     case .vscodeInsiders: "vscode-insiders"
     case .warp: "warp"
+    case .webstorm: "webstorm"
     case .wezterm: "wezterm"
     case .windsurf: "windsurf"
     case .xcode: "xcode"
@@ -131,6 +137,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitup: "co.gitup.mac"
     case .ghostty: "com.mitchellh.ghostty"
     case .kitty: "net.kovidgoyal.kitty"
+    case .pycharm: "com.jetbrains.pycharm"
     case .smartgit: "com.syntevo.smartgit"
     case .sourcetree: "com.torusknot.SourceTreeNotMAS"
     case .sublimeMerge: "com.sublimemerge"
@@ -138,6 +145,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .vscode: "com.microsoft.VSCode"
     case .vscodeInsiders: "com.microsoft.VSCodeInsiders"
     case .warp: "dev.warp.Warp-Stable"
+    case .webstorm: "com.jetbrains.WebStorm"
     case .wezterm: "com.github.wez.wezterm"
     case .windsurf: "com.exafunction.windsurf"
     case .xcode: "com.apple.dt.Xcode"
@@ -153,6 +161,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     .vscode,
     .windsurf,
     .vscodeInsiders,
+    .webstorm,
+    .pycharm,
     .antigravity,
   ]
   static let terminalPriority: [OpenWorktreeAction] = [
@@ -225,6 +235,38 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       return
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
+    // Apps that require CLI arguments instead of Apple Events to open directories.
+    case .webstorm, .pycharm:
+      guard
+        let appURL = NSWorkspace.shared.urlForApplication(
+          withBundleIdentifier: bundleIdentifier
+        )
+      else {
+        onError(
+          OpenActionError(
+            title: "\(title) not found",
+            message: "Install \(title) to open this worktree."
+          )
+        )
+        return
+      }
+      let configuration = NSWorkspace.OpenConfiguration()
+      configuration.createsNewApplicationInstance = true
+      configuration.arguments = [worktree.workingDirectory.path]
+      NSWorkspace.shared.openApplication(
+        at: appURL,
+        configuration: configuration
+      ) { _, error in
+        guard let error else { return }
+        Task { @MainActor in
+          onError(
+            OpenActionError(
+              title: "Unable to open in \(self.title)",
+              message: error.localizedDescription
+            )
+          )
+        }
+      }
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
       .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .warp,
       .wezterm, .windsurf, .xcode, .zed:
