@@ -574,6 +574,9 @@ struct AppFeature {
       case .commandPalette(.delegate(.mergePullRequest(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .merge)))
 
+      case .commandPalette(.delegate(.copyFailingJobURL(let worktreeID))):
+        return .send(.repositories(.pullRequestAction(worktreeID, .copyFailingJobURL)))
+
       case .commandPalette(.delegate(.copyCiFailureLogs(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .copyCiFailureLogs)))
 

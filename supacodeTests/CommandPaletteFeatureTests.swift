@@ -399,6 +399,29 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
     let failingCheck = GithubPullRequestStatusCheck(
+      detailsUrl: "https://example.com/check/1",
+      status: "COMPLETED",
+      conclusion: "FAILURE",
+      state: nil
+    )
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(checks: [failingCheck])
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
+    #expect(ordered.first?.title == "Copy failing job URL")
+  }
+
+  @Test func commandPaletteFailingActionFallsBackToLogsWhenCheckURLMissing() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-failing", name: "failing", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    let failingCheck = GithubPullRequestStatusCheck(
       status: "COMPLETED",
       conclusion: "FAILURE",
       state: nil

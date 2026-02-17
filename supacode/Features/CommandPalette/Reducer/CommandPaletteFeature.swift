@@ -42,6 +42,7 @@ struct CommandPaletteFeature {
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
+    case copyFailingJobURL(Worktree.ID)
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
@@ -250,10 +251,7 @@ private func pullRequestItems(
   let checks = pullRequest.statusCheckRollup?.checks ?? []
   let breakdown = PullRequestCheckBreakdown(checks: checks)
   let hasFailingChecks = breakdown.failed > 0
-  let canMerge =
-    isOpen
-    && !isDraft
-    && !mergeReadiness.isBlocking
+  let canMerge = isOpen && !isDraft && !mergeReadiness.isBlocking
 
   func makeReadyItem() -> CommandPaletteItem? {
     guard isOpen && isDraft else { return nil }
@@ -268,25 +266,40 @@ private func pullRequestItems(
 
   func makeFailingItems() -> [CommandPaletteItem] {
     guard isOpen && hasFailingChecks else { return [] }
-    let logTier = isDraft ? 1 : 0
-    let followupTier = logTier + 1
-    var failingItems: [CommandPaletteItem] = [
+    let hasFailingCheckWithDetails = checks.contains { $0.checkState == .failure && $0.detailsUrl != nil }
+    let leadingTier = isDraft ? 1 : 0
+    let followupTier = leadingTier + 1
+    var failingItems: [CommandPaletteItem] = []
+    if hasFailingCheckWithDetails {
+      failingItems.append(
+        CommandPaletteItem(
+          id: CommandPaletteItemID.pullRequestCopyFailingJobURL(repositoryID),
+          title: "Copy failing job URL",
+          subtitle: pullRequest.title,
+          kind: .copyFailingJobURL(worktreeID),
+          priorityTier: leadingTier
+        )
+      )
+    }
+    failingItems.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.pullRequestCopyCiLogs(repositoryID),
         title: "Copy CI Failure Logs",
         subtitle: pullRequest.title,
         kind: .copyCiFailureLogs(worktreeID),
-        priorityTier: logTier
-      ),
+        priorityTier: hasFailingCheckWithDetails ? followupTier : leadingTier
+      )
+    )
+    failingItems.append(
       CommandPaletteItem(
         id: CommandPaletteItemID.pullRequestRerunFailedJobs(repositoryID),
         title: "Re-run Failed Jobs",
         subtitle: pullRequest.title,
         kind: .rerunFailedJobs(worktreeID),
         priorityTier: followupTier
-      ),
-    ]
-    if checks.contains(where: { $0.checkState == .failure && $0.detailsUrl != nil }) {
+      )
+    )
+    if hasFailingCheckWithDetails {
       failingItems.append(
         CommandPaletteItem(
           id: CommandPaletteItemID.pullRequestOpenFailingCheck(repositoryID),
@@ -383,6 +396,7 @@ private enum CommandPaletteItemID {
     [
       pullRequestOpen(repositoryID),
       pullRequestReady(repositoryID),
+      pullRequestCopyFailingJobURL(repositoryID),
       pullRequestCopyCiLogs(repositoryID),
       pullRequestRerunFailedJobs(repositoryID),
       pullRequestOpenFailingCheck(repositoryID),
@@ -396,6 +410,10 @@ private enum CommandPaletteItemID {
 
   static func pullRequestReady(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "pr.\(repositoryID).ready"
+  }
+
+  static func pullRequestCopyFailingJobURL(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
+    "pr.\(repositoryID).copy-failing-job-url"
   }
 
   static func pullRequestCopyCiLogs(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
@@ -465,21 +483,51 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .archiveWorktree(worktreeID, repositoryID)
   case .refreshWorktrees:
     return .refreshWorktrees
+  case .openPullRequest,
+    .markPullRequestReady,
+    .mergePullRequest,
+    .copyFailingJobURL,
+    .copyCiFailureLogs,
+    .rerunFailedJobs,
+    .openFailingCheckDetails:
+    return pullRequestDelegateAction(for: kind)!
+  #if DEBUG
+    case .debugTestToast(let toast):
+      return .debugTestToast(toast)
+  #endif
+  }
+}
+
+private func pullRequestDelegateAction(
+  for kind: CommandPaletteItem.Kind
+) -> CommandPaletteFeature.Delegate? {
+  switch kind {
   case .openPullRequest(let worktreeID):
     return .openPullRequest(worktreeID)
   case .markPullRequestReady(let worktreeID):
     return .markPullRequestReady(worktreeID)
   case .mergePullRequest(let worktreeID):
     return .mergePullRequest(worktreeID)
+  case .copyFailingJobURL(let worktreeID):
+    return .copyFailingJobURL(worktreeID)
   case .copyCiFailureLogs(let worktreeID):
     return .copyCiFailureLogs(worktreeID)
   case .rerunFailedJobs(let worktreeID):
     return .rerunFailedJobs(worktreeID)
   case .openFailingCheckDetails(let worktreeID):
     return .openFailingCheckDetails(worktreeID)
+  case .worktreeSelect,
+    .checkForUpdates,
+    .openSettings,
+    .newWorktree,
+    .openRepository,
+    .removeWorktree,
+    .archiveWorktree,
+    .refreshWorktrees:
+    return nil
   #if DEBUG
-    case .debugTestToast(let toast):
-      return .debugTestToast(toast)
+    case .debugTestToast:
+      return nil
   #endif
   }
 }

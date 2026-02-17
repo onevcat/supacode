@@ -217,6 +217,7 @@ struct RepositoriesFeature {
     case openOnGithub
     case markReadyForReview
     case merge
+    case copyFailingJobURL
     case copyCiFailureLogs
     case rerunFailedJobs
     case openFailingCheckDetails
@@ -1688,6 +1689,9 @@ struct RepositoriesFeature {
         let repoRoot = worktree.repositoryRootURL
         let worktreeRoot = worktree.workingDirectory
         let branchName = pullRequest.headRefName ?? worktree.name
+        let failingCheckDetailsURL = (pullRequest.statusCheckRollup?.checks ?? []).first {
+          $0.checkState == .failure && $0.detailsUrl != nil
+        }?.detailsUrl
         switch action {
         case .openOnGithub:
           guard let url = URL(string: pullRequest.url) else {
@@ -1702,12 +1706,25 @@ struct RepositoriesFeature {
             NSWorkspace.shared.open(url)
           }
 
+        case .copyFailingJobURL:
+          guard let failingCheckDetailsURL, !failingCheckDetailsURL.isEmpty else {
+            return .send(
+              .presentAlert(
+                title: "Failing check not found",
+                message: "Supacode could not find a failing check URL."
+              )
+            )
+          }
+          return .run { send in
+            await MainActor.run {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(failingCheckDetailsURL, forType: .string)
+            }
+            await send(.showToast(.success("Failing job URL copied")))
+          }
+
         case .openFailingCheckDetails:
-          let checks = pullRequest.statusCheckRollup?.checks ?? []
-          let detailsUrl = checks.first {
-            $0.checkState == .failure && $0.detailsUrl != nil
-          }?.detailsUrl
-          guard let detailsUrl, let url = URL(string: detailsUrl) else {
+          guard let failingCheckDetailsURL, let url = URL(string: failingCheckDetailsURL) else {
             return .send(
               .presentAlert(
                 title: "Failing check not found",
