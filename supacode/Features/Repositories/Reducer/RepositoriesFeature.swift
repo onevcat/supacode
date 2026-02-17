@@ -19,6 +19,39 @@ private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(1
 private nonisolated let worktreeCreationProgressLineLimit = 200
 private nonisolated let worktreeCreationProgressUpdateStride = 20
 
+nonisolated struct WorktreeCreationProgressUpdateThrottle {
+  private let stride: Int
+  private var hasEmittedFirstLine = false
+  private var unsentLineCount = 0
+
+  init(stride: Int) {
+    precondition(stride > 0)
+    self.stride = stride
+  }
+
+  mutating func recordLine() -> Bool {
+    unsentLineCount += 1
+    if !hasEmittedFirstLine {
+      hasEmittedFirstLine = true
+      unsentLineCount = 0
+      return true
+    }
+    if unsentLineCount >= stride {
+      unsentLineCount = 0
+      return true
+    }
+    return false
+  }
+
+  mutating func flush() -> Bool {
+    guard unsentLineCount > 0 else {
+      return false
+    }
+    unsentLineCount = 0
+    return true
+  }
+}
+
 @Reducer
 struct RepositoriesFeature {
   @ObservableState
@@ -548,7 +581,9 @@ struct RepositoriesFeature {
         return .run { send in
           var newWorktreeName: String?
           var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
-          var pendingProgressLineCount = 0
+          var progressUpdateThrottle = WorktreeCreationProgressUpdateThrottle(
+            stride: worktreeCreationProgressUpdateStride
+          )
           do {
             await send(
               .pendingWorktreeProgressUpdated(
@@ -638,9 +673,7 @@ struct RepositoriesFeature {
                   continue
                 }
                 progress.appendOutputLine(line, maxLines: worktreeCreationProgressLineLimit)
-                pendingProgressLineCount += 1
-                if pendingProgressLineCount == 1 || pendingProgressLineCount >= worktreeCreationProgressUpdateStride {
-                  pendingProgressLineCount = 0
+                if progressUpdateThrottle.recordLine() {
                   await send(
                     .pendingWorktreeProgressUpdated(
                       id: pendingID,
@@ -649,8 +682,7 @@ struct RepositoriesFeature {
                   )
                 }
               case .finished(let newWorktree):
-                if pendingProgressLineCount > 0 {
-                  pendingProgressLineCount = 0
+                if progressUpdateThrottle.flush() {
                   await send(
                     .pendingWorktreeProgressUpdated(
                       id: pendingID,
@@ -673,8 +705,7 @@ struct RepositoriesFeature {
               message: "Worktree creation finished without a result."
             )
           } catch {
-            if pendingProgressLineCount > 0 {
-              pendingProgressLineCount = 0
+            if progressUpdateThrottle.flush() {
               await send(
                 .pendingWorktreeProgressUpdated(
                   id: pendingID,

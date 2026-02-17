@@ -14,6 +14,11 @@ final class WorktreeInfoWatcherManager {
     let task: Task<Void, Never>
   }
 
+  private struct PullRequestSelectionCooldownTask {
+    let id: UUID
+    let task: Task<Void, Never>
+  }
+
   private struct RepeatingTaskRequest {
     let worktreeID: Worktree.ID
     let interval: Duration
@@ -41,7 +46,7 @@ final class WorktreeInfoWatcherManager {
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
-  private var pullRequestSelectionCooldownTasksByRepo: [URL: Task<Void, Never>] = [:]
+  private var pullRequestSelectionCooldownTasksByRepo: [URL: PullRequestSelectionCooldownTask] = [:]
   private var eventContinuation: AsyncStream<WorktreeInfoWatcherClient.Event>.Continuation?
 
   init<C: Clock<Duration>>(
@@ -110,9 +115,11 @@ final class WorktreeInfoWatcherManager {
     for repositoryRootURL in obsoleteRepositories {
       pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
     }
-    for repositoryRootURL in pullRequestSelectionCooldownTasksByRepo.keys
-    where !repositoryRoots.contains(repositoryRootURL) {
-      pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)?.cancel()
+    let obsoleteCooldownRepositories = pullRequestSelectionCooldownTasksByRepo.keys.filter {
+      !repositoryRoots.contains($0)
+    }
+    for repositoryRootURL in obsoleteCooldownRepositories {
+      cancelPullRequestSelectionCooldown(for: repositoryRootURL)
     }
   }
 
@@ -301,10 +308,7 @@ final class WorktreeInfoWatcherManager {
     pullRequestTasks.removeAll()
     lineChangeTasks.removeAll()
     deferredLineChangeIDs.removeAll()
-    for task in pullRequestSelectionCooldownTasksByRepo.values {
-      task.cancel()
-    }
-    pullRequestSelectionCooldownTasksByRepo.removeAll()
+    cancelAllPullRequestSelectionCooldownTasks()
     worktrees.removeAll()
     selectedWorktreeID = nil
     pullRequestTrackingEnabled = true
@@ -327,10 +331,7 @@ final class WorktreeInfoWatcherManager {
       task.task.cancel()
     }
     pullRequestTasks.removeAll()
-    for task in pullRequestSelectionCooldownTasksByRepo.values {
-      task.cancel()
-    }
-    pullRequestSelectionCooldownTasksByRepo.removeAll()
+    cancelAllPullRequestSelectionCooldownTasks()
   }
 
   private func updatePullRequestSchedule(repositoryRootURL: URL, immediate: Bool) {
@@ -456,19 +457,44 @@ final class WorktreeInfoWatcherManager {
     eventContinuation?.yield(event)
   }
 
+  private func cancelPullRequestSelectionCooldown(for repositoryRootURL: URL) {
+    pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)?.task.cancel()
+  }
+
+  private func cancelAllPullRequestSelectionCooldownTasks() {
+    for task in pullRequestSelectionCooldownTasksByRepo.values {
+      task.task.cancel()
+    }
+    pullRequestSelectionCooldownTasksByRepo.removeAll()
+  }
+
   private func shouldImmediatelyRefreshPullRequests(repositoryRootURL: URL) -> Bool {
     guard pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] == nil else {
       return false
     }
     let cooldown = pullRequestSelectionRefreshCooldown
     let sleep = self.sleep
-    let task = Task { [weak self, sleep] in
-      try? await sleep(cooldown)
+    let taskID = UUID()
+    let task = Task { [weak self, sleep, taskID] in
+      do {
+        try await sleep(cooldown)
+      } catch {
+        return
+      }
       await MainActor.run {
-        self?.pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)
+        guard
+          let self,
+          self.pullRequestSelectionCooldownTasksByRepo[repositoryRootURL]?.id == taskID
+        else {
+          return
+        }
+        self.pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)
       }
     }
-    pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] = task
+    pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] = PullRequestSelectionCooldownTask(
+      id: taskID,
+      task: task
+    )
     return true
   }
 }

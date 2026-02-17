@@ -75,6 +75,53 @@ struct WorktreeInfoWatcherManagerTests {
     await task.value
     try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
+
+  @Test func canceledSelectionCooldownDoesNotClearReplacementCooldown() async throws {
+    let clock = TestClock()
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .seconds(3_600),
+      pullRequestSelectionRefreshCooldown: .milliseconds(500),
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees(tempRepository.worktrees))
+    await drainAsyncEvents()
+    let baselineCount = await collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot)
+    #expect(baselineCount == 1)
+
+    let firstWorktree = try #require(tempRepository.worktrees.first)
+    let secondWorktree = try #require(tempRepository.worktrees.dropFirst().first)
+
+    manager.handleCommand(.setSelectedWorktreeID(firstWorktree.id))
+    await drainAsyncEvents()
+    let afterFirstSelectionCount = await collector.pullRequestRefreshCount(
+      repositoryRootURL: tempRepository.tempRoot
+    )
+    #expect(afterFirstSelectionCount == baselineCount + 1)
+
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setPullRequestTrackingEnabled(true))
+    manager.handleCommand(.setSelectedWorktreeID(secondWorktree.id))
+    await drainAsyncEvents()
+    let afterReplacementCooldownCount = await collector.pullRequestRefreshCount(
+      repositoryRootURL: tempRepository.tempRoot
+    )
+    #expect(afterReplacementCooldownCount == afterFirstSelectionCount + 2)
+
+    manager.handleCommand(.setSelectedWorktreeID(firstWorktree.id))
+    await drainAsyncEvents()
+    #expect(
+      await collector.pullRequestRefreshCount(repositoryRootURL: tempRepository.tempRoot)
+        == afterReplacementCooldownCount
+    )
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
+  }
 }
 
 actor EventCollector {
