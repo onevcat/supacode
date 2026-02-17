@@ -982,10 +982,140 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.githubIntegrationAvailabilityUpdated) {
       $0.githubIntegrationAvailability = .unavailable
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.send(.setGithubIntegrationEnabled(false)) {
+      $0.githubIntegrationAvailability = .disabled
       $0.pendingPullRequestRefreshByRepositoryID = [:]
       $0.queuedPullRequestRefreshByRepositoryID = [:]
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
+    await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshQueuesWhileAvailabilityUnavailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    ) {
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityRecoveryReplaysPendingRefreshes() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    initialState.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      worktreeIDs: [mainWorktree.id, featureWorktree.id]
+    )
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.batchPullRequests = { _, _, _, _ in
+        Issue.record("batchPullRequests should not run when remoteInfo is unavailable")
+        return [:]
+      }
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(true)) {
+      $0.githubIntegrationAvailability = .available
+      $0.pendingPullRequestRefreshByRepositoryID = [:]
+    }
+    await store.receive(\.worktreeInfoEvent) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    }
+    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityUnavailablePromotesQueuedRefreshesToPending() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .available
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    initialState.queuedPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      worktreeIDs: [mainWorktree.id, featureWorktree.id]
+    )
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(false)) {
+      $0.githubIntegrationAvailability = .unavailable
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.send(.setGithubIntegrationEnabled(false)) {
+      $0.githubIntegrationAvailability = .disabled
+      $0.pendingPullRequestRefreshByRepositoryID = [:]
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityUpdatedWhileDisabledIsIgnored() async {
+    var state = makeState(repositories: [])
+    state.githubIntegrationAvailability = .disabled
+    state.pendingPullRequestRefreshByRepositoryID["repo"] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"),
+      worktreeIDs: []
+    )
+    let expectedState = state
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(false))
+    await store.send(.githubIntegrationAvailabilityUpdated(true))
+    #expect(store.state == expectedState)
     await store.finish()
   }
 

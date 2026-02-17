@@ -9,10 +9,13 @@ private enum CancelID {
   static let load = "repositories.load"
   static let toastAutoDismiss = "repositories.toastAutoDismiss"
   static let githubIntegrationAvailability = "repositories.githubIntegrationAvailability"
+  static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
   static func delayedPRRefresh(_ worktreeID: Worktree.ID) -> String {
     "repositories.delayedPRRefresh.\(worktreeID)"
   }
 }
+
+private let githubIntegrationRecoveryInterval: Duration = .seconds(15)
 
 @Reducer
 struct RepositoriesFeature {
@@ -52,6 +55,7 @@ struct RepositoriesFeature {
     case checking
     case available
     case unavailable
+    case disabled
   }
 
   struct PendingPullRequestRefresh: Equatable {
@@ -1443,12 +1447,22 @@ struct RepositoriesFeature {
             )
             return .none
           case .unavailable:
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: repositoryRootURL,
+              worktreeIDs: worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+            return .none
+          case .disabled:
             return .none
           }
         }
 
       case .refreshGithubIntegrationAvailability:
-        guard state.githubIntegrationAvailability != .checking else {
+        guard state.githubIntegrationAvailability != .checking,
+          state.githubIntegrationAvailability != .disabled
+        else {
           return .none
         }
         state.githubIntegrationAvailability = .checking
@@ -1460,32 +1474,51 @@ struct RepositoriesFeature {
         .cancellable(id: CancelID.githubIntegrationAvailability, cancelInFlight: true)
 
       case .githubIntegrationAvailabilityUpdated(let isAvailable):
+        guard state.githubIntegrationAvailability != .disabled else {
+          return .none
+        }
         state.githubIntegrationAvailability = isAvailable ? .available : .unavailable
         guard isAvailable else {
-          state.pendingPullRequestRefreshByRepositoryID.removeAll()
+          for (repositoryID, queued) in state.queuedPullRequestRefreshByRepositoryID {
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: queued.repositoryRootURL,
+              worktreeIDs: queued.worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+          }
           state.queuedPullRequestRefreshByRepositoryID.removeAll()
           state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
-          return .none
+          return .run { send in
+            while !Task.isCancelled {
+              try? await Task.sleep(for: githubIntegrationRecoveryInterval)
+              guard !Task.isCancelled else {
+                return
+              }
+              await send(.refreshGithubIntegrationAvailability)
+            }
+          }
+          .cancellable(id: CancelID.githubIntegrationRecovery, cancelInFlight: true)
         }
         let pendingRefreshes = state.pendingPullRequestRefreshByRepositoryID.values.sorted {
           $0.repositoryRootURL.path(percentEncoded: false)
             < $1.repositoryRootURL.path(percentEncoded: false)
         }
         state.pendingPullRequestRefreshByRepositoryID.removeAll()
-        guard !pendingRefreshes.isEmpty else {
-          return .none
-        }
         return .merge(
-          pendingRefreshes.map { pending in
-            .send(
-              .worktreeInfoEvent(
-                .repositoryPullRequestRefresh(
-                  repositoryRootURL: pending.repositoryRootURL,
-                  worktreeIDs: pending.worktreeIDs
+          .cancel(id: CancelID.githubIntegrationRecovery),
+          .merge(
+            pendingRefreshes.map { pending in
+              .send(
+                .worktreeInfoEvent(
+                  .repositoryPullRequestRefresh(
+                    repositoryRootURL: pending.repositoryRootURL,
+                    worktreeIDs: pending.worktreeIDs
+                  )
                 )
               )
-            )
-          }
+            }
+          )
         )
 
       case .repositoryPullRequestRefreshCompleted(let repositoryID):
@@ -1806,9 +1839,12 @@ struct RepositoriesFeature {
           state.pendingPullRequestRefreshByRepositoryID.removeAll()
           state.queuedPullRequestRefreshByRepositoryID.removeAll()
           state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
-          return .send(.refreshGithubIntegrationAvailability)
+          return .merge(
+            .cancel(id: CancelID.githubIntegrationRecovery),
+            .send(.refreshGithubIntegrationAvailability)
+          )
         }
-        state.githubIntegrationAvailability = .unavailable
+        state.githubIntegrationAvailability = .disabled
         state.pendingPullRequestRefreshByRepositoryID.removeAll()
         state.queuedPullRequestRefreshByRepositoryID.removeAll()
         state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
@@ -1820,7 +1856,10 @@ struct RepositoriesFeature {
             state: &state
           )
         }
-        return .cancel(id: CancelID.githubIntegrationAvailability)
+        return .merge(
+          .cancel(id: CancelID.githubIntegrationAvailability),
+          .cancel(id: CancelID.githubIntegrationRecovery)
+        )
 
       case .setAutomaticallyArchiveMergedWorktrees(let isEnabled):
         state.automaticallyArchiveMergedWorktrees = isEnabled
