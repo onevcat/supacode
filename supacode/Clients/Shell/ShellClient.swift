@@ -69,7 +69,7 @@ nonisolated struct ShellClient: Sendable {
 }
 
 extension ShellClient: DependencyKey {
-  static let liveValue = ShellClient(
+  nonisolated static let live = ShellClient(
     run: { executableURL, arguments, currentDirectoryURL in
       try await runProcess(
         executableURL: executableURL,
@@ -118,6 +118,8 @@ extension ShellClient: DependencyKey {
       )
     }
   )
+
+  static let liveValue = live
 
   static let testValue = ShellClient(
     run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },

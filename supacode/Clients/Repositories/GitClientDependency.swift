@@ -57,28 +57,13 @@ extension GitClientDependency: DependencyKey {
       )
     },
     createWorktreeStream: { name, repoRoot, copyIgnored, copyUntracked, baseRef in
-      AsyncThrowingStream { continuation in
-        let task = Task {
-          let stream = await GitClient().createWorktreeStream(
-            named: name,
-            in: repoRoot,
-            copyIgnored: copyIgnored,
-            copyUntracked: copyUntracked,
-            baseRef: baseRef
-          )
-          do {
-            for try await event in stream {
-              continuation.yield(event)
-            }
-            continuation.finish()
-          } catch {
-            continuation.finish(throwing: error)
-          }
-        }
-        continuation.onTermination = { _ in
-          task.cancel()
-        }
-      }
+      GitClient().createWorktreeStream(
+        named: name,
+        in: repoRoot,
+        copyIgnored: copyIgnored,
+        copyUntracked: copyUntracked,
+        baseRef: baseRef
+      )
     },
     removeWorktree: { worktree, deleteBranch in
       try await GitClient().removeWorktree(worktree, deleteBranch: deleteBranch)

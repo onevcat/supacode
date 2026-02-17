@@ -48,7 +48,7 @@ struct GitClient {
 
   private let shell: ShellClient
 
-  init(shell: ShellClient = .liveValue) {
+  nonisolated init(shell: ShellClient = .live) {
     self.shell = shell
   }
 
