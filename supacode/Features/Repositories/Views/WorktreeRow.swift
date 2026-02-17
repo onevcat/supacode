@@ -74,7 +74,7 @@ struct WorktreeRow: View {
         if isRunScriptRunning {
           Image(systemName: "play.fill")
             .font(.caption)
-            .foregroundStyle(isSelected ? Color.primary : Color.green)
+            .foregroundStyle(.green)
             .help("Run script active")
             .accessibilityLabel("Run script active")
         }
@@ -113,7 +113,6 @@ struct WorktreeRow: View {
         pullRequestNumber: display.pullRequest?.number,
         pullRequestState: display.pullRequestState,
         mergeReadiness: mergeReadiness,
-        isSelected: isSelected,
         shortcutHint: shortcutHint
       )
       .padding(.leading, 22)
@@ -146,7 +145,6 @@ private struct WorktreeRowInfoView: View {
   let pullRequestNumber: Int?
   let pullRequestState: String?
   let mergeReadiness: PullRequestMergeReadiness?
-  let isSelected: Bool
   let shortcutHint: String?
 
   var body: some View {
@@ -188,12 +186,12 @@ private struct WorktreeRowInfoView: View {
     if pullRequestState == "MERGED" {
       appendSeparator()
       var segment = AttributedString("Merged")
-      segment.foregroundColor = isSelected ? .secondary : PullRequestBadgeStyle.mergedColor
+      segment.foregroundColor = PullRequestBadgeStyle.mergedColor
       result.append(segment)
     } else if let mergeReadiness {
       appendSeparator()
       var segment = AttributedString(mergeReadiness.label)
-      segment.foregroundColor = isSelected ? .secondary : (mergeReadiness.isBlocking ? .red : .green)
+      segment.foregroundColor = mergeReadiness.isBlocking ? .red : .green
       result.append(segment)
     }
     return Text(result)
@@ -208,9 +206,9 @@ private struct WorktreeRowChangeCountView: View {
   var body: some View {
     HStack(spacing: 4) {
       Text("+\(addedLines)")
-        .foregroundStyle(isSelected ? Color.secondary : Color.green)
+        .foregroundStyle(.green)
       Text("-\(removedLines)")
-        .foregroundStyle(isSelected ? Color.secondary : Color.red)
+        .foregroundStyle(.red)
     }
     .font(.caption)
     .lineLimit(1)

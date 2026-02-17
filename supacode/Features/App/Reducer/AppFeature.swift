@@ -92,6 +92,11 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
+          .run { _ in
+            await MainActor.run {
+              NSApplication.shared.dockTile.badgeLabel = nil
+            }
+          },
           .run { send in
             for await event in await terminalClient.events() {
               await send(.terminalEvent(event))
@@ -243,10 +248,6 @@ struct AppFeature {
         return .none
 
       case .settings(.delegate(.settingsChanged(let settings))):
-        let badgeLabel =
-          settings.dockBadgeEnabled
-          ? (state.notificationIndicatorCount == 0 ? nil : String(state.notificationIndicatorCount))
-          : nil
         if let selectedWorktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -275,11 +276,6 @@ struct AppFeature {
           ),
           .run { _ in
             await terminalClient.send(.setNotificationsEnabled(settings.inAppNotificationsEnabled))
-          },
-          .run { _ in
-            await MainActor.run {
-              NSApplication.shared.dockTile.badgeLabel = badgeLabel
-            }
           },
           .run { _ in
             await worktreeInfoWatcher.send(
@@ -610,13 +606,9 @@ struct AppFeature {
 
       case .terminalEvent(.notificationIndicatorChanged(let count)):
         state.notificationIndicatorCount = count
-        let badgeLabel =
-          state.settings.dockBadgeEnabled
-          ? (count == 0 ? nil : String(count))
-          : nil
         return .run { _ in
           await MainActor.run {
-            NSApplication.shared.dockTile.badgeLabel = badgeLabel
+            NSApplication.shared.dockTile.badgeLabel = nil
           }
         }
 

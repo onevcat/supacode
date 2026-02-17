@@ -62,5 +62,8 @@ struct SidebarFooterView: View {
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(.bar)
+    .overlay(alignment: .top) {
+      Divider()
+    }
   }
 }

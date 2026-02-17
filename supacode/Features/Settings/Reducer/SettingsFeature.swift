@@ -12,7 +12,6 @@ struct SettingsFeature {
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
-    var dockBadgeEnabled: Bool
     var notificationSoundEnabled: Bool
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
@@ -31,7 +30,6 @@ struct SettingsFeature {
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
-      dockBadgeEnabled = settings.dockBadgeEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
@@ -49,7 +47,6 @@ struct SettingsFeature {
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
-        dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
@@ -103,7 +100,6 @@ struct SettingsFeature {
         state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
-        state.dockBadgeEnabled = normalizedSettings.dockBadgeEnabled
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled

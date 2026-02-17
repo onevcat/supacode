@@ -14,11 +14,6 @@ struct NotificationsSettingsView: View {
           )
           .help("Show bell icon next to worktree")
           Toggle(
-            "Show Dock badge",
-            isOn: $store.dockBadgeEnabled
-          )
-          .help("Show a badge on the Dock icon for unread notifications")
-          Toggle(
             "Play notification sound",
             isOn: $store.notificationSoundEnabled
           )

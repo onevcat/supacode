@@ -106,10 +106,6 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch
 - After implementing an execplan, always submit a PR if you're not in the main branch
 
-## Ghostty
-
-When following/porting Ghostty logic from their macOS app, try to match the implementation exactly, no smartness, no corner cutting.
-
 ## References
 
 - `git@github.com:ghostty-org/ghostty.git` - Dive into this codebase when implementing Ghostty features

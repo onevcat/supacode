@@ -18,7 +18,6 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: false,
       notificationSoundEnabled: true,
       analyticsEnabled: false,
       crashReportsEnabled: true,
@@ -42,7 +41,6 @@ struct SettingsFeatureTests {
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
-      $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = true
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
@@ -62,7 +60,6 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: false,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: true,
       notificationSoundEnabled: false,
       analyticsEnabled: true,
       crashReportsEnabled: false,
@@ -88,7 +85,6 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: initialSettings.updatesAutomaticallyCheckForUpdates,
       updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
-      dockBadgeEnabled: initialSettings.dockBadgeEnabled,
       notificationSoundEnabled: initialSettings.notificationSoundEnabled,
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
@@ -137,7 +133,6 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: false,
       notificationSoundEnabled: false,
       analyticsEnabled: true,
       crashReportsEnabled: false,
@@ -154,7 +149,6 @@ struct SettingsFeatureTests {
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
-      $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = false
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
