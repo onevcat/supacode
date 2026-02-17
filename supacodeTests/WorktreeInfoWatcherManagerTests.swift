@@ -5,26 +5,62 @@ import Testing
 
 @MainActor
 struct WorktreeInfoWatcherManagerTests {
-  @Test func defersLineChangesUntilSchedule() async throws {
+  @Test func emitsLineChangesImmediatelyOnInitialWorktreeLoad() async throws {
     let tempWorktree = try makeTempWorktree()
     let manager = WorktreeInfoWatcherManager(
-      focusedInterval: .milliseconds(50),
-      unfocusedInterval: .milliseconds(50)
+      focusedInterval: .seconds(3_600),
+      unfocusedInterval: .seconds(3_600)
     )
     let (collector, task) = startCollecting(manager.eventStream())
 
     manager.handleCommand(.setPullRequestTrackingEnabled(false))
     manager.handleCommand(.setWorktrees([tempWorktree.worktree]))
-    manager.handleCommand(.setSelectedWorktreeID(tempWorktree.worktree.id))
-
-    try? await Task.sleep(for: .milliseconds(20))
-    let earlyHasFilesChanged = await collector.hasFilesChanged(worktreeID: tempWorktree.worktree.id)
-    #expect(earlyHasFilesChanged == false)
 
     #expect(
       await waitForFilesChangedCount(
         collector,
         worktreeID: tempWorktree.worktree.id,
+        count: 1,
+        timeout: .milliseconds(300)
+      )
+    )
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempWorktree.tempRoot)
+  }
+
+  @Test func defersLineChangesForWorktreesAddedAfterInitialLoad() async throws {
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift"])
+    let firstWorktree = try #require(tempRepository.worktrees.first)
+    let secondWorktree = try #require(tempRepository.worktrees.dropFirst().first)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .milliseconds(80),
+      unfocusedInterval: .milliseconds(80)
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees([firstWorktree]))
+
+    #expect(
+      await waitForFilesChangedCount(
+        collector,
+        worktreeID: firstWorktree.id,
+        count: 1,
+        timeout: .milliseconds(300)
+      )
+    )
+
+    manager.handleCommand(.setWorktrees([firstWorktree, secondWorktree]))
+
+    try? await Task.sleep(for: .milliseconds(20))
+    #expect(await collector.hasFilesChanged(worktreeID: secondWorktree.id) == false)
+
+    #expect(
+      await waitForFilesChangedCount(
+        collector,
+        worktreeID: secondWorktree.id,
         count: 1,
         timeout: .seconds(1)
       )
@@ -32,7 +68,7 @@ struct WorktreeInfoWatcherManagerTests {
 
     manager.handleCommand(.stop)
     await task.value
-    try FileManager.default.removeItem(at: tempWorktree.tempRoot)
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
   }
 
   @Test func selectionRefreshUsesCooldownWithinRepository() async throws {

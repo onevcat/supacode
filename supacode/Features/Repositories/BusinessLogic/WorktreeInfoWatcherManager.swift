@@ -39,6 +39,7 @@ final class WorktreeInfoWatcherManager {
   private var pullRequestTasks: [URL: RefreshTask] = [:]
   private var lineChangeTasks: [Worktree.ID: RefreshTask] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
+  private var hasCompletedInitialWorktreeLoad = false
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
   private var lastImmediatePullRequestRefreshByRepo: [URL: ContinuousClock.Instant] = [:]
@@ -78,6 +79,7 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func setWorktrees(_ worktrees: [Worktree]) {
+    let isInitialWorktreeLoad = !hasCompletedInitialWorktreeLoad && self.worktrees.isEmpty && !worktrees.isEmpty
     let worktreesByID = Dictionary(uniqueKeysWithValues: worktrees.map { ($0.id, $0) })
     let desiredIDs = Set(worktreesByID.keys)
     let currentIDs = Set(self.worktrees.keys)
@@ -89,7 +91,7 @@ final class WorktreeInfoWatcherManager {
       deferredLineChangeIDs.subtract(removedIDs)
     }
     let newIDs = desiredIDs.subtracting(currentIDs)
-    if !newIDs.isEmpty {
+    if !newIDs.isEmpty && !isInitialWorktreeLoad {
       deferredLineChangeIDs.formUnion(newIDs)
     }
     self.worktrees = worktreesByID
@@ -97,8 +99,11 @@ final class WorktreeInfoWatcherManager {
       configureWatcher(for: worktree)
       updateLineChangeSchedule(
         worktreeID: worktree.id,
-        immediate: !deferredLineChangeIDs.contains(worktree.id)
+        immediate: isInitialWorktreeLoad || !deferredLineChangeIDs.contains(worktree.id)
       )
+    }
+    if isInitialWorktreeLoad {
+      hasCompletedInitialWorktreeLoad = true
     }
     let repositoryRoots = Set(worktrees.map(\.repositoryRootURL))
     for repositoryRootURL in repositoryRoots {
@@ -295,6 +300,7 @@ final class WorktreeInfoWatcherManager {
     pullRequestTasks.removeAll()
     lineChangeTasks.removeAll()
     deferredLineChangeIDs.removeAll()
+    hasCompletedInitialWorktreeLoad = false
     lastImmediatePullRequestRefreshByRepo.removeAll()
     worktrees.removeAll()
     selectedWorktreeID = nil
