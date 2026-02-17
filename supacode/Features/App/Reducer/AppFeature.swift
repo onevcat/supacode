@@ -78,12 +78,12 @@ struct AppFeature {
     case confirmQuit
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.repositoryPersistence) private var repositoryPersistence
-  @Dependency(\.workspaceClient) private var workspaceClient
-  @Dependency(\.settingsWindowClient) private var settingsWindowClient
-  @Dependency(\.terminalClient) private var terminalClient
-  @Dependency(\.worktreeInfoWatcher) private var worktreeInfoWatcher
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(WorkspaceClient.self) private var workspaceClient
+  @Dependency(SettingsWindowClient.self) private var settingsWindowClient
+  @Dependency(TerminalClient.self) private var terminalClient
+  @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
@@ -117,7 +117,7 @@ struct AppFeature {
             .send(.repositories(.refreshWorktrees)),
             .run { send in
               while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await ContinuousClock().sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
                 await send(.repositories(.refreshWorktrees))
               }

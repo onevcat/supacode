@@ -1,7 +1,7 @@
 import ComposableArchitecture
 import Foundation
 
-struct GitClientDependency {
+struct GitClientDependency: Sendable {
   var repoRoot: @Sendable (URL) async throws -> URL
   var worktrees: @Sendable (URL) async throws -> [Worktree]
   var pruneWorktrees: @Sendable (URL) async throws -> Void
@@ -20,6 +20,14 @@ struct GitClientDependency {
       _ baseRef: String
     ) async throws
       -> Worktree
+  var createWorktreeStream:
+    @Sendable (
+      _ name: String,
+      _ repoRoot: URL,
+      _ copyIgnored: Bool,
+      _ copyUntracked: Bool,
+      _ baseRef: String
+    ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error>
   var removeWorktree: @Sendable (_ worktree: Worktree, _ deleteBranch: Bool) async throws -> URL
   var isBareRepository: @Sendable (_ repoRoot: URL) async throws -> Bool
   var branchName: @Sendable (URL) async -> String?
@@ -41,6 +49,15 @@ extension GitClientDependency: DependencyKey {
     untrackedFileCount: { try await GitClient().untrackedFileCount(for: $0) },
     createWorktree: { name, repoRoot, copyIgnored, copyUntracked, baseRef in
       try await GitClient().createWorktree(
+        named: name,
+        in: repoRoot,
+        copyIgnored: copyIgnored,
+        copyUntracked: copyUntracked,
+        baseRef: baseRef
+      )
+    },
+    createWorktreeStream: { name, repoRoot, copyIgnored, copyUntracked, baseRef in
+      GitClient().createWorktreeStream(
         named: name,
         in: repoRoot,
         copyIgnored: copyIgnored,

@@ -95,6 +95,90 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func createRandomWorktreeInRepositoryStreamsOutputLines() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 2 }
+      $0.gitClient.untrackedFileCount = { _ in 1 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[2/2] copy .cache")))
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(store.state.pendingWorktrees.isEmpty)
+    #expect(store.state.selection == .worktree(createdWorktree.id))
+    #expect(store.state.pendingSetupScriptWorktreeIDs.contains(createdWorktree.id))
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.contains(createdWorktree.id))
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: createdWorktree.id] != nil)
+    #expect(store.state.alert == nil)
+  }
+
+  @Test func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 2 }
+      $0.gitClient.untrackedFileCount = { _ in 1 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
+          continuation.finish(throwing: GitClientError.commandFailed(command: "wt sw", message: "boom"))
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeFailed)
+    await store.finish()
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Git command failed: wt sw\nboom")
+    }
+
+    #expect(store.state.pendingWorktrees.isEmpty)
+    #expect(store.state.selection == nil)
+    #expect(store.state.alert == expectedAlert)
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: mainWorktree.id] != nil)
+  }
+
   @Test func pendingProgressUpdateUpdatesPendingWorktreeState() async {
     let repoRoot = "/tmp/repo"
     let repository = makeRepository(

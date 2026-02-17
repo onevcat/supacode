@@ -2,7 +2,7 @@ import ComposableArchitecture
 import PostHog
 import SwiftUI
 
-struct AnalyticsClient {
+struct AnalyticsClient: Sendable {
   var capture: @Sendable (_ event: String, _ properties: [String: Any]?) -> Void
   var identify: @Sendable (_ distinctId: String) -> Void
 }

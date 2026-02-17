@@ -67,7 +67,7 @@ struct GithubCLIClientTests {
         await probe.recordLoginCall()
         _ = await probe.beginGhCall()
         do {
-          try await Task.sleep(for: .milliseconds(80))
+          try await ContinuousClock().sleep(for: .milliseconds(80))
           let stdout = graphQLResponse(for: arguments)
           await probe.endGhCall()
           return ShellOutput(stdout: stdout, stderr: "", exitCode: 0)
@@ -116,7 +116,7 @@ struct GithubCLIClientTests {
           )
         }
         do {
-          try await Task.sleep(for: .milliseconds(40))
+          try await ContinuousClock().sleep(for: .milliseconds(40))
           let stdout = graphQLResponse(for: arguments)
           await probe.endGhCall()
           return ShellOutput(stdout: stdout, stderr: "", exitCode: 0)
@@ -213,7 +213,7 @@ struct GithubCLIClientTests {
   }
 }
 
-private func graphQLResponse(for arguments: [String]) -> String {
+nonisolated private func graphQLResponse(for arguments: [String]) -> String {
   guard let queryArgument = arguments.first(where: { $0.hasPrefix("query=") }) else {
     return #"{"data":{"repository":{}}}"#
   }
@@ -223,7 +223,7 @@ private func graphQLResponse(for arguments: [String]) -> String {
   return #"{"data":{"repository":{\#(entries)}}}"#
 }
 
-private func queryAliases(from query: String) -> [String] {
+nonisolated private func queryAliases(from query: String) -> [String] {
   guard let regex = try? NSRegularExpression(pattern: #"branch\d+"#) else {
     return []
   }

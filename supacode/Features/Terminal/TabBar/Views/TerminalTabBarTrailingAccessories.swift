@@ -139,7 +139,7 @@ struct TerminalTabBarTrailingAccessories: View {
       openTask?.cancel()
       openTask = Task { @MainActor in
         // Intentional delay so clicks on + don't get interrupted by the hover UI.
-        try? await Task.sleep(for: .milliseconds(350))
+        try? await ContinuousClock().sleep(for: .milliseconds(350))
         guard isHoveringButton || isHoveringPopover else { return }
         // Prevent showing while the user is in the middle of a click-drag/click-hold.
         guard NSEvent.pressedMouseButtons == 0 else { return }
@@ -153,7 +153,7 @@ struct TerminalTabBarTrailingAccessories: View {
       closeTask?.cancel()
       closeTask = Task { @MainActor in
         // Allow time to move from button into popover without it flashing closed.
-        try? await Task.sleep(for: .milliseconds(350))
+        try? await ContinuousClock().sleep(for: .milliseconds(350))
         guard !(isHoveringButton || isHoveringPopover) else { return }
         isHoverPopoverPresented = false
       }

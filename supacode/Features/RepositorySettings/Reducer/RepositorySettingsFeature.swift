@@ -26,7 +26,7 @@ struct RepositorySettingsFeature {
     case settingsChanged(URL)
   }
 
-  @Dependency(\.gitClient) private var gitClient
+  @Dependency(GitClientDependency.self) private var gitClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()

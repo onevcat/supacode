@@ -331,7 +331,8 @@ struct WorktreeDetailView: View {
         repositoryName: repositoryName,
         state: .removing,
         statusTitle: nil,
-        statusDetail: nil
+        statusDetail: nil,
+        statusLines: []
       )
     }
     if selectedRow.isPending {
@@ -343,7 +344,8 @@ struct WorktreeDetailView: View {
         repositoryName: repositoryName,
         state: .creating,
         statusTitle: progress?.titleText ?? selectedRow.name,
-        statusDetail: progress?.detailText ?? selectedRow.detail
+        statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusLines: progress?.liveOutputLines ?? []
       )
     }
     return nil

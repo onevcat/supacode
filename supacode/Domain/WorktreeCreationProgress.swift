@@ -6,6 +6,8 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var copyUntracked: Bool?
   var ignoredFilesToCopyCount: Int?
   var untrackedFilesToCopyCount: Int?
+  var latestOutputLine: String?
+  var outputLines: [String]
 
   init(
     stage: WorktreeCreationStage,
@@ -14,7 +16,9 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     copyIgnored: Bool? = nil,
     copyUntracked: Bool? = nil,
     ignoredFilesToCopyCount: Int? = nil,
-    untrackedFilesToCopyCount: Int? = nil
+    untrackedFilesToCopyCount: Int? = nil,
+    latestOutputLine: String? = nil,
+    outputLines: [String] = []
   ) {
     self.stage = stage
     self.worktreeName = worktreeName
@@ -23,6 +27,8 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     self.copyUntracked = copyUntracked
     self.ignoredFilesToCopyCount = ignoredFilesToCopyCount
     self.untrackedFilesToCopyCount = untrackedFilesToCopyCount
+    self.latestOutputLine = latestOutputLine
+    self.outputLines = outputLines
   }
 
   var titleText: String {
@@ -43,6 +49,12 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     case .resolvingBaseReference:
       return "Resolving base reference (\(baseRefDisplay))"
     case .creatingWorktree:
+      if let outputLine = outputLines.last, !outputLine.isEmpty {
+        return outputLine
+      }
+      if let latestOutputLine, !latestOutputLine.isEmpty {
+        return latestOutputLine
+      }
       var copyDetails: [String] = []
       if copyIgnored == true {
         let ignoredCount = ignoredFilesToCopyCount ?? 0
@@ -58,6 +70,27 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       } else {
         "Creating from \(baseRefBranchDisplay). \(copySummary)"
       }
+    }
+  }
+
+  var liveOutputLines: [String] {
+    guard stage == .creatingWorktree else {
+      return []
+    }
+    if !outputLines.isEmpty {
+      return outputLines
+    }
+    if let latestOutputLine, !latestOutputLine.isEmpty {
+      return [latestOutputLine]
+    }
+    return []
+  }
+
+  mutating func appendOutputLine(_ line: String, maxLines: Int) {
+    latestOutputLine = line
+    outputLines.append(line)
+    if outputLines.count > maxLines {
+      outputLines.removeFirst(outputLines.count - maxLines)
     }
   }
 

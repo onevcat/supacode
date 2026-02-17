@@ -17,8 +17,8 @@ struct UpdatesFeature {
     case checkForUpdates
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.updaterClient) private var updaterClient
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(UpdaterClient.self) private var updaterClient
 
   var body: some Reducer<State, Action> {
     Reduce { state, action in

@@ -1,6 +1,6 @@
 import ComposableArchitecture
 
-struct GithubIntegrationClient {
+struct GithubIntegrationClient: Sendable {
   var isAvailable: @MainActor @Sendable () async -> Bool
 }
 

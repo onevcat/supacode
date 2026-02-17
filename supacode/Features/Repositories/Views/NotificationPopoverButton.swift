@@ -47,7 +47,7 @@ struct NotificationPopoverButton<Label: View>: View {
     }
     closeTask?.cancel()
     closeTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(150))
+      try? await ContinuousClock().sleep(for: .milliseconds(150))
       if !Task.isCancelled {
         isPresented = false
       }

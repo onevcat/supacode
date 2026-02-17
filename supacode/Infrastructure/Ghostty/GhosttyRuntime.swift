@@ -33,28 +33,23 @@ final class GhosttyRuntime {
     var runtimeConfig = ghostty_runtime_config_s(
       userdata: Unmanaged.passUnretained(self).toOpaque(),
       supports_selection_clipboard: true,
-      wakeup_cb: { userdata in GhosttyRuntime.wakeup(userdata) },
-      action_cb: { app, target, action in
-        guard let app else { return false }
-        return GhosttyRuntime.action(app, target: target, action: action)
+      wakeup_cb: { @Sendable userdata in
+        GhosttyRuntime.wakeupCallback(userdata)
       },
-      read_clipboard_cb: { userdata, loc, state in
-        GhosttyRuntime.readClipboard(userdata, location: loc, state: state)
+      action_cb: { @Sendable app, target, action in
+        GhosttyRuntime.actionCallback(app, target, action)
       },
-      confirm_read_clipboard_cb: { userdata, str, state, request in
-        GhosttyRuntime.confirmReadClipboard(
-          userdata,
-          string: str,
-          state: state,
-          request: request
-        )
+      read_clipboard_cb: { @Sendable userdata, location, state in
+        GhosttyRuntime.readClipboardCallback(userdata, location, state)
       },
-      write_clipboard_cb: { userdata, loc, content, len, confirm in
-        GhosttyRuntime.writeClipboard(
-          userdata, location: loc, content: content, len: len, confirm: confirm)
+      confirm_read_clipboard_cb: { @Sendable userdata, string, state, request in
+        GhosttyRuntime.confirmReadClipboardCallback(userdata, string, state, request)
       },
-      close_surface_cb: { userdata, processAlive in
-        GhosttyRuntime.closeSurface(userdata, processAlive: processAlive)
+      write_clipboard_cb: { @Sendable userdata, location, content, len, confirm in
+        GhosttyRuntime.writeClipboardCallback(userdata, location, content, len, confirm)
+      },
+      close_surface_cb: { @Sendable userdata, processAlive in
+        GhosttyRuntime.closeSurfaceCallback(userdata, processAlive)
       }
     )
 
@@ -70,7 +65,9 @@ final class GhosttyRuntime {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        self?.setAppFocus(true)
+        MainActor.assumeIsolated {
+          self?.setAppFocus(true)
+        }
       })
     observers.append(
       center.addObserver(
@@ -78,7 +75,9 @@ final class GhosttyRuntime {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        self?.setAppFocus(false)
+        MainActor.assumeIsolated {
+          self?.setAppFocus(false)
+        }
       })
     observers.append(
       center.addObserver(
@@ -86,12 +85,14 @@ final class GhosttyRuntime {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        guard let app = self?.app else { return }
-        ghostty_app_keyboard_changed(app)
+        MainActor.assumeIsolated {
+          guard let app = self?.app else { return }
+          ghostty_app_keyboard_changed(app)
+        }
       })
   }
 
-  deinit {
+  isolated deinit {
     let center = NotificationCenter.default
     for observer in observers {
       center.removeObserver(observer)
@@ -201,104 +202,102 @@ final class GhosttyRuntime {
     return Unmanaged<GhosttySurfaceBridge>.fromOpaque(userdata).takeUnretainedValue()
   }
 
-  private static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-    guard let runtime = runtime(from: userdata) else { return }
+  private nonisolated static func wakeupCallback(_ userdata: UnsafeMutableRawPointer?) {
+    let userdataBits = userdata.map { UInt(bitPattern: $0) }
+    if Thread.isMainThread {
+      MainActor.assumeIsolated {
+        wakeup(userdataBits: userdataBits)
+      }
+      return
+    }
     DispatchQueue.main.async {
-      runtime.tick()
+      MainActor.assumeIsolated {
+        wakeup(userdataBits: userdataBits)
+      }
     }
   }
 
-  private static func action(
-    _ app: ghostty_app_t, target: ghostty_target_s, action: ghostty_action_s
+  private nonisolated static func actionCallback(
+    _ app: ghostty_app_t?,
+    _ target: ghostty_target_s,
+    _ action: ghostty_action_s
   ) -> Bool {
-    if let runtime = runtime(fromApp: app) {
-      if action.tag == GHOSTTY_ACTION_CONFIG_CHANGE, target.tag == GHOSTTY_TARGET_APP {
-        let config = action.action.config_change.config
-        guard let clone = ghostty_config_clone(config) else { return false }
-        let work = {
-          runtime.setConfig(clone)
-          runtime.onConfigChange?()
-          NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: runtime)
-        }
-        if Thread.isMainThread {
-          work()
-        } else {
-          DispatchQueue.main.async { work() }
-        }
-      }
-      if action.tag == GHOSTTY_ACTION_RELOAD_CONFIG {
-        let soft = action.action.reload_config.soft
-        let work = { runtime.reloadConfig(soft: soft, target: target) }
-        if Thread.isMainThread {
-          work()
-        } else {
-          DispatchQueue.main.async { work() }
-        }
-      }
-    }
-    guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
-    guard let surface = target.target.surface else { return false }
-    guard let bridge = surfaceBridge(fromSurface: surface) else { return false }
+    guard let app else { return false }
+    let appBits = UInt(bitPattern: app)
     if Thread.isMainThread {
-      return bridge.handleAction(target: target, action: action)
+      return MainActor.assumeIsolated {
+        handleAction(appBits: appBits, target: target, action: action)
+      }
     }
     DispatchQueue.main.async {
-      _ = bridge.handleAction(target: target, action: action)
+      MainActor.assumeIsolated {
+        _ = handleAction(appBits: appBits, target: target, action: action)
+      }
     }
     return false
   }
 
-  private static func readClipboard(
+  private nonisolated static func readClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    location: ghostty_clipboard_e,
-    state: UnsafeMutableRawPointer?
+    _ location: ghostty_clipboard_e,
+    _ state: UnsafeMutableRawPointer?
   ) {
-    let work = {
-      guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
-        return
-      }
-      let value = NSPasteboard.ghostty(location)?.getOpinionatedStringContents() ?? ""
-      value.withCString { ptr in
-        ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
-      }
-    }
+    let userdataBits = userdata.map { UInt(bitPattern: $0) }
+    let stateBits = state.map { UInt(bitPattern: $0) }
     if Thread.isMainThread {
-      work()
-    } else {
-      DispatchQueue.main.async { work() }
+      MainActor.assumeIsolated {
+        readClipboard(userdataBits: userdataBits, location: location, stateBits: stateBits)
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        readClipboard(userdataBits: userdataBits, location: location, stateBits: stateBits)
+      }
     }
   }
 
-  private static func confirmReadClipboard(
+  private nonisolated static func confirmReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    string: UnsafePointer<CChar>?,
-    state: UnsafeMutableRawPointer?,
-    request: ghostty_clipboard_request_e
+    _ string: UnsafePointer<CChar>?,
+    _ state: UnsafeMutableRawPointer?,
+    _ request: ghostty_clipboard_request_e
   ) {
     guard let string else { return }
     let value = String(cString: string)
-    let work = {
-      guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
-        return
-      }
-      value.withCString { ptr in
-        ghostty_surface_complete_clipboard_request(surface, ptr, state, true)
-      }
-    }
+    let userdataBits = userdata.map { UInt(bitPattern: $0) }
+    let stateBits = state.map { UInt(bitPattern: $0) }
     if Thread.isMainThread {
-      work()
-    } else {
-      DispatchQueue.main.async { work() }
+      MainActor.assumeIsolated {
+        confirmReadClipboard(
+          userdataBits: userdataBits,
+          value: value,
+          stateBits: stateBits,
+          request: request
+        )
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        confirmReadClipboard(
+          userdataBits: userdataBits,
+          value: value,
+          stateBits: stateBits,
+          request: request
+        )
+      }
     }
   }
 
-  private static func writeClipboard(
+  private nonisolated static func writeClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    location: ghostty_clipboard_e,
-    content: UnsafePointer<ghostty_clipboard_content_s>?,
-    len: Int,
-    confirm: Bool
+    _ location: ghostty_clipboard_e,
+    _ content: UnsafePointer<ghostty_clipboard_content_s>?,
+    _ len: Int,
+    _ confirm: Bool
   ) {
+    _ = userdata
     guard let content, len > 0 else { return }
     let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
       let item = content.advanced(by: index).pointee
@@ -306,25 +305,127 @@ final class GhosttyRuntime {
       return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
     }
     guard !items.isEmpty else { return }
-
-    let write = {
-      guard let pasteboard = NSPasteboard.ghostty(location) else { return }
-      let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
-      pasteboard.declareTypes(types, owner: nil)
-      for item in items {
-        guard let type = NSPasteboard.PasteboardType(mimeType: item.mime) else { continue }
-        pasteboard.setString(item.data, forType: type)
-      }
-    }
-
     if Thread.isMainThread {
-      write()
-    } else {
-      DispatchQueue.main.async { write() }
+      MainActor.assumeIsolated {
+        writeClipboard(
+          location: location,
+          items: items,
+          confirm: confirm
+        )
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        writeClipboard(
+          location: location,
+          items: items,
+          confirm: confirm
+        )
+      }
     }
   }
 
-  private static func closeSurface(_ userdata: UnsafeMutableRawPointer?, processAlive: Bool) {
+  private nonisolated static func closeSurfaceCallback(
+    _ userdata: UnsafeMutableRawPointer?,
+    _ processAlive: Bool
+  ) {
+    let userdataBits = userdata.map { UInt(bitPattern: $0) }
+    if Thread.isMainThread {
+      MainActor.assumeIsolated {
+        closeSurface(userdataBits: userdataBits, processAlive: processAlive)
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        closeSurface(userdataBits: userdataBits, processAlive: processAlive)
+      }
+    }
+  }
+
+  private static func wakeup(userdataBits: UInt?) {
+    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    guard let runtime = runtime(from: userdata) else { return }
+    runtime.tick()
+  }
+
+  private static func handleAction(
+    appBits: UInt,
+    target: ghostty_target_s,
+    action: ghostty_action_s
+  ) -> Bool {
+    guard let app = ghostty_app_t(bitPattern: appBits) else { return false }
+    if let runtime = runtime(fromApp: app) {
+      if action.tag == GHOSTTY_ACTION_CONFIG_CHANGE, target.tag == GHOSTTY_TARGET_APP {
+        let config = action.action.config_change.config
+        guard let clone = ghostty_config_clone(config) else { return false }
+        runtime.setConfig(clone)
+        runtime.onConfigChange?()
+        NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: runtime)
+      }
+      if action.tag == GHOSTTY_ACTION_RELOAD_CONFIG {
+        let soft = action.action.reload_config.soft
+        runtime.reloadConfig(soft: soft, target: target)
+      }
+    }
+    guard target.tag == GHOSTTY_TARGET_SURFACE else { return false }
+    guard let surface = target.target.surface else { return false }
+    guard let bridge = surfaceBridge(fromSurface: surface) else { return false }
+    return bridge.handleAction(target: target, action: action)
+  }
+
+  private static func readClipboard(
+    userdataBits: UInt?,
+    location: ghostty_clipboard_e,
+    stateBits: UInt?
+  ) {
+    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
+      return
+    }
+    let value = NSPasteboard.ghostty(location)?.getOpinionatedStringContents() ?? ""
+    value.withCString { ptr in
+      ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
+    }
+  }
+
+  private static func confirmReadClipboard(
+    userdataBits: UInt?,
+    value: String,
+    stateBits: UInt?,
+    request: ghostty_clipboard_request_e
+  ) {
+    _ = request
+    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
+    guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
+      return
+    }
+    value.withCString { ptr in
+      ghostty_surface_complete_clipboard_request(surface, ptr, state, true)
+    }
+  }
+
+  private static func writeClipboard(
+    location: ghostty_clipboard_e,
+    items: [(mime: String, data: String)],
+    confirm: Bool
+  ) {
+    _ = confirm
+
+    guard let pasteboard = NSPasteboard.ghostty(location) else { return }
+    let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
+    pasteboard.declareTypes(types, owner: nil)
+    for item in items {
+      guard let type = NSPasteboard.PasteboardType(mimeType: item.mime) else { continue }
+      pasteboard.setString(item.data, forType: type)
+    }
+  }
+
+  private static func closeSurface(userdataBits: UInt?, processAlive: Bool) {
+    let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
     guard let bridge = surfaceBridge(fromUserdata: userdata) else { return }
     bridge.closeSurface(processAlive: processAlive)
   }

@@ -15,7 +15,42 @@ private enum CancelID {
   }
 }
 
-private let githubIntegrationRecoveryInterval: Duration = .seconds(15)
+private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)
+private nonisolated let worktreeCreationProgressLineLimit = 200
+private nonisolated let worktreeCreationProgressUpdateStride = 20
+
+nonisolated struct WorktreeCreationProgressUpdateThrottle {
+  private let stride: Int
+  private var hasEmittedFirstLine = false
+  private var unsentLineCount = 0
+
+  init(stride: Int) {
+    precondition(stride > 0)
+    self.stride = stride
+  }
+
+  mutating func recordLine() -> Bool {
+    unsentLineCount += 1
+    if !hasEmittedFirstLine {
+      hasEmittedFirstLine = true
+      unsentLineCount = 0
+      return true
+    }
+    if unsentLineCount >= stride {
+      unsentLineCount = 0
+      return true
+    }
+    return false
+  }
+
+  mutating func flush() -> Bool {
+    guard unsentLineCount > 0 else {
+      return false
+    }
+    unsentLineCount = 0
+    return true
+  }
+}
 
 @Reducer
 struct RepositoriesFeature {
@@ -195,11 +230,11 @@ struct RepositoriesFeature {
     case worktreeCreated(Worktree)
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.gitClient) private var gitClient
-  @Dependency(\.githubCLI) private var githubCLI
-  @Dependency(\.githubIntegration) private var githubIntegration
-  @Dependency(\.repositoryPersistence) private var repositoryPersistence
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(GitClientDependency.self) private var gitClient
+  @Dependency(GithubCLIClient.self) private var githubCLI
+  @Dependency(GithubIntegrationClient.self) private var githubIntegration
+  @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
   @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
@@ -542,9 +577,13 @@ struct RepositoriesFeature {
         )
         state.selection = .worktree(pendingID)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
+        let createWorktreeStream = gitClient.createWorktreeStream
         return .run { send in
           var newWorktreeName: String?
           var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
+          var progressUpdateThrottle = WorktreeCreationProgressUpdateThrottle(
+            stride: worktreeCreationProgressUpdateStride
+          )
           do {
             await send(
               .pendingWorktreeProgressUpdated(
@@ -619,21 +658,61 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let newWorktree = try await gitClient.createWorktree(
+            let stream = createWorktreeStream(
               name,
               repository.rootURL,
               copyIgnored,
               copyUntracked,
               resolvedBaseRef
             )
-            await send(
-              .createRandomWorktreeSucceeded(
-                newWorktree,
-                repositoryID: repository.id,
-                pendingID: pendingID
-              )
+            for try await event in stream {
+              switch event {
+              case .outputLine(let outputLine):
+                let line = outputLine.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty else {
+                  continue
+                }
+                progress.appendOutputLine(line, maxLines: worktreeCreationProgressLineLimit)
+                if progressUpdateThrottle.recordLine() {
+                  await send(
+                    .pendingWorktreeProgressUpdated(
+                      id: pendingID,
+                      progress: progress
+                    )
+                  )
+                }
+              case .finished(let newWorktree):
+                if progressUpdateThrottle.flush() {
+                  await send(
+                    .pendingWorktreeProgressUpdated(
+                      id: pendingID,
+                      progress: progress
+                    )
+                  )
+                }
+                await send(
+                  .createRandomWorktreeSucceeded(
+                    newWorktree,
+                    repositoryID: repository.id,
+                    pendingID: pendingID
+                  )
+                )
+                return
+              }
+            }
+            throw GitClientError.commandFailed(
+              command: "wt sw",
+              message: "Worktree creation finished without a result."
             )
           } catch {
+            if progressUpdateThrottle.flush() {
+              await send(
+                .pendingWorktreeProgressUpdated(
+                  id: pendingID,
+                  progress: progress
+                )
+              )
+            }
             await send(
               .createRandomWorktreeFailed(
                 title: "Unable to create worktree",
@@ -1301,7 +1380,7 @@ struct RepositoriesFeature {
           return .cancel(id: CancelID.toastAutoDismiss)
         case .success:
           return .run { send in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await ContinuousClock().sleep(for: .seconds(2.5))
             await send(.dismissToast)
           }
           .cancellable(id: CancelID.toastAutoDismiss, cancelInFlight: true)
@@ -1321,7 +1400,7 @@ struct RepositoriesFeature {
         let repositoryRootURL = worktree.repositoryRootURL
         let worktreeIDs = repository.worktrees.map(\.id)
         return .run { send in
-          try? await Task.sleep(for: .seconds(2))
+          try? await ContinuousClock().sleep(for: .seconds(2))
           await send(
             .worktreeInfoEvent(
               .repositoryPullRequestRefresh(
@@ -1494,7 +1573,7 @@ struct RepositoriesFeature {
           state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
           return .run { send in
             while !Task.isCancelled {
-              try? await Task.sleep(for: githubIntegrationRecoveryInterval)
+              try? await ContinuousClock().sleep(for: githubIntegrationRecoveryInterval)
               guard !Task.isCancelled else {
                 return
               }

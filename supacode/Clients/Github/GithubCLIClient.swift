@@ -40,7 +40,7 @@ extension GithubAuthStatusResponse.GithubAuthAccount: Decodable {
   }
 }
 
-struct GithubCLIClient {
+struct GithubCLIClient: Sendable {
   var defaultBranch: @Sendable (URL) async throws -> String
   var latestRun: @Sendable (URL, String) async throws -> GithubWorkflowRun?
   var batchPullRequests: @Sendable (String, String, String, [String]) async throws -> [String: GithubPullRequest]

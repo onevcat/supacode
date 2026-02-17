@@ -34,7 +34,7 @@ final class SecureInput: Observable {
     )
   }
 
-  deinit {
+  isolated deinit {
     NotificationCenter.default.removeObserver(self)
     scoped.removeAll()
     global = false

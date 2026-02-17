@@ -39,10 +39,15 @@ struct AppFeatureDefaultEditorTests {
     await store.finish()
   }
 
-  @Test func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
+  @Test(.dependencies) func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
     let worktree = makeWorktree()
     let repositoriesState = makeRepositoriesState(worktree: worktree)
+    let expectedOpenActionSelection = OpenWorktreeAction.preferredDefault()
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+    let storage = SettingsTestStorage()
+    let settingsFileURL = URL(
+      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+    )
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -56,11 +61,13 @@ struct AppFeatureDefaultEditorTests {
       $0.worktreeInfoWatcher.send = { command in
         watcherCommands.withValue { $0.append(command) }
       }
+      $0.settingsFileStorage = storage.storage
+      $0.settingsFileURL = settingsFileURL
     }
 
     await store.send(.repositories(.delegate(.selectedWorktreeChanged(worktree))))
     await store.receive(\.worktreeSettingsLoaded) {
-      $0.openActionSelection = .zed
+      $0.openActionSelection = expectedOpenActionSelection
     }
     await store.finish()
 
@@ -68,19 +75,21 @@ struct AppFeatureDefaultEditorTests {
   }
 
   private func makeWorktree() -> Worktree {
-    Worktree(
-      id: "/tmp/repo/wt-1",
+    let repositoryRootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
+    let worktreeURL = repositoryRootURL.appending(path: "wt-1")
+    return Worktree(
+      id: worktreeURL.path(percentEncoded: false),
       name: "wt-1",
       detail: "detail",
-      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt-1"),
-      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+      workingDirectory: worktreeURL,
+      repositoryRootURL: repositoryRootURL
     )
   }
 
   private func makeRepositoriesState(worktree: Worktree) -> RepositoriesFeature.State {
     let repository = Repository(
-      id: "/tmp/repo",
-      rootURL: URL(fileURLWithPath: "/tmp/repo"),
+      id: worktree.repositoryRootURL.path(percentEncoded: false),
+      rootURL: worktree.repositoryRootURL,
       name: "repo",
       worktrees: [worktree]
     )

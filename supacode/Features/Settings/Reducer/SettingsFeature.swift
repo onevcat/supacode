@@ -71,7 +71,7 @@ struct SettingsFeature {
     case settingsChanged(GlobalSettings)
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
+  @Dependency(AnalyticsClient.self) private var analyticsClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
