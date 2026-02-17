@@ -48,7 +48,7 @@ final class WorktreeInfoWatcherManager {
     focusedInterval: Duration = .seconds(30),
     unfocusedInterval: Duration = .seconds(60),
     filesChangedDebounceInterval: Duration = .seconds(5),
-    pullRequestSelectionRefreshCooldown: Duration = .seconds(7),
+    pullRequestSelectionRefreshCooldown: Duration = .seconds(15),
     clock: ContinuousClock = ContinuousClock()
   ) {
     refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
