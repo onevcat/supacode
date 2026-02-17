@@ -62,7 +62,7 @@ struct RepositoriesFeature {
       invalidRoots: [String],
       roots: [URL]
     )
-    case selectWorktree(Worktree.ID?)
+    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
     case selectNextWorktree
     case selectPreviousWorktree
     case requestRenameBranch(Worktree.ID, String)
@@ -419,8 +419,11 @@ struct RepositoriesFeature {
         state.selection = .archivedWorktrees
         return .send(.delegate(.selectedWorktreeChanged(nil)))
 
-      case .selectWorktree(let worktreeID):
+      case .selectWorktree(let worktreeID, let focusTerminal):
         state.selection = worktreeID.map(SidebarSelection.worktree)
+        if focusTerminal, let worktreeID {
+          state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
+        }
         let selectedWorktree = state.worktree(for: worktreeID)
         return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
 
