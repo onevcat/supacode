@@ -263,14 +263,15 @@ final class GhosttyRuntime {
     _ state: UnsafeMutableRawPointer?,
     _ request: ghostty_clipboard_request_e
   ) {
+    guard let string else { return }
+    let value = String(cString: string)
     let userdataBits = userdata.map { UInt(bitPattern: $0) }
-    let stringBits = string.map { UInt(bitPattern: $0) }
     let stateBits = state.map { UInt(bitPattern: $0) }
     if Thread.isMainThread {
       MainActor.assumeIsolated {
         confirmReadClipboard(
           userdataBits: userdataBits,
-          stringBits: stringBits,
+          value: value,
           stateBits: stateBits,
           request: request
         )
@@ -281,7 +282,7 @@ final class GhosttyRuntime {
       MainActor.assumeIsolated {
         confirmReadClipboard(
           userdataBits: userdataBits,
-          stringBits: stringBits,
+          value: value,
           stateBits: stateBits,
           request: request
         )
@@ -296,15 +297,19 @@ final class GhosttyRuntime {
     _ len: Int,
     _ confirm: Bool
   ) {
-    let userdataBits = userdata.map { UInt(bitPattern: $0) }
-    let contentBits = content.map { UInt(bitPattern: $0) }
+    _ = userdata
+    guard let content, len > 0 else { return }
+    let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
+      let item = content.advanced(by: index).pointee
+      guard let mimePtr = item.mime, let dataPtr = item.data else { return nil }
+      return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
+    }
+    guard !items.isEmpty else { return }
     if Thread.isMainThread {
       MainActor.assumeIsolated {
         writeClipboard(
-          userdataBits: userdataBits,
           location: location,
-          contentBits: contentBits,
-          len: len,
+          items: items,
           confirm: confirm
         )
       }
@@ -313,10 +318,8 @@ final class GhosttyRuntime {
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
         writeClipboard(
-          userdataBits: userdataBits,
           location: location,
-          contentBits: contentBits,
-          len: len,
+          items: items,
           confirm: confirm
         )
       }
@@ -390,15 +393,13 @@ final class GhosttyRuntime {
 
   private static func confirmReadClipboard(
     userdataBits: UInt?,
-    stringBits: UInt?,
+    value: String,
     stateBits: UInt?,
     request: ghostty_clipboard_request_e
   ) {
+    _ = request
     let userdata = userdataBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
-    let string = stringBits.flatMap { UnsafePointer<CChar>(bitPattern: $0) }
     let state = stateBits.flatMap { UnsafeMutableRawPointer(bitPattern: $0) }
-    guard let string else { return }
-    let value = String(cString: string)
     guard let bridge = surfaceBridge(fromUserdata: userdata), let surface = bridge.surface else {
       return
     }
@@ -408,21 +409,11 @@ final class GhosttyRuntime {
   }
 
   private static func writeClipboard(
-    userdataBits: UInt?,
     location: ghostty_clipboard_e,
-    contentBits: UInt?,
-    len: Int,
+    items: [(mime: String, data: String)],
     confirm: Bool
   ) {
-    _ = userdataBits
-    let content = contentBits.flatMap { UnsafePointer<ghostty_clipboard_content_s>(bitPattern: $0) }
-    guard let content, len > 0 else { return }
-    let items: [(mime: String, data: String)] = (0..<len).compactMap { index in
-      let item = content.advanced(by: index).pointee
-      guard let mimePtr = item.mime, let dataPtr = item.data else { return nil }
-      return (mime: String(cString: mimePtr), data: String(cString: dataPtr))
-    }
-    guard !items.isEmpty else { return }
+    _ = confirm
 
     guard let pasteboard = NSPasteboard.ghostty(location) else { return }
     let types = items.compactMap { NSPasteboard.PasteboardType(mimeType: $0.mime) }
