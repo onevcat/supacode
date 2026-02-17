@@ -39,10 +39,14 @@ struct AppFeatureDefaultEditorTests {
     await store.finish()
   }
 
-  @Test func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
+  @Test(.dependencies) func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
     let worktree = makeWorktree()
     let repositoriesState = makeRepositoriesState(worktree: worktree)
     let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+    let storage = SettingsTestStorage()
+    let settingsFileURL = URL(
+      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+    )
     let store = TestStore(
       initialState: AppFeature.State(
         repositories: repositoriesState,
@@ -56,6 +60,8 @@ struct AppFeatureDefaultEditorTests {
       $0.worktreeInfoWatcher.send = { command in
         watcherCommands.withValue { $0.append(command) }
       }
+      $0.settingsFileStorage = storage.storage
+      $0.settingsFileURL = settingsFileURL
     }
 
     await store.send(.repositories(.delegate(.selectedWorktreeChanged(worktree))))
@@ -81,8 +87,8 @@ struct AppFeatureDefaultEditorTests {
 
   private func makeRepositoriesState(worktree: Worktree) -> RepositoriesFeature.State {
     let repository = Repository(
-      id: "/tmp/repo",
-      rootURL: URL(fileURLWithPath: "/tmp/repo"),
+      id: worktree.repositoryRootURL.path(percentEncoded: false),
+      rootURL: worktree.repositoryRootURL,
       name: "repo",
       worktrees: [worktree]
     )
