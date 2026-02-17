@@ -104,7 +104,7 @@ struct TerminalTabsRowView: View {
         }
       }
       Task { @MainActor in
-        try? await Task.sleep(for: .seconds(TerminalTabBarMetrics.closeAnimationDuration))
+        try? await ContinuousClock().sleep(for: .seconds(TerminalTabBarMetrics.closeAnimationDuration))
         if let selectedId = manager.selectedTabId {
           withAnimation {
             scrollReader.scrollTo(selectedId)

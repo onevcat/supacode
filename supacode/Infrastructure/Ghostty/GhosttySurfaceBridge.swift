@@ -217,7 +217,7 @@ final class GhosttySurfaceBridge {
       } else {
         state.progressState = report.state
         progressResetTask = Task { @MainActor [weak self] in
-          try? await Task.sleep(for: .seconds(15))
+          try? await ContinuousClock().sleep(for: .seconds(15))
           guard let self, !Task.isCancelled else { return }
           self.state.progressState = nil
           self.state.progressValue = nil

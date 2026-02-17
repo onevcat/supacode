@@ -55,7 +55,7 @@ final class CommandKeyObserver {
 
     if isDown {
       holdTask = Task {
-        try? await Task.sleep(for: Self.holdDelay)
+        try? await ContinuousClock().sleep(for: Self.holdDelay)
         guard !Task.isCancelled else { return }
         isPressed = true
       }

@@ -698,7 +698,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     let nextDelay: TimeInterval = if let delay { delay * 2 } else { 0.05 }
     Task { @MainActor in
       if let delay {
-        try? await Task.sleep(for: .seconds(delay))
+        try? await ContinuousClock().sleep(for: .seconds(delay))
       }
       guard let window = view.window else {
         moveFocus(to: view, from: previous, delay: nextDelay)

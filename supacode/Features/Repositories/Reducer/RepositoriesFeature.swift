@@ -1349,7 +1349,7 @@ struct RepositoriesFeature {
           return .cancel(id: CancelID.toastAutoDismiss)
         case .success:
           return .run { send in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await ContinuousClock().sleep(for: .seconds(2.5))
             await send(.dismissToast)
           }
           .cancellable(id: CancelID.toastAutoDismiss, cancelInFlight: true)
@@ -1369,7 +1369,7 @@ struct RepositoriesFeature {
         let repositoryRootURL = worktree.repositoryRootURL
         let worktreeIDs = repository.worktrees.map(\.id)
         return .run { send in
-          try? await Task.sleep(for: .seconds(2))
+          try? await ContinuousClock().sleep(for: .seconds(2))
           await send(
             .worktreeInfoEvent(
               .repositoryPullRequestRefresh(
@@ -1542,7 +1542,7 @@ struct RepositoriesFeature {
           state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
           return .run { send in
             while !Task.isCancelled {
-              try? await Task.sleep(for: githubIntegrationRecoveryInterval)
+              try? await ContinuousClock().sleep(for: githubIntegrationRecoveryInterval)
               guard !Task.isCancelled else {
                 return
               }

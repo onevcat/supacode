@@ -112,7 +112,7 @@ struct AppFeature {
             .send(.repositories(.refreshWorktrees)),
             .run { send in
               while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await ContinuousClock().sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
                 await send(.repositories(.refreshWorktrees))
               }
