@@ -112,6 +112,7 @@ struct SidebarListView: View {
       }
     }
     .listStyle(.sidebar)
+    .scrollIndicators(.never)
     .frame(minWidth: 220)
     .onDragSessionUpdated { session in
       if case .ended = session.phase {
