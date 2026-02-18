@@ -106,6 +106,13 @@ private final class MiddleClickNSView: NSView {
   @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError() }
 
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    guard let event = NSApp.currentEvent,
+      event.type == .otherMouseDown || event.type == .otherMouseUp
+    else { return nil }
+    return super.hitTest(point)
+  }
+
   override func otherMouseUp(with event: NSEvent) {
     if event.buttonNumber == 2 {
       action()
