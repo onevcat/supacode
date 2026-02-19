@@ -239,8 +239,30 @@ struct RepositoriesFeatureTests {
   }
 
   @Test func createRandomWorktreeInRepositoryLatestPromptRequestWins() async {
+    actor PromptLoadGate {
+      var continuation: CheckedContinuation<Void, Never>?
+
+      func wait() async {
+        await withCheckedContinuation { continuation in
+          self.continuation = continuation
+        }
+      }
+
+      func waitUntilArmed() async {
+        while continuation == nil {
+          await Task.yield()
+        }
+      }
+
+      func resume() {
+        continuation?.resume()
+        continuation = nil
+      }
+    }
+
     let repoRootA = "/tmp/repo-a"
     let repoRootB = "/tmp/repo-b"
+    let promptLoadGate = PromptLoadGate()
     let repoA = makeRepository(
       id: repoRootA,
       worktrees: [makeWorktree(id: repoRootA, name: "main", repoRoot: repoRootA)]
@@ -254,7 +276,7 @@ struct RepositoriesFeatureTests {
     } withDependencies: {
       $0.gitClient.automaticWorktreeBaseRef = { root in
         if root.path(percentEncoded: false) == repoRootA {
-          try? await Task.sleep(for: .milliseconds(300))
+          await promptLoadGate.wait()
         }
         return "origin/main"
       }
@@ -262,7 +284,9 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.createRandomWorktreeInRepository(repoA.id))
+    await promptLoadGate.waitUntilArmed()
     await store.send(.createRandomWorktreeInRepository(repoB.id))
+    await promptLoadGate.resume()
     await store.receive(\.promptedWorktreeCreationDataLoaded) {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repoB.id,
