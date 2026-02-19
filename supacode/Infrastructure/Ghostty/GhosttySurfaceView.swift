@@ -181,6 +181,36 @@ final class GhosttySurfaceView: NSView, Identifiable {
           self?.windowDidChangeScreen()
         }
       })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didEnterFullScreenNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didExitFullScreenNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: .ghosttyRuntimeConfigDidChange,
+        object: runtime,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
   }
 
   private func windowDidChangeScreen() {
@@ -206,6 +236,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     updateScreenObservers()
     updateContentScale()
     updateSurfaceSize()
+    applyWindowBackgroundAppearance()
+    DispatchQueue.main.async { [weak self] in
+      self?.applyWindowBackgroundAppearance()
+    }
   }
 
   override func viewDidChangeBackingProperties() {
@@ -241,6 +275,24 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func resetCursorRects() {
     addCursorRect(bounds, cursor: currentCursor)
+  }
+
+  private func applyWindowBackgroundAppearance() {
+    guard let window else { return }
+    let opacity = runtime.backgroundOpacity()
+    if !window.styleMask.contains(.fullScreen), opacity < 1 {
+      window.isOpaque = false
+      window.backgroundColor = .white.withAlphaComponent(0.001)
+      if let app = runtime.app {
+        ghostty_set_window_background_blur(
+          app,
+          Unmanaged.passUnretained(window).toOpaque()
+        )
+      }
+      return
+    }
+    window.isOpaque = true
+    window.backgroundColor = runtime.backgroundColor().withAlphaComponent(1)
   }
 
   func focusDidChange(_ focused: Bool) {

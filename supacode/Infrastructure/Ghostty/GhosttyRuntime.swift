@@ -472,9 +472,20 @@ final class GhosttyRuntime {
     return true
   }
 
+  func backgroundOpacity() -> Double {
+    guard let config else { return 1 }
+    var value: Double = 1
+    let key = "background-opacity"
+    _ = ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8)))
+    return min(max(value, 0), 1)
+  }
+
+  func backgroundColor() -> NSColor {
+    backgroundColorFromConfig() ?? NSColor.windowBackgroundColor
+  }
+
   func scrollbarAppearanceName() -> NSAppearance.Name {
-    let backgroundColor = backgroundColorFromConfig() ?? NSColor.windowBackgroundColor
-    return backgroundColor.isLightColor ? .aqua : .darkAqua
+    backgroundColor().isLightColor ? .aqua : .darkAqua
   }
 
   private func backgroundColorFromConfig() -> NSColor? {
