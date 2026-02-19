@@ -229,7 +229,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     defaultPriority.first(where: \.isInstalled) ?? .finder
   }
 
-  func perform(with worktree: Worktree, onError: @escaping (OpenActionError) -> Void) {
+  func perform(with worktree: Worktree, onError: @escaping @MainActor @Sendable (OpenActionError) -> Void) {
+    let actionTitle = title
     switch self {
     case .editor:
       return
@@ -261,7 +262,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         Task { @MainActor in
           onError(
             OpenActionError(
-              title: "Unable to open in \(self.title)",
+              title: "Unable to open in \(actionTitle)",
               message: error.localizedDescription
             )
           )
@@ -293,7 +294,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         Task { @MainActor in
           onError(
             OpenActionError(
-              title: "Unable to open in \(self.title)",
+              title: "Unable to open in \(actionTitle)",
               message: error.localizedDescription
             )
           )

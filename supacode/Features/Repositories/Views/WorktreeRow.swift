@@ -36,6 +36,7 @@ struct WorktreeRow: View {
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
+    let bodyFontAscender = NSFont.preferredFont(forTextStyle: .body).ascender
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         ZStack {
@@ -64,7 +65,7 @@ struct WorktreeRow: View {
         }
         .frame(width: 16, height: 16)
         .alignmentGuide(.firstTextBaseline) { _ in
-          bodyFont.ascender
+          bodyFontAscender
         }
         Text(name)
           .font(.body)
@@ -128,10 +129,6 @@ struct WorktreeRow: View {
       return nil
     }
     return PullRequestMergeReadiness(pullRequest: pullRequest)
-  }
-
-  private var bodyFont: NSFont {
-    NSFont.preferredFont(forTextStyle: .body)
   }
 
   private var worktreeRowHeight: CGFloat {

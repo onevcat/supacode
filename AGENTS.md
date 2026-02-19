@@ -4,8 +4,12 @@
 make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires mise)
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
-make check                       # Run swiftformat and swiftlint
+make install-dev-build           # Build and copy to /Applications
+make format                      # Run swift-format only
+make lint                        # Run swiftlint only (fix + lint)
+make check                       # Run both format and lint
 make test                        # Run all tests
+make log-stream                  # Stream app logs (subsystem: app.supabit.supacode)
 make bump-version                # Bump patch version and create git tag
 make bump-and-release            # Bump version and push to trigger release
 ```
@@ -78,6 +82,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
 - Always mark `@Observable` classes with `@MainActor`
 - Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
+- When a new logic changes in the Reducer, always add tests
 - Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.

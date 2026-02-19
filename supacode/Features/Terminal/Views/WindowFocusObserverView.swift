@@ -59,7 +59,9 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        self?.emitActivityIfNeeded()
+        Task { @MainActor [weak self] in
+          self?.emitActivityIfNeeded()
+        }
       })
     observers.append(
       center.addObserver(
@@ -67,7 +69,9 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        self?.emitActivityIfNeeded()
+        Task { @MainActor [weak self] in
+          self?.emitActivityIfNeeded()
+        }
       })
     observers.append(
       center.addObserver(
@@ -75,7 +79,9 @@ final class WindowFocusObserverNSView: NSView {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        self?.emitActivityIfNeeded()
+        Task { @MainActor [weak self] in
+          self?.emitActivityIfNeeded()
+        }
       })
     emitActivityIfNeeded(force: true)
   }
@@ -97,7 +103,7 @@ final class WindowFocusObserverNSView: NSView {
     observers.removeAll()
   }
 
-  deinit {
+  isolated deinit {
     clearObservers()
   }
 }
