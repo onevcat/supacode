@@ -1496,10 +1496,12 @@ struct RepositoriesFeature {
         if state.isWorktreeArchived(worktree.id) {
           return .none
         }
+        @Shared(.settingsFile) var settingsFile
+        let moveNotifiedWorktreeToTop = settingsFile.global.moveNotifiedWorktreeToTop
 
         var effects: [Effect<Action>] = []
 
-        if !state.isMainWorktree(worktree), !state.isWorktreePinned(worktree) {
+        if moveNotifiedWorktreeToTop, !state.isMainWorktree(worktree), !state.isWorktreePinned(worktree) {
           let reordered = reorderedUnpinnedWorktreeIDs(
             for: worktreeID,
             in: repository,

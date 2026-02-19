@@ -7,6 +7,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
   var notificationSoundEnabled: Bool
+  var moveNotifiedWorktreeToTop: Bool
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
@@ -22,6 +23,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
     notificationSoundEnabled: true,
+    moveNotifiedWorktreeToTop: true,
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
@@ -38,6 +40,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
     notificationSoundEnabled: Bool,
+    moveNotifiedWorktreeToTop: Bool,
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
@@ -52,6 +55,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
+    self.moveNotifiedWorktreeToTop = moveNotifiedWorktreeToTop
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
@@ -79,6 +83,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
       ?? Self.default.notificationSoundEnabled
+    moveNotifiedWorktreeToTop =
+      try container.decodeIfPresent(Bool.self, forKey: .moveNotifiedWorktreeToTop)
+      ?? Self.default.moveNotifiedWorktreeToTop
     analyticsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
       ?? Self.default.analyticsEnabled

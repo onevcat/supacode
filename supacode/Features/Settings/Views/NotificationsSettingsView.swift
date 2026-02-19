@@ -18,6 +18,11 @@ struct NotificationsSettingsView: View {
             isOn: $store.notificationSoundEnabled
           )
           .help("Play a sound when a notification is received")
+          Toggle(
+            "Move notified worktree to top",
+            isOn: $store.moveNotifiedWorktreeToTop
+          )
+          .help("Bring the worktree to the top when the terminal receives a notification")
         }
       }
       .formStyle(.grouped)
