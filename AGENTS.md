@@ -82,6 +82,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
 - Always mark `@Observable` classes with `@MainActor`
 - Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
+- When a new logic changes in the Reducer, always add tests
 - Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.
