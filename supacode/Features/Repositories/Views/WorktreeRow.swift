@@ -150,9 +150,8 @@ private struct WorktreeRowInfoView: View {
   var body: some View {
     HStack(spacing: 4) {
       summaryText
-        .lineLimit(2)
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
+        .lineLimit(1)
+        .truncationMode(.tail)
         .layoutPriority(1)
       Spacer(minLength: 0)
       if let shortcutHint {
