@@ -23,7 +23,8 @@ struct SettingsFeatureTests {
       crashReportsEnabled: true,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: false,
-      automaticallyArchiveMergedWorktrees: true
+      automaticallyArchiveMergedWorktrees: true,
+      promptForWorktreeCreation: true
     )
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = loaded }
@@ -47,6 +48,7 @@ struct SettingsFeatureTests {
       $0.githubIntegrationEnabled = true
       $0.deleteBranchOnDeleteWorktree = false
       $0.automaticallyArchiveMergedWorktrees = true
+      $0.promptForWorktreeCreation = true
     }
     await store.receive(\.delegate.settingsChanged)
   }
@@ -65,7 +67,8 @@ struct SettingsFeatureTests {
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: true,
-      automaticallyArchiveMergedWorktrees: false
+      automaticallyArchiveMergedWorktrees: false,
+      promptForWorktreeCreation: false
     )
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = initialSettings }
@@ -90,7 +93,8 @@ struct SettingsFeatureTests {
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
       deleteBranchOnDeleteWorktree: initialSettings.deleteBranchOnDeleteWorktree,
-      automaticallyArchiveMergedWorktrees: initialSettings.automaticallyArchiveMergedWorktrees
+      automaticallyArchiveMergedWorktrees: initialSettings.automaticallyArchiveMergedWorktrees,
+      promptForWorktreeCreation: initialSettings.promptForWorktreeCreation
     )
     await store.receive(\.delegate.settingsChanged)
 
@@ -138,7 +142,8 @@ struct SettingsFeatureTests {
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: true,
-      automaticallyArchiveMergedWorktrees: true
+      automaticallyArchiveMergedWorktrees: true,
+      promptForWorktreeCreation: false
     )
 
     await store.send(.settingsLoaded(loaded)) {
@@ -155,6 +160,7 @@ struct SettingsFeatureTests {
       $0.githubIntegrationEnabled = true
       $0.deleteBranchOnDeleteWorktree = true
       $0.automaticallyArchiveMergedWorktrees = true
+      $0.promptForWorktreeCreation = false
       $0.selection = selection
       $0.repositorySettings = RepositorySettingsFeature.State(
         rootURL: rootURL,

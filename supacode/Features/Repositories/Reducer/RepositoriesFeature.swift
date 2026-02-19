@@ -10,6 +10,8 @@ private enum CancelID {
   static let toastAutoDismiss = "repositories.toastAutoDismiss"
   static let githubIntegrationAvailability = "repositories.githubIntegrationAvailability"
   static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
+  static let worktreePromptLoad = "repositories.worktreePromptLoad"
+  static let worktreePromptValidation = "repositories.worktreePromptValidation"
   static func delayedPRRefresh(_ worktreeID: Worktree.ID) -> String {
     "repositories.delayedPRRefresh.\(worktreeID)"
   }
@@ -83,6 +85,7 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -97,6 +100,16 @@ struct RepositoriesFeature {
   struct PendingPullRequestRefresh: Equatable {
     var repositoryRootURL: URL
     var worktreeIDs: [Worktree.ID]
+  }
+
+  enum WorktreeCreationNameSource: Equatable {
+    case random
+    case explicit(String)
+  }
+
+  enum WorktreeCreationBaseRefSource: Equatable {
+    case repositorySetting
+    case explicit(String?)
   }
 
   enum Action {
@@ -126,6 +139,28 @@ struct RepositoriesFeature {
     case requestRenameBranch(Worktree.ID, String)
     case createRandomWorktree
     case createRandomWorktreeInRepository(Repository.ID)
+    case createWorktreeInRepository(
+      repositoryID: Repository.ID,
+      nameSource: WorktreeCreationNameSource,
+      baseRefSource: WorktreeCreationBaseRefSource
+    )
+    case promptedWorktreeCreationDataLoaded(
+      repositoryID: Repository.ID,
+      baseRefOptions: [String],
+      automaticBaseRefLabel: String,
+      selectedBaseRef: String?
+    )
+    case startPromptedWorktreeCreation(
+      repositoryID: Repository.ID,
+      branchName: String,
+      baseRef: String?
+    )
+    case promptedWorktreeCreationChecked(
+      repositoryID: Repository.ID,
+      branchName: String,
+      baseRef: String?,
+      duplicateMessage: String?
+    )
     case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)
     case createRandomWorktreeSucceeded(
       Worktree,
@@ -183,6 +218,7 @@ struct RepositoriesFeature {
     case dismissToast
     case delayedPullRequestRefresh(Worktree.ID)
     case openRepositorySettings(Repository.ID)
+    case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -587,6 +623,183 @@ struct RepositoriesFeature {
           )
           return .none
         }
+        @Shared(.settingsFile) var settingsFile
+        if !settingsFile.global.promptForWorktreeCreation {
+          return .merge(
+            .cancel(id: CancelID.worktreePromptLoad),
+            .send(
+              .createWorktreeInRepository(
+                repositoryID: repository.id,
+                nameSource: .random,
+                baseRefSource: .repositorySetting
+              )
+            )
+          )
+        }
+        @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+        let selectedBaseRef = repositorySettings.worktreeBaseRef
+        let gitClient = gitClient
+        let rootURL = repository.rootURL
+        return .run { send in
+          let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+          guard !Task.isCancelled else {
+            return
+          }
+          let baseRefOptions: [String]
+          do {
+            let refs = try await gitClient.branchRefs(rootURL)
+            guard !Task.isCancelled else {
+              return
+            }
+            var options = refs
+            if !automaticBaseRef.isEmpty, !options.contains(automaticBaseRef) {
+              options.append(automaticBaseRef)
+            }
+            if let selectedBaseRef, !selectedBaseRef.isEmpty, !options.contains(selectedBaseRef) {
+              options.append(selectedBaseRef)
+            }
+            baseRefOptions = options.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+          } catch {
+            guard !Task.isCancelled else {
+              return
+            }
+            var options: [String] = []
+            if !automaticBaseRef.isEmpty {
+              options.append(automaticBaseRef)
+            }
+            if let selectedBaseRef, !selectedBaseRef.isEmpty, !options.contains(selectedBaseRef) {
+              options.append(selectedBaseRef)
+            }
+            baseRefOptions = options
+          }
+          guard !Task.isCancelled else {
+            return
+          }
+          let automaticBaseRefLabel =
+            automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
+          await send(
+            .promptedWorktreeCreationDataLoaded(
+              repositoryID: repositoryID,
+              baseRefOptions: baseRefOptions,
+              automaticBaseRefLabel: automaticBaseRefLabel,
+              selectedBaseRef: selectedBaseRef
+            )
+          )
+        }
+        .cancellable(id: CancelID.worktreePromptLoad, cancelInFlight: true)
+
+      case .promptedWorktreeCreationDataLoaded(
+        let repositoryID,
+        let baseRefOptions,
+        let automaticBaseRefLabel,
+        let selectedBaseRef
+      ):
+        guard let repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+          repositoryID: repository.id,
+          repositoryName: repository.name,
+          automaticBaseRefLabel: automaticBaseRefLabel,
+          baseRefOptions: baseRefOptions,
+          branchName: "",
+          selectedBaseRef: selectedBaseRef,
+          validationMessage: nil
+        )
+        return .none
+
+      case .worktreeCreationPrompt(.presented(.delegate(.cancel))):
+        state.worktreeCreationPrompt = nil
+        return .merge(
+          .cancel(id: CancelID.worktreePromptLoad),
+          .cancel(id: CancelID.worktreePromptValidation)
+        )
+
+      case .worktreeCreationPrompt(
+        .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef)))
+      ):
+        return .send(
+          .startPromptedWorktreeCreation(
+            repositoryID: repositoryID,
+            branchName: branchName,
+            baseRef: baseRef
+          )
+        )
+
+      case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef):
+        guard let repository = state.repositories[id: repositoryID] else {
+          state.worktreeCreationPrompt = nil
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "Unable to resolve a repository for the new worktree."
+          )
+          return .none
+        }
+        state.worktreeCreationPrompt?.validationMessage = nil
+        state.worktreeCreationPrompt?.isValidating = true
+        let normalizedBranchName = branchName.lowercased()
+        if repository.worktrees.contains(where: { $0.name.lowercased() == normalizedBranchName }) {
+          state.worktreeCreationPrompt?.isValidating = false
+          state.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
+          return .none
+        }
+        let gitClient = gitClient
+        let rootURL = repository.rootURL
+        return .run { send in
+          let localBranchNames = (try? await gitClient.localBranchNames(rootURL)) ?? []
+          let duplicateMessage =
+            localBranchNames.contains(normalizedBranchName)
+            ? "Branch name already exists."
+            : nil
+          await send(
+            .promptedWorktreeCreationChecked(
+              repositoryID: repositoryID,
+              branchName: branchName,
+              baseRef: baseRef,
+              duplicateMessage: duplicateMessage
+            )
+          )
+        }
+        .cancellable(id: CancelID.worktreePromptValidation, cancelInFlight: true)
+
+      case .promptedWorktreeCreationChecked(
+        let repositoryID,
+        let branchName,
+        let baseRef,
+        let duplicateMessage
+      ):
+        guard let prompt = state.worktreeCreationPrompt, prompt.repositoryID == repositoryID else {
+          return .none
+        }
+        state.worktreeCreationPrompt?.isValidating = false
+        if let duplicateMessage {
+          state.worktreeCreationPrompt?.validationMessage = duplicateMessage
+          return .none
+        }
+        state.worktreeCreationPrompt = nil
+        return .send(
+          .createWorktreeInRepository(
+            repositoryID: repositoryID,
+            nameSource: .explicit(branchName),
+            baseRefSource: .explicit(baseRef)
+          )
+        )
+
+      case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource):
+        guard let repository = state.repositories[id: repositoryID] else {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "Unable to resolve a repository for the new worktree."
+          )
+          return .none
+        }
+        if state.removingRepositoryIDs.contains(repository.id) {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "This repository is being removed."
+          )
+          return .none
+        }
         let previousSelection = state.selectedWorktreeID
         let pendingID = "pending:\(uuid().uuidString)"
         @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
@@ -603,6 +816,7 @@ struct RepositoriesFeature {
         state.selection = .worktree(pendingID)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         let createWorktreeStream = gitClient.createWorktreeStream
+        let isValidBranchName = gitClient.isValidBranchName
         return .run { send in
           var newWorktreeName: String?
           var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
@@ -617,32 +831,92 @@ struct RepositoriesFeature {
               )
             )
             let branchNames = try await gitClient.localBranchNames(repository.rootURL)
-            progress.stage = .choosingWorktreeName
-            await send(
-              .pendingWorktreeProgressUpdated(
-                id: pendingID,
-                progress: progress
-              )
-            )
             let existing = existingNames.union(branchNames)
-            let name = await MainActor.run {
-              WorktreeNameGenerator.nextName(excluding: existing)
-            }
-            guard let name else {
-              let message =
-                "All default adjective-animal names are already in use. "
-                + "Delete a worktree or rename a branch, then try again."
+            let name: String
+            switch nameSource {
+            case .random:
+              progress.stage = .choosingWorktreeName
               await send(
-                .createRandomWorktreeFailed(
-                  title: "No available worktree names",
-                  message: message,
-                  pendingID: pendingID,
-                  previousSelection: previousSelection,
-                  repositoryID: repository.id,
-                  name: nil
+                .pendingWorktreeProgressUpdated(
+                  id: pendingID,
+                  progress: progress
                 )
               )
-              return
+              let generatedName = await MainActor.run {
+                WorktreeNameGenerator.nextName(excluding: existing)
+              }
+              guard let generatedName else {
+                let message =
+                  "All default adjective-animal names are already in use. "
+                  + "Delete a worktree or rename a branch, then try again."
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "No available worktree names",
+                    message: message,
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              name = generatedName
+            case .explicit(let explicitName):
+              let trimmed = explicitName.trimmingCharacters(in: .whitespacesAndNewlines)
+              guard !trimmed.isEmpty else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name required",
+                    message: "Enter a branch name to create a worktree.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard !trimmed.contains(where: \.isWhitespace) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name invalid",
+                    message: "Branch names can't contain spaces.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard await isValidBranchName(trimmed, repository.rootURL) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name invalid",
+                    message: "Enter a valid git branch name and try again.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard !existing.contains(trimmed.lowercased()) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name already exists",
+                    message: "Choose a different branch name and try again.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              name = trimmed
             }
             newWorktreeName = name
             progress.worktreeName = name
@@ -664,10 +938,19 @@ struct RepositoriesFeature {
               )
             )
             let resolvedBaseRef: String
-            if (selectedBaseRef ?? "").isEmpty {
-              resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
-            } else {
-              resolvedBaseRef = selectedBaseRef ?? ""
+            switch baseRefSource {
+            case .repositorySetting:
+              if (selectedBaseRef ?? "").isEmpty {
+                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              } else {
+                resolvedBaseRef = selectedBaseRef ?? ""
+              }
+            case .explicit(let explicitBaseRef):
+              if let explicitBaseRef, !explicitBaseRef.isEmpty {
+                resolvedBaseRef = explicitBaseRef
+              } else {
+                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              }
             }
             progress.baseRef = resolvedBaseRef
             progress.copyIgnored = copyIgnored
@@ -750,6 +1033,16 @@ struct RepositoriesFeature {
             )
           }
         }
+
+      case .worktreeCreationPrompt(.dismiss):
+        state.worktreeCreationPrompt = nil
+        return .merge(
+          .cancel(id: CancelID.worktreePromptLoad),
+          .cancel(id: CancelID.worktreePromptValidation)
+        )
+
+      case .worktreeCreationPrompt:
+        return .none
 
       case .pendingWorktreeProgressUpdated(let id, let progress):
         updatePendingWorktreeProgress(id, progress: progress, state: &state)
@@ -2051,6 +2344,9 @@ struct RepositoriesFeature {
         return .none
       }
     }
+    .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
+      WorktreeCreationPromptFeature()
+    }
   }
 
   private func refreshRepositoryPullRequests(
@@ -2736,8 +3032,19 @@ private func cleanupFailedWorktree(
     )
   }
   let repositoryRootURL = URL(fileURLWithPath: repositoryID).standardizedFileURL
-  let baseDirectory = SupacodePaths.repositoryDirectory(for: repositoryRootURL)
-  let worktreeURL = baseDirectory.appending(path: name, directoryHint: .isDirectory)
+  let baseDirectory = SupacodePaths.repositoryDirectory(for: repositoryRootURL).standardizedFileURL
+  let worktreeURL =
+    baseDirectory
+    .appending(path: name, directoryHint: .isDirectory)
+    .standardizedFileURL
+  guard isPathInsideBaseDirectory(worktreeURL, baseDirectory: baseDirectory) else {
+    return FailedWorktreeCleanup(
+      didRemoveWorktree: false,
+      didUpdatePinned: false,
+      didUpdateOrder: false,
+      worktree: nil
+    )
+  }
   let worktreeID = worktreeURL.path(percentEncoded: false)
   let worktree =
     state.repositories[id: repositoryID]?.worktrees[id: worktreeID]
@@ -2759,6 +3066,15 @@ private func cleanupFailedWorktree(
     didUpdateOrder: cleanup.didUpdateOrder,
     worktree: worktree
   )
+}
+
+private func isPathInsideBaseDirectory(_ path: URL, baseDirectory: URL) -> Bool {
+  let normalizedPath = path.standardizedFileURL.pathComponents
+  let normalizedBase = baseDirectory.standardizedFileURL.pathComponents
+  guard normalizedPath.count >= normalizedBase.count else {
+    return false
+  }
+  return Array(normalizedPath.prefix(normalizedBase.count)) == normalizedBase
 }
 
 private struct WorktreeCleanupStateResult {

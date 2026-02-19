@@ -9,6 +9,7 @@ enum GitOperation: String {
   case worktreePrune = "worktree_prune"
   case repoIsBare = "repo_is_bare"
   case branchNames = "branch_names"
+  case branchNameValidation = "branch_name_validation"
   case branchRefs = "branch_refs"
   case defaultRemoteBranchRef = "default_remote_branch_ref"
   case localHeadRef = "local_head_ref"
@@ -138,6 +139,19 @@ struct GitClient {
       .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
       .filter { !$0.isEmpty }
     return Set(names)
+  }
+
+  nonisolated func isValidBranchName(_ branchName: String, for repoRoot: URL) async -> Bool {
+    let path = repoRoot.path(percentEncoded: false)
+    do {
+      _ = try await runGit(
+        operation: .branchNameValidation,
+        arguments: ["-C", path, "check-ref-format", "--branch", branchName]
+      )
+      return true
+    } catch {
+      return false
+    }
   }
 
   nonisolated func isBareRepository(for repoRoot: URL) async throws -> Bool {

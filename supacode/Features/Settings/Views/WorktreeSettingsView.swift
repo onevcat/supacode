@@ -25,6 +25,15 @@ struct WorktreeSettingsView: View {
             isOn: $store.automaticallyArchiveMergedWorktrees
           )
           .help("Archive worktrees automatically when their pull requests are merged.")
+          VStack(alignment: .leading) {
+            Toggle(
+              "Prompt for branch name during creation",
+              isOn: $store.promptForWorktreeCreation
+            )
+            .help("Ask for branch name and base ref before creating a worktree.")
+            Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
+              .foregroundStyle(.secondary)
+          }
         }
       }
       .formStyle(.grouped)

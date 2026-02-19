@@ -30,25 +30,25 @@ struct SidebarView: View {
       terminalManager: terminalManager
     )
     .focusedSceneValue(\.confirmWorktreeAction, confirmWorktreeAction)
-      .focusedSceneValue(\.archiveWorktreeAction, archiveWorktreeAction)
-      .focusedSceneValue(\.deleteWorktreeAction, deleteWorktreeAction)
-      .focusedSceneValue(\.visibleHotkeyWorktreeRows, visibleHotkeyRows)
-      .onAppear { syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs) }
-      .onChange(of: state.selection) { _, _ in
-        syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
+    .focusedSceneValue(\.archiveWorktreeAction, archiveWorktreeAction)
+    .focusedSceneValue(\.deleteWorktreeAction, deleteWorktreeAction)
+    .focusedSceneValue(\.visibleHotkeyWorktreeRows, visibleHotkeyRows)
+    .onAppear { syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs) }
+    .onChange(of: state.selection) { _, _ in
+      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
+    }
+    .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
+      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
+    }
+    .onChange(of: sidebarSelections) { _, newValue in
+      store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
+    }
+    .onChange(of: repositoryIDs) { _, newValue in
+      let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
+      $collapsedRepositoryIDs.withLock {
+        $0 = Array(collapsed).sorted()
       }
-      .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
-        syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
-      }
-      .onChange(of: sidebarSelections) { _, newValue in
-        store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
-      }
-      .onChange(of: repositoryIDs) { _, newValue in
-        let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
-        $collapsedRepositoryIDs.withLock {
-          $0 = Array(collapsed).sorted()
-        }
-      }
+    }
   }
 
   private func expandedRepositoryIDs(
@@ -94,7 +94,8 @@ struct SidebarView: View {
   private func makeArchiveWorktreeAction(
     rows: [WorktreeRowModel]
   ) -> (() -> Void)? {
-    let targets = rows
+    let targets =
+      rows
       .filter { $0.isRemovable && !$0.isMainWorktree && !$0.isDeleting }
       .map {
         RepositoriesFeature.ArchiveWorktreeTarget(
@@ -115,7 +116,8 @@ struct SidebarView: View {
   private func makeDeleteWorktreeAction(
     rows: [WorktreeRowModel]
   ) -> (() -> Void)? {
-    let targets = rows
+    let targets =
+      rows
       .filter { $0.isRemovable && !$0.isDeleting }
       .map {
         RepositoriesFeature.DeleteWorktreeTarget(

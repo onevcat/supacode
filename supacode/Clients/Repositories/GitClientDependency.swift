@@ -6,6 +6,7 @@ struct GitClientDependency: Sendable {
   var worktrees: @Sendable (URL) async throws -> [Worktree]
   var pruneWorktrees: @Sendable (URL) async throws -> Void
   var localBranchNames: @Sendable (URL) async throws -> Set<String>
+  var isValidBranchName: @Sendable (String, URL) async -> Bool
   var branchRefs: @Sendable (URL) async throws -> [String]
   var defaultRemoteBranchRef: @Sendable (URL) async throws -> String?
   var automaticWorktreeBaseRef: @Sendable (URL) async -> String?
@@ -42,6 +43,9 @@ extension GitClientDependency: DependencyKey {
     worktrees: { try await GitClient().worktrees(for: $0) },
     pruneWorktrees: { try await GitClient().pruneWorktrees(for: $0) },
     localBranchNames: { try await GitClient().localBranchNames(for: $0) },
+    isValidBranchName: { branchName, repoRoot in
+      await GitClient().isValidBranchName(branchName, for: repoRoot)
+    },
     branchRefs: { try await GitClient().branchRefs(for: $0) },
     defaultRemoteBranchRef: { try await GitClient().defaultRemoteBranchRef(for: $0) },
     automaticWorktreeBaseRef: { await GitClient().automaticWorktreeBaseRef(for: $0) },

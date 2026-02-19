@@ -214,7 +214,8 @@ struct WorktreeRowsView: View {
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let contextRows = contextActionRows(for: row)
     let isBulkSelection = contextRows.count > 1
-    let archiveTargets = contextRows
+    let archiveTargets =
+      contextRows
       .filter { !$0.isMainWorktree }
       .map {
         RepositoriesFeature.ArchiveWorktreeTarget(

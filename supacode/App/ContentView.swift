@@ -70,6 +70,10 @@ struct ContentView: View {
     }
     .alert(store: repositoriesStore.scope(state: \.$alert, action: \.alert))
     .alert(store: store.scope(state: \.$alert, action: \.alert))
+    .sheet(store: repositoriesStore.scope(state: \.$worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
+      promptStore in
+      WorktreeCreationPromptView(store: promptStore)
+    }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(
         script: runScriptDraft,
