@@ -71,6 +71,44 @@ struct RepositoriesFeatureTests {
 
     await store.send(.selectWorktree(worktree.id)) {
       $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func setSidebarSelectedWorktreeIDsKeepsSelectedAndPrunesUnknown() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .setSidebarSelectedWorktreeIDs(
+        [worktree2.id, "/tmp/repo/unknown"]
+      )
+    ) {
+      $0.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    }
+  }
+
+  @Test func selectArchivedWorktreesClearsSidebarSelectedWorktreeIDs() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -368,6 +406,36 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.requestArchiveWorktree(worktree.id, repository.id)) {
+      $0.alert = expectedAlert
+    }
+  }
+
+  @Test func requestArchiveWorktreesShowsBatchConfirmation() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "owl", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "hawk", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    let targets = [
+      RepositoriesFeature.ArchiveWorktreeTarget(worktreeID: worktree1.id, repositoryID: repository.id),
+      RepositoriesFeature.ArchiveWorktreeTarget(worktreeID: worktree2.id, repositoryID: repository.id),
+    ]
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive 2 worktrees?")
+    } actions: {
+      ButtonState(role: .destructive, action: .confirmArchiveWorktrees(targets)) {
+        TextState("Archive 2 (⌘↩)")
+      }
+      ButtonState(role: .cancel) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Archive 2 worktrees?")
+    }
+
+    await store.send(.requestArchiveWorktrees(targets)) {
       $0.alert = expectedAlert
     }
   }

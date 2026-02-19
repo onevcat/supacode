@@ -82,6 +82,7 @@ struct RepositoriesFeature {
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
+    var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -111,6 +112,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case selectArchivedWorktrees
+    case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case openRepositories([URL])
     case openRepositoriesFinished(
       [Repository],
@@ -487,10 +489,25 @@ struct RepositoriesFeature {
 
       case .selectArchivedWorktrees:
         state.selection = .archivedWorktrees
+        state.sidebarSelectedWorktreeIDs = []
         return .send(.delegate(.selectedWorktreeChanged(nil)))
+
+      case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
+        let validWorktreeIDs = Set(state.orderedWorktreeRows().map(\.id))
+        var nextWorktreeIDs = worktreeIDs.intersection(validWorktreeIDs)
+        if let selectedWorktreeID = state.selectedWorktreeID, validWorktreeIDs.contains(selectedWorktreeID) {
+          nextWorktreeIDs.insert(selectedWorktreeID)
+        }
+        state.sidebarSelectedWorktreeIDs = nextWorktreeIDs
+        return .none
 
       case .selectWorktree(let worktreeID, let focusTerminal):
         state.selection = worktreeID.map(SidebarSelection.worktree)
+        if let worktreeID {
+          state.sidebarSelectedWorktreeIDs.insert(worktreeID)
+        } else {
+          state.sidebarSelectedWorktreeIDs = []
+        }
         if focusTerminal, let worktreeID {
           state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
         }

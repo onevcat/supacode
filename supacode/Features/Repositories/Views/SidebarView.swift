@@ -84,32 +84,36 @@ struct SidebarView: View {
     .focusedSceneValue(\.archiveWorktreeAction, archiveWorktreeAction)
     .focusedSceneValue(\.deleteWorktreeAction, deleteWorktreeAction)
     .focusedSceneValue(\.visibleHotkeyWorktreeRows, visibleHotkeyRows)
-    .onAppear {
-      sidebarSelections = normalizedSidebarSelections(
-        current: sidebarSelections,
-        state: state,
-        visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
-      )
-    }
-    .onChange(of: state.selection) { _, _ in
-      sidebarSelections = normalizedSidebarSelections(
-        current: sidebarSelections,
-        state: state,
-        visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
-      )
-    }
-    .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
-      sidebarSelections = normalizedSidebarSelections(
-        current: sidebarSelections,
-        state: state,
-        visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
-      )
-    }
-    .onChange(of: repositoryIDs) { _, newValue in
-      let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
-      $collapsedRepositoryIDs.withLock {
-        $0 = Array(collapsed).sorted()
+      .onAppear {
+        sidebarSelections = normalizedSidebarSelections(
+          current: sidebarSelections,
+          state: state,
+          visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
+        )
+        store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: sidebarSelections)))
       }
+      .onChange(of: state.selection) { _, _ in
+        sidebarSelections = normalizedSidebarSelections(
+          current: sidebarSelections,
+          state: state,
+        visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
+      )
+    }
+      .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
+        sidebarSelections = normalizedSidebarSelections(
+          current: sidebarSelections,
+          state: state,
+          visibleWorktreeIDs: Set(visibleHotkeyRows.map(\.id))
+        )
+      }
+      .onChange(of: sidebarSelections) { _, newValue in
+        store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
+      }
+      .onChange(of: repositoryIDs) { _, newValue in
+        let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
+        $collapsedRepositoryIDs.withLock {
+          $0 = Array(collapsed).sorted()
+        }
     }
   }
 
@@ -135,5 +139,9 @@ struct SidebarView: View {
       normalized.insert(.worktree(selectedWorktreeID))
     }
     return normalized
+  }
+
+  private func selectedWorktreeIDs(from selections: Set<SidebarSelection>) -> Set<Worktree.ID> {
+    Set(selections.compactMap(\.worktreeID))
   }
 }

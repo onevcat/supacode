@@ -212,6 +212,30 @@ struct WorktreeRowsView: View {
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
     let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    let contextRows = contextActionRows(for: row)
+    let isBulkSelection = contextRows.count > 1
+    let archiveTargets = contextRows
+      .filter { !$0.isMainWorktree }
+      .map {
+        RepositoriesFeature.ArchiveWorktreeTarget(
+          worktreeID: $0.id,
+          repositoryID: $0.repositoryID
+        )
+      }
+    let deleteTargets = contextRows.map {
+      RepositoriesFeature.DeleteWorktreeTarget(
+        worktreeID: $0.id,
+        repositoryID: $0.repositoryID
+      )
+    }
+    let archiveTitle =
+      isBulkSelection
+      ? "Archive Selected Worktrees (\(archiveShortcut))"
+      : "Archive Worktree (\(archiveShortcut))"
+    let deleteTitle =
+      isBulkSelection
+      ? "Delete Selected Worktrees (\(deleteShortcut))"
+      : "Delete Worktree (\(deleteShortcut))"
     if !row.isMainWorktree {
       if row.isPinned {
         Button("Unpin") {
@@ -229,19 +253,19 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
-    Button("Archive Worktree (\(archiveShortcut))") {
-      archiveWorktree(worktree.id)
+    Button(archiveTitle) {
+      archiveWorktrees(archiveTargets)
     }
     .help(
-      row.isMainWorktree
+      archiveTargets.isEmpty
         ? "Main worktree can't be archived"
-        : "Archive Worktree (\(archiveShortcut))"
+        : archiveTitle
     )
-    .disabled(row.isMainWorktree)
-    Button("Delete Worktree (\(deleteShortcut))", role: .destructive) {
-      store.send(.requestDeleteWorktree(worktree.id, repository.id))
+    .disabled(archiveTargets.isEmpty)
+    Button(deleteTitle, role: .destructive) {
+      deleteWorktrees(deleteTargets)
     }
-    .help("Delete Worktree (\(deleteShortcut))")
+    .help(deleteTitle)
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {
@@ -261,6 +285,32 @@ struct WorktreeRowsView: View {
 
   private func archiveWorktree(_ worktreeID: Worktree.ID) {
     store.send(.requestArchiveWorktree(worktreeID, repository.id))
+  }
+
+  private func contextActionRows(for row: WorktreeRowModel) -> [WorktreeRowModel] {
+    guard selectedWorktreeIDs.count > 1, selectedWorktreeIDs.contains(row.id) else {
+      return [row]
+    }
+    let rows = selectedWorktreeIDs.compactMap { store.state.selectedRow(for: $0) }
+    return rows.isEmpty ? [row] : rows
+  }
+
+  private func archiveWorktrees(_ targets: [RepositoriesFeature.ArchiveWorktreeTarget]) {
+    guard !targets.isEmpty else { return }
+    if targets.count == 1, let target = targets.first {
+      store.send(.requestArchiveWorktree(target.worktreeID, target.repositoryID))
+    } else {
+      store.send(.requestArchiveWorktrees(targets))
+    }
+  }
+
+  private func deleteWorktrees(_ targets: [RepositoriesFeature.DeleteWorktreeTarget]) {
+    guard !targets.isEmpty else { return }
+    if targets.count == 1, let target = targets.first {
+      store.send(.requestDeleteWorktree(target.worktreeID, target.repositoryID))
+    } else {
+      store.send(.requestDeleteWorktrees(targets))
+    }
   }
 
   private func worktreeName(for row: WorktreeRowModel) -> String {

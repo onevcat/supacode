@@ -15,12 +15,36 @@ struct WorktreeDetailView: View {
     let repositories = state.repositories
     let selectedRow = repositories.selectedRow(for: repositories.selectedWorktreeID)
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
+    let selectedWorktreeSummaries = repositories.sidebarSelectedWorktreeIDs
+      .compactMap { worktreeID in
+        repositories.selectedRow(for: worktreeID).map {
+          MultiSelectedWorktreeSummary(
+            id: $0.id,
+            name: $0.name,
+            repositoryName: repositories.repositoryName(for: $0.repositoryID)
+          )
+        }
+      }
+      .sorted { lhs, rhs in
+        let lhsRepository = lhs.repositoryName ?? ""
+        let rhsRepository = rhs.repositoryName ?? ""
+        if lhsRepository == rhsRepository {
+          return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return lhsRepository.localizedCaseInsensitiveCompare(rhsRepository) == .orderedAscending
+      }
+    let showsMultiSelectionSummary =
+      !repositories.isShowingArchivedWorktrees
+      && selectedWorktreeSummaries.count > 1
     let loadingInfo = loadingInfo(
       for: selectedRow,
       selectedWorktreeID: repositories.selectedWorktreeID,
       repositories: repositories
     )
-    let hasActiveWorktree = selectedWorktree != nil && loadingInfo == nil
+    let hasActiveWorktree =
+      selectedWorktree != nil
+      && loadingInfo == nil
+      && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
     let runScriptEnabled = hasActiveWorktree
     let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
@@ -33,6 +57,8 @@ struct WorktreeDetailView: View {
         ArchivedWorktreesDetailView(
           store: store.scope(state: \.repositories, action: \.repositories)
         )
+      } else if showsMultiSelectionSummary {
+        MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
       } else if let loadingInfo {
         WorktreeLoadingView(info: loadingInfo)
       } else if let selectedWorktree {
@@ -349,6 +375,59 @@ struct WorktreeDetailView: View {
       )
     }
     return nil
+  }
+}
+
+private struct MultiSelectedWorktreeSummary: Identifiable {
+  let id: Worktree.ID
+  let name: String
+  let repositoryName: String?
+}
+
+private struct MultiSelectedWorktreesDetailView: View {
+  let rows: [MultiSelectedWorktreeSummary]
+
+  private let visibleRowsLimit = 8
+
+  var body: some View {
+    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
+    let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    VStack(alignment: .leading, spacing: 16) {
+      Text("\(rows.count) worktrees selected")
+        .font(.title3)
+      VStack(alignment: .leading, spacing: 8) {
+        ForEach(Array(rows.prefix(visibleRowsLimit))) { row in
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(row.name)
+              .lineLimit(1)
+            if let repositoryName = row.repositoryName {
+              Text(repositoryName)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+          }
+          .font(.body)
+        }
+        if rows.count > visibleRowsLimit {
+          Text("+\(rows.count - visibleRowsLimit) more")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+      Divider()
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Available actions")
+          .font(.headline)
+        Text("Archive selected (\(archiveShortcut))")
+        Text("Delete selected (\(deleteShortcut))")
+        Text("Right-click any selected worktree to apply actions to all selected worktrees.")
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      Spacer(minLength: 0)
+    }
+    .padding(20)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 }
 
