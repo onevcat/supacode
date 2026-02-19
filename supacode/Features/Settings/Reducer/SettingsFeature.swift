@@ -18,6 +18,7 @@ struct SettingsFeature {
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
     var automaticallyArchiveMergedWorktrees: Bool
+    var promptForWorktreeCreation: Bool
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
 
@@ -36,6 +37,7 @@ struct SettingsFeature {
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
+      promptForWorktreeCreation = settings.promptForWorktreeCreation
     }
 
     var globalSettings: GlobalSettings {
@@ -52,7 +54,8 @@ struct SettingsFeature {
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
-        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees
+        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees,
+        promptForWorktreeCreation: promptForWorktreeCreation
       )
     }
   }
@@ -106,6 +109,7 @@ struct SettingsFeature {
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:

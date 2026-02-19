@@ -1,7 +1,9 @@
 import ComposableArchitecture
 import CustomDump
+import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import supacode
@@ -95,7 +97,91 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func createRandomWorktreeInRepositoryStreamsOutputLines() async {
+  @Test func createRandomWorktreeInRepositoryWithPromptEnabledPresentsPrompt() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.branchRefs = { _ in ["origin/main", "origin/dev"] }
+    }
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.promptedWorktreeCreationDataLoaded) {
+      $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+        repositoryID: repository.id,
+        repositoryName: repository.name,
+        automaticBaseRefLabel: "Automatic (origin/main)",
+        baseRefOptions: ["origin/dev", "origin/main"],
+        branchName: "",
+        selectedBaseRef: nil,
+        validationMessage: nil
+      )
+    }
+  }
+
+  @Test func promptedWorktreeCreationCancelDismissesPrompt() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRefLabel: "Automatic (origin/main)",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/new-branch",
+      selectedBaseRef: nil,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
+      $0.worktreeCreationPrompt = nil
+    }
+  }
+
+  @Test func startPromptedWorktreeCreationWithDuplicateLocalBranchShowsValidation() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRefLabel: "Automatic (origin/main)",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/existing",
+      selectedBaseRef: nil,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.localBranchNames = { _ in ["feature/existing"] }
+    }
+
+    await store.send(
+      .startPromptedWorktreeCreation(
+        repositoryID: repository.id,
+        branchName: "feature/existing",
+        baseRef: nil
+      )
+    ) {
+      $0.worktreeCreationPrompt?.validationMessage = nil
+      $0.worktreeCreationPrompt?.isValidating = true
+    }
+    await store.receive(\.promptedWorktreeCreationChecked) {
+      $0.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
+      $0.worktreeCreationPrompt?.isValidating = false
+    }
+  }
+
+  @Test(.dependencies) func createRandomWorktreeInRepositoryStreamsOutputLines() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
@@ -104,6 +190,8 @@ struct RepositoriesFeatureTests {
       name: "swift-otter",
       repoRoot: repoRoot
     )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global.promptForWorktreeCreation = false }
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
     } withDependencies: {
@@ -137,10 +225,12 @@ struct RepositoriesFeatureTests {
     #expect(store.state.alert == nil)
   }
 
-  @Test func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
+  @Test(.dependencies) func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global.promptForWorktreeCreation = false }
     let store = TestStore(initialState: makeState(repositories: [repository])) {
       RepositoriesFeature()
     } withDependencies: {

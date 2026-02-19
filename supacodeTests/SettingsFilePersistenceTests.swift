@@ -107,6 +107,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.githubIntegrationEnabled == true)
     #expect(settings.global.deleteBranchOnDeleteWorktree == true)
     #expect(settings.global.automaticallyArchiveMergedWorktrees == false)
+    #expect(settings.global.promptForWorktreeCreation == true)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
