@@ -36,7 +36,6 @@ Flags:
   --from <ref>      base ref for new branch
   --path <dir>      explicit worktree path
   --fetch           fetch remotes before resolving --from
-  --init-submodules initialize submodules in new worktree
   --copy-all        copy all files to new worktree
   --copy-ignored    copy gitignored files to new worktree
   --copy-untracked  copy untracked files to new worktree
@@ -181,6 +180,16 @@ repo_is_bare() {
   [ "$is_bare" = "true" ]
 }
 
+canonical_worktree_path() {
+  local path="$1"
+  local resolved
+  if resolved=$(git -C "$path" rev-parse --show-toplevel 2>/dev/null); then
+    normalize_dir "$resolved"
+    return
+  fi
+  normalize_dir "$path"
+}
+
 main_worktree_path() {
   local common
   common=$(common_git_dir_abs)
@@ -192,7 +201,7 @@ main_worktree_path() {
   while IFS= read -r line || [ -n "$line" ]; do
     if [ -z "$line" ]; then
       if [ -n "$path" ] && [ "$is_bare" -eq 0 ]; then
-        printf '%s\n' "$path"
+        canonical_worktree_path "$path"
         return
       fi
       path=""
@@ -205,7 +214,7 @@ main_worktree_path() {
     esac
   done < <(git worktree list --porcelain)
   if [ -n "$path" ] && [ "$is_bare" -eq 0 ]; then
-    printf '%s\n' "$path"
+    canonical_worktree_path "$path"
     return
   fi
   git rev-parse --show-toplevel
@@ -284,7 +293,11 @@ worktree_entries() {
   while IFS= read -r line || [ -n "$line" ]; do
     if [ -z "$line" ]; then
       if [ -n "$path" ]; then
-        printf '%s\t%s\t%s\t%s\n' "$path" "$head" "$branch" "$is_bare"
+        local output_path="$path"
+        if [ "$is_bare" -eq 0 ]; then
+          output_path=$(canonical_worktree_path "$path")
+        fi
+        printf '%s\t%s\t%s\t%s\n' "$output_path" "$head" "$branch" "$is_bare"
       fi
       path=""
       head=""
@@ -304,7 +317,11 @@ worktree_entries() {
     esac
   done < <(git -C "$root" worktree list --porcelain)
   if [ -n "$path" ]; then
-    printf '%s\t%s\t%s\t%s\n' "$path" "$head" "$branch" "$is_bare"
+    local output_path="$path"
+    if [ "$is_bare" -eq 0 ]; then
+      output_path=$(canonical_worktree_path "$path")
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$output_path" "$head" "$branch" "$is_bare"
   fi
 }
 
@@ -669,7 +686,7 @@ copy_entry() {
   local srcfile="$src/$entry_trim"
   local dstfile="$dst/$entry_trim"
   [ -e "$srcfile" ] || [ -L "$srcfile" ] || return 0
-  [ "$verbose" -eq 1 ] && printf 'copy %s\n' "$entry_trim" >&2
+  [ "$verbose" -eq 1 ] && printf '%s\n' "$entry_trim" >&2
   copy_path "$srcfile" "$dstfile" "$force"
 }
 
@@ -728,7 +745,7 @@ copy_files_between() {
       if [ ! -e "$srcfile" ] && [ ! -L "$srcfile" ]; then
         continue
       fi
-      [ "$verbose" -eq 1 ] && printf 'would copy %s\n' "$file" >&2
+      [ "$verbose" -eq 1 ] && printf '%s\n' "$file" >&2
       printf '%s\n' "$file"
     done <<< "$files"
     return 0
@@ -742,13 +759,12 @@ open_path() {
   local base_override="$3"
   local path_override="$4"
   local fetch="$5"
-  local initsubmodules="${6:-0}"
-  local copyignored="${7:-0}"
-  local copyuntracked="${8:-0}"
-  local copymodified="${9:-0}"
-  local copytracked="${10:-0}"
-  local force="${11:-0}"
-  local verbose="${12:-0}"
+  local copyignored="${6:-0}"
+  local copyuntracked="${7:-0}"
+  local copymodified="${8:-0}"
+  local copytracked="${9:-0}"
+  local force="${10:-0}"
+  local verbose="${11:-0}"
   require_repo
   local root base path copy_src
   root=$(main_worktree_path)
@@ -777,9 +793,6 @@ open_path() {
     mkdir -p "$(dirname "$path")"
     git -C "$root" worktree add "$path" "$branch" >/dev/null
     copy_files_to_worktree "$copy_src" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked" "$force" "$verbose"
-    if [ "$initsubmodules" -eq 1 ]; then
-      git -C "$path" submodule update --init --recursive 1>&2
-    fi
     printf '%s\n' "$path"
     return 0
   fi
@@ -795,15 +808,12 @@ open_path() {
   mkdir -p "$(dirname "$path")"
   git -C "$root" worktree add -b "$branch" "$path" "$from" >/dev/null
   copy_files_to_worktree "$copy_src" "$path" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked" "$force" "$verbose"
-  if [ "$initsubmodules" -eq 1 ]; then
-    git -C "$path" submodule update --init --recursive 1>&2
-  fi
   printf '%s\n' "$path"
 }
 
 cmd_switch() {
   local from="" path_override="" fetch=0 branch=""
-  local initsubmodules=0 copyignored=0 copyuntracked=0 copymodified=0 copytracked=0 force=0 verbose=0
+  local copyignored=0 copyuntracked=0 copymodified=0 copytracked=0 force=0 verbose=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
     -h | --help)
@@ -823,7 +833,6 @@ cmd_switch() {
       ;;
     --path=*) path_override="${1#--path=}" ;;
     --fetch) fetch=1 ;;
-    --init-submodules) initsubmodules=1 ;;
     --copy-all) copyignored=1; copyuntracked=1; copymodified=1; copytracked=1 ;;
     --copy-ignored) copyignored=1 ;;
     --copy-untracked) copyuntracked=1 ;;
@@ -836,7 +845,7 @@ cmd_switch() {
     shift
   done
   [ -n "$branch" ] || die "missing branch"
-  open_path "$branch" "$from" "$BASE_DIR_OVERRIDE" "$path_override" "$fetch" "$initsubmodules" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked" "$force" "$verbose"
+  open_path "$branch" "$from" "$BASE_DIR_OVERRIDE" "$path_override" "$fetch" "$copyignored" "$copyuntracked" "$copymodified" "$copytracked" "$force" "$verbose"
 }
 
 cmd_exec() {
@@ -1317,7 +1326,7 @@ _wt_complete() {
   fi
   case "\$cmd" in
     switch|sw)
-      flags="--from --path --fetch --init-submodules --copy-all --copy-ignored --copy-untracked --copy-modified -f --force -v --verbose -h --help"
+      flags="--from --path --fetch --copy-all --copy-ignored --copy-untracked --copy-modified -f --force -v --verbose -h --help"
       case "\$prev" in
         --from|--path) return 0 ;;
       esac
@@ -1429,8 +1438,8 @@ _wt() {
   )
   global_flags=(--base-dir -h --help)
   global_descs=("base dir override" "show help" "show help")
-  switch_flags=(--from --path --fetch --init-submodules --copy-all --copy-ignored --copy-untracked --copy-modified -f --force -v --verbose -h --help)
-  switch_descs=("base ref for new branch" "explicit worktree path" "fetch remotes before resolving --from" "initialize submodules in new worktree" "copy all files to new worktree" "copy gitignored files to new worktree" "copy untracked files to new worktree" "copy modified files to new worktree" "overwrite existing destination files" "overwrite existing destination files" "print copy progress" "print copy progress" "show help" "show help")
+  switch_flags=(--from --path --fetch --copy-all --copy-ignored --copy-untracked --copy-modified -f --force -v --verbose -h --help)
+  switch_descs=("base ref for new branch" "explicit worktree path" "fetch remotes before resolving --from" "copy all files to new worktree" "copy gitignored files to new worktree" "copy untracked files to new worktree" "copy modified files to new worktree" "overwrite existing destination files" "overwrite existing destination files" "print copy progress" "print copy progress" "show help" "show help")
   exec_flags=(--from --path --fetch -h --help --)
   exec_descs=("base ref for new branch" "explicit worktree path" "fetch remotes before resolving --from" "show help" "show help" "end of flags")
   sync_flags=(--copy-all --copy-ignored --copy-untracked --copy-modified -f --force -v --verbose -n --dry-run -h --help)
@@ -1607,7 +1616,6 @@ complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l from -r -d 'ba
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l path -r -d 'explicit worktree path'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -l fetch -d 'fetch remotes before resolving --from'
 complete -c wt -n '__fish_seen_subcommand_from switch sw exec' -s h -l help -d 'show help'
-complete -c wt -n '__fish_seen_subcommand_from switch sw' -l init-submodules -d 'initialize submodules in new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-all -d 'copy all files to new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-ignored -d 'copy gitignored files to new worktree'
 complete -c wt -n '__fish_seen_subcommand_from switch sw' -l copy-untracked -d 'copy untracked files to new worktree'
