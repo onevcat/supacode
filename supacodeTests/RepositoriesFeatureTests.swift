@@ -1,3 +1,4 @@
+import Clocks
 import ComposableArchitecture
 import CustomDump
 import DependenciesTestSupport
@@ -302,6 +303,7 @@ struct RepositoriesFeatureTests {
   }
 
   @Test func promptedWorktreeCreationCancelDuringValidationStopsCreation() async {
+    let validationClock = TestClock()
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
@@ -319,7 +321,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     } withDependencies: {
       $0.gitClient.localBranchNames = { _ in
-        try? await Task.sleep(for: .seconds(1))
+        try? await validationClock.sleep(for: .seconds(1))
         return []
       }
     }
@@ -337,6 +339,7 @@ struct RepositoriesFeatureTests {
     await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
       $0.worktreeCreationPrompt = nil
     }
+    await validationClock.advance(by: .seconds(1))
     await store.finish()
   }
 
