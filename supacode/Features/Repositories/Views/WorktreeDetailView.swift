@@ -15,27 +15,11 @@ struct WorktreeDetailView: View {
     let repositories = state.repositories
     let selectedRow = repositories.selectedRow(for: repositories.selectedWorktreeID)
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
-    let selectedWorktreeSummaries = repositories.sidebarSelectedWorktreeIDs
-      .compactMap { worktreeID in
-        repositories.selectedRow(for: worktreeID).map {
-          MultiSelectedWorktreeSummary(
-            id: $0.id,
-            name: $0.name,
-            repositoryName: repositories.repositoryName(for: $0.repositoryID)
-          )
-        }
-      }
-      .sorted { lhs, rhs in
-        let lhsRepository = lhs.repositoryName ?? ""
-        let rhsRepository = rhs.repositoryName ?? ""
-        if lhsRepository == rhsRepository {
-          return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-        }
-        return lhsRepository.localizedCaseInsensitiveCompare(rhsRepository) == .orderedAscending
-      }
-    let showsMultiSelectionSummary =
-      !repositories.isShowingArchivedWorktrees
-      && selectedWorktreeSummaries.count > 1
+    let selectedWorktreeSummaries = selectedWorktreeSummaries(from: repositories)
+    let showsMultiSelectionSummary = shouldShowMultiSelectionSummary(
+      repositories: repositories,
+      selectedWorktreeSummaries: selectedWorktreeSummaries
+    )
     let loadingInfo = loadingInfo(
       for: selectedRow,
       selectedWorktreeID: repositories.selectedWorktreeID,
@@ -52,36 +36,12 @@ struct WorktreeDetailView: View {
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
       count + repository.unseenWorktreeCount
     }
-    let content = Group {
-      if repositories.isShowingArchivedWorktrees {
-        ArchivedWorktreesDetailView(
-          store: store.scope(state: \.repositories, action: \.repositories)
-        )
-      } else if showsMultiSelectionSummary {
-        MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
-      } else if let loadingInfo {
-        WorktreeLoadingView(info: loadingInfo)
-      } else if let selectedWorktree {
-        let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedWorktree.id)
-        let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedWorktree.id)
-        WorktreeTerminalTabsView(
-          worktree: selectedWorktree,
-          manager: terminalManager,
-          shouldRunSetupScript: shouldRunSetupScript,
-          forceAutoFocus: shouldFocusTerminal,
-          createTab: { store.send(.newTerminal) }
-        )
-        .id(selectedWorktree.id)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-          if shouldFocusTerminal {
-            store.send(.repositories(.consumeTerminalFocus(selectedWorktree.id)))
-          }
-        }
-      } else {
-        EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
-      }
-    }
+    let content = detailContent(
+      repositories: repositories,
+      loadingInfo: loadingInfo,
+      selectedWorktree: selectedWorktree,
+      selectedWorktreeSummaries: selectedWorktreeSummaries
+    )
     .toolbar(removing: .title)
     .toolbar {
       if hasActiveWorktree, let selectedWorktree {
@@ -131,6 +91,77 @@ struct WorktreeDetailView: View {
       runScriptIsRunning: runScriptIsRunning
     )
     return applyFocusedActions(content: content, actions: actions)
+  }
+
+  private func selectedWorktreeSummaries(
+    from repositories: RepositoriesFeature.State
+  ) -> [MultiSelectedWorktreeSummary] {
+    repositories.sidebarSelectedWorktreeIDs
+      .compactMap { worktreeID in
+        repositories.selectedRow(for: worktreeID).map {
+          MultiSelectedWorktreeSummary(
+            id: $0.id,
+            name: $0.name,
+            repositoryName: repositories.repositoryName(for: $0.repositoryID)
+          )
+        }
+      }
+      .sorted { lhs, rhs in
+        let lhsRepository = lhs.repositoryName ?? ""
+        let rhsRepository = rhs.repositoryName ?? ""
+        if lhsRepository == rhsRepository {
+          return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return lhsRepository.localizedCaseInsensitiveCompare(rhsRepository) == .orderedAscending
+      }
+  }
+
+  private func shouldShowMultiSelectionSummary(
+    repositories: RepositoriesFeature.State,
+    selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
+  ) -> Bool {
+    !repositories.isShowingArchivedWorktrees
+      && selectedWorktreeSummaries.count > 1
+  }
+
+  @ViewBuilder
+  private func detailContent(
+    repositories: RepositoriesFeature.State,
+    loadingInfo: WorktreeLoadingInfo?,
+    selectedWorktree: Worktree?,
+    selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
+  ) -> some View {
+    if repositories.isShowingArchivedWorktrees {
+      ArchivedWorktreesDetailView(
+        store: store.scope(state: \.repositories, action: \.repositories)
+      )
+    } else if shouldShowMultiSelectionSummary(
+      repositories: repositories,
+      selectedWorktreeSummaries: selectedWorktreeSummaries
+    ) {
+      MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
+    } else if let loadingInfo {
+      WorktreeLoadingView(info: loadingInfo)
+    } else if let selectedWorktree {
+      let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedWorktree.id)
+      let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedWorktree.id)
+      WorktreeTerminalTabsView(
+        worktree: selectedWorktree,
+        manager: terminalManager,
+        shouldRunSetupScript: shouldRunSetupScript,
+        forceAutoFocus: shouldFocusTerminal,
+        createTab: { store.send(.newTerminal) }
+      )
+      .id(selectedWorktree.id)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .onAppear {
+        if shouldFocusTerminal {
+          store.send(.repositories(.consumeTerminalFocus(selectedWorktree.id)))
+        }
+      }
+    } else {
+      EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
+    }
   }
 
   private func applyFocusedActions<Content: View>(
