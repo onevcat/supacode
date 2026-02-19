@@ -75,12 +75,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ## Code Guidelines
 
 - Target macOS 26.0+, Swift 6.2+
-- Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
-- Always mark `@Observable` classes with `@MainActor`
-- Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
-- Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)
-- Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
-- Do not use NSNotification to communicate between reducers.
+- Before doing a big feature or when planning, consult with pfw (pointfree) skills on TCA, Observable best practices first.
 - Prefer `@Shared` directly in reducers for app storage and shared settings; do not introduce new dependency clients solely to wrap `@Shared`.
 - Use `SupaLogger` for all logging. Never use `print()` or `os.Logger` directly. `SupaLogger` prints in DEBUG and uses `os.Logger` in release.
 
