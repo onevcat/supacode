@@ -84,6 +84,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Always mark `@Observable` classes with `@MainActor`
 - Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
 - When a new logic changes in the Reducer, always add tests
+- In unit tests, never use `Task.sleep`; use `TestClock` (or an injected clock) and drive time with `advance`.
 - Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.
