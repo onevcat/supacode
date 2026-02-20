@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
+  let backgroundOpacity: Double
   @Environment(\.openURL) private var openURL
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
@@ -61,7 +62,7 @@ struct SidebarFooterView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.bar)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(backgroundOpacity))
     .overlay(alignment: .top) {
       Divider()
     }

@@ -228,6 +228,10 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.hasUnseenNotification == true
   }
 
+  func surfaceBackgroundOpacity() -> Double {
+    runtime.backgroundOpacity()
+  }
+
   private func emit(_ event: TerminalClient.Event) {
     guard let eventContinuation else {
       pendingEvents.append(event)

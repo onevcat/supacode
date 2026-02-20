@@ -175,7 +175,10 @@ struct SidebarListView: View {
       }
     }
     .safeAreaInset(edge: .bottom) {
-      SidebarFooterView(store: store)
+      SidebarFooterView(
+        store: store,
+        backgroundOpacity: terminalManager.surfaceBackgroundOpacity()
+      )
     }
     .dropDestination(for: URL.self) { urls, _ in
       let fileURLs = urls.filter(\.isFileURL)

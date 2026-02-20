@@ -141,7 +141,10 @@ struct WorktreeDetailView: View {
     ) {
       MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
     } else if let loadingInfo {
-      WorktreeLoadingView(info: loadingInfo)
+      WorktreeLoadingView(
+        info: loadingInfo,
+        backgroundOpacity: terminalManager.surfaceBackgroundOpacity()
+      )
     } else if let selectedWorktree {
       let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedWorktree.id)
       let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedWorktree.id)
