@@ -460,6 +460,7 @@ struct RepositoriesFeatureTests {
 
     #expect(store.state.pendingWorktrees.isEmpty)
     #expect(store.state.selection == .worktree(createdWorktree.id))
+    #expect(store.state.sidebarSelectedWorktreeIDs == [createdWorktree.id])
     #expect(store.state.pendingSetupScriptWorktreeIDs.contains(createdWorktree.id))
     #expect(store.state.pendingTerminalFocusWorktreeIDs.contains(createdWorktree.id))
     #expect(store.state.repositories[id: repository.id]?.worktrees[id: createdWorktree.id] != nil)
@@ -1290,6 +1291,7 @@ struct RepositoriesFeatureTests {
       ),
     ]
     initialState.selection = .worktree(pendingID)
+    initialState.sidebarSelectedWorktreeIDs = [existingWorktree.id, pendingID]
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
@@ -1307,6 +1309,7 @@ struct RepositoriesFeatureTests {
       $0.pendingTerminalFocusWorktreeIDs.insert(newWorktree.id)
       $0.pendingWorktrees = []
       $0.selection = .worktree(newWorktree.id)
+      $0.sidebarSelectedWorktreeIDs = [newWorktree.id]
       $0.repositories = [updatedRepository]
     }
 

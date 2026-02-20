@@ -540,12 +540,7 @@ struct RepositoriesFeature {
         return .none
 
       case .selectWorktree(let worktreeID, let focusTerminal):
-        state.selection = worktreeID.map(SidebarSelection.worktree)
-        if let worktreeID {
-          state.sidebarSelectedWorktreeIDs = [worktreeID]
-        } else {
-          state.sidebarSelectedWorktreeIDs = []
-        }
+        setSingleWorktreeSelection(worktreeID, state: &state)
         if focusTerminal, let worktreeID {
           state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
         }
@@ -815,7 +810,7 @@ struct RepositoriesFeature {
             progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
           )
         )
-        state.selection = .worktree(pendingID)
+        setSingleWorktreeSelection(pendingID, state: &state)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         let createWorktreeStream = gitClient.createWorktreeStream
         let isValidBranchName = gitClient.isValidBranchName
@@ -1060,7 +1055,7 @@ struct RepositoriesFeature {
         state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
         removePendingWorktree(pendingID, state: &state)
         if state.selection == .worktree(pendingID) {
-          state.selection = .worktree(worktree.id)
+          setSingleWorktreeSelection(worktree.id, state: &state)
         }
         insertWorktree(worktree, repositoryID: repositoryID, state: &state)
         return .merge(
@@ -3240,11 +3235,10 @@ private func restoreSelection(
   state: inout RepositoriesFeature.State
 ) {
   guard state.selection == .worktree(pendingID) else { return }
-  if isSelectionValid(id, state: state) {
-    state.selection = id.map(SidebarSelection.worktree)
-  } else {
-    state.selection = nil
-  }
+  setSingleWorktreeSelection(
+    isSelectionValid(id, state: state) ? id : nil,
+    state: &state
+  )
 }
 
 private func isSelectionValid(
@@ -3252,6 +3246,18 @@ private func isSelectionValid(
   state: RepositoriesFeature.State
 ) -> Bool {
   state.selectedRow(for: id) != nil
+}
+
+private func setSingleWorktreeSelection(
+  _ worktreeID: Worktree.ID?,
+  state: inout RepositoriesFeature.State
+) {
+  state.selection = worktreeID.map(SidebarSelection.worktree)
+  if let worktreeID {
+    state.sidebarSelectedWorktreeIDs = [worktreeID]
+  } else {
+    state.sidebarSelectedWorktreeIDs = []
+  }
 }
 
 private func repositoryForWorktreeCreation(
