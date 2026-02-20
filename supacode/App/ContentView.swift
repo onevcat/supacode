@@ -113,6 +113,18 @@ extension EnvironmentValues {
     get { self[SurfaceBackgroundOpacityKey.self] }
     set { self[SurfaceBackgroundOpacityKey.self] = newValue }
   }
+
+  var surfaceChromeBackgroundOpacity: Double {
+    get {
+      if surfaceBackgroundOpacity < 1 {
+        return min(surfaceBackgroundOpacity, 0.72)
+      }
+      return 1
+    }
+    set {
+      surfaceBackgroundOpacity = newValue
+    }
+  }
 }
 
 private struct RunScriptPromptView: View {

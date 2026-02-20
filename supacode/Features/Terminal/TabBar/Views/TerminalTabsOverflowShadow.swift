@@ -7,6 +7,8 @@ struct TerminalTabsOverflowShadow: View {
 
   @Environment(\.controlActiveState)
   private var activeState
+  @Environment(\.surfaceChromeBackgroundOpacity)
+  private var surfaceChromeBackgroundOpacity
 
   var body: some View {
     Rectangle()
@@ -19,15 +21,22 @@ struct TerminalTabsOverflowShadow: View {
           startPoint: startPoint,
           endPoint: endPoint
         )
-        .opacity(activeState == .inactive ? 0.95 : 1)
       )
       .allowsHitTesting(false)
   }
 
   private var gradientColors: [Color] {
     [
-      TerminalTabBarColors.barBackground,
+      TerminalTabBarColors.barBackground.opacity(chromeBackgroundOpacity),
       TerminalTabBarColors.barBackground.opacity(0),
     ]
+  }
+
+  private var chromeBackgroundOpacity: Double {
+    let baseOpacity = surfaceChromeBackgroundOpacity
+    if activeState == .inactive {
+      return baseOpacity * 0.95
+    }
+    return baseOpacity
   }
 }
