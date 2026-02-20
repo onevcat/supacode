@@ -341,7 +341,7 @@ private struct CommandPaletteRowView: View {
   private var badge: String? {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
-      .openPullRequest, .markPullRequestReady, .mergePullRequest, .copyFailingJobURL,
+      .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect:
       return nil
@@ -374,6 +374,8 @@ private struct CommandPaletteRowView: View {
       return "checkmark.seal"
     case .mergePullRequest:
       return "arrow.merge"
+    case .closePullRequest:
+      return "xmark.circle"
     case .copyFailingJobURL:
       return "link"
     case .copyCiFailureLogs:
@@ -398,7 +400,7 @@ private struct CommandPaletteRowView: View {
   private var emphasis: Bool {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
-      .openPullRequest, .markPullRequestReady, .mergePullRequest, .copyFailingJobURL,
+      .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails:
       return true
@@ -500,6 +502,8 @@ private struct CommandPaletteRowView: View {
       base = "Mark pull request ready for review"
     case .mergePullRequest:
       base = "Merge pull request"
+    case .closePullRequest:
+      base = "Close pull request"
     case .copyFailingJobURL:
       base = "Copy failing job URL"
     case .copyCiFailureLogs:

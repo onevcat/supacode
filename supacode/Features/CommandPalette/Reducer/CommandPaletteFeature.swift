@@ -42,6 +42,7 @@ struct CommandPaletteFeature {
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
+    case closePullRequest(Worktree.ID)
     case copyFailingJobURL(Worktree.ID)
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
@@ -313,22 +314,6 @@ private func pullRequestItems(
     return failingItems
   }
 
-  func makeMergeItem() -> CommandPaletteItem? {
-    guard canMerge else { return nil }
-    let successfulChecks = breakdown.passed
-    let successfulChecksLabel =
-      successfulChecks == 1
-      ? "1 successful check"
-      : "\(successfulChecks) successful checks"
-    return CommandPaletteItem(
-      id: CommandPaletteItemID.pullRequestMerge(repositoryID),
-      title: "Merge PR",
-      subtitle: "Merge Ready - \(successfulChecksLabel)",
-      kind: .mergePullRequest(worktreeID),
-      priorityTier: 0
-    )
-  }
-
   var items: [CommandPaletteItem] = [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
@@ -345,11 +330,62 @@ private func pullRequestItems(
 
   items.append(contentsOf: makeFailingItems())
 
-  if let mergeItem = makeMergeItem() {
+  if let mergeItem = makeMergePullRequestItem(
+    canMerge: canMerge,
+    breakdown: breakdown,
+    repositoryID: repositoryID,
+    worktreeID: worktreeID
+  ) {
     items.append(mergeItem)
   }
 
+  if let closeItem = makeClosePullRequestItem(
+    isOpen: isOpen,
+    repositoryID: repositoryID,
+    worktreeID: worktreeID,
+    pullRequestTitle: pullRequest.title
+  ) {
+    items.append(closeItem)
+  }
+
   return items
+}
+
+private func makeMergePullRequestItem(
+  canMerge: Bool,
+  breakdown: PullRequestCheckBreakdown,
+  repositoryID: Repository.ID,
+  worktreeID: Worktree.ID
+) -> CommandPaletteItem? {
+  guard canMerge else { return nil }
+  let successfulChecks = breakdown.passed
+  let successfulChecksLabel =
+    successfulChecks == 1
+    ? "1 successful check"
+    : "\(successfulChecks) successful checks"
+  return CommandPaletteItem(
+    id: CommandPaletteItemID.pullRequestMerge(repositoryID),
+    title: "Merge PR",
+    subtitle: "Merge Ready - \(successfulChecksLabel)",
+    kind: .mergePullRequest(worktreeID),
+    priorityTier: 0
+  )
+}
+
+private func makeClosePullRequestItem(
+  isOpen: Bool,
+  repositoryID: Repository.ID,
+  worktreeID: Worktree.ID,
+  pullRequestTitle: String
+) -> CommandPaletteItem? {
+  guard isOpen else { return nil }
+  return CommandPaletteItem(
+    id: CommandPaletteItemID.pullRequestClose(repositoryID),
+    title: "Close PR",
+    subtitle: pullRequestTitle,
+    kind: .closePullRequest(worktreeID),
+    priorityTier: 1
+  )
 }
 
 #if DEBUG
@@ -401,6 +437,7 @@ private enum CommandPaletteItemID {
       pullRequestRerunFailedJobs(repositoryID),
       pullRequestOpenFailingCheck(repositoryID),
       pullRequestMerge(repositoryID),
+      pullRequestClose(repositoryID),
     ]
   }
 
@@ -430,6 +467,10 @@ private enum CommandPaletteItemID {
 
   static func pullRequestMerge(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
     "pr.\(repositoryID).merge"
+  }
+
+  static func pullRequestClose(_ repositoryID: Repository.ID) -> CommandPaletteItem.ID {
+    "pr.\(repositoryID).close"
   }
 }
 
@@ -486,6 +527,7 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
   case .openPullRequest,
     .markPullRequestReady,
     .mergePullRequest,
+    .closePullRequest,
     .copyFailingJobURL,
     .copyCiFailureLogs,
     .rerunFailedJobs,
@@ -508,6 +550,8 @@ private func pullRequestDelegateAction(
     return .markPullRequestReady(worktreeID)
   case .mergePullRequest(let worktreeID):
     return .mergePullRequest(worktreeID)
+  case .closePullRequest(let worktreeID):
+    return .closePullRequest(worktreeID)
   case .copyFailingJobURL(let worktreeID):
     return .copyFailingJobURL(worktreeID)
   case .copyCiFailureLogs(let worktreeID):

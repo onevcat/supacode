@@ -457,6 +457,45 @@ struct CommandPaletteFeatureTests {
     #expect(ordered.first?.title == "Merge PR")
   }
 
+  @Test func commandPaletteShowsCloseActionForOpenPullRequest() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-close", name: "close", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "OPEN")
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let closeItem = items.first(where: { $0.title == "Close PR" })
+    #expect(closeItem != nil)
+    #expect(closeItem?.subtitle == "PR")
+    if case .some(.closePullRequest(let closeWorktreeID)) = closeItem?.kind {
+      #expect(closeWorktreeID == worktree.id)
+    } else {
+      Issue.record("Expected close pull request command palette action")
+    }
+  }
+
+  @Test func commandPaletteDoesNotShowCloseActionForMergedPullRequest() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-merged", name: "merged", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "MERGED")
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    #expect(!items.contains(where: { $0.title == "Close PR" }))
+  }
+
   @Test func commandPaletteDoesNotShowMergeActionWhenBlocked() {
     let rootPath = "/tmp/repo"
     let worktree = makeWorktree(id: "\(rootPath)/wt-blocked", name: "blocked", repoRoot: rootPath)

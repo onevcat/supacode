@@ -264,6 +264,7 @@ struct RepositoriesFeature {
     case openOnGithub
     case markReadyForReview
     case merge
+    case close
     case copyFailingJobURL
     case copyCiFailureLogs
     case rerunFailedJobs
@@ -2165,6 +2166,36 @@ struct RepositoriesFeature {
               await send(
                 .presentAlert(
                   title: "Failed to merge pull request",
+                  message: error.localizedDescription
+                )
+              )
+            }
+          }
+
+        case .close:
+          let githubCLI = githubCLI
+          let githubIntegration = githubIntegration
+          return .run { send in
+            guard await githubIntegration.isAvailable() else {
+              await send(
+                .presentAlert(
+                  title: "GitHub integration unavailable",
+                  message: "Enable GitHub integration to close a pull request."
+                )
+              )
+              return
+            }
+            await send(.showToast(.inProgress("Closing pull request…")))
+            do {
+              try await githubCLI.closePullRequest(worktreeRoot, pullRequest.number)
+              await send(.showToast(.success("Pull request closed")))
+              await send(.worktreeInfoEvent(pullRequestRefresh))
+              await send(.delayedPullRequestRefresh(worktreeID))
+            } catch {
+              await send(.dismissToast)
+              await send(
+                .presentAlert(
+                  title: "Failed to close pull request",
                   message: error.localizedDescription
                 )
               )

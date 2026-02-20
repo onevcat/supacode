@@ -45,6 +45,7 @@ struct GithubCLIClient: Sendable {
   var latestRun: @Sendable (URL, String) async throws -> GithubWorkflowRun?
   var batchPullRequests: @Sendable (String, String, String, [String]) async throws -> [String: GithubPullRequest]
   var mergePullRequest: @Sendable (URL, Int, PullRequestMergeStrategy) async throws -> Void
+  var closePullRequest: @Sendable (URL, Int) async throws -> Void
   var markPullRequestReady: @Sendable (URL, Int) async throws -> Void
   var rerunFailedJobs: @Sendable (URL, Int) async throws -> Void
   var failedRunLogs: @Sendable (URL, Int) async throws -> String
@@ -63,6 +64,7 @@ extension GithubCLIClient: DependencyKey {
       latestRun: latestRunFetcher(shell: shell, resolver: resolver),
       batchPullRequests: batchPullRequestsFetcher(shell: shell, resolver: resolver),
       mergePullRequest: mergePullRequestFetcher(shell: shell, resolver: resolver),
+      closePullRequest: closePullRequestFetcher(shell: shell, resolver: resolver),
       markPullRequestReady: markPullRequestReadyFetcher(shell: shell, resolver: resolver),
       rerunFailedJobs: rerunFailedJobsFetcher(shell: shell, resolver: resolver),
       failedRunLogs: failedRunLogsFetcher(shell: shell, resolver: resolver),
@@ -77,6 +79,7 @@ extension GithubCLIClient: DependencyKey {
     latestRun: { _, _ in nil },
     batchPullRequests: { _, _, _, _ in [:] },
     mergePullRequest: { _, _, _ in },
+    closePullRequest: { _, _ in },
     markPullRequestReady: { _, _ in },
     rerunFailedJobs: { _, _ in },
     failedRunLogs: { _, _ in "" },
@@ -265,6 +268,24 @@ nonisolated private func mergePullRequestFetcher(
         "merge",
         "\(pullRequestNumber)",
         "--\(strategy.ghArgument)",
+      ],
+      repoRoot: repoRoot
+    )
+  }
+}
+
+nonisolated private func closePullRequestFetcher(
+  shell: ShellClient,
+  resolver: GithubCLIExecutableResolver
+) -> @Sendable (URL, Int) async throws -> Void {
+  { repoRoot, pullRequestNumber in
+    _ = try await runGh(
+      shell: shell,
+      resolver: resolver,
+      arguments: [
+        "pr",
+        "close",
+        "\(pullRequestNumber)",
       ],
       repoRoot: repoRoot
     )

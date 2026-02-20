@@ -33,6 +33,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case openPullRequest(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
+    case closePullRequest(Worktree.ID)
     case copyFailingJobURL(Worktree.ID)
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
@@ -49,6 +50,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .openPullRequest,
       .markPullRequestReady,
       .mergePullRequest,
+      .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs,
@@ -70,6 +72,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .openPullRequest,
       .markPullRequestReady,
       .mergePullRequest,
+      .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs,
@@ -101,6 +104,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.openPullRequest
     case .markPullRequestReady,
       .mergePullRequest,
+      .closePullRequest,
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs,
