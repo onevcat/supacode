@@ -18,6 +18,28 @@ struct TerminalTabBarTrailingAccessories: View {
   @State private var closeTask: Task<Void, Never>?
 
   var body: some View {
+    HStack(spacing: TerminalTabBarMetrics.contentTrailingSpacing) {
+      newTabButton
+      splitButton(
+        title: "Split Vertically",
+        systemImage: "rectangle.righthalf.inset.filled",
+        shortcutBinding: "new_split:right",
+        action: splitVertically
+      )
+      .disabled(!canSplit)
+      splitButton(
+        title: "Split Horizontally",
+        systemImage: "rectangle.bottomhalf.inset.filled",
+        shortcutBinding: "new_split:down",
+        action: splitHorizontally
+      )
+      .disabled(!canSplit)
+    }
+    .frame(height: TerminalTabBarMetrics.barHeight)
+    .padding(.trailing, 8)
+  }
+
+  private var newTabButton: some View {
     Button {
       createTab()
       isHoverPopoverPresented = false
@@ -56,8 +78,32 @@ struct TerminalTabBarTrailingAccessories: View {
           updateHoverPopoverVisibility()
         }
     }
-    .frame(height: TerminalTabBarMetrics.barHeight)
-    .padding(.trailing, 8)
+  }
+
+  private func splitButton(
+    title: String,
+    systemImage: String,
+    shortcutBinding: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    let shortcut = ghosttyShortcuts.display(for: shortcutBinding)
+
+    return Button(action: action) {
+      if commandKeyObserver.isPressed {
+        HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
+          Text(title)
+            .font(.caption)
+          if let shortcut {
+            ShortcutHintView(text: shortcut, color: TerminalTabBarColors.inactiveText)
+          }
+        }
+      } else {
+        Label(title, systemImage: systemImage)
+          .labelStyle(.iconOnly)
+      }
+    }
+    .buttonStyle(.borderless)
+    .help(helpText(title, shortcut: shortcut))
   }
 
   private var hoverPopoverContent: some View {
