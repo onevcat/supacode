@@ -257,9 +257,6 @@ final class GhosttySurfaceView: NSView, Identifiable {
     updateContentScale()
     updateSurfaceSize()
     applyWindowBackgroundAppearance()
-    DispatchQueue.main.async { [weak self] in
-      self?.applyWindowBackgroundAppearance()
-    }
   }
 
   override func viewDidChangeBackingProperties() {
