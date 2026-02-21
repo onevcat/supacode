@@ -117,7 +117,8 @@ extension EnvironmentValues {
   var surfaceChromeBackgroundOpacity: Double {
     get {
       if surfaceBackgroundOpacity < 1 {
-        return min(surfaceBackgroundOpacity, 0.5)
+        let proportionalOpacity = surfaceBackgroundOpacity * 0.68
+        return min(max(proportionalOpacity, 0.45), 0.72)
       }
       return 1
     }
