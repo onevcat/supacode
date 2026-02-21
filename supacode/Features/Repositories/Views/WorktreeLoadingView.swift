@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorktreeLoadingView: View {
   let info: WorktreeLoadingInfo
+  @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
   private let bottomAnchorID = "worktree-loading-bottom"
 
   var body: some View {
@@ -59,6 +60,7 @@ struct WorktreeLoadingView: View {
     .frame(maxWidth: 640)
     .padding(.horizontal, 16)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
   }
 
   private func scrollToBottom(using proxy: ScrollViewProxy, animated: Bool) {
