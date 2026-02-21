@@ -299,6 +299,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     let opacity = runtime.backgroundOpacity()
     if !window.styleMask.contains(.fullScreen), opacity < 1 {
       window.isOpaque = false
+      window.titlebarAppearsTransparent = true
       window.backgroundColor = .white.withAlphaComponent(0.001)
       if let app = runtime.app {
         ghostty_set_window_background_blur(
@@ -309,6 +310,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       return
     }
     window.isOpaque = true
+    window.titlebarAppearsTransparent = false
     window.backgroundColor = runtime.backgroundColor().withAlphaComponent(1)
   }
 
