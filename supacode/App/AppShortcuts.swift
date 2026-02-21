@@ -26,6 +26,10 @@ struct AppShortcut {
     return parts.joined(separator: "+")
   }
 
+  var ghosttyUnbindArgument: String {
+    "--keybind=\(ghosttyKeybind)=unbind"
+  }
+
   var display: String {
     let parts = displayModifierParts + [keyEquivalent.display]
     return parts.joined()
@@ -55,6 +59,25 @@ struct AppShortcut {
 }
 
 enum AppShortcuts {
+  private struct TabSelectionBinding {
+    let unicode: String
+    let physical: String
+    let tabIndex: Int
+  }
+
+  private static let tabSelectionBindings: [TabSelectionBinding] = [
+    TabSelectionBinding(unicode: "1", physical: "digit_1", tabIndex: 1),
+    TabSelectionBinding(unicode: "2", physical: "digit_2", tabIndex: 2),
+    TabSelectionBinding(unicode: "3", physical: "digit_3", tabIndex: 3),
+    TabSelectionBinding(unicode: "4", physical: "digit_4", tabIndex: 4),
+    TabSelectionBinding(unicode: "5", physical: "digit_5", tabIndex: 5),
+    TabSelectionBinding(unicode: "6", physical: "digit_6", tabIndex: 6),
+    TabSelectionBinding(unicode: "7", physical: "digit_7", tabIndex: 7),
+    TabSelectionBinding(unicode: "8", physical: "digit_8", tabIndex: 8),
+    TabSelectionBinding(unicode: "9", physical: "digit_9", tabIndex: 9),
+    TabSelectionBinding(unicode: "0", physical: "digit_0", tabIndex: 10),
+  ]
+
   static let newWorktree = AppShortcut(key: "n", modifiers: .command)
   static let openSettings = AppShortcut(key: ",", modifiers: .command)
   static let openFinder = AppShortcut(key: "o", modifiers: .command)
@@ -95,6 +118,18 @@ enum AppShortcuts {
     selectWorktree9,
     selectWorktree0,
   ]
+
+  static let tabSelectionGhosttyKeybindArguments: [String] = tabSelectionBindings.flatMap { binding in
+    [
+      "--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)",
+      "--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)",
+    ]
+  }
+
+  static var ghosttyCLIKeybindArguments: [String] {
+    all.map(\.ghosttyUnbindArgument) + tabSelectionGhosttyKeybindArguments
+  }
+
   static let all: [AppShortcut] = [
     newWorktree,
     openSettings,

@@ -19,8 +19,8 @@ private enum GhosttyCLI {
     var args: [UnsafeMutablePointer<CChar>?] = []
     let executable = CommandLine.arguments.first ?? "supacode"
     args.append(strdup(executable))
-    for shortcut in AppShortcuts.all {
-      args.append(strdup("--keybind=\(shortcut.ghosttyKeybind)=unbind"))
+    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments {
+      args.append(strdup(keybindArgument))
     }
     args.append(nil)
     return args
