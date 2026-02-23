@@ -117,10 +117,3 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 
 - `ThirdParty/ghostty` (`https://github.com/ghostty-org/ghostty`): Source dependency used to build `Frameworks/GhosttyKit.xcframework` and terminal resources.
 - `Resources/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Supacode Git worktree flows at runtime.
-- Keep submodules initialized and updated in local clones:
-  - `git submodule update --init --recursive`
-  - `git submodule update --remote --recursive` (when intentionally bumping submodule revisions)
-
-## References
-
-- `git@github.com:ghostty-org/ghostty.git` - Dive into this codebase when implementing Ghostty features
