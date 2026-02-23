@@ -18,14 +18,14 @@ struct AppShortcutsTests {
     }
   }
 
-  @Test func worktreeSelectionUsesCommandNumberShortcuts() {
+  @Test func worktreeSelectionUsesControlNumberShortcuts() {
     expectNoDifference(
       AppShortcuts.worktreeSelection.map(\.display),
-      ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9", "⌘0"]
+      ["⌃1", "⌃2", "⌃3", "⌃4", "⌃5", "⌃6", "⌃7", "⌃8", "⌃9", "⌃0"]
     )
 
     for shortcut in AppShortcuts.worktreeSelection {
-      #expect(shortcut.modifiers == .command)
+      #expect(shortcut.modifiers == .control)
     }
   }
 
@@ -66,10 +66,6 @@ struct AppShortcutsTests {
 
     for argument in AppShortcuts.tabSelectionGhosttyKeybindArguments {
       #expect(arguments.contains(argument))
-    }
-
-    for argument in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map({ "--keybind=ctrl+\($0)=unbind" }) {
-      #expect(arguments.contains(argument) == false)
     }
 
     for argument in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map({ "--keybind=ctrl+digit_\($0)=unbind" }) {
