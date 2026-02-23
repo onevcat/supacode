@@ -16,8 +16,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case gitkraken
   case gitup
   case ghostty
+  case intellij
   case kitty
   case pycharm
+  case rustrover
   case smartgit
   case sourcetree
   case sublimeMerge
@@ -44,8 +46,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitkraken: "GitKraken"
     case .gitup: "GitUp"
     case .ghostty: "Ghostty"
+    case .intellij: "IntelliJ IDEA"
     case .kitty: "Kitty"
     case .pycharm: "PyCharm"
+    case .rustrover: "RustRover"
     case .smartgit: "SmartGit"
     case .sourcetree: "Sourcetree"
     case .sublimeMerge: "Sublime Merge"
@@ -67,8 +71,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder: "Finder"
     case .editor: "$EDITOR"
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .pycharm, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders,
-      .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
+      .vscode, .vscodeInsiders, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       title
     }
   }
@@ -89,8 +93,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder, .editor:
       return true
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .pycharm, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders,
-      .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+      .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
+      .vscode, .vscodeInsiders, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -107,8 +111,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitkraken: "gitkraken"
     case .gitup: "gitup"
     case .ghostty: "ghostty"
+    case .intellij: "intellij"
     case .kitty: "kitty"
     case .pycharm: "pycharm"
+    case .rustrover: "rustrover"
     case .smartgit: "smartgit"
     case .sourcetree: "sourcetree"
     case .sublimeMerge: "sublime-merge"
@@ -136,8 +142,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .gitkraken: "com.axosoft.gitkraken"
     case .gitup: "co.gitup.mac"
     case .ghostty: "com.mitchellh.ghostty"
+    case .intellij: "com.jetbrains.intellij"
     case .kitty: "net.kovidgoyal.kitty"
     case .pycharm: "com.jetbrains.pycharm"
+    case .rustrover: "com.jetbrains.rustrover"
     case .smartgit: "com.syntevo.smartgit"
     case .sourcetree: "com.torusknot.SourceTreeNotMAS"
     case .sublimeMerge: "com.sublimemerge"
@@ -161,8 +169,10 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     .vscode,
     .windsurf,
     .vscodeInsiders,
+    .intellij,
     .webstorm,
     .pycharm,
+    .rustrover,
     .antigravity,
   ]
   static let terminalPriority: [OpenWorktreeAction] = [
@@ -237,7 +247,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .finder:
       NSWorkspace.shared.activateFileViewerSelecting([worktree.workingDirectory])
     // Apps that require CLI arguments instead of Apple Events to open directories.
-    case .webstorm, .pycharm:
+    case .intellij, .webstorm, .pycharm, .rustrover:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier
