@@ -26,7 +26,8 @@ struct WorktreeDetailTitleView: View {
       }
       .font(.headline)
     }
-    .help("Rename branch")
+    .help("Rename branch (⌘M)")
+    .keyboardShortcut("m", modifiers: .command)
     .onHover { hovering in
       isHovered = hovering
     }
