@@ -1965,6 +1965,19 @@ struct RepositoriesFeatureTests {
     await store.send(.selectNextWorktree)
   }
 
+  @Test func selectPreviousWorktreeAllCollapsedIsNoOp() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    var state = makeState(repositories: [repo1])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo1.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+  }
+
   @Test func selectNextWorktreeWrapsAroundSkippingCollapsedRepo() async {
     let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
     let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
