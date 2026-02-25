@@ -2617,12 +2617,15 @@ extension RepositoriesFeature.State {
     selection?.worktreeID
   }
 
-  func worktreeID(byOffset offset: Int) -> Worktree.ID? {
+  var expandedRepositoryIDs: Set<Repository.ID> {
     let repositoryIDs = Set(repositories.map(\.id))
     let collapsedSet = Set(collapsedRepositoryIDs).intersection(repositoryIDs)
     let pendingRepositoryIDs = Set(pendingWorktrees.map(\.repositoryID))
-    let expandedIDs = repositoryIDs.subtracting(collapsedSet).union(pendingRepositoryIDs)
-    let rows = orderedWorktreeRows(includingRepositoryIDs: expandedIDs)
+    return repositoryIDs.subtracting(collapsedSet).union(pendingRepositoryIDs)
+  }
+
+  func worktreeID(byOffset offset: Int) -> Worktree.ID? {
+    let rows = orderedWorktreeRows(includingRepositoryIDs: expandedRepositoryIDs)
     guard !rows.isEmpty else { return nil }
     if let currentID = selectedWorktreeID,
       let currentIndex = rows.firstIndex(where: { $0.id == currentID })

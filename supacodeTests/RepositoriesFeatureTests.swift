@@ -1908,6 +1908,85 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func selectNextWorktreeSkipsCollapsedRepository() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt3.id)
+      $0.sidebarSelectedWorktreeIDs = [wt3.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectPreviousWorktreeSkipsCollapsedRepository() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt3.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeAllCollapsedIsNoOp() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    var state = makeState(repositories: [repo1])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo1.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+  }
+
+  @Test func selectNextWorktreeWrapsAroundSkippingCollapsedRepo() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt3.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
   private func makeWorktree(
     id: String,
     name: String,
