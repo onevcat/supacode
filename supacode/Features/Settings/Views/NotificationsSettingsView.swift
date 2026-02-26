@@ -19,7 +19,7 @@ struct NotificationsSettingsView: View {
           )
           .help("Show a badge on the Dock icon for unread notifications")
           Toggle(
-            "Play notification sound",
+            "Play in app notification sound",
             isOn: $store.notificationSoundEnabled
           )
           .help("Play a sound when a notification is received")
