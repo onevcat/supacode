@@ -31,7 +31,10 @@ struct AppFeatureSystemNotificationTests {
     await store.send(.settings(.binding(.set(\.systemNotificationsEnabled, true)))) {
       $0.settings.systemNotificationsEnabled = true
     }
-    await store.finish()
+    await store.receive(\.systemNotificationsPermissionFailed)
+    await store.receive(\.settings.binding) {
+      $0.settings.systemNotificationsEnabled = false
+    }
 
     let expectedAlert = AlertState<AppFeature.Alert> {
       TextState("Enable Notifications in System Settings")
@@ -79,7 +82,10 @@ struct AppFeatureSystemNotificationTests {
     await store.send(.settings(.binding(.set(\.systemNotificationsEnabled, true)))) {
       $0.settings.systemNotificationsEnabled = true
     }
-    await store.finish()
+    await store.receive(\.systemNotificationsPermissionFailed)
+    await store.receive(\.settings.binding) {
+      $0.settings.systemNotificationsEnabled = false
+    }
 
     let expectedAlert = AlertState<AppFeature.Alert> {
       TextState("Enable Notifications in System Settings")
