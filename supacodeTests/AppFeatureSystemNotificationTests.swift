@@ -133,7 +133,9 @@ struct AppFeatureSystemNotificationTests {
     )
     await store.finish()
 
-    #expect(sends.value == [("Done", "Build succeeded")])
+    #expect(sends.value.count == 1)
+    #expect(sends.value.first?.0 == "Done")
+    #expect(sends.value.first?.1 == "Build succeeded")
   }
 
   @Test(.dependencies) func notificationReceivedSkipsLocalSoundWhenSystemNotificationsEnabled() async {
