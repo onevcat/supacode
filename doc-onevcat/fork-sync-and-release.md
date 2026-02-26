@@ -59,14 +59,17 @@ If conflicts happen, resolve once, commit, and `rerere` will likely auto-apply n
 
 ## Personal Release Strategy (Fork Release Page)
 
-For personal usage, the easiest path is:
+The release helper now supports automatic notarization for personal fork releases.
 
-1) Build unsigned Debug app locally (`make build-app`).
-2) Zip app bundle.
-3) Create a tag.
-4) Upload zip to your fork GitHub Release page.
+Default flow:
 
-This avoids Apple signing/notarization setup and keeps the workflow simple.
+1) Build app locally (`make build-app`).
+2) Sign app with your `Developer ID Application` identity.
+3) Notarize via `notarytool` and staple ticket to app.
+4) Zip app bundle.
+5) Create tag and upload zip to your fork GitHub Release page.
+
+If you want the old behavior (no notarization), set `ENABLE_NOTARIZATION=0`.
 
 ## Helper Scripts
 
@@ -75,6 +78,8 @@ This avoids Apple signing/notarization setup and keeps the workflow simple.
   - Default target repo: auto-detected from `origin`
   - Override target repo: `GH_REPO=owner/repo`
   - Release create fallback: if `gh release create` fails (for example token scope mismatch), script falls back to `gh api` and then uploads assets
+  - Notarization: enabled by default (`ENABLE_NOTARIZATION=1`)
+  - Default keychain profile name: `supacode-notary` (override with `APPLE_NOTARY_KEYCHAIN_PROFILE`)
 
 ### Example
 
@@ -88,6 +93,24 @@ This avoids Apple signing/notarization setup and keeps the workflow simple.
 # Or specify tag explicitly
 ./doc-onevcat/scripts/release-to-fork.sh onevcat-v2026.02.26-01
 ```
+
+## Notarization Credentials
+
+The script first tries `xcrun notarytool submit --keychain-profile <profile>`.
+If profile is missing, it will create one using either:
+
+- App Store Connect API key:
+  - `APPLE_NOTARIZATION_KEY_PATH`
+  - `APPLE_NOTARIZATION_KEY_ID`
+  - `APPLE_NOTARIZATION_ISSUER`
+- Or Apple ID credentials:
+  - `APPLE_ID`
+  - `APPLE_PASSWORD` (app-specific password)
+  - `APPLE_TEAM_ID` (optional if inferable from signing identity)
+
+Signing identity:
+
+- `APPLE_SIGNING_IDENTITY` (optional). If omitted, script auto-detects the first available `Developer ID Application` identity from keychain.
 
 ## Optional: Full Signed Release on Fork
 
