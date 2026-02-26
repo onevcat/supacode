@@ -435,7 +435,6 @@ private struct MultiSelectedWorktreesDetailView: View {
   private let visibleRowsLimit = 8
 
   var body: some View {
-    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     VStack(alignment: .leading, spacing: 16) {
       Text("\(rows.count) worktrees selected")
@@ -463,7 +462,7 @@ private struct MultiSelectedWorktreesDetailView: View {
       VStack(alignment: .leading, spacing: 6) {
         Text("Available actions")
           .font(.headline)
-        Text("Archive selected (\(archiveShortcut))")
+        Text("Archive selected")
         Text("Delete selected (\(deleteShortcut))")
         Text("Right-click any selected worktree to apply actions to all selected worktrees.")
       }

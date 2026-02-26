@@ -32,7 +32,6 @@ struct WorktreeRow: View {
     let displayRemovedLines = info?.removedLines
     let mergeReadiness = pullRequestMergeReadiness(for: display.pullRequest)
     let hasChangeCounts = displayAddedLines != nil && displayRemovedLines != nil
-    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
@@ -104,7 +103,7 @@ struct WorktreeRow: View {
               .accessibilityLabel("Archive worktree")
           }
           .buttonStyle(.plain)
-          .help("Archive Worktree (\(archiveShortcut))")
+          .help("Archive Worktree")
           .disabled(archiveAction == nil)
         }
       }

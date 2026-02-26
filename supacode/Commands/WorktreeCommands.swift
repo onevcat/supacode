@@ -21,7 +21,6 @@ struct WorktreeCommands: Commands {
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
     let pullRequestURL = selectedPullRequestURL
     let githubIntegrationEnabled = store.settings.githubIntegrationEnabled
-    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     CommandMenu("Worktrees") {
       Button("Select Next Worktree") {
@@ -96,8 +95,7 @@ struct WorktreeCommands: Commands {
       Button("Archive Worktree") {
         archiveWorktreeAction?()
       }
-      .keyboardShortcut(.delete, modifiers: .command)
-      .help("Archive Worktree (\(archiveShortcut))")
+      .help("Archive Worktree")
       .disabled(archiveWorktreeAction == nil)
       Button("Delete Worktree") {
         deleteWorktreeAction?()

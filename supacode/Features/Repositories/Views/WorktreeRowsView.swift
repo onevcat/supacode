@@ -217,7 +217,6 @@ struct WorktreeRowsView: View {
 
   @ViewBuilder
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
-    let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let contextRows = contextActionRows(for: row)
     let isBulkSelection = contextRows.count > 1
@@ -238,8 +237,8 @@ struct WorktreeRowsView: View {
     }
     let archiveTitle =
       isBulkSelection
-      ? "Archive Selected Worktrees (\(archiveShortcut))"
-      : "Archive Worktree (\(archiveShortcut))"
+      ? "Archive Selected Worktrees"
+      : "Archive Worktree"
     let deleteTitle =
       isBulkSelection
       ? "Delete Selected Worktrees (\(deleteShortcut))"
