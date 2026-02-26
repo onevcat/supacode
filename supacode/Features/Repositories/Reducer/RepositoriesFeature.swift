@@ -92,6 +92,7 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
@@ -2726,8 +2727,15 @@ extension RepositoriesFeature.State {
     selection?.worktreeID
   }
 
+  var expandedRepositoryIDs: Set<Repository.ID> {
+    let repositoryIDs = Set(repositories.map(\.id))
+    let collapsedSet = Set(collapsedRepositoryIDs).intersection(repositoryIDs)
+    let pendingRepositoryIDs = Set(pendingWorktrees.map(\.repositoryID))
+    return repositoryIDs.subtracting(collapsedSet).union(pendingRepositoryIDs)
+  }
+
   func worktreeID(byOffset offset: Int) -> Worktree.ID? {
-    let rows = orderedWorktreeRows()
+    let rows = orderedWorktreeRows(includingRepositoryIDs: expandedRepositoryIDs)
     guard !rows.isEmpty else { return nil }
     if let currentID = selectedWorktreeID,
       let currentIndex = rows.firstIndex(where: { $0.id == currentID })

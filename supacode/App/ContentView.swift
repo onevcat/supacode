@@ -160,8 +160,10 @@ private struct RunScriptPromptView: View {
       }
 
       ZStack(alignment: .topLeading) {
-        TextEditor(text: $script)
-          .font(.body.monospaced())
+        PlainTextEditor(
+          text: $script,
+          isMonospaced: true
+        )
           .frame(minHeight: 160)
         if script.isEmpty {
           Text("npm run dev")
