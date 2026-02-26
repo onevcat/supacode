@@ -12,6 +12,9 @@ private enum CancelID {
   static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
   static let worktreePromptLoad = "repositories.worktreePromptLoad"
   static let worktreePromptValidation = "repositories.worktreePromptValidation"
+  static func archiveScript(_ worktreeID: Worktree.ID) -> String {
+    "repositories.archiveScript.\(worktreeID)"
+  }
   static func delayedPRRefresh(_ worktreeID: Worktree.ID) -> String {
     "repositories.delayedPRRefresh.\(worktreeID)"
   }
@@ -1282,6 +1285,7 @@ struct RepositoriesFeature {
             await send(.archiveScriptFailed(worktreeID: worktreeID, message: error.localizedDescription))
           }
         }
+        .cancellable(id: CancelID.archiveScript(worktreeID), cancelInFlight: true)
 
       case .archiveScriptProgressUpdated(let worktreeID, let progress):
         guard state.archivingWorktreeIDs.contains(worktreeID) else {
@@ -1291,11 +1295,17 @@ struct RepositoriesFeature {
         return .none
 
       case .archiveScriptSucceeded(let worktreeID, let repositoryID):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
         state.archivingWorktreeIDs.remove(worktreeID)
         state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
         return .send(.archiveWorktreeApply(worktreeID, repositoryID))
 
       case .archiveScriptFailed(let worktreeID, let message):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
         state.archivingWorktreeIDs.remove(worktreeID)
         state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
         state.alert = messageAlert(title: "Archive script failed", message: message)

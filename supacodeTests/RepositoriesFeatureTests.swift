@@ -884,6 +884,41 @@ struct RepositoriesFeatureTests {
     #expect(store.state.archivedWorktreeIDs.isEmpty)
   }
 
+  @Test func archiveScriptSucceededIgnoredWhenNotArchiving() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id))
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+  }
+
+  @Test func archiveScriptFailedIgnoredWhenNotArchiving() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "late failure"))
+    #expect(store.state.alert == nil)
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+  }
+
   @Test func requestRenameBranchWithEmptyNameShowsAlert() async {
     let worktree = makeWorktree(id: "/tmp/wt", name: "eagle")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
