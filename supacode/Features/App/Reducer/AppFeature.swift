@@ -253,7 +253,7 @@ struct AppFeature {
         return .none
 
       case .settings(.delegate(.settingsChanged(let settings))):
-        let shouldEvaluateSystemNotificationsPermission =
+        let shouldCheckSystemNotificationPermission =
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         let badgeLabel =
@@ -300,7 +300,7 @@ struct AppFeature {
             )
           },
           .run { send in
-            guard shouldEvaluateSystemNotificationsPermission else { return }
+            guard shouldCheckSystemNotificationPermission else { return }
             let status = await systemNotificationClient.authorizationStatus()
             switch status {
             case .authorized:
