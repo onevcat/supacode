@@ -6,15 +6,14 @@ struct WorktreeLoadingView: View {
   private let bottomAnchorID = "worktree-loading-bottom"
 
   var body: some View {
-    let actionLabel: String
-    switch info.state {
-    case .creating:
-      actionLabel = "Creating"
-    case .archiving:
-      actionLabel = "Archiving"
-    case .removing:
-      actionLabel = "Removing"
-    }
+    let actionLabel =
+      if info.state == .creating {
+        "Creating"
+      } else if info.state == .archiving {
+        "Archiving"
+      } else {
+        "Removing"
+      }
     let fallbackStatus =
       if let repositoryName = info.repositoryName {
         "\(actionLabel) worktree in \(repositoryName)"
