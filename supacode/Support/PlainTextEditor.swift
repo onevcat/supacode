@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct SubstitutionFreeTextEditor: NSViewRepresentable {
+struct PlainTextEditor: NSViewRepresentable {
   @Binding var text: String
   var isMonospaced: Bool = false
 

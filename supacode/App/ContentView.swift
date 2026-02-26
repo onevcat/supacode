@@ -160,7 +160,7 @@ private struct RunScriptPromptView: View {
       }
 
       ZStack(alignment: .topLeading) {
-        SubstitutionFreeTextEditor(
+        PlainTextEditor(
           text: $script,
           isMonospaced: true
         )

@@ -94,7 +94,7 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          SubstitutionFreeTextEditor(
+          PlainTextEditor(
             text: settings.setupScript
           )
           .frame(minHeight: 120)
@@ -115,7 +115,7 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          SubstitutionFreeTextEditor(
+          PlainTextEditor(
             text: settings.runScript
           )
           .frame(minHeight: 120)
