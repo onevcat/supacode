@@ -23,6 +23,7 @@ enum GitOperation: String {
 
 enum GitClientError: LocalizedError {
   case commandFailed(command: String, message: String)
+  case missingBundledWtScript
 
   var errorDescription: String? {
     switch self {
@@ -31,6 +32,8 @@ enum GitClientError: LocalizedError {
         return "Git command failed: \(command)"
       }
       return "Git command failed: \(command)\n\(message)"
+    case .missingBundledWtScript:
+      return "Bundled wt script not found. Run `git submodule update --init Resources/git-wt`."
     }
   }
 }
@@ -48,36 +51,39 @@ struct GitClient {
   }
 
   private let shell: ShellClient
+  private let bundledWtScriptURLProvider: @Sendable () -> URL?
 
-  nonisolated init(shell: ShellClient = .live) {
+  nonisolated init(
+    shell: ShellClient = .live,
+    bundledWtScriptURLProvider: @escaping @Sendable () -> URL? = {
+      Bundle.main.url(forResource: "wt", withExtension: nil, subdirectory: "git-wt")
+    }
+  ) {
     self.shell = shell
+    self.bundledWtScriptURLProvider = bundledWtScriptURLProvider
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
     let normalizedPath = Self.directoryURL(for: path)
-    let wtURL = try wtScriptURL()
-    let output = try await runLoginShellProcess(
-      operation: .repoRoot,
-      executableURL: wtURL,
-      arguments: ["root"],
-      currentDirectoryURL: normalizedPath
-    )
-    if output.isEmpty {
-      let command = "\(wtURL.lastPathComponent) root"
-      throw GitClientError.commandFailed(command: command, message: "Empty output")
+    if let wtURL = bundledWtScriptURL() {
+      let output = try await runLoginShellProcess(
+        operation: .repoRoot,
+        executableURL: wtURL,
+        arguments: ["root"],
+        currentDirectoryURL: normalizedPath
+      )
+      if output.isEmpty {
+        let command = "\(wtURL.lastPathComponent) root"
+        throw GitClientError.commandFailed(command: command, message: "Empty output")
+      }
+      return URL(fileURLWithPath: output).standardizedFileURL
     }
-    return URL(fileURLWithPath: output).standardizedFileURL
+    return try await resolveRepoRootWithGit(for: normalizedPath)
   }
 
   nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
     let repositoryRootURL = repoRoot.standardizedFileURL
-    let output = try await runWtList(repoRoot: repoRoot)
-    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      return []
-    }
-    let data = Data(trimmed.utf8)
-    let entries = try JSONDecoder().decode([GitWtWorktreeEntry].self, from: data)
+    let entries = try await runWtList(repoRoot: repoRoot)
       .filter { !$0.isBare }
     let worktreeEntries = entries.enumerated().map { index, entry in
       let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
@@ -256,7 +262,7 @@ struct GitClient {
     }
     guard let createdWorktree else {
       let repositoryRootURL = repoRoot.standardizedFileURL
-      let wtURL = try wtScriptURL()
+      let wtURL = try requireWtScriptURL()
       let command =
         ([wtURL.lastPathComponent]
         + createWorktreeArguments(
@@ -282,7 +288,7 @@ struct GitClient {
       Task {
         let repositoryRootURL = repoRoot.standardizedFileURL
         do {
-          let wtURL = try wtScriptURL()
+          let wtURL = try requireWtScriptURL()
           let arguments = createWorktreeArguments(
             repositoryRootURL: repositoryRootURL,
             name: name,
@@ -644,22 +650,142 @@ struct GitClient {
     }
   }
 
-  nonisolated private func runWtList(repoRoot: URL) async throws -> String {
-    let wtURL = try wtScriptURL()
-    let arguments = ["ls", "--json"]
-    return try await runLoginShellProcess(
+  nonisolated private func runWtList(repoRoot: URL) async throws -> [GitWtWorktreeEntry] {
+    if let wtURL = bundledWtScriptURL() {
+      let output = try await runLoginShellProcess(
+        operation: .worktreeList,
+        executableURL: wtURL,
+        arguments: ["ls", "--json"],
+        currentDirectoryURL: repoRoot
+      )
+      return try decodeWtWorktreeList(output)
+    }
+    let rootPath = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
       operation: .worktreeList,
-      executableURL: wtURL,
-      arguments: arguments,
-      currentDirectoryURL: repoRoot
+      arguments: ["-C", rootPath, "worktree", "list", "--porcelain"]
     )
+    return parseGitWorktreePorcelainList(output)
   }
 
-  nonisolated private func wtScriptURL() throws -> URL {
-    guard let url = Bundle.main.url(forResource: "wt", withExtension: nil, subdirectory: "git-wt") else {
-      fatalError("Bundled wt script not found")
+  nonisolated private func decodeWtWorktreeList(_ output: String) throws -> [GitWtWorktreeEntry] {
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      return []
     }
-    return url
+    let data = Data(trimmed.utf8)
+    return try JSONDecoder().decode([GitWtWorktreeEntry].self, from: data)
+  }
+
+  nonisolated private func parseGitWorktreePorcelainList(_ output: String) -> [GitWtWorktreeEntry] {
+    let lines = output.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+    var entries: [GitWtWorktreeEntry] = []
+    var path: String?
+    var branch = ""
+    var head = ""
+    var isBare = false
+    func appendEntry() {
+      guard let entryPath = path else {
+        return
+      }
+      entries.append(
+        GitWtWorktreeEntry(
+          branch: branch,
+          path: entryPath,
+          head: head,
+          isBare: isBare
+        )
+      )
+      path = nil
+      branch = ""
+      head = ""
+      isBare = false
+    }
+    for line in lines {
+      if line.isEmpty {
+        appendEntry()
+        continue
+      }
+      if line.hasPrefix("worktree ") {
+        appendEntry()
+        path = String(line.dropFirst("worktree ".count))
+        continue
+      }
+      if line.hasPrefix("branch ") {
+        let value = String(line.dropFirst("branch ".count))
+        branch = Self.shortBranchRef(value)
+        continue
+      }
+      if line.hasPrefix("HEAD ") {
+        head = String(line.dropFirst("HEAD ".count))
+        continue
+      }
+      if line == "bare" {
+        isBare = true
+      }
+    }
+    appendEntry()
+    return entries
+  }
+
+  nonisolated private func resolveRepoRootWithGit(for path: URL) async throws -> URL {
+    let directory = Self.directoryURL(for: path).standardizedFileURL
+    let pathString = directory.path(percentEncoded: false)
+    do {
+      let output = try await runGit(
+        operation: .repoRoot,
+        arguments: ["-C", pathString, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+      )
+      if let resolved = Self.resolveGitCommonDir(output, currentDirectoryURL: directory) {
+        return resolved
+      }
+    } catch {}
+    let output = try await runGit(
+      operation: .repoRoot,
+      arguments: ["-C", pathString, "rev-parse", "--show-toplevel"]
+    )
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      throw GitClientError.commandFailed(
+        command: "git -C \(pathString) rev-parse --show-toplevel", message: "Empty output")
+    }
+    return URL(fileURLWithPath: trimmed).standardizedFileURL
+  }
+
+  nonisolated private static func resolveGitCommonDir(_ output: String, currentDirectoryURL: URL) -> URL? {
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return nil
+    }
+    let commonDir: URL
+    if trimmed.hasPrefix("/") {
+      commonDir = URL(fileURLWithPath: trimmed).standardizedFileURL
+    } else {
+      commonDir = currentDirectoryURL.appending(path: trimmed).standardizedFileURL
+    }
+    if commonDir.lastPathComponent == ".git" {
+      return commonDir.deletingLastPathComponent().standardizedFileURL
+    }
+    return commonDir
+  }
+
+  nonisolated private static func shortBranchRef(_ value: String) -> String {
+    let refPrefix = "refs/heads/"
+    if value.hasPrefix(refPrefix) {
+      return String(value.dropFirst(refPrefix.count))
+    }
+    return value
+  }
+
+  nonisolated private func bundledWtScriptURL() -> URL? {
+    bundledWtScriptURLProvider()
+  }
+
+  nonisolated private func requireWtScriptURL() throws -> URL {
+    guard let wtURL = bundledWtScriptURL() else {
+      throw GitClientError.missingBundledWtScript
+    }
+    return wtURL
   }
 
   nonisolated private func runLoginShellProcess(
