@@ -58,7 +58,7 @@ struct WorktreeRowsView: View {
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
-        moveDisabled: isRepositoryRemoving || row.isDeleting,
+        moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
         shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
       )
     }
@@ -77,7 +77,7 @@ struct WorktreeRowsView: View {
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
-        moveDisabled: isRepositoryRemoving || row.isDeleting,
+        moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
         shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
       )
     }
@@ -94,7 +94,14 @@ struct WorktreeRowsView: View {
     shortcutHint: String?
   ) -> some View {
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
-    let displayName = row.isDeleting ? "\(row.name) (deleting...)" : row.name
+    let displayName =
+      if row.isDeleting {
+        "\(row.name) (deleting...)"
+      } else if row.isArchiving {
+        "\(row.name) (archiving...)"
+      } else {
+        row.name
+      }
     let canShowRowActions = row.isRemovable && !isRepositoryRemoving
     let pinAction: (() -> Void)? =
       canShowRowActions && !row.isMainWorktree
@@ -189,7 +196,7 @@ struct WorktreeRowsView: View {
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,
-      isLoading: row.isPending || row.isDeleting,
+      isLoading: row.isPending || row.isArchiving || row.isDeleting,
       taskStatus: taskStatus,
       isRunScriptRunning: isRunScriptRunning,
       showsNotificationIndicator: config.showsNotificationIndicator,

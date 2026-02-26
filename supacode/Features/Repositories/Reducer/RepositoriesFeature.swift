@@ -20,6 +20,7 @@ private enum CancelID {
 private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)
 private nonisolated let worktreeCreationProgressLineLimit = 200
 private nonisolated let worktreeCreationProgressUpdateStride = 20
+private nonisolated let archiveScriptProgressLineLimit = 200
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -70,6 +71,8 @@ struct RepositoriesFeature {
     var pendingWorktrees: [PendingWorktree] = []
     var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
     var pendingTerminalFocusWorktreeIDs: Set<Worktree.ID> = []
+    var archivingWorktreeIDs: Set<Worktree.ID> = []
+    var archiveScriptProgressByWorktreeID: [Worktree.ID: ArchiveScriptProgress] = [:]
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
@@ -181,6 +184,10 @@ struct RepositoriesFeature {
     case requestArchiveWorktree(Worktree.ID, Repository.ID)
     case requestArchiveWorktrees([ArchiveWorktreeTarget])
     case archiveWorktreeConfirmed(Worktree.ID, Repository.ID)
+    case archiveScriptProgressUpdated(worktreeID: Worktree.ID, progress: ArchiveScriptProgress)
+    case archiveScriptSucceeded(worktreeID: Worktree.ID, repositoryID: Repository.ID)
+    case archiveScriptFailed(worktreeID: Worktree.ID, message: String)
+    case archiveWorktreeApply(Worktree.ID, Repository.ID)
     case unarchiveWorktree(Worktree.ID)
     case requestDeleteWorktree(Worktree.ID, Repository.ID)
     case requestDeleteWorktrees([DeleteWorktreeTarget])
@@ -284,6 +291,7 @@ struct RepositoriesFeature {
   @Dependency(GithubCLIClient.self) private var githubCLI
   @Dependency(GithubIntegrationClient.self) private var githubIntegration
   @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(ShellClient.self) private var shellClient
   @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
@@ -1148,6 +1156,9 @@ struct RepositoriesFeature {
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
+          return .none
+        }
         if state.isWorktreeArchived(worktree.id) {
           return .none
         }
@@ -1183,6 +1194,7 @@ struct RepositoriesFeature {
           }
           if state.isMainWorktree(worktree)
             || state.deletingWorktreeIDs.contains(worktree.id)
+            || state.archivingWorktreeIDs.contains(worktree.id)
             || state.isWorktreeArchived(worktree.id)
           {
             continue
@@ -1221,6 +1233,75 @@ struct RepositoriesFeature {
         )
 
       case .archiveWorktreeConfirmed(let worktreeID, let repositoryID):
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
+        else {
+          return .none
+        }
+        if state.isWorktreeArchived(worktreeID) || state.archivingWorktreeIDs.contains(worktreeID) {
+          state.alert = nil
+          return .none
+        }
+        state.alert = nil
+        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        let script = repositorySettings.archiveScript
+        let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+          return .send(.archiveWorktreeApply(worktreeID, repositoryID))
+        }
+        state.archivingWorktreeIDs.insert(worktreeID)
+        state.archiveScriptProgressByWorktreeID[worktreeID] = ArchiveScriptProgress(
+          titleText: "Running archive script",
+          detailText: "Preparing archive script"
+        )
+        let shellClient = shellClient
+        return .run { send in
+          let envURL = URL(fileURLWithPath: "/usr/bin/env")
+          var progress = ArchiveScriptProgress(
+            titleText: "Running archive script",
+            detailText: "Running archive script"
+          )
+          do {
+            for try await event in shellClient.runLoginStream(
+              envURL,
+              ["bash", "-lc", script],
+              worktree.workingDirectory,
+              log: false
+            ) {
+              switch event {
+              case .line(let line):
+                let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { continue }
+                progress.appendOutputLine(text, maxLines: archiveScriptProgressLineLimit)
+                await send(.archiveScriptProgressUpdated(worktreeID: worktreeID, progress: progress))
+              case .finished:
+                await send(.archiveScriptSucceeded(worktreeID: worktreeID, repositoryID: repositoryID))
+              }
+            }
+          } catch {
+            await send(.archiveScriptFailed(worktreeID: worktreeID, message: error.localizedDescription))
+          }
+        }
+
+      case .archiveScriptProgressUpdated(let worktreeID, let progress):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
+        state.archiveScriptProgressByWorktreeID[worktreeID] = progress
+        return .none
+
+      case .archiveScriptSucceeded(let worktreeID, let repositoryID):
+        state.archivingWorktreeIDs.remove(worktreeID)
+        state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
+        return .send(.archiveWorktreeApply(worktreeID, repositoryID))
+
+      case .archiveScriptFailed(let worktreeID, let message):
+        state.archivingWorktreeIDs.remove(worktreeID)
+        state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
+        state.alert = messageAlert(title: "Archive script failed", message: message)
+        return .none
+
+      case .archiveWorktreeApply(let worktreeID, let repositoryID):
         guard let repository = state.repositories[id: repositoryID],
           let worktree = repository.worktrees[id: worktreeID]
         else {
@@ -1325,6 +1406,9 @@ struct RepositoriesFeature {
           )
           return .none
         }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
+          return .none
+        }
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
@@ -1361,7 +1445,10 @@ struct RepositoriesFeature {
           else {
             continue
           }
-          if state.isMainWorktree(worktree) || state.deletingWorktreeIDs.contains(worktree.id) {
+          if state.isMainWorktree(worktree)
+            || state.deletingWorktreeIDs.contains(worktree.id)
+            || state.archivingWorktreeIDs.contains(worktree.id)
+          {
             continue
           }
           validTargets.append(target)
@@ -1404,6 +1491,9 @@ struct RepositoriesFeature {
         guard let repository = state.repositories[id: repositoryID],
           let worktree = repository.worktrees[id: worktreeID]
         else {
+          return .none
+        }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
           return .none
         }
         if state.deletingWorktreeIDs.contains(worktree.id) {
@@ -1451,9 +1541,11 @@ struct RepositoriesFeature {
         let wasArchived = state.isWorktreeArchived(worktreeID)
         withAnimation(.easeOut(duration: 0.2)) {
           state.deletingWorktreeIDs.remove(worktreeID)
+          state.archivingWorktreeIDs.remove(worktreeID)
           state.pendingWorktrees.removeAll { $0.id == worktreeID }
           state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
           state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
+          state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
           state.worktreeInfoByID.removeValue(forKey: worktreeID)
           state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
           state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
@@ -2504,6 +2596,10 @@ struct RepositoriesFeature {
     let filteredFocusIDs = state.pendingTerminalFocusWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
     }
+    let filteredArchivingIDs = state.archivingWorktreeIDs.intersection(availableWorktreeIDs)
+    let filteredArchiveScriptProgress = state.archiveScriptProgressByWorktreeID.filter {
+      availableWorktreeIDs.contains($0.key)
+    }
     let filteredWorktreeInfo = state.worktreeInfoByID.filter {
       availableWorktreeIDs.contains($0.key)
     }
@@ -2515,6 +2611,8 @@ struct RepositoriesFeature {
         state.deletingWorktreeIDs = filteredDeletingIDs
         state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
         state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
+        state.archivingWorktreeIDs = filteredArchivingIDs
+        state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
         state.worktreeInfoByID = filteredWorktreeInfo
       }
     } else {
@@ -2523,6 +2621,8 @@ struct RepositoriesFeature {
       state.deletingWorktreeIDs = filteredDeletingIDs
       state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
       state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
+      state.archivingWorktreeIDs = filteredArchivingIDs
+      state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
       state.worktreeInfoByID = filteredWorktreeInfo
     }
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
@@ -2689,6 +2789,11 @@ extension RepositoriesFeature.State {
     return pendingWorktrees.first(where: { $0.id == id })
   }
 
+  func archiveScriptProgress(for id: Worktree.ID?) -> ArchiveScriptProgress? {
+    guard let id else { return nil }
+    return archiveScriptProgressByWorktreeID[id]
+  }
+
   func shouldFocusTerminal(for worktreeID: Worktree.ID) -> Bool {
     pendingTerminalFocusWorktreeIDs.contains(worktreeID)
   }
@@ -2704,6 +2809,7 @@ extension RepositoriesFeature.State {
       isPinned: false,
       isMainWorktree: false,
       isPending: true,
+      isArchiving: false,
       isDeleting: isDeleting,
       isRemovable: false
     )
@@ -2718,6 +2824,7 @@ extension RepositoriesFeature.State {
     let isDeleting =
       removingRepositoryIDs.contains(repositoryID)
       || deletingWorktreeIDs.contains(worktree.id)
+    let isArchiving = archivingWorktreeIDs.contains(worktree.id)
     return WorktreeRowModel(
       id: worktree.id,
       repositoryID: repositoryID,
@@ -2727,8 +2834,9 @@ extension RepositoriesFeature.State {
       isPinned: isPinned,
       isMainWorktree: isMainWorktree,
       isPending: false,
+      isArchiving: isArchiving,
       isDeleting: isDeleting,
-      isRemovable: !isDeleting
+      isRemovable: !isDeleting && !isArchiving
     )
   }
 
@@ -3131,6 +3239,8 @@ private func cleanupWorktreeState(
   state.pendingWorktrees.removeAll { $0.id == worktreeID }
   state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
   state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
+  state.archivingWorktreeIDs.remove(worktreeID)
+  state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
   state.deletingWorktreeIDs.remove(worktreeID)
   state.worktreeInfoByID.removeValue(forKey: worktreeID)
   let didUpdatePinned = state.pinnedWorktreeIDs.contains(worktreeID)

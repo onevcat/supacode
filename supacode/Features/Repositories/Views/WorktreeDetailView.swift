@@ -392,6 +392,17 @@ struct WorktreeDetailView: View {
         statusLines: []
       )
     }
+    if selectedRow.isArchiving {
+      let progress = repositories.archiveScriptProgress(for: selectedWorktreeID)
+      return WorktreeLoadingInfo(
+        name: selectedRow.name,
+        repositoryName: repositoryName,
+        state: .archiving,
+        statusTitle: progress?.titleText ?? selectedRow.name,
+        statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusLines: progress?.outputLines ?? []
+      )
+    }
     if selectedRow.isPending {
       let pending = repositories.pendingWorktree(for: selectedWorktreeID)
       let progress = pending?.progress
