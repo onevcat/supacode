@@ -21,6 +21,7 @@ struct WorktreeLoadingView: View {
         "\(actionLabel) worktree..."
       }
     let statusLine = info.statusDetail ?? info.statusTitle ?? fallbackStatus
+    let statusCommand = info.statusCommand
     VStack(spacing: 10) {
       ProgressView()
       Text(info.name)
@@ -31,10 +32,25 @@ struct WorktreeLoadingView: View {
           .font(.subheadline)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
+        if let statusCommand {
+          Text(statusCommand)
+            .font(.caption)
+            .monospaced()
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+        }
       } else {
         ScrollViewReader { scrollProxy in
           ScrollView {
             VStack(alignment: .leading, spacing: 4) {
+              if let statusCommand {
+                Text(statusCommand)
+                  .font(.caption)
+                  .monospaced()
+                  .foregroundStyle(.secondary)
+                  .multilineTextAlignment(.leading)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
               ForEach(Array(info.statusLines.enumerated()), id: \.offset) { _, line in
                 Text(line)
                   .font(.caption)

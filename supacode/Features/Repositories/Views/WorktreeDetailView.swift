@@ -389,6 +389,7 @@ struct WorktreeDetailView: View {
         state: .removing,
         statusTitle: nil,
         statusDetail: nil,
+        statusCommand: nil,
         statusLines: []
       )
     }
@@ -400,6 +401,7 @@ struct WorktreeDetailView: View {
         state: .archiving,
         statusTitle: progress?.titleText ?? selectedRow.name,
         statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusCommand: progress?.commandText,
         statusLines: progress?.outputLines ?? []
       )
     }
@@ -413,6 +415,7 @@ struct WorktreeDetailView: View {
         state: .creating,
         statusTitle: progress?.titleText ?? selectedRow.name,
         statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusCommand: progress?.commandText,
         statusLines: progress?.liveOutputLines ?? []
       )
     }

@@ -970,6 +970,13 @@ struct RepositoriesFeature {
             progress.untrackedFilesToCopyCount =
               copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
             progress.stage = .creatingWorktree
+            progress.commandText = worktreeCreateCommand(
+              repositoryRootURL: repository.rootURL,
+              name: name,
+              copyIgnored: copyIgnored,
+              copyUntracked: copyUntracked,
+              baseRef: resolvedBaseRef
+            )
             await send(
               .pendingWorktreeProgressUpdated(
                 id: pendingID,
