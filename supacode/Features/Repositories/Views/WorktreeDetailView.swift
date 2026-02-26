@@ -389,7 +389,20 @@ struct WorktreeDetailView: View {
         state: .removing,
         statusTitle: nil,
         statusDetail: nil,
+        statusCommand: nil,
         statusLines: []
+      )
+    }
+    if selectedRow.isArchiving {
+      let progress = repositories.archiveScriptProgress(for: selectedWorktreeID)
+      return WorktreeLoadingInfo(
+        name: selectedRow.name,
+        repositoryName: repositoryName,
+        state: .archiving,
+        statusTitle: progress?.titleText ?? selectedRow.name,
+        statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusCommand: progress?.commandText,
+        statusLines: progress?.outputLines ?? []
       )
     }
     if selectedRow.isPending {
@@ -402,6 +415,7 @@ struct WorktreeDetailView: View {
         state: .creating,
         statusTitle: progress?.titleText ?? selectedRow.name,
         statusDetail: progress?.detailText ?? selectedRow.detail,
+        statusCommand: progress?.commandText,
         statusLines: progress?.liveOutputLines ?? []
       )
     }
