@@ -11,7 +11,7 @@ struct SidebarView: View {
   var body: some View {
     let state = store.state
     let repositoryIDs = Set(state.repositories.map(\.id))
-    let expandedRepoIDs = expandedRepositoryIDs(state: state, repositoryIDs: repositoryIDs)
+    let expandedRepoIDs = state.expandedRepositoryIDs
     let expandedRepoIDsBinding = expandedRepoIDsBinding(
       repositoryIDs: repositoryIDs,
       expandedRepoIDs: expandedRepoIDs
@@ -49,15 +49,6 @@ struct SidebarView: View {
         $0 = Array(collapsed).sorted()
       }
     }
-  }
-
-  private func expandedRepositoryIDs(
-    state: RepositoriesFeature.State,
-    repositoryIDs: Set<Repository.ID>
-  ) -> Set<Repository.ID> {
-    let pendingRepositoryIDs = Set(state.pendingWorktrees.map(\.repositoryID))
-    let collapsedSet = Set(collapsedRepositoryIDs).intersection(repositoryIDs)
-    return repositoryIDs.subtracting(collapsedSet).union(pendingRepositoryIDs)
   }
 
   private func expandedRepoIDsBinding(
