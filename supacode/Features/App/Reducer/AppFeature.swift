@@ -671,7 +671,7 @@ struct AppFeature {
             }
           )
         }
-        if state.settings.notificationSoundEnabled {
+        if state.settings.notificationSoundEnabled && !state.settings.systemNotificationsEnabled {
           effects.append(
             .run { _ in
               await MainActor.run { _ = notificationSound?.play() }
