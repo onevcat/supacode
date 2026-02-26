@@ -72,6 +72,9 @@ This avoids Apple signing/notarization setup and keeps the workflow simple.
 
 - Sync helper: `doc-onevcat/scripts/sync-upstream-main.sh`
 - Release helper: `doc-onevcat/scripts/release-to-fork.sh`
+  - Default target repo: auto-detected from `origin`
+  - Override target repo: `GH_REPO=owner/repo`
+  - Release create fallback: if `gh release create` fails (for example token scope mismatch), script falls back to `gh api` and then uploads assets
 
 ### Example
 
