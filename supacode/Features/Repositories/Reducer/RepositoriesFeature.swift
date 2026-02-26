@@ -970,6 +970,13 @@ struct RepositoriesFeature {
             progress.untrackedFilesToCopyCount =
               copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
             progress.stage = .creatingWorktree
+            progress.commandText = worktreeCreateCommand(
+              repositoryRootURL: repository.rootURL,
+              name: name,
+              copyIgnored: copyIgnored,
+              copyUntracked: copyUntracked,
+              baseRef: resolvedBaseRef
+            )
             await send(
               .pendingWorktreeProgressUpdated(
                 id: pendingID,
@@ -1249,6 +1256,7 @@ struct RepositoriesFeature {
         state.alert = nil
         @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
         let script = repositorySettings.archiveScript
+        let commandText = archiveScriptCommand(script)
         let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
           return .send(.archiveWorktreeApply(worktreeID, repositoryID))
@@ -1256,14 +1264,16 @@ struct RepositoriesFeature {
         state.archivingWorktreeIDs.insert(worktreeID)
         state.archiveScriptProgressByWorktreeID[worktreeID] = ArchiveScriptProgress(
           titleText: "Running archive script",
-          detailText: "Preparing archive script"
+          detailText: "Preparing archive script",
+          commandText: commandText
         )
         let shellClient = shellClient
         return .run { send in
           let envURL = URL(fileURLWithPath: "/usr/bin/env")
           var progress = ArchiveScriptProgress(
             titleText: "Running archive script",
-            detailText: "Running archive script"
+            detailText: "Running archive script",
+            commandText: commandText
           )
           do {
             for try await event in shellClient.runLoginStream(
@@ -2607,9 +2617,9 @@ struct RepositoriesFeature {
     let filteredFocusIDs = state.pendingTerminalFocusWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
     }
-    let filteredArchivingIDs = state.archivingWorktreeIDs.intersection(availableWorktreeIDs)
+    let filteredArchivingIDs = state.archivingWorktreeIDs
     let filteredArchiveScriptProgress = state.archiveScriptProgressByWorktreeID.filter {
-      availableWorktreeIDs.contains($0.key)
+      availableWorktreeIDs.contains($0.key) || filteredArchivingIDs.contains($0.key)
     }
     let filteredWorktreeInfo = state.worktreeInfoByID.filter {
       availableWorktreeIDs.contains($0.key)
@@ -3283,6 +3293,47 @@ private func cleanupWorktreeState(
     didUpdatePinned: didUpdatePinned,
     didUpdateOrder: didUpdateOrder
   )
+}
+
+private func archiveScriptCommand(_ script: String) -> String {
+  let normalized = script.replacing("\n", with: "\\n")
+  return "bash -lc \(shellQuote(normalized))"
+}
+
+private func worktreeCreateCommand(
+  repositoryRootURL: URL,
+  name: String,
+  copyIgnored: Bool,
+  copyUntracked: Bool,
+  baseRef: String
+) -> String {
+  let baseDir = SupacodePaths.repositoryDirectory(for: repositoryRootURL).path(percentEncoded: false)
+  var parts = ["wt", "--base-dir", baseDir, "sw"]
+  if copyIgnored {
+    parts.append("--copy-ignored")
+  }
+  if copyUntracked {
+    parts.append("--copy-untracked")
+  }
+  if !baseRef.isEmpty {
+    parts.append("--from")
+    parts.append(baseRef)
+  }
+  if copyIgnored || copyUntracked {
+    parts.append("--verbose")
+  }
+  parts.append(name)
+  return parts.map(shellQuote).joined(separator: " ")
+}
+
+private func shellQuote(_ value: String) -> String {
+  let needsQuoting = value.contains { character in
+    character.isWhitespace || character == "\"" || character == "'" || character == "\\"
+  }
+  guard needsQuoting else {
+    return value
+  }
+  return "'\(value.replacing("'", with: "'\"'\"'"))'"
 }
 
 private func updateWorktreeName(
