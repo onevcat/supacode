@@ -23,6 +23,11 @@ struct NotificationsSettingsView: View {
             isOn: $store.notificationSoundEnabled
           )
           .help("Play a sound when a notification is received")
+          Toggle(
+            "System notification",
+            isOn: $store.systemNotificationsEnabled
+          )
+          .help("Show macOS system notifications")
         }
       }
       .formStyle(.grouped)

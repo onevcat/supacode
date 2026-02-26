@@ -1,0 +1,138 @@
+import ComposableArchitecture
+import DependenciesTestSupport
+import Foundation
+import Testing
+
+@testable import supacode
+
+@MainActor
+struct AppFeatureSystemNotificationTests {
+  @Test(.dependencies) func firstTimeDeniedTurnsSystemNotificationsBackOffWithAlert() async {
+    let storage = SettingsTestStorage()
+    let authorizationRequests = LockIsolated(0)
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      TestStore(initialState: AppFeature.State()) {
+        AppFeature()
+      } withDependencies: {
+        $0.systemNotificationClient.authorizationStatus = { .notDetermined }
+        $0.systemNotificationClient.requestAuthorization = {
+          authorizationRequests.withValue { $0 += 1 }
+          return SystemNotificationClient.AuthorizationRequestResult(
+            granted: false,
+            errorMessage: "Mock request error"
+          )
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.binding(.set(\.systemNotificationsEnabled, true)))) {
+      $0.settings.systemNotificationsEnabled = true
+    }
+    await store.finish()
+
+    let expectedAlert = AlertState<AppFeature.Alert> {
+      TextState("Enable Notifications in System Settings")
+    } actions: {
+      ButtonState(action: .openSystemNotificationSettings) {
+        TextState("Open System Settings")
+      }
+      ButtonState(role: .cancel, action: .dismiss) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Supacode cannot send system notifications.\n\nError: Mock request error")
+    }
+
+    #expect(authorizationRequests.value == 1)
+    #expect(store.state.settings.systemNotificationsEnabled == false)
+    #expect(store.state.alert == expectedAlert)
+  }
+
+  @Test(.dependencies) func deniedStatusShowsAlertAndOpensSystemSettings() async {
+    let storage = SettingsTestStorage()
+    let authorizationRequests = LockIsolated(0)
+    let openedSettings = LockIsolated(0)
+    let store = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      TestStore(initialState: AppFeature.State()) {
+        AppFeature()
+      } withDependencies: {
+        $0.systemNotificationClient.authorizationStatus = { .denied }
+        $0.systemNotificationClient.requestAuthorization = {
+          authorizationRequests.withValue { $0 += 1 }
+          return SystemNotificationClient.AuthorizationRequestResult(
+            granted: false,
+            errorMessage: "Mock request error"
+          )
+        }
+        $0.systemNotificationClient.openSettings = {
+          openedSettings.withValue { $0 += 1 }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.binding(.set(\.systemNotificationsEnabled, true)))) {
+      $0.settings.systemNotificationsEnabled = true
+    }
+    await store.finish()
+
+    let expectedAlert = AlertState<AppFeature.Alert> {
+      TextState("Enable Notifications in System Settings")
+    } actions: {
+      ButtonState(action: .openSystemNotificationSettings) {
+        TextState("Open System Settings")
+      }
+      ButtonState(role: .cancel, action: .dismiss) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Supacode cannot send system notifications.\n\nError: Authorization status is denied.")
+    }
+
+    #expect(authorizationRequests.value == 0)
+    #expect(store.state.settings.systemNotificationsEnabled == false)
+    #expect(store.state.alert == expectedAlert)
+
+    await store.send(.alert(.presented(.openSystemNotificationSettings))) {
+      $0.alert = nil
+    }
+    await store.finish()
+    #expect(openedSettings.value == 1)
+  }
+
+  @Test(.dependencies) func notificationReceivedSendsSystemNotificationWhenEnabled() async {
+    var globalSettings = GlobalSettings.default
+    globalSettings.systemNotificationsEnabled = true
+    let sends = LockIsolated<[(String, String)]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        settings: SettingsFeature.State(settings: globalSettings)
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.systemNotificationClient.send = { title, body in
+        sends.withValue { $0.append((title, body)) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(
+        .notificationReceived(
+          worktreeID: "/tmp/repo/wt-1",
+          title: "Done",
+          body: "Build succeeded"
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(sends.value == [("Done", "Build succeeded")])
+  }
+}

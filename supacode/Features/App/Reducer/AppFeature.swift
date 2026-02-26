@@ -30,6 +30,7 @@ struct AppFeature {
     var isRunScriptPromptPresented = false
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     var notificationIndicatorCount: Int = 0
+    var lastKnownSystemNotificationsEnabled: Bool
     @Presents var alert: AlertState<Alert>?
     var commandPaletteItems: [CommandPaletteItem] {
       CommandPaletteFeature.commandPaletteItems(from: repositories)
@@ -41,6 +42,7 @@ struct AppFeature {
     ) {
       self.repositories = repositories
       self.settings = settings
+      lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
     }
   }
 
@@ -70,6 +72,7 @@ struct AppFeature {
     case navigateSearchNext
     case navigateSearchPrevious
     case endSearch
+    case systemNotificationsPermissionFailed(errorMessage: String?)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
   }
@@ -77,12 +80,14 @@ struct AppFeature {
   enum Alert: Equatable {
     case dismiss
     case confirmQuit
+    case openSystemNotificationSettings
   }
 
   @Dependency(\.analyticsClient) private var analyticsClient
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
   @Dependency(\.workspaceClient) private var workspaceClient
   @Dependency(\.settingsWindowClient) private var settingsWindowClient
+  @Dependency(\.systemNotificationClient) private var systemNotificationClient
   @Dependency(\.terminalClient) private var terminalClient
   @Dependency(\.worktreeInfoWatcher) private var worktreeInfoWatcher
 
@@ -254,6 +259,9 @@ struct AppFeature {
         return .none
 
       case .settings(.delegate(.settingsChanged(let settings))):
+        let shouldEvaluateSystemNotificationsPermission =
+          settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
+        state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
         let badgeLabel =
           settings.dockBadgeEnabled
           ? (state.notificationIndicatorCount == 0 ? nil : String(state.notificationIndicatorCount))
@@ -296,6 +304,23 @@ struct AppFeature {
             await worktreeInfoWatcher.send(
               .setPullRequestTrackingEnabled(settings.githubIntegrationEnabled)
             )
+          },
+          .run { send in
+            guard shouldEvaluateSystemNotificationsPermission else { return }
+            let status = await systemNotificationClient.authorizationStatus()
+            switch status {
+            case .authorized:
+              return
+            case .notDetermined:
+              let result = await systemNotificationClient.requestAuthorization()
+              if !result.granted {
+                await send(
+                  .systemNotificationsPermissionFailed(errorMessage: result.errorMessage)
+                )
+              }
+            case .denied:
+              await send(.systemNotificationsPermissionFailed(errorMessage: "Authorization status is denied."))
+            }
           }
         )
 
@@ -528,9 +553,38 @@ struct AppFeature {
         state.selectedRunScript = settings.runScript
         return .none
 
+      case .systemNotificationsPermissionFailed(let errorMessage):
+        let message: String
+        if let errorMessage, !errorMessage.isEmpty {
+          message =
+            "Supacode cannot send system notifications.\n\n"
+            + "Error: \(errorMessage)"
+        } else {
+          message = "Supacode cannot send system notifications while permission is denied."
+        }
+        state.alert = AlertState {
+          TextState("Enable Notifications in System Settings")
+        } actions: {
+          ButtonState(action: .openSystemNotificationSettings) {
+            TextState("Open System Settings")
+          }
+          ButtonState(role: .cancel, action: .dismiss) {
+            TextState("Cancel")
+          }
+        } message: {
+          TextState(message)
+        }
+        return .send(.settings(.binding(.set(\.systemNotificationsEnabled, false))))
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
+
+      case .alert(.presented(.openSystemNotificationSettings)):
+        state.alert = nil
+        return .run { _ in
+          await systemNotificationClient.openSettings()
+        }
 
       case .alert(.presented(.confirmQuit)):
         analyticsClient.capture("app_quit", nil)
@@ -606,10 +660,17 @@ struct AppFeature {
       case .commandPalette:
         return .none
 
-      case .terminalEvent(.notificationReceived(let worktreeID, _, _)):
+      case .terminalEvent(.notificationReceived(let worktreeID, let title, let body)):
         var effects: [Effect<Action>] = [
           .send(.repositories(.worktreeNotificationReceived(worktreeID)))
         ]
+        if state.settings.systemNotificationsEnabled {
+          effects.append(
+            .run { _ in
+              await systemNotificationClient.send(title, body)
+            }
+          )
+        }
         if state.settings.notificationSoundEnabled {
           effects.append(
             .run { _ in

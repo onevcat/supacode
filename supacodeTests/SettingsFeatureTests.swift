@@ -20,6 +20,7 @@ struct SettingsFeatureTests {
       inAppNotificationsEnabled: false,
       dockBadgeEnabled: false,
       notificationSoundEnabled: true,
+      systemNotificationsEnabled: true,
       analyticsEnabled: false,
       crashReportsEnabled: true,
       githubIntegrationEnabled: true,
@@ -44,6 +45,7 @@ struct SettingsFeatureTests {
       $0.inAppNotificationsEnabled = false
       $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = true
+      $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
       $0.githubIntegrationEnabled = true
@@ -64,6 +66,7 @@ struct SettingsFeatureTests {
       inAppNotificationsEnabled: false,
       dockBadgeEnabled: true,
       notificationSoundEnabled: false,
+      systemNotificationsEnabled: false,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
@@ -90,6 +93,7 @@ struct SettingsFeatureTests {
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
       dockBadgeEnabled: initialSettings.dockBadgeEnabled,
       notificationSoundEnabled: initialSettings.notificationSoundEnabled,
+      systemNotificationsEnabled: initialSettings.systemNotificationsEnabled,
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
@@ -139,6 +143,7 @@ struct SettingsFeatureTests {
       inAppNotificationsEnabled: false,
       dockBadgeEnabled: false,
       notificationSoundEnabled: false,
+      systemNotificationsEnabled: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
@@ -156,6 +161,7 @@ struct SettingsFeatureTests {
       $0.inAppNotificationsEnabled = false
       $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = false
+      $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
       $0.githubIntegrationEnabled = true

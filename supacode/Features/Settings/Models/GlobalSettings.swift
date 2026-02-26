@@ -8,6 +8,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var inAppNotificationsEnabled: Bool
   var dockBadgeEnabled: Bool
   var notificationSoundEnabled: Bool
+  var systemNotificationsEnabled: Bool
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
@@ -24,6 +25,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     inAppNotificationsEnabled: true,
     dockBadgeEnabled: true,
     notificationSoundEnabled: true,
+    systemNotificationsEnabled: false,
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
@@ -41,6 +43,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     inAppNotificationsEnabled: Bool,
     dockBadgeEnabled: Bool,
     notificationSoundEnabled: Bool,
+    systemNotificationsEnabled: Bool = false,
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
@@ -56,6 +59,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
     self.dockBadgeEnabled = dockBadgeEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
+    self.systemNotificationsEnabled = systemNotificationsEnabled
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
@@ -86,6 +90,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
       ?? Self.default.notificationSoundEnabled
+    systemNotificationsEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled)
+      ?? Self.default.systemNotificationsEnabled
     analyticsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
       ?? Self.default.analyticsEnabled

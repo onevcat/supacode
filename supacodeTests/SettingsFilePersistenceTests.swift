@@ -103,6 +103,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.inAppNotificationsEnabled == true)
     #expect(settings.global.dockBadgeEnabled == true)
     #expect(settings.global.notificationSoundEnabled == true)
+    #expect(settings.global.systemNotificationsEnabled == false)
     #expect(settings.global.analyticsEnabled == true)
     #expect(settings.global.crashReportsEnabled == true)
     #expect(settings.global.githubIntegrationEnabled == true)

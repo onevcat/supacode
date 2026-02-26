@@ -14,6 +14,7 @@ struct SettingsFeature {
     var inAppNotificationsEnabled: Bool
     var dockBadgeEnabled: Bool
     var notificationSoundEnabled: Bool
+    var systemNotificationsEnabled: Bool
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
@@ -33,6 +34,7 @@ struct SettingsFeature {
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
       dockBadgeEnabled = settings.dockBadgeEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
+      systemNotificationsEnabled = settings.systemNotificationsEnabled
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
@@ -51,6 +53,7 @@ struct SettingsFeature {
         inAppNotificationsEnabled: inAppNotificationsEnabled,
         dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
+        systemNotificationsEnabled: systemNotificationsEnabled,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
@@ -105,6 +108,7 @@ struct SettingsFeature {
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
         state.dockBadgeEnabled = normalizedSettings.dockBadgeEnabled
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
+        state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
