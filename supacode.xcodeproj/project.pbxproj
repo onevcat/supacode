@@ -133,6 +133,7 @@
 			buildConfigurationList = D69CE0552F1F378200584C57 /* Build configuration list for PBXNativeTarget "supacode" */;
 			buildPhases = (
 				D69CE0462F1F378200584C57 /* Sources */,
+				D67F9B122F33000100A1B2C3 /* Verify git-wt script */,
 				D69CE0472F1F378200584C57 /* Frameworks */,
 				D69CE0482F1F378200584C57 /* Resources */,
 			);
@@ -246,6 +247,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D67F9B122F33000100A1B2C3 /* Verify git-wt script */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Verify git-wt script";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "WT_SCRIPT=\"${PROJECT_DIR}/Resources/git-wt/wt\"\nif [ ! -f \"$WT_SCRIPT\" ]; then\n  echo \"error: Missing $WT_SCRIPT. Run: git submodule update --init Resources/git-wt\" >&2\n  exit 1\nfi\nif [ ! -x \"$WT_SCRIPT\" ]; then\n  echo \"error: $WT_SCRIPT is not executable.\" >&2\n  exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D69CE0462F1F378200584C57 /* Sources */ = {
