@@ -4,8 +4,12 @@
 make build-ghostty-xcframework  # Rebuild GhosttyKit from Zig source (requires mise)
 make build-app                   # Build macOS app (Debug) via xcodebuild
 make run-app                     # Build and launch Debug app
-make check                       # Run swiftformat and swiftlint
+make install-dev-build           # Build and copy to /Applications
+make format                      # Run swift-format only
+make lint                        # Run swiftlint only (fix + lint)
+make check                       # Run both format and lint
 make test                        # Run all tests
+make log-stream                  # Stream app logs (subsystem: app.supabit.supacode)
 make bump-version                # Bump patch version and create git tag
 make bump-and-release            # Bump version and push to trigger release
 ```
@@ -75,13 +79,17 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ## Code Guidelines
 
 - Target macOS 26.0+, Swift 6.2+
+- Before doing a big feature or when planning, consult with pfw (pointfree) skills on TCA, Observable best practices first.
 - Use `@ObservableState` for TCA feature state; use `@Observable` for non-TCA shared stores; never `ObservableObject`
 - Always mark `@Observable` classes with `@MainActor`
 - Modern SwiftUI only: `foregroundStyle()`, `NavigationStack`, `Button` over `onTapGesture()`
+- When a new logic changes in the Reducer, always add tests
+- In unit tests, never use `Task.sleep`; use `TestClock` (or an injected clock) and drive time with `advance`.
 - Prefer Swift-native APIs over Foundation where they exist (e.g., `replacing()` not `replacingOccurrences()`)
 - Avoid `GeometryReader` when `containerRelativeFrame()` or `visualEffect()` would work
 - Do not use NSNotification to communicate between reducers.
 - Prefer `@Shared` directly in reducers for app storage and shared settings; do not introduce new dependency clients solely to wrap `@Shared`.
+- Use `SupaLogger` for all logging. Never use `print()` or `os.Logger` directly. `SupaLogger` prints in DEBUG and uses `os.Logger` in release.
 
 ### Formatting & Linting
 
@@ -105,11 +113,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch
 - After implementing an execplan, always submit a PR if you're not in the main branch
 
-## Ghostty
+## Submodules
 
-When following/porting Ghostty logic from their macOS app, try to match the implementation exactly, no smartness, no corner cutting.
-
-## References
-
-- `git@github.com:ghostty-org/ghostty.git` - Dive into this codebase when implementing Ghostty features
-- `git@github.com:khoi/git-wt.git` - Bundled git worktree wrapper (in Resources/git-wt/wt), modified in the repo directly, do not modify the bundled script we have
+- `ThirdParty/ghostty` (`https://github.com/ghostty-org/ghostty`): Source dependency used to build `Frameworks/GhosttyKit.xcframework` and terminal resources.
+- `Resources/git-wt` (`https://github.com/khoi/git-wt.git`): Bundled `wt` CLI used by Supacode Git worktree flows at runtime.

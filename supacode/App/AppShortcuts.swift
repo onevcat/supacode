@@ -1,11 +1,20 @@
 import SwiftUI
 
 struct AppShortcut {
-  let key: Character
+  let keyEquivalent: KeyEquivalent
   let modifiers: EventModifiers
+  private let ghosttyKeyName: String
 
-  var keyEquivalent: KeyEquivalent {
-    KeyEquivalent(key)
+  init(key: Character, modifiers: EventModifiers) {
+    self.keyEquivalent = KeyEquivalent(key)
+    self.modifiers = modifiers
+    self.ghosttyKeyName = String(key).lowercased()
+  }
+
+  init(keyEquivalent: KeyEquivalent, ghosttyKeyName: String, modifiers: EventModifiers) {
+    self.keyEquivalent = keyEquivalent
+    self.modifiers = modifiers
+    self.ghosttyKeyName = ghosttyKeyName
   }
 
   var keyboardShortcut: KeyboardShortcut {
@@ -13,12 +22,16 @@ struct AppShortcut {
   }
 
   var ghosttyKeybind: String {
-    let parts = ghosttyModifierParts + [String(key).lowercased()]
+    let parts = ghosttyModifierParts + [ghosttyKeyName]
     return parts.joined(separator: "+")
   }
 
+  var ghosttyUnbindArgument: String {
+    "--keybind=\(ghosttyKeybind)=unbind"
+  }
+
   var display: String {
-    let parts = displayModifierParts + [String(key).uppercased()]
+    let parts = displayModifierParts + [keyEquivalent.display]
     return parts.joined()
   }
 
@@ -46,6 +59,25 @@ struct AppShortcut {
 }
 
 enum AppShortcuts {
+  private struct TabSelectionBinding {
+    let unicode: String
+    let physical: String
+    let tabIndex: Int
+  }
+
+  private static let tabSelectionBindings: [TabSelectionBinding] = [
+    TabSelectionBinding(unicode: "1", physical: "digit_1", tabIndex: 1),
+    TabSelectionBinding(unicode: "2", physical: "digit_2", tabIndex: 2),
+    TabSelectionBinding(unicode: "3", physical: "digit_3", tabIndex: 3),
+    TabSelectionBinding(unicode: "4", physical: "digit_4", tabIndex: 4),
+    TabSelectionBinding(unicode: "5", physical: "digit_5", tabIndex: 5),
+    TabSelectionBinding(unicode: "6", physical: "digit_6", tabIndex: 6),
+    TabSelectionBinding(unicode: "7", physical: "digit_7", tabIndex: 7),
+    TabSelectionBinding(unicode: "8", physical: "digit_8", tabIndex: 8),
+    TabSelectionBinding(unicode: "9", physical: "digit_9", tabIndex: 9),
+    TabSelectionBinding(unicode: "0", physical: "digit_0", tabIndex: 10),
+  ]
+
   static let newWorktree = AppShortcut(key: "n", modifiers: .command)
   static let openSettings = AppShortcut(key: ",", modifiers: .command)
   static let openFinder = AppShortcut(key: "o", modifiers: .command)
@@ -58,16 +90,22 @@ enum AppShortcuts {
   static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
-  static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.command, .control])
-  static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.command, .control])
-  static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.command, .control])
-  static let selectWorktree4 = AppShortcut(key: "4", modifiers: [.command, .control])
-  static let selectWorktree5 = AppShortcut(key: "5", modifiers: [.command, .control])
-  static let selectWorktree6 = AppShortcut(key: "6", modifiers: [.command, .control])
-  static let selectWorktree7 = AppShortcut(key: "7", modifiers: [.command, .control])
-  static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.command, .control])
-  static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.command, .control])
-  static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.command, .control])
+  static let selectNextWorktree = AppShortcut(
+    keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .control]
+  )
+  static let selectPreviousWorktree = AppShortcut(
+    keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .control]
+  )
+  static let selectWorktree1 = AppShortcut(key: "1", modifiers: [.control])
+  static let selectWorktree2 = AppShortcut(key: "2", modifiers: [.control])
+  static let selectWorktree3 = AppShortcut(key: "3", modifiers: [.control])
+  static let selectWorktree4 = AppShortcut(key: "4", modifiers: [.control])
+  static let selectWorktree5 = AppShortcut(key: "5", modifiers: [.control])
+  static let selectWorktree6 = AppShortcut(key: "6", modifiers: [.control])
+  static let selectWorktree7 = AppShortcut(key: "7", modifiers: [.control])
+  static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.control])
+  static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.control])
+  static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.control])
   static let worktreeSelection: [AppShortcut] = [
     selectWorktree1,
     selectWorktree2,
@@ -80,6 +118,18 @@ enum AppShortcuts {
     selectWorktree9,
     selectWorktree0,
   ]
+
+  static let tabSelectionGhosttyKeybindArguments: [String] = tabSelectionBindings.flatMap { binding in
+    [
+      "--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)",
+      "--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)",
+    ]
+  }
+
+  static var ghosttyCLIKeybindArguments: [String] {
+    all.map(\.ghosttyUnbindArgument) + tabSelectionGhosttyKeybindArguments
+  }
+
   static let all: [AppShortcut] = [
     newWorktree,
     openSettings,
@@ -93,6 +143,8 @@ enum AppShortcuts {
     stopRunScript,
     checkForUpdates,
     archivedWorktrees,
+    selectNextWorktree,
+    selectPreviousWorktree,
     selectWorktree1,
     selectWorktree2,
     selectWorktree3,

@@ -18,14 +18,15 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: false,
       notificationSoundEnabled: true,
       systemNotificationsEnabled: true,
+      moveNotifiedWorktreeToTop: false,
       analyticsEnabled: false,
       crashReportsEnabled: true,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: false,
-      automaticallyArchiveMergedWorktrees: true
+      automaticallyArchiveMergedWorktrees: true,
+      promptForWorktreeCreation: true
     )
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = loaded }
@@ -43,14 +44,15 @@ struct SettingsFeatureTests {
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
-      $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = true
+      $0.moveNotifiedWorktreeToTop = false
       $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
       $0.githubIntegrationEnabled = true
       $0.deleteBranchOnDeleteWorktree = false
       $0.automaticallyArchiveMergedWorktrees = true
+      $0.promptForWorktreeCreation = true
     }
     await store.receive(\.delegate.settingsChanged)
   }
@@ -64,14 +66,15 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: false,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: true,
       notificationSoundEnabled: false,
+      moveNotifiedWorktreeToTop: true,
       systemNotificationsEnabled: false,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: true,
-      automaticallyArchiveMergedWorktrees: false
+      automaticallyArchiveMergedWorktrees: false,
+      promptForWorktreeCreation: false
     )
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = initialSettings }
@@ -91,14 +94,15 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: initialSettings.updatesAutomaticallyCheckForUpdates,
       updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
-      dockBadgeEnabled: initialSettings.dockBadgeEnabled,
       notificationSoundEnabled: initialSettings.notificationSoundEnabled,
+      moveNotifiedWorktreeToTop: initialSettings.moveNotifiedWorktreeToTop,
       systemNotificationsEnabled: initialSettings.systemNotificationsEnabled,
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
       deleteBranchOnDeleteWorktree: initialSettings.deleteBranchOnDeleteWorktree,
-      automaticallyArchiveMergedWorktrees: initialSettings.automaticallyArchiveMergedWorktrees
+      automaticallyArchiveMergedWorktrees: initialSettings.automaticallyArchiveMergedWorktrees,
+      promptForWorktreeCreation: initialSettings.promptForWorktreeCreation
     )
     await store.receive(\.delegate.settingsChanged)
 
@@ -141,14 +145,15 @@ struct SettingsFeatureTests {
       updatesAutomaticallyCheckForUpdates: false,
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
-      dockBadgeEnabled: false,
       notificationSoundEnabled: false,
+      moveNotifiedWorktreeToTop: true,
       systemNotificationsEnabled: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
       deleteBranchOnDeleteWorktree: true,
-      automaticallyArchiveMergedWorktrees: true
+      automaticallyArchiveMergedWorktrees: true,
+      promptForWorktreeCreation: false
     )
 
     await store.send(.settingsLoaded(loaded)) {
@@ -159,14 +164,15 @@ struct SettingsFeatureTests {
       $0.updatesAutomaticallyCheckForUpdates = false
       $0.updatesAutomaticallyDownloadUpdates = true
       $0.inAppNotificationsEnabled = false
-      $0.dockBadgeEnabled = false
       $0.notificationSoundEnabled = false
+      $0.moveNotifiedWorktreeToTop = true
       $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
       $0.githubIntegrationEnabled = true
       $0.deleteBranchOnDeleteWorktree = true
       $0.automaticallyArchiveMergedWorktrees = true
+      $0.promptForWorktreeCreation = false
       $0.selection = selection
       $0.repositorySettings = RepositorySettingsFeature.State(
         rootURL: rootURL,

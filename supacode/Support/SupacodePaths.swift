@@ -11,13 +11,24 @@ nonisolated enum SupacodePaths {
   }
 
   static func repositoryDirectory(for rootURL: URL) -> URL {
-    let repoName = rootURL.lastPathComponent
-    let fallback = rootURL.path(percentEncoded: false).replacing("/", with: "_")
-    let name = repoName.isEmpty ? fallback : repoName
+    let name = repositoryDirectoryName(for: rootURL)
     return reposDirectory.appending(path: name, directoryHint: .isDirectory)
   }
 
   static var settingsURL: URL {
     baseDirectory.appending(path: "settings.json", directoryHint: .notDirectory)
+  }
+
+  private static func repositoryDirectoryName(for rootURL: URL) -> String {
+    let repoName = rootURL.lastPathComponent
+    if repoName.isEmpty || repoName == ".bare" || repoName == ".git" {
+      let path = rootURL.standardizedFileURL.path(percentEncoded: false)
+      let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+      if trimmed.isEmpty {
+        return "_"
+      }
+      return trimmed.replacing("/", with: "_")
+    }
+    return repoName
   }
 }

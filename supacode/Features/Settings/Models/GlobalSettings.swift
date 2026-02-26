@@ -6,14 +6,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var updatesAutomaticallyCheckForUpdates: Bool
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
-  var dockBadgeEnabled: Bool
   var notificationSoundEnabled: Bool
   var systemNotificationsEnabled: Bool
+  var moveNotifiedWorktreeToTop: Bool
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
   var deleteBranchOnDeleteWorktree: Bool
   var automaticallyArchiveMergedWorktrees: Bool
+  var promptForWorktreeCreation: Bool
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -23,14 +24,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyCheckForUpdates: true,
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
-    dockBadgeEnabled: true,
     notificationSoundEnabled: true,
     systemNotificationsEnabled: false,
+    moveNotifiedWorktreeToTop: true,
     analyticsEnabled: true,
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
     deleteBranchOnDeleteWorktree: true,
-    automaticallyArchiveMergedWorktrees: false
+    automaticallyArchiveMergedWorktrees: false,
+    promptForWorktreeCreation: true
   )
 
   init(
@@ -41,14 +43,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyCheckForUpdates: Bool,
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
-    dockBadgeEnabled: Bool,
     notificationSoundEnabled: Bool,
     systemNotificationsEnabled: Bool = false,
+    moveNotifiedWorktreeToTop: Bool,
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
     deleteBranchOnDeleteWorktree: Bool,
-    automaticallyArchiveMergedWorktrees: Bool
+    automaticallyArchiveMergedWorktrees: Bool,
+    promptForWorktreeCreation: Bool
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -57,14 +60,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.updatesAutomaticallyCheckForUpdates = updatesAutomaticallyCheckForUpdates
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
-    self.dockBadgeEnabled = dockBadgeEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
     self.systemNotificationsEnabled = systemNotificationsEnabled
+    self.moveNotifiedWorktreeToTop = moveNotifiedWorktreeToTop
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
     self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
     self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
+    self.promptForWorktreeCreation = promptForWorktreeCreation
   }
 
   init(from decoder: any Decoder) throws {
@@ -84,15 +88,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     inAppNotificationsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .inAppNotificationsEnabled)
       ?? Self.default.inAppNotificationsEnabled
-    dockBadgeEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .dockBadgeEnabled)
-      ?? Self.default.dockBadgeEnabled
     notificationSoundEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
       ?? Self.default.notificationSoundEnabled
     systemNotificationsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled)
       ?? Self.default.systemNotificationsEnabled
+    moveNotifiedWorktreeToTop =
+      try container.decodeIfPresent(Bool.self, forKey: .moveNotifiedWorktreeToTop)
+      ?? Self.default.moveNotifiedWorktreeToTop
     analyticsEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled)
       ?? Self.default.analyticsEnabled
@@ -108,5 +112,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     automaticallyArchiveMergedWorktrees =
       try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees)
       ?? Self.default.automaticallyArchiveMergedWorktrees
+    promptForWorktreeCreation =
+      try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
+      ?? Self.default.promptForWorktreeCreation
   }
 }

@@ -13,6 +13,7 @@ struct ArchivedWorktreeRowView: View {
       pullRequest: info?.pullRequest
     )
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    let bodyFontAscender = NSFont.preferredFont(forTextStyle: .body).ascender
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Image(systemName: "archivebox")
@@ -21,7 +22,7 @@ struct ArchivedWorktreeRowView: View {
           .accessibilityHidden(true)
           .frame(width: 16, height: 16)
           .alignmentGuide(.firstTextBaseline) { _ in
-            bodyFont.ascender
+            bodyFontAscender
           }
         Text(worktree.name)
           .font(.body)
@@ -62,11 +63,7 @@ struct ArchivedWorktreeRowView: View {
     .frame(height: rowHeight, alignment: .center)
   }
 
-  private var bodyFont: NSFont {
-    NSFont.preferredFont(forTextStyle: .body)
-  }
-
   private var rowHeight: CGFloat {
-    56
+    50
   }
 }

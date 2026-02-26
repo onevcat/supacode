@@ -1,15 +1,11 @@
 import Carbon
 import Cocoa
-import OSLog
 
 @MainActor
 final class SecureInput: Observable {
   static let shared = SecureInput()
 
-  private static let logger = Logger(
-    subsystem: Bundle.main.bundleIdentifier!,
-    category: String(describing: SecureInput.self)
-  )
+  private static let logger = SupaLogger("SecureInput")
 
   var global: Bool = false {
     didSet { apply() }
@@ -38,7 +34,7 @@ final class SecureInput: Observable {
     )
   }
 
-  deinit {
+  isolated deinit {
     NotificationCenter.default.removeObserver(self)
     scoped.removeAll()
     global = false

@@ -2,7 +2,6 @@ import AppKit
 import ComposableArchitecture
 import Foundation
 import PostHog
-import Sentry
 import SwiftUI
 
 private enum CancelID {
@@ -76,14 +75,14 @@ struct AppFeature {
     case openSystemNotificationSettings
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.repositoryPersistence) private var repositoryPersistence
-  @Dependency(\.workspaceClient) private var workspaceClient
-  @Dependency(\.settingsWindowClient) private var settingsWindowClient
-  @Dependency(\.notificationSoundClient) private var notificationSoundClient
-  @Dependency(\.systemNotificationClient) private var systemNotificationClient
-  @Dependency(\.terminalClient) private var terminalClient
-  @Dependency(\.worktreeInfoWatcher) private var worktreeInfoWatcher
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(WorkspaceClient.self) private var workspaceClient
+  @Dependency(SettingsWindowClient.self) private var settingsWindowClient
+  @Dependency(NotificationSoundClient.self) private var notificationSoundClient
+  @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(TerminalClient.self) private var terminalClient
+  @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
@@ -92,6 +91,11 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
+          .run { _ in
+            await MainActor.run {
+              NSApplication.shared.dockTile.badgeLabel = nil
+            }
+          },
           .run { send in
             for await event in await terminalClient.events() {
               await send(.terminalEvent(event))
@@ -112,7 +116,7 @@ struct AppFeature {
             .send(.repositories(.refreshWorktrees)),
             .run { send in
               while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await ContinuousClock().sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
                 await send(.repositories(.refreshWorktrees))
               }
@@ -128,7 +132,6 @@ struct AppFeature {
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
         let lastFocusedWorktreeID = worktree?.id
         let repositoryPersistence = repositoryPersistence
-        let worktreesForWatcher = state.repositories.worktreesForInfoWatcher()
         guard let worktree else {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
@@ -140,9 +143,6 @@ struct AppFeature {
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setSelectedWorktreeID(nil))
-            },
-            .run { _ in
-              await worktreeInfoWatcher.send(.setWorktrees(worktreesForWatcher))
             },
           ]
           if !state.repositories.isShowingArchivedWorktrees {
@@ -170,9 +170,6 @@ struct AppFeature {
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(worktree.id))
-          },
-          .run { _ in
-            await worktreeInfoWatcher.send(.setWorktrees(worktreesForWatcher))
           },
           .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID))
         )
@@ -249,17 +246,10 @@ struct AppFeature {
         }
         return .none
 
-      case .repositories(.worktreePullRequestLoaded):
-        return .none
-
       case .settings(.delegate(.settingsChanged(let settings))):
         let shouldCheckSystemNotificationPermission =
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
-        let badgeLabel =
-          settings.dockBadgeEnabled
-          ? (state.notificationIndicatorCount == 0 ? nil : String(state.notificationIndicatorCount))
-          : nil
         if let selectedWorktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -278,6 +268,13 @@ struct AppFeature {
             )
           ),
           .send(
+            .repositories(
+              .setMoveNotifiedWorktreeToTop(
+                settings.moveNotifiedWorktreeToTop
+              )
+            )
+          ),
+          .send(
             .updates(
               .applySettings(
                 updateChannel: settings.updateChannel,
@@ -288,11 +285,6 @@ struct AppFeature {
           ),
           .run { _ in
             await terminalClient.send(.setNotificationsEnabled(settings.inAppNotificationsEnabled))
-          },
-          .run { _ in
-            await MainActor.run {
-              NSApplication.shared.dockTile.badgeLabel = badgeLabel
-            }
           },
           .run { _ in
             await worktreeInfoWatcher.send(
@@ -637,6 +629,12 @@ struct AppFeature {
       case .commandPalette(.delegate(.mergePullRequest(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .merge)))
 
+      case .commandPalette(.delegate(.closePullRequest(let worktreeID))):
+        return .send(.repositories(.pullRequestAction(worktreeID, .close)))
+
+      case .commandPalette(.delegate(.copyFailingJobURL(let worktreeID))):
+        return .send(.repositories(.pullRequestAction(worktreeID, .copyFailingJobURL)))
+
       case .commandPalette(.delegate(.copyCiFailureLogs(let worktreeID))):
         return .send(.repositories(.pullRequestAction(worktreeID, .copyCiFailureLogs)))
 
@@ -676,13 +674,9 @@ struct AppFeature {
 
       case .terminalEvent(.notificationIndicatorChanged(let count)):
         state.notificationIndicatorCount = count
-        let badgeLabel =
-          state.settings.dockBadgeEnabled
-          ? (count == 0 ? nil : String(count))
-          : nil
         return .run { _ in
           await MainActor.run {
-            NSApplication.shared.dockTile.badgeLabel = badgeLabel
+            NSApplication.shared.dockTile.badgeLabel = nil
           }
         }
 
@@ -710,7 +704,6 @@ struct AppFeature {
       }
     }
     core
-      .printActionLabels()
     Scope(state: \.repositories, action: \.repositories) {
       RepositoriesFeature()
     }
@@ -723,23 +716,5 @@ struct AppFeature {
     Scope(state: \.commandPalette, action: \.commandPalette) {
       CommandPaletteFeature()
     }
-  }
-}
-
-private struct ActionLabelReducer<Base: Reducer>: Reducer {
-  let base: Base
-
-  func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
-    let actionLabel = debugCaseOutput(action)
-    #if !DEBUG
-      SentrySDK.logger.info("received action: \(actionLabel)")
-    #endif
-    return base.reduce(into: &state, action: action)
-  }
-}
-
-extension Reducer {
-  fileprivate func printActionLabels() -> ActionLabelReducer<Self> {
-    ActionLabelReducer(base: self)
   }
 }

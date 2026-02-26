@@ -63,4 +63,19 @@ struct RepositorySettingsKeyTests {
 
     #expect(reloaded.repositories[rootURL.path(percentEncoded: false)] == settings)
   }
+
+  @Test func decodeMissingArchiveScriptDefaultsToEmpty() throws {
+    let data = Data(
+      """
+      {
+        "setupScript": "echo setup",
+        "runScript": "echo run",
+        "openActionID": "automatic"
+      }
+      """.utf8
+    )
+    let settings = try JSONDecoder().decode(RepositorySettings.self, from: data)
+
+    #expect(settings.archiveScript.isEmpty)
+  }
 }

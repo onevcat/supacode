@@ -21,7 +21,6 @@ struct FailedRepositoryRow: View {
         .foregroundStyle(.red)
         .help("Show load failure")
     }
-    .padding(.vertical, 6)
     .contentShape(Rectangle())
     .contextMenu {
       Button("Remove Repository", action: removeRepository)

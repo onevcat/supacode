@@ -150,7 +150,7 @@ struct GhosttySurfaceSearchOverlay: View {
     let text = needle
     searchTask = Task { @MainActor in
       do {
-        try await Task.sleep(for: .milliseconds(300))
+        try await ContinuousClock().sleep(for: .milliseconds(300))
       } catch {
         return
       }
@@ -165,12 +165,7 @@ struct GhosttySurfaceSearchOverlay: View {
 
   private func navigateSearch(_ direction: GhosttySearchDirection) {
     flushPendingSearch()
-    switch direction {
-    case .next:
-      surfaceView.performBindingAction("navigate_search:next")
-    case .previous:
-      surfaceView.performBindingAction("navigate_search:previous")
-    }
+    surfaceView.navigateSearch(direction)
   }
 
   private func closeSearch() {
@@ -246,11 +241,6 @@ private struct GhosttySearchOverlayShape: Shape {
     }
     return RoundedRectangle(cornerRadius: 8).path(in: rect)
   }
-}
-
-private enum GhosttySearchDirection {
-  case next
-  case previous
 }
 
 private struct SearchButtonLabel: View {

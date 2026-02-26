@@ -7,7 +7,7 @@ private final class ForegroundSystemNotificationDelegate: NSObject, UNUserNotifi
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification
-  ) -> UNNotificationPresentationOptions {
+  ) async -> UNNotificationPresentationOptions {
     [.badge, .sound, .banner]
   }
 }

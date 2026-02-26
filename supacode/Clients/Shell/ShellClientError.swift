@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct ShellClientError: LocalizedError, Equatable {
+nonisolated struct ShellClientError: LocalizedError, Equatable, Sendable {
   let command: String
   let stdout: String
   let stderr: String

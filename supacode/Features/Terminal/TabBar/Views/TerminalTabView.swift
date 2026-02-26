@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TerminalTabView: View {
@@ -66,6 +67,9 @@ struct TerminalTabView: View {
       isHovering = hovering
     }
     .zIndex(isActive ? 2 : (isDragging ? 3 : 0))
+    .overlay {
+      MiddleClickView(action: onClose)
+    }
   }
 
   private var shortcutHint: String? {
@@ -77,4 +81,45 @@ struct TerminalTabView: View {
   private var showsShortcutHint: Bool {
     commandKeyObserver.isPressed && shortcutHint != nil
   }
+}
+
+private struct MiddleClickView: NSViewRepresentable {
+  let action: () -> Void
+
+  func makeNSView(context: Context) -> MiddleClickNSView {
+    MiddleClickNSView(action: action)
+  }
+
+  func updateNSView(_ nsView: MiddleClickNSView, context: Context) {
+    nsView.action = action
+  }
+}
+
+private final class MiddleClickNSView: NSView {
+  var action: () -> Void
+
+  init(action: @escaping () -> Void) {
+    self.action = action
+    super.init(frame: .zero)
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError() }
+
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    guard let event = NSApp.currentEvent,
+      event.type == .otherMouseDown || event.type == .otherMouseUp
+    else { return nil }
+    return super.hitTest(point)
+  }
+
+  override func otherMouseUp(with event: NSEvent) {
+    if event.buttonNumber == 2 {
+      action()
+    } else {
+      super.otherMouseUp(with: event)
+    }
+  }
+
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

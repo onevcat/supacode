@@ -13,17 +13,20 @@ extension Reducer where State: Equatable {
 struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
   let base: Base
 
+  private let logger = SupaLogger("TCA")
+
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
     let actionLabel = debugCaseOutput(action)
+    logger.debug("Action: \(actionLabel)")
     #if DEBUG
       let previousState = state
       let effects = base.reduce(into: &state, action: action)
-      print("Action: \(actionLabel)")
       if previousState != state, let diff = CustomDump.diff(previousState, state) {
         print(diff)
       }
       return effects
     #else
+      SentrySDK.logger.info("Action: \(actionLabel)")
       let breadcrumb = Breadcrumb(level: .debug, category: "action")
       breadcrumb.message = actionLabel
       SentrySDK.addBreadcrumb(breadcrumb)

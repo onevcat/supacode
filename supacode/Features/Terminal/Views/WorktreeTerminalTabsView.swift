@@ -7,6 +7,7 @@ struct WorktreeTerminalTabsView: View {
   let shouldRunSetupScript: Bool
   let forceAutoFocus: Bool
   let createTab: () -> Void
+  @State private var windowActivity = WindowActivityState.inactive
 
   var body: some View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
@@ -45,8 +46,9 @@ struct WorktreeTerminalTabsView: View {
       }
     }
     .background(
-      WindowFocusObserverView { isKey in
-        state.syncFocus(windowIsKey: isKey)
+      WindowFocusObserverView { activity in
+        windowActivity = activity
+        state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
       }
     )
     .onAppear {
@@ -54,12 +56,15 @@ struct WorktreeTerminalTabsView: View {
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
       }
+      let activity = resolvedWindowActivity
+      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
     .onChange(of: state.tabManager.selectedTabId) { _, _ in
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
       }
-      state.syncFocus(windowIsKey: NSApp.keyWindow?.isKeyWindow ?? false)
+      let activity = resolvedWindowActivity
+      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
   }
 
@@ -69,5 +74,15 @@ struct WorktreeTerminalTabsView: View {
     }
     guard let responder = NSApp.keyWindow?.firstResponder else { return true }
     return !(responder is NSTableView) && !(responder is NSOutlineView)
+  }
+
+  private var resolvedWindowActivity: WindowActivityState {
+    if let keyWindow = NSApp.keyWindow {
+      return WindowActivityState(
+        isKeyWindow: keyWindow.isKeyWindow,
+        isVisible: keyWindow.occlusionState.contains(.visible)
+      )
+    }
+    return windowActivity
   }
 }

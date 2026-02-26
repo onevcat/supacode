@@ -24,6 +24,25 @@ struct WorktreeCommands: Commands {
     let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     CommandMenu("Worktrees") {
+      Button("Select Next Worktree") {
+        store.send(.repositories(.selectNextWorktree))
+      }
+      .keyboardShortcut(
+        AppShortcuts.selectNextWorktree.keyEquivalent,
+        modifiers: AppShortcuts.selectNextWorktree.modifiers
+      )
+      .help("Select Next Worktree (\(AppShortcuts.selectNextWorktree.display))")
+      .disabled(orderedRows.isEmpty)
+      Button("Select Previous Worktree") {
+        store.send(.repositories(.selectPreviousWorktree))
+      }
+      .keyboardShortcut(
+        AppShortcuts.selectPreviousWorktree.keyEquivalent,
+        modifiers: AppShortcuts.selectPreviousWorktree.modifiers
+      )
+      .help("Select Previous Worktree (\(AppShortcuts.selectPreviousWorktree.display))")
+      .disabled(orderedRows.isEmpty)
+      Divider()
       ForEach(worktreeShortcuts.indices, id: \.self) { index in
         let shortcut = worktreeShortcuts[index]
         worktreeShortcutButton(index: index, shortcut: shortcut, orderedRows: orderedRows)

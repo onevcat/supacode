@@ -78,6 +78,32 @@ struct WorktreeTerminalManagerTests {
     #expect(second == .setupScriptConsumed(worktreeID: worktree.id))
   }
 
+  @Test func taskStatusReflectsAnyRunningTab() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    #expect(manager.taskStatus(for: worktree.id) == .idle)
+
+    let tab1 = TerminalTabID()
+    let tab2 = TerminalTabID()
+    state.tabIsRunningById[tab1] = false
+    state.tabIsRunningById[tab2] = false
+    #expect(manager.taskStatus(for: worktree.id) == .idle)
+
+    state.tabIsRunningById[tab2] = true
+    #expect(manager.taskStatus(for: worktree.id) == .running)
+
+    state.tabIsRunningById[tab1] = true
+    #expect(manager.taskStatus(for: worktree.id) == .running)
+
+    state.tabIsRunningById[tab2] = false
+    #expect(manager.taskStatus(for: worktree.id) == .running)
+
+    state.tabIsRunningById[tab1] = false
+    #expect(manager.taskStatus(for: worktree.id) == .idle)
+  }
+
   @Test func hasUnseenNotificationsReflectsUnreadEntries() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

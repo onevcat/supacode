@@ -8,8 +8,53 @@ import SwiftUI
 private enum CancelID {
   static let load = "repositories.load"
   static let toastAutoDismiss = "repositories.toastAutoDismiss"
+  static let githubIntegrationAvailability = "repositories.githubIntegrationAvailability"
+  static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
+  static let worktreePromptLoad = "repositories.worktreePromptLoad"
+  static let worktreePromptValidation = "repositories.worktreePromptValidation"
+  static func archiveScript(_ worktreeID: Worktree.ID) -> String {
+    "repositories.archiveScript.\(worktreeID)"
+  }
   static func delayedPRRefresh(_ worktreeID: Worktree.ID) -> String {
     "repositories.delayedPRRefresh.\(worktreeID)"
+  }
+}
+
+private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)
+private nonisolated let worktreeCreationProgressLineLimit = 200
+private nonisolated let worktreeCreationProgressUpdateStride = 20
+private nonisolated let archiveScriptProgressLineLimit = 200
+
+nonisolated struct WorktreeCreationProgressUpdateThrottle {
+  private let stride: Int
+  private var hasEmittedFirstLine = false
+  private var unsentLineCount = 0
+
+  init(stride: Int) {
+    precondition(stride > 0)
+    self.stride = stride
+  }
+
+  mutating func recordLine() -> Bool {
+    unsentLineCount += 1
+    if !hasEmittedFirstLine {
+      hasEmittedFirstLine = true
+      unsentLineCount = 0
+      return true
+    }
+    if unsentLineCount >= stride {
+      unsentLineCount = 0
+      return true
+    }
+    return false
+  }
+
+  mutating func flush() -> Bool {
+    guard unsentLineCount > 0 else {
+      return false
+    }
+    unsentLineCount = 0
+    return true
   }
 }
 
@@ -29,17 +74,50 @@ struct RepositoriesFeature {
     var pendingWorktrees: [PendingWorktree] = []
     var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
     var pendingTerminalFocusWorktreeIDs: Set<Worktree.ID> = []
+    var archivingWorktreeIDs: Set<Worktree.ID> = []
+    var archiveScriptProgressByWorktreeID: [Worktree.ID: ArchiveScriptProgress] = [:]
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
     var archivedWorktreeIDs: [Worktree.ID] = []
     var automaticallyArchiveMergedWorktrees = false
+    var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
     var statusToast: StatusToast?
+    var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
+    var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
+    var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
+    var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
+    var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
+    @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
+  }
+
+  enum GithubIntegrationAvailability: Equatable {
+    case unknown
+    case checking
+    case available
+    case unavailable
+    case disabled
+  }
+
+  struct PendingPullRequestRefresh: Equatable {
+    var repositoryRootURL: URL
+    var worktreeIDs: [Worktree.ID]
+  }
+
+  enum WorktreeCreationNameSource: Equatable {
+    case random
+    case explicit(String)
+  }
+
+  enum WorktreeCreationBaseRefSource: Equatable {
+    case repositorySetting
+    case explicit(String?)
   }
 
   enum Action {
@@ -55,6 +133,7 @@ struct RepositoriesFeature {
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
     case selectArchivedWorktrees
+    case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case openRepositories([URL])
     case openRepositoriesFinished(
       [Repository],
@@ -62,10 +141,35 @@ struct RepositoriesFeature {
       invalidRoots: [String],
       roots: [URL]
     )
-    case selectWorktree(Worktree.ID?)
+    case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
+    case selectNextWorktree
+    case selectPreviousWorktree
     case requestRenameBranch(Worktree.ID, String)
     case createRandomWorktree
     case createRandomWorktreeInRepository(Repository.ID)
+    case createWorktreeInRepository(
+      repositoryID: Repository.ID,
+      nameSource: WorktreeCreationNameSource,
+      baseRefSource: WorktreeCreationBaseRefSource
+    )
+    case promptedWorktreeCreationDataLoaded(
+      repositoryID: Repository.ID,
+      baseRefOptions: [String],
+      automaticBaseRefLabel: String,
+      selectedBaseRef: String?
+    )
+    case startPromptedWorktreeCreation(
+      repositoryID: Repository.ID,
+      branchName: String,
+      baseRef: String?
+    )
+    case promptedWorktreeCreationChecked(
+      repositoryID: Repository.ID,
+      branchName: String,
+      baseRef: String?,
+      duplicateMessage: String?
+    )
+    case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)
     case createRandomWorktreeSucceeded(
       Worktree,
       repositoryID: Repository.ID,
@@ -82,7 +186,12 @@ struct RepositoriesFeature {
     case consumeSetupScript(Worktree.ID)
     case consumeTerminalFocus(Worktree.ID)
     case requestArchiveWorktree(Worktree.ID, Repository.ID)
+    case requestArchiveWorktrees([ArchiveWorktreeTarget])
     case archiveWorktreeConfirmed(Worktree.ID, Repository.ID)
+    case archiveScriptProgressUpdated(worktreeID: Worktree.ID, progress: ArchiveScriptProgress)
+    case archiveScriptSucceeded(worktreeID: Worktree.ID, repositoryID: Repository.ID)
+    case archiveScriptFailed(worktreeID: Worktree.ID, message: String)
+    case archiveWorktreeApply(Worktree.ID, Repository.ID)
     case unarchiveWorktree(Worktree.ID)
     case requestDeleteWorktree(Worktree.ID, Repository.ID)
     case requestDeleteWorktrees([DeleteWorktreeTarget])
@@ -107,14 +216,22 @@ struct RepositoriesFeature {
     case worktreeNotificationReceived(Worktree.ID)
     case worktreeBranchNameLoaded(worktreeID: Worktree.ID, name: String)
     case worktreeLineChangesLoaded(worktreeID: Worktree.ID, added: Int, removed: Int)
-    case worktreePullRequestLoaded(worktreeID: Worktree.ID, pullRequest: GithubPullRequest?)
+    case refreshGithubIntegrationAvailability
+    case githubIntegrationAvailabilityUpdated(Bool)
+    case repositoryPullRequestRefreshCompleted(Repository.ID)
+    case repositoryPullRequestsLoaded(
+      repositoryID: Repository.ID,
+      pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?]
+    )
     case setGithubIntegrationEnabled(Bool)
     case setAutomaticallyArchiveMergedWorktrees(Bool)
+    case setMoveNotifiedWorktreeToTop(Bool)
     case pullRequestAction(Worktree.ID, PullRequestAction)
     case showToast(StatusToast)
     case dismissToast
     case delayedPullRequestRefresh(Worktree.ID)
     case openRepositorySettings(Repository.ID)
+    case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -125,6 +242,11 @@ struct RepositoriesFeature {
   }
 
   struct DeleteWorktreeTarget: Equatable {
+    let worktreeID: Worktree.ID
+    let repositoryID: Repository.ID
+  }
+
+  struct ArchiveWorktreeTarget: Equatable {
     let worktreeID: Worktree.ID
     let repositoryID: Repository.ID
   }
@@ -143,6 +265,7 @@ struct RepositoriesFeature {
 
   enum Alert: Equatable {
     case confirmArchiveWorktree(Worktree.ID, Repository.ID)
+    case confirmArchiveWorktrees([ArchiveWorktreeTarget])
     case confirmDeleteWorktree(Worktree.ID, Repository.ID)
     case confirmDeleteWorktrees([DeleteWorktreeTarget])
     case confirmRemoveRepository(Repository.ID)
@@ -152,6 +275,8 @@ struct RepositoriesFeature {
     case openOnGithub
     case markReadyForReview
     case merge
+    case close
+    case copyFailingJobURL
     case copyCiFailureLogs
     case rerunFailedJobs
     case openFailingCheckDetails
@@ -165,11 +290,12 @@ struct RepositoriesFeature {
     case worktreeCreated(Worktree)
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
-  @Dependency(\.gitClient) private var gitClient
-  @Dependency(\.githubCLI) private var githubCLI
-  @Dependency(\.githubIntegration) private var githubIntegration
-  @Dependency(\.repositoryPersistence) private var repositoryPersistence
+  @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(GitClientDependency.self) private var gitClient
+  @Dependency(GithubCLIClient.self) private var githubCLI
+  @Dependency(GithubIntegrationClient.self) private var githubIntegration
+  @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(ShellClient.self) private var shellClient
   @Dependency(\.uuid) private var uuid
 
   var body: some Reducer<State, Action> {
@@ -414,12 +540,33 @@ struct RepositoriesFeature {
 
       case .selectArchivedWorktrees:
         state.selection = .archivedWorktrees
+        state.sidebarSelectedWorktreeIDs = []
         return .send(.delegate(.selectedWorktreeChanged(nil)))
 
-      case .selectWorktree(let worktreeID):
-        state.selection = worktreeID.map(SidebarSelection.worktree)
+      case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
+        let validWorktreeIDs = Set(state.orderedWorktreeRows().map(\.id))
+        var nextWorktreeIDs = worktreeIDs.intersection(validWorktreeIDs)
+        if let selectedWorktreeID = state.selectedWorktreeID, validWorktreeIDs.contains(selectedWorktreeID) {
+          nextWorktreeIDs.insert(selectedWorktreeID)
+        }
+        state.sidebarSelectedWorktreeIDs = nextWorktreeIDs
+        return .none
+
+      case .selectWorktree(let worktreeID, let focusTerminal):
+        setSingleWorktreeSelection(worktreeID, state: &state)
+        if focusTerminal, let worktreeID {
+          state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
+        }
         let selectedWorktree = state.worktree(for: worktreeID)
         return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+
+      case .selectNextWorktree:
+        guard let id = state.worktreeID(byOffset: 1) else { return .none }
+        return .send(.selectWorktree(id))
+
+      case .selectPreviousWorktree:
+        guard let id = state.worktreeID(byOffset: -1) else { return .none }
+        return .send(.selectWorktree(id))
 
       case .requestRenameBranch(let worktreeID, let branchName):
         guard let worktree = state.worktree(for: worktreeID) else { return .none }
@@ -486,6 +633,183 @@ struct RepositoriesFeature {
           )
           return .none
         }
+        @Shared(.settingsFile) var settingsFile
+        if !settingsFile.global.promptForWorktreeCreation {
+          return .merge(
+            .cancel(id: CancelID.worktreePromptLoad),
+            .send(
+              .createWorktreeInRepository(
+                repositoryID: repository.id,
+                nameSource: .random,
+                baseRefSource: .repositorySetting
+              )
+            )
+          )
+        }
+        @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+        let selectedBaseRef = repositorySettings.worktreeBaseRef
+        let gitClient = gitClient
+        let rootURL = repository.rootURL
+        return .run { send in
+          let automaticBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+          guard !Task.isCancelled else {
+            return
+          }
+          let baseRefOptions: [String]
+          do {
+            let refs = try await gitClient.branchRefs(rootURL)
+            guard !Task.isCancelled else {
+              return
+            }
+            var options = refs
+            if !automaticBaseRef.isEmpty, !options.contains(automaticBaseRef) {
+              options.append(automaticBaseRef)
+            }
+            if let selectedBaseRef, !selectedBaseRef.isEmpty, !options.contains(selectedBaseRef) {
+              options.append(selectedBaseRef)
+            }
+            baseRefOptions = options.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+          } catch {
+            guard !Task.isCancelled else {
+              return
+            }
+            var options: [String] = []
+            if !automaticBaseRef.isEmpty {
+              options.append(automaticBaseRef)
+            }
+            if let selectedBaseRef, !selectedBaseRef.isEmpty, !options.contains(selectedBaseRef) {
+              options.append(selectedBaseRef)
+            }
+            baseRefOptions = options
+          }
+          guard !Task.isCancelled else {
+            return
+          }
+          let automaticBaseRefLabel =
+            automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
+          await send(
+            .promptedWorktreeCreationDataLoaded(
+              repositoryID: repositoryID,
+              baseRefOptions: baseRefOptions,
+              automaticBaseRefLabel: automaticBaseRefLabel,
+              selectedBaseRef: selectedBaseRef
+            )
+          )
+        }
+        .cancellable(id: CancelID.worktreePromptLoad, cancelInFlight: true)
+
+      case .promptedWorktreeCreationDataLoaded(
+        let repositoryID,
+        let baseRefOptions,
+        let automaticBaseRefLabel,
+        let selectedBaseRef
+      ):
+        guard let repository = state.repositories[id: repositoryID] else {
+          return .none
+        }
+        state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+          repositoryID: repository.id,
+          repositoryName: repository.name,
+          automaticBaseRefLabel: automaticBaseRefLabel,
+          baseRefOptions: baseRefOptions,
+          branchName: "",
+          selectedBaseRef: selectedBaseRef,
+          validationMessage: nil
+        )
+        return .none
+
+      case .worktreeCreationPrompt(.presented(.delegate(.cancel))):
+        state.worktreeCreationPrompt = nil
+        return .merge(
+          .cancel(id: CancelID.worktreePromptLoad),
+          .cancel(id: CancelID.worktreePromptValidation)
+        )
+
+      case .worktreeCreationPrompt(
+        .presented(.delegate(.submit(let repositoryID, let branchName, let baseRef)))
+      ):
+        return .send(
+          .startPromptedWorktreeCreation(
+            repositoryID: repositoryID,
+            branchName: branchName,
+            baseRef: baseRef
+          )
+        )
+
+      case .startPromptedWorktreeCreation(let repositoryID, let branchName, let baseRef):
+        guard let repository = state.repositories[id: repositoryID] else {
+          state.worktreeCreationPrompt = nil
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "Unable to resolve a repository for the new worktree."
+          )
+          return .none
+        }
+        state.worktreeCreationPrompt?.validationMessage = nil
+        state.worktreeCreationPrompt?.isValidating = true
+        let normalizedBranchName = branchName.lowercased()
+        if repository.worktrees.contains(where: { $0.name.lowercased() == normalizedBranchName }) {
+          state.worktreeCreationPrompt?.isValidating = false
+          state.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
+          return .none
+        }
+        let gitClient = gitClient
+        let rootURL = repository.rootURL
+        return .run { send in
+          let localBranchNames = (try? await gitClient.localBranchNames(rootURL)) ?? []
+          let duplicateMessage =
+            localBranchNames.contains(normalizedBranchName)
+            ? "Branch name already exists."
+            : nil
+          await send(
+            .promptedWorktreeCreationChecked(
+              repositoryID: repositoryID,
+              branchName: branchName,
+              baseRef: baseRef,
+              duplicateMessage: duplicateMessage
+            )
+          )
+        }
+        .cancellable(id: CancelID.worktreePromptValidation, cancelInFlight: true)
+
+      case .promptedWorktreeCreationChecked(
+        let repositoryID,
+        let branchName,
+        let baseRef,
+        let duplicateMessage
+      ):
+        guard let prompt = state.worktreeCreationPrompt, prompt.repositoryID == repositoryID else {
+          return .none
+        }
+        state.worktreeCreationPrompt?.isValidating = false
+        if let duplicateMessage {
+          state.worktreeCreationPrompt?.validationMessage = duplicateMessage
+          return .none
+        }
+        state.worktreeCreationPrompt = nil
+        return .send(
+          .createWorktreeInRepository(
+            repositoryID: repositoryID,
+            nameSource: .explicit(branchName),
+            baseRefSource: .explicit(baseRef)
+          )
+        )
+
+      case .createWorktreeInRepository(let repositoryID, let nameSource, let baseRefSource):
+        guard let repository = state.repositories[id: repositoryID] else {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "Unable to resolve a repository for the new worktree."
+          )
+          return .none
+        }
+        if state.removingRepositoryIDs.contains(repository.id) {
+          state.alert = messageAlert(
+            title: "Unable to create worktree",
+            message: "This repository is being removed."
+          )
+          return .none
+        }
         let previousSelection = state.selectedWorktreeID
         let pendingID = "pending:\(uuid().uuidString)"
         @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
@@ -496,61 +820,224 @@ struct RepositoriesFeature {
           PendingWorktree(
             id: pendingID,
             repositoryID: repository.id,
-            name: "Creating worktree...",
-            detail: ""
+            progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
           )
         )
-        state.selection = .worktree(pendingID)
+        setSingleWorktreeSelection(pendingID, state: &state)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
+        let createWorktreeStream = gitClient.createWorktreeStream
+        let isValidBranchName = gitClient.isValidBranchName
         return .run { send in
           var newWorktreeName: String?
+          var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
+          var progressUpdateThrottle = WorktreeCreationProgressUpdateThrottle(
+            stride: worktreeCreationProgressUpdateStride
+          )
           do {
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let branchNames = try await gitClient.localBranchNames(repository.rootURL)
             let existing = existingNames.union(branchNames)
-            let name = await MainActor.run {
-              WorktreeNameGenerator.nextName(excluding: existing)
-            }
-            guard let name else {
-              let message =
-                "All default adjective-animal names are already in use. "
-                + "Delete a worktree or rename a branch, then try again."
+            let name: String
+            switch nameSource {
+            case .random:
+              progress.stage = .choosingWorktreeName
               await send(
-                .createRandomWorktreeFailed(
-                  title: "No available worktree names",
-                  message: message,
-                  pendingID: pendingID,
-                  previousSelection: previousSelection,
-                  repositoryID: repository.id,
-                  name: nil
+                .pendingWorktreeProgressUpdated(
+                  id: pendingID,
+                  progress: progress
                 )
               )
-              return
+              let generatedName = await MainActor.run {
+                WorktreeNameGenerator.nextName(excluding: existing)
+              }
+              guard let generatedName else {
+                let message =
+                  "All default adjective-animal names are already in use. "
+                  + "Delete a worktree or rename a branch, then try again."
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "No available worktree names",
+                    message: message,
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              name = generatedName
+            case .explicit(let explicitName):
+              let trimmed = explicitName.trimmingCharacters(in: .whitespacesAndNewlines)
+              guard !trimmed.isEmpty else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name required",
+                    message: "Enter a branch name to create a worktree.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard !trimmed.contains(where: \.isWhitespace) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name invalid",
+                    message: "Branch names can't contain spaces.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard await isValidBranchName(trimmed, repository.rootURL) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name invalid",
+                    message: "Enter a valid git branch name and try again.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              guard !existing.contains(trimmed.lowercased()) else {
+                await send(
+                  .createRandomWorktreeFailed(
+                    title: "Branch name already exists",
+                    message: "Choose a different branch name and try again.",
+                    pendingID: pendingID,
+                    previousSelection: previousSelection,
+                    repositoryID: repository.id,
+                    name: nil
+                  )
+                )
+                return
+              }
+              name = trimmed
             }
             newWorktreeName = name
+            progress.worktreeName = name
+            progress.stage = .checkingRepositoryMode
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let isBareRepository = (try? await gitClient.isBareRepository(repository.rootURL)) ?? false
             let copyIgnored = isBareRepository ? false : copyIgnoredOnWorktreeCreate
             let copyUntracked = isBareRepository ? false : copyUntrackedOnWorktreeCreate
+            progress.stage = .resolvingBaseReference
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
             let resolvedBaseRef: String
-            if (selectedBaseRef ?? "").isEmpty {
-              resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
-            } else {
-              resolvedBaseRef = selectedBaseRef ?? ""
+            switch baseRefSource {
+            case .repositorySetting:
+              if (selectedBaseRef ?? "").isEmpty {
+                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              } else {
+                resolvedBaseRef = selectedBaseRef ?? ""
+              }
+            case .explicit(let explicitBaseRef):
+              if let explicitBaseRef, !explicitBaseRef.isEmpty {
+                resolvedBaseRef = explicitBaseRef
+              } else {
+                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+              }
             }
-            let newWorktree = try await gitClient.createWorktree(
+            progress.baseRef = resolvedBaseRef
+            progress.copyIgnored = copyIgnored
+            progress.copyUntracked = copyUntracked
+            progress.ignoredFilesToCopyCount =
+              copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+            progress.untrackedFilesToCopyCount =
+              copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+            progress.stage = .creatingWorktree
+            progress.commandText = worktreeCreateCommand(
+              repositoryRootURL: repository.rootURL,
+              name: name,
+              copyIgnored: copyIgnored,
+              copyUntracked: copyUntracked,
+              baseRef: resolvedBaseRef
+            )
+            await send(
+              .pendingWorktreeProgressUpdated(
+                id: pendingID,
+                progress: progress
+              )
+            )
+            let stream = createWorktreeStream(
               name,
               repository.rootURL,
               copyIgnored,
               copyUntracked,
               resolvedBaseRef
             )
-            await send(
-              .createRandomWorktreeSucceeded(
-                newWorktree,
-                repositoryID: repository.id,
-                pendingID: pendingID
-              )
+            for try await event in stream {
+              switch event {
+              case .outputLine(let outputLine):
+                let line = outputLine.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty else {
+                  continue
+                }
+                progress.appendOutputLine(line, maxLines: worktreeCreationProgressLineLimit)
+                if progressUpdateThrottle.recordLine() {
+                  await send(
+                    .pendingWorktreeProgressUpdated(
+                      id: pendingID,
+                      progress: progress
+                    )
+                  )
+                }
+              case .finished(let newWorktree):
+                if progressUpdateThrottle.flush() {
+                  await send(
+                    .pendingWorktreeProgressUpdated(
+                      id: pendingID,
+                      progress: progress
+                    )
+                  )
+                }
+                await send(
+                  .createRandomWorktreeSucceeded(
+                    newWorktree,
+                    repositoryID: repository.id,
+                    pendingID: pendingID
+                  )
+                )
+                return
+              }
+            }
+            throw GitClientError.commandFailed(
+              command: "wt sw",
+              message: "Worktree creation finished without a result."
             )
           } catch {
+            if progressUpdateThrottle.flush() {
+              await send(
+                .pendingWorktreeProgressUpdated(
+                  id: pendingID,
+                  progress: progress
+                )
+              )
+            }
             await send(
               .createRandomWorktreeFailed(
                 title: "Unable to create worktree",
@@ -564,6 +1051,20 @@ struct RepositoriesFeature {
           }
         }
 
+      case .worktreeCreationPrompt(.dismiss):
+        state.worktreeCreationPrompt = nil
+        return .merge(
+          .cancel(id: CancelID.worktreePromptLoad),
+          .cancel(id: CancelID.worktreePromptValidation)
+        )
+
+      case .worktreeCreationPrompt:
+        return .none
+
+      case .pendingWorktreeProgressUpdated(let id, let progress):
+        updatePendingWorktreeProgress(id, progress: progress, state: &state)
+        return .none
+
       case .createRandomWorktreeSucceeded(
         let worktree,
         let repositoryID,
@@ -574,7 +1075,7 @@ struct RepositoriesFeature {
         state.pendingTerminalFocusWorktreeIDs.insert(worktree.id)
         removePendingWorktree(pendingID, state: &state)
         if state.selection == .worktree(pendingID) {
-          state.selection = .worktree(worktree.id)
+          setSingleWorktreeSelection(worktree.id, state: &state)
         }
         insertWorktree(worktree, repositoryID: repositoryID, state: &state)
         return .merge(
@@ -666,6 +1167,9 @@ struct RepositoriesFeature {
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
+          return .none
+        }
         if state.isWorktreeArchived(worktree.id) {
           return .none
         }
@@ -686,10 +1190,139 @@ struct RepositoriesFeature {
         }
         return .none
 
+      case .requestArchiveWorktrees(let targets):
+        var validTargets: [ArchiveWorktreeTarget] = []
+        var seenWorktreeIDs: Set<Worktree.ID> = []
+        for target in targets {
+          guard seenWorktreeIDs.insert(target.worktreeID).inserted else { continue }
+          if state.removingRepositoryIDs.contains(target.repositoryID) {
+            continue
+          }
+          guard let repository = state.repositories[id: target.repositoryID],
+            let worktree = repository.worktrees[id: target.worktreeID]
+          else {
+            continue
+          }
+          if state.isMainWorktree(worktree)
+            || state.deletingWorktreeIDs.contains(worktree.id)
+            || state.archivingWorktreeIDs.contains(worktree.id)
+            || state.isWorktreeArchived(worktree.id)
+          {
+            continue
+          }
+          validTargets.append(target)
+        }
+        guard !validTargets.isEmpty else {
+          return .none
+        }
+        if validTargets.count == 1, let target = validTargets.first {
+          return .send(.requestArchiveWorktree(target.worktreeID, target.repositoryID))
+        }
+        let count = validTargets.count
+        state.alert = AlertState {
+          TextState("Archive \(count) worktrees?")
+        } actions: {
+          ButtonState(role: .destructive, action: .confirmArchiveWorktrees(validTargets)) {
+            TextState("Archive \(count) (⌘↩)")
+          }
+          ButtonState(role: .cancel) {
+            TextState("Cancel")
+          }
+        } message: {
+          TextState("Archive \(count) worktrees?")
+        }
+        return .none
+
       case .alert(.presented(.confirmArchiveWorktree(let worktreeID, let repositoryID))):
         return .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
 
+      case .alert(.presented(.confirmArchiveWorktrees(let targets))):
+        return .merge(
+          targets.map { target in
+            .send(.archiveWorktreeConfirmed(target.worktreeID, target.repositoryID))
+          }
+        )
+
       case .archiveWorktreeConfirmed(let worktreeID, let repositoryID):
+        guard let repository = state.repositories[id: repositoryID],
+          let worktree = repository.worktrees[id: worktreeID]
+        else {
+          return .none
+        }
+        if state.isWorktreeArchived(worktreeID) || state.archivingWorktreeIDs.contains(worktreeID) {
+          state.alert = nil
+          return .none
+        }
+        state.alert = nil
+        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        let script = repositorySettings.archiveScript
+        let commandText = archiveScriptCommand(script)
+        let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+          return .send(.archiveWorktreeApply(worktreeID, repositoryID))
+        }
+        state.archivingWorktreeIDs.insert(worktreeID)
+        state.archiveScriptProgressByWorktreeID[worktreeID] = ArchiveScriptProgress(
+          titleText: "Running archive script",
+          detailText: "Preparing archive script",
+          commandText: commandText
+        )
+        let shellClient = shellClient
+        return .run { send in
+          let envURL = URL(fileURLWithPath: "/usr/bin/env")
+          var progress = ArchiveScriptProgress(
+            titleText: "Running archive script",
+            detailText: "Running archive script",
+            commandText: commandText
+          )
+          do {
+            for try await event in shellClient.runLoginStream(
+              envURL,
+              ["bash", "-lc", script],
+              worktree.workingDirectory,
+              log: false
+            ) {
+              switch event {
+              case .line(let line):
+                let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { continue }
+                progress.appendOutputLine(text, maxLines: archiveScriptProgressLineLimit)
+                await send(.archiveScriptProgressUpdated(worktreeID: worktreeID, progress: progress))
+              case .finished:
+                await send(.archiveScriptSucceeded(worktreeID: worktreeID, repositoryID: repositoryID))
+              }
+            }
+          } catch {
+            await send(.archiveScriptFailed(worktreeID: worktreeID, message: error.localizedDescription))
+          }
+        }
+        .cancellable(id: CancelID.archiveScript(worktreeID), cancelInFlight: true)
+
+      case .archiveScriptProgressUpdated(let worktreeID, let progress):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
+        state.archiveScriptProgressByWorktreeID[worktreeID] = progress
+        return .none
+
+      case .archiveScriptSucceeded(let worktreeID, let repositoryID):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
+        state.archivingWorktreeIDs.remove(worktreeID)
+        state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
+        return .send(.archiveWorktreeApply(worktreeID, repositoryID))
+
+      case .archiveScriptFailed(let worktreeID, let message):
+        guard state.archivingWorktreeIDs.contains(worktreeID) else {
+          return .none
+        }
+        state.archivingWorktreeIDs.remove(worktreeID)
+        state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
+        state.alert = messageAlert(title: "Archive script failed", message: message)
+        return .none
+
+      case .archiveWorktreeApply(let worktreeID, let repositoryID):
         guard let repository = state.repositories[id: repositoryID],
           let worktree = repository.worktrees[id: worktreeID]
         else {
@@ -794,6 +1427,9 @@ struct RepositoriesFeature {
           )
           return .none
         }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
+          return .none
+        }
         if state.deletingWorktreeIDs.contains(worktree.id) {
           return .none
         }
@@ -830,7 +1466,10 @@ struct RepositoriesFeature {
           else {
             continue
           }
-          if state.isMainWorktree(worktree) || state.deletingWorktreeIDs.contains(worktree.id) {
+          if state.isMainWorktree(worktree)
+            || state.deletingWorktreeIDs.contains(worktree.id)
+            || state.archivingWorktreeIDs.contains(worktree.id)
+          {
             continue
           }
           validTargets.append(target)
@@ -873,6 +1512,9 @@ struct RepositoriesFeature {
         guard let repository = state.repositories[id: repositoryID],
           let worktree = repository.worktrees[id: worktreeID]
         else {
+          return .none
+        }
+        if state.archivingWorktreeIDs.contains(worktree.id) {
           return .none
         }
         if state.deletingWorktreeIDs.contains(worktree.id) {
@@ -920,9 +1562,11 @@ struct RepositoriesFeature {
         let wasArchived = state.isWorktreeArchived(worktreeID)
         withAnimation(.easeOut(duration: 0.2)) {
           state.deletingWorktreeIDs.remove(worktreeID)
+          state.archivingWorktreeIDs.remove(worktreeID)
           state.pendingWorktrees.removeAll { $0.id == worktreeID }
           state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
           state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
+          state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
           state.worktreeInfoByID.removeValue(forKey: worktreeID)
           state.pinnedWorktreeIDs.removeAll { $0 == worktreeID }
           state.archivedWorktreeIDs.removeAll { $0 == worktreeID }
@@ -1214,7 +1858,7 @@ struct RepositoriesFeature {
           return .cancel(id: CancelID.toastAutoDismiss)
         case .success:
           return .run { send in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await ContinuousClock().sleep(for: .seconds(2.5))
             await send(.dismissToast)
           }
           .cancellable(id: CancelID.toastAutoDismiss, cancelInFlight: true)
@@ -1234,7 +1878,7 @@ struct RepositoriesFeature {
         let repositoryRootURL = worktree.repositoryRootURL
         let worktreeIDs = repository.worktrees.map(\.id)
         return .run { send in
-          try? await Task.sleep(for: .seconds(2))
+          try? await ContinuousClock().sleep(for: .seconds(2))
           await send(
             .worktreeInfoEvent(
               .repositoryPullRequestRefresh(
@@ -1259,7 +1903,7 @@ struct RepositoriesFeature {
 
         var effects: [Effect<Action>] = []
 
-        if !state.isMainWorktree(worktree), !state.isWorktreePinned(worktree) {
+        if state.moveNotifiedWorktreeToTop, !state.isMainWorktree(worktree), !state.isWorktreePinned(worktree) {
           let reordered = reorderedUnpinnedWorktreeIDs(
             for: worktreeID,
             in: repository,
@@ -1315,6 +1959,11 @@ struct RepositoriesFeature {
           }
         case .repositoryPullRequestRefresh(let repositoryRootURL, let worktreeIDs):
           let worktrees = worktreeIDs.compactMap { state.worktree(for: $0) }
+          guard let firstWorktree = worktrees.first,
+            let repositoryID = state.repositoryID(containing: firstWorktree.id)
+          else {
+            return .none
+          }
           var seen = Set<String>()
           let branches =
             worktrees
@@ -1323,34 +1972,132 @@ struct RepositoriesFeature {
           guard !branches.isEmpty else {
             return .none
           }
-          let gitClient = gitClient
-          let githubCLI = githubCLI
-          let githubIntegration = githubIntegration
-          return .run { send in
-            guard await githubIntegration.isAvailable() else {
-              return
-            }
-            guard let remoteInfo = await gitClient.remoteInfo(repositoryRootURL) else {
-              return
-            }
-            do {
-              let prsByBranch = try await githubCLI.batchPullRequests(
-                remoteInfo.host,
-                remoteInfo.owner,
-                remoteInfo.repo,
-                branches
+          switch state.githubIntegrationAvailability {
+          case .available:
+            if state.inFlightPullRequestRefreshRepositoryIDs.contains(repositoryID) {
+              queuePullRequestRefresh(
+                repositoryID: repositoryID,
+                repositoryRootURL: repositoryRootURL,
+                worktreeIDs: worktreeIDs,
+                refreshesByRepositoryID: &state.queuedPullRequestRefreshByRepositoryID
               )
-              for worktree in worktrees {
-                let pullRequest = prsByBranch[worktree.name]
-                await send(
-                  .worktreePullRequestLoaded(worktreeID: worktree.id, pullRequest: pullRequest)
-                )
-              }
-            } catch {
-              return
+              return .none
             }
+            state.inFlightPullRequestRefreshRepositoryIDs.insert(repositoryID)
+            return refreshRepositoryPullRequests(
+              repositoryID: repositoryID,
+              repositoryRootURL: repositoryRootURL,
+              worktrees: worktrees,
+              branches: branches
+            )
+          case .unknown:
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: repositoryRootURL,
+              worktreeIDs: worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+            return .send(.refreshGithubIntegrationAvailability)
+          case .checking:
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: repositoryRootURL,
+              worktreeIDs: worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+            return .none
+          case .unavailable:
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: repositoryRootURL,
+              worktreeIDs: worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+            return .none
+          case .disabled:
+            return .none
           }
         }
+
+      case .refreshGithubIntegrationAvailability:
+        guard state.githubIntegrationAvailability != .checking,
+          state.githubIntegrationAvailability != .disabled
+        else {
+          return .none
+        }
+        state.githubIntegrationAvailability = .checking
+        let githubIntegration = githubIntegration
+        return .run { send in
+          let isAvailable = await githubIntegration.isAvailable()
+          await send(.githubIntegrationAvailabilityUpdated(isAvailable))
+        }
+        .cancellable(id: CancelID.githubIntegrationAvailability, cancelInFlight: true)
+
+      case .githubIntegrationAvailabilityUpdated(let isAvailable):
+        guard state.githubIntegrationAvailability != .disabled else {
+          return .none
+        }
+        state.githubIntegrationAvailability = isAvailable ? .available : .unavailable
+        guard isAvailable else {
+          for (repositoryID, queued) in state.queuedPullRequestRefreshByRepositoryID {
+            queuePullRequestRefresh(
+              repositoryID: repositoryID,
+              repositoryRootURL: queued.repositoryRootURL,
+              worktreeIDs: queued.worktreeIDs,
+              refreshesByRepositoryID: &state.pendingPullRequestRefreshByRepositoryID
+            )
+          }
+          state.queuedPullRequestRefreshByRepositoryID.removeAll()
+          state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+          return .run { send in
+            while !Task.isCancelled {
+              try? await ContinuousClock().sleep(for: githubIntegrationRecoveryInterval)
+              guard !Task.isCancelled else {
+                return
+              }
+              await send(.refreshGithubIntegrationAvailability)
+            }
+          }
+          .cancellable(id: CancelID.githubIntegrationRecovery, cancelInFlight: true)
+        }
+        let pendingRefreshes = state.pendingPullRequestRefreshByRepositoryID.values.sorted {
+          $0.repositoryRootURL.path(percentEncoded: false)
+            < $1.repositoryRootURL.path(percentEncoded: false)
+        }
+        state.pendingPullRequestRefreshByRepositoryID.removeAll()
+        return .merge(
+          .cancel(id: CancelID.githubIntegrationRecovery),
+          .merge(
+            pendingRefreshes.map { pending in
+              .send(
+                .worktreeInfoEvent(
+                  .repositoryPullRequestRefresh(
+                    repositoryRootURL: pending.repositoryRootURL,
+                    worktreeIDs: pending.worktreeIDs
+                  )
+                )
+              )
+            }
+          )
+        )
+
+      case .repositoryPullRequestRefreshCompleted(let repositoryID):
+        state.inFlightPullRequestRefreshRepositoryIDs.remove(repositoryID)
+        guard state.githubIntegrationAvailability == .available,
+          let pending = state.queuedPullRequestRefreshByRepositoryID.removeValue(
+            forKey: repositoryID
+          )
+        else {
+          return .none
+        }
+        return .send(
+          .worktreeInfoEvent(
+            .repositoryPullRequestRefresh(
+              repositoryRootURL: pending.repositoryRootURL,
+              worktreeIDs: pending.worktreeIDs
+            )
+          )
+        )
 
       case .worktreeBranchNameLoaded(let worktreeID, let name):
         updateWorktreeName(worktreeID, name: name, state: &state)
@@ -1365,31 +2112,50 @@ struct RepositoriesFeature {
         )
         return .none
 
-      case .worktreePullRequestLoaded(let worktreeID, let pullRequest):
-        let previousMerged =
-          state.worktreeInfoByID[worktreeID]?.pullRequest?.state == "MERGED"
-        let nextMerged = pullRequest?.state == "MERGED"
-        updateWorktreePullRequest(
-          worktreeID: worktreeID,
-          pullRequest: pullRequest,
-          state: &state
-        )
-        if state.automaticallyArchiveMergedWorktrees,
-          !previousMerged,
-          nextMerged,
-          let repositoryID = state.repositoryID(containing: worktreeID),
-          let repository = state.repositories[id: repositoryID],
-          let worktree = repository.worktrees[id: worktreeID],
-          !state.isMainWorktree(worktree),
-          !state.isWorktreeArchived(worktreeID),
-          !state.deletingWorktreeIDs.contains(worktreeID)
-        {
-          return .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
+      case .repositoryPullRequestsLoaded(let repositoryID, let pullRequestsByWorktreeID):
+        guard let repository = state.repositories[id: repositoryID] else {
+          return .none
         }
-        return .none
+        var archiveWorktreeIDs: [Worktree.ID] = []
+        for worktreeID in pullRequestsByWorktreeID.keys.sorted() {
+          guard let worktree = repository.worktrees[id: worktreeID] else {
+            continue
+          }
+          let pullRequest = pullRequestsByWorktreeID[worktreeID] ?? nil
+          let previousPullRequest = state.worktreeInfoByID[worktreeID]?.pullRequest
+          guard previousPullRequest != pullRequest else {
+            continue
+          }
+          let previousMerged = previousPullRequest?.state == "MERGED"
+          let nextMerged = pullRequest?.state == "MERGED"
+          updateWorktreePullRequest(
+            worktreeID: worktreeID,
+            pullRequest: pullRequest,
+            state: &state
+          )
+          if state.automaticallyArchiveMergedWorktrees,
+            !previousMerged,
+            nextMerged,
+            !state.isMainWorktree(worktree),
+            !state.isWorktreeArchived(worktreeID),
+            !state.deletingWorktreeIDs.contains(worktreeID)
+          {
+            archiveWorktreeIDs.append(worktreeID)
+          }
+        }
+        guard !archiveWorktreeIDs.isEmpty else {
+          return .none
+        }
+        return .merge(
+          archiveWorktreeIDs.map { worktreeID in
+            .send(.archiveWorktreeConfirmed(worktreeID, repositoryID))
+          }
+        )
 
       case .pullRequestAction(let worktreeID, let action):
         guard let worktree = state.worktree(for: worktreeID),
+          let repositoryID = state.repositoryID(containing: worktreeID),
+          let repository = state.repositories[id: repositoryID],
           let pullRequest = state.worktreeInfo(for: worktreeID)?.pullRequest
         else {
           return .send(
@@ -1401,7 +2167,14 @@ struct RepositoriesFeature {
         }
         let repoRoot = worktree.repositoryRootURL
         let worktreeRoot = worktree.workingDirectory
+        let pullRequestRefresh = WorktreeInfoWatcherClient.Event.repositoryPullRequestRefresh(
+          repositoryRootURL: repoRoot,
+          worktreeIDs: repository.worktrees.map(\.id)
+        )
         let branchName = pullRequest.headRefName ?? worktree.name
+        let failingCheckDetailsURL = (pullRequest.statusCheckRollup?.checks ?? []).first {
+          $0.checkState == .failure && $0.detailsUrl != nil
+        }?.detailsUrl
         switch action {
         case .openOnGithub:
           guard let url = URL(string: pullRequest.url) else {
@@ -1416,12 +2189,25 @@ struct RepositoriesFeature {
             NSWorkspace.shared.open(url)
           }
 
+        case .copyFailingJobURL:
+          guard let failingCheckDetailsURL, !failingCheckDetailsURL.isEmpty else {
+            return .send(
+              .presentAlert(
+                title: "Failing check not found",
+                message: "Supacode could not find a failing check URL."
+              )
+            )
+          }
+          return .run { send in
+            await MainActor.run {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(failingCheckDetailsURL, forType: .string)
+            }
+            await send(.showToast(.success("Failing job URL copied")))
+          }
+
         case .openFailingCheckDetails:
-          let checks = pullRequest.statusCheckRollup?.checks ?? []
-          let detailsUrl = checks.first {
-            $0.checkState == .failure && $0.detailsUrl != nil
-          }?.detailsUrl
-          guard let detailsUrl, let url = URL(string: detailsUrl) else {
+          guard let failingCheckDetailsURL, let url = URL(string: failingCheckDetailsURL) else {
             return .send(
               .presentAlert(
                 title: "Failing check not found",
@@ -1481,12 +2267,43 @@ struct RepositoriesFeature {
             do {
               try await githubCLI.mergePullRequest(worktreeRoot, pullRequest.number, strategy)
               await send(.showToast(.success("Pull request merged")))
+              await send(.worktreeInfoEvent(pullRequestRefresh))
               await send(.delayedPullRequestRefresh(worktreeID))
             } catch {
               await send(.dismissToast)
               await send(
                 .presentAlert(
                   title: "Failed to merge pull request",
+                  message: error.localizedDescription
+                )
+              )
+            }
+          }
+
+        case .close:
+          let githubCLI = githubCLI
+          let githubIntegration = githubIntegration
+          return .run { send in
+            guard await githubIntegration.isAvailable() else {
+              await send(
+                .presentAlert(
+                  title: "GitHub integration unavailable",
+                  message: "Enable GitHub integration to close a pull request."
+                )
+              )
+              return
+            }
+            await send(.showToast(.inProgress("Closing pull request…")))
+            do {
+              try await githubCLI.closePullRequest(worktreeRoot, pullRequest.number)
+              await send(.showToast(.success("Pull request closed")))
+              await send(.worktreeInfoEvent(pullRequestRefresh))
+              await send(.delayedPullRequestRefresh(worktreeID))
+            } catch {
+              await send(.dismissToast)
+              await send(
+                .presentAlert(
+                  title: "Failed to close pull request",
                   message: error.localizedDescription
                 )
               )
@@ -1630,9 +2447,20 @@ struct RepositoriesFeature {
         }
 
       case .setGithubIntegrationEnabled(let isEnabled):
-        guard !isEnabled else {
-          return .none
+        if isEnabled {
+          state.githubIntegrationAvailability = .unknown
+          state.pendingPullRequestRefreshByRepositoryID.removeAll()
+          state.queuedPullRequestRefreshByRepositoryID.removeAll()
+          state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
+          return .merge(
+            .cancel(id: CancelID.githubIntegrationRecovery),
+            .send(.refreshGithubIntegrationAvailability)
+          )
         }
+        state.githubIntegrationAvailability = .disabled
+        state.pendingPullRequestRefreshByRepositoryID.removeAll()
+        state.queuedPullRequestRefreshByRepositoryID.removeAll()
+        state.inFlightPullRequestRefreshRepositoryIDs.removeAll()
         let worktreeIDs = Array(state.worktreeInfoByID.keys)
         for worktreeID in worktreeIDs {
           updateWorktreePullRequest(
@@ -1641,10 +2469,17 @@ struct RepositoriesFeature {
             state: &state
           )
         }
-        return .none
+        return .merge(
+          .cancel(id: CancelID.githubIntegrationAvailability),
+          .cancel(id: CancelID.githubIntegrationRecovery)
+        )
 
       case .setAutomaticallyArchiveMergedWorktrees(let isEnabled):
         state.automaticallyArchiveMergedWorktrees = isEnabled
+        return .none
+
+      case .setMoveNotifiedWorktreeToTop(let isEnabled):
+        state.moveNotifiedWorktreeToTop = isEnabled
         return .none
 
       case .openRepositorySettings(let repositoryID):
@@ -1660,6 +2495,47 @@ struct RepositoriesFeature {
       case .delegate:
         return .none
       }
+    }
+    .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
+      WorktreeCreationPromptFeature()
+    }
+  }
+
+  private func refreshRepositoryPullRequests(
+    repositoryID: Repository.ID,
+    repositoryRootURL: URL,
+    worktrees: [Worktree],
+    branches: [String]
+  ) -> Effect<Action> {
+    let gitClient = gitClient
+    let githubCLI = githubCLI
+    return .run { send in
+      guard let remoteInfo = await gitClient.remoteInfo(repositoryRootURL) else {
+        await send(.repositoryPullRequestRefreshCompleted(repositoryID))
+        return
+      }
+      do {
+        let prsByBranch = try await githubCLI.batchPullRequests(
+          remoteInfo.host,
+          remoteInfo.owner,
+          remoteInfo.repo,
+          branches
+        )
+        var pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [:]
+        for worktree in worktrees {
+          pullRequestsByWorktreeID[worktree.id] = prsByBranch[worktree.name]
+        }
+        await send(
+          .repositoryPullRequestsLoaded(
+            repositoryID: repositoryID,
+            pullRequestsByWorktreeID: pullRequestsByWorktreeID
+          )
+        )
+      } catch {
+        await send(.repositoryPullRequestRefreshCompleted(repositoryID))
+        return
+      }
+      await send(.repositoryPullRequestRefreshCompleted(repositoryID))
     }
   }
 
@@ -1741,6 +2617,10 @@ struct RepositoriesFeature {
     let filteredFocusIDs = state.pendingTerminalFocusWorktreeIDs.filter {
       availableWorktreeIDs.contains($0)
     }
+    let filteredArchivingIDs = state.archivingWorktreeIDs
+    let filteredArchiveScriptProgress = state.archiveScriptProgressByWorktreeID.filter {
+      availableWorktreeIDs.contains($0.key) || filteredArchivingIDs.contains($0.key)
+    }
     let filteredWorktreeInfo = state.worktreeInfoByID.filter {
       availableWorktreeIDs.contains($0.key)
     }
@@ -1752,6 +2632,8 @@ struct RepositoriesFeature {
         state.deletingWorktreeIDs = filteredDeletingIDs
         state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
         state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
+        state.archivingWorktreeIDs = filteredArchivingIDs
+        state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
         state.worktreeInfoByID = filteredWorktreeInfo
       }
     } else {
@@ -1760,6 +2642,8 @@ struct RepositoriesFeature {
       state.deletingWorktreeIDs = filteredDeletingIDs
       state.pendingSetupScriptWorktreeIDs = filteredSetupScriptIDs
       state.pendingTerminalFocusWorktreeIDs = filteredFocusIDs
+      state.archivingWorktreeIDs = filteredArchivingIDs
+      state.archiveScriptProgressByWorktreeID = filteredArchiveScriptProgress
       state.worktreeInfoByID = filteredWorktreeInfo
     }
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
@@ -1853,6 +2737,24 @@ extension RepositoriesFeature.State {
     selection?.worktreeID
   }
 
+  var expandedRepositoryIDs: Set<Repository.ID> {
+    let repositoryIDs = Set(repositories.map(\.id))
+    let collapsedSet = Set(collapsedRepositoryIDs).intersection(repositoryIDs)
+    let pendingRepositoryIDs = Set(pendingWorktrees.map(\.repositoryID))
+    return repositoryIDs.subtracting(collapsedSet).union(pendingRepositoryIDs)
+  }
+
+  func worktreeID(byOffset offset: Int) -> Worktree.ID? {
+    let rows = orderedWorktreeRows(includingRepositoryIDs: expandedRepositoryIDs)
+    guard !rows.isEmpty else { return nil }
+    if let currentID = selectedWorktreeID,
+      let currentIndex = rows.firstIndex(where: { $0.id == currentID })
+    {
+      return rows[(currentIndex + offset + rows.count) % rows.count].id
+    }
+    return rows[offset > 0 ? 0 : rows.count - 1].id
+  }
+
   var isShowingArchivedWorktrees: Bool {
     selection == .archivedWorktrees
   }
@@ -1915,6 +2817,11 @@ extension RepositoriesFeature.State {
     return pendingWorktrees.first(where: { $0.id == id })
   }
 
+  func archiveScriptProgress(for id: Worktree.ID?) -> ArchiveScriptProgress? {
+    guard let id else { return nil }
+    return archiveScriptProgressByWorktreeID[id]
+  }
+
   func shouldFocusTerminal(for worktreeID: Worktree.ID) -> Bool {
     pendingTerminalFocusWorktreeIDs.contains(worktreeID)
   }
@@ -1924,12 +2831,13 @@ extension RepositoriesFeature.State {
     return WorktreeRowModel(
       id: pending.id,
       repositoryID: pending.repositoryID,
-      name: pending.name,
-      detail: pending.detail,
+      name: pending.progress.titleText,
+      detail: pending.progress.detailText,
       info: worktreeInfo(for: pending.id),
       isPinned: false,
       isMainWorktree: false,
       isPending: true,
+      isArchiving: false,
       isDeleting: isDeleting,
       isRemovable: false
     )
@@ -1944,6 +2852,7 @@ extension RepositoriesFeature.State {
     let isDeleting =
       removingRepositoryIDs.contains(repositoryID)
       || deletingWorktreeIDs.contains(worktree.id)
+    let isArchiving = archivingWorktreeIDs.contains(worktree.id)
     return WorktreeRowModel(
       id: worktree.id,
       repositoryID: repositoryID,
@@ -1953,8 +2862,9 @@ extension RepositoriesFeature.State {
       isPinned: isPinned,
       isMainWorktree: isMainWorktree,
       isPending: false,
+      isArchiving: isArchiving,
       isDeleting: isDeleting,
-      isRemovable: !isDeleting
+      isRemovable: !isDeleting && !isArchiving
     )
   }
 
@@ -2118,6 +3028,9 @@ extension RepositoriesFeature.State {
       if case .confirmArchiveWorktree(let worktreeID, let repositoryID)? = button.action.action {
         return .confirmArchiveWorktree(worktreeID, repositoryID)
       }
+      if case .confirmArchiveWorktrees(let targets)? = button.action.action {
+        return .confirmArchiveWorktrees(targets)
+      }
       if case .confirmDeleteWorktree(let worktreeID, let repositoryID)? = button.action.action {
         return .confirmDeleteWorktree(worktreeID, repositoryID)
       }
@@ -2229,6 +3142,17 @@ private func removePendingWorktree(_ id: String, state: inout RepositoriesFeatur
   state.pendingWorktrees.removeAll { $0.id == id }
 }
 
+private func updatePendingWorktreeProgress(
+  _ id: String,
+  progress: WorktreeCreationProgress,
+  state: inout RepositoriesFeature.State
+) {
+  guard let index = state.pendingWorktrees.firstIndex(where: { $0.id == id }) else {
+    return
+  }
+  state.pendingWorktrees[index].progress = progress
+}
+
 private func insertWorktree(
   _ worktree: Worktree,
   repositoryID: Repository.ID,
@@ -2283,8 +3207,19 @@ private func cleanupFailedWorktree(
     )
   }
   let repositoryRootURL = URL(fileURLWithPath: repositoryID).standardizedFileURL
-  let baseDirectory = SupacodePaths.repositoryDirectory(for: repositoryRootURL)
-  let worktreeURL = baseDirectory.appending(path: name, directoryHint: .isDirectory)
+  let baseDirectory = SupacodePaths.repositoryDirectory(for: repositoryRootURL).standardizedFileURL
+  let worktreeURL =
+    baseDirectory
+    .appending(path: name, directoryHint: .isDirectory)
+    .standardizedFileURL
+  guard isPathInsideBaseDirectory(worktreeURL, baseDirectory: baseDirectory) else {
+    return FailedWorktreeCleanup(
+      didRemoveWorktree: false,
+      didUpdatePinned: false,
+      didUpdateOrder: false,
+      worktree: nil
+    )
+  }
   let worktreeID = worktreeURL.path(percentEncoded: false)
   let worktree =
     state.repositories[id: repositoryID]?.worktrees[id: worktreeID]
@@ -2308,6 +3243,15 @@ private func cleanupFailedWorktree(
   )
 }
 
+private func isPathInsideBaseDirectory(_ path: URL, baseDirectory: URL) -> Bool {
+  let normalizedPath = path.standardizedFileURL.pathComponents
+  let normalizedBase = baseDirectory.standardizedFileURL.pathComponents
+  guard normalizedPath.count >= normalizedBase.count else {
+    return false
+  }
+  return Array(normalizedPath.prefix(normalizedBase.count)) == normalizedBase
+}
+
 private struct WorktreeCleanupStateResult {
   let didRemoveWorktree: Bool
   let didUpdatePinned: Bool
@@ -2323,6 +3267,8 @@ private func cleanupWorktreeState(
   state.pendingWorktrees.removeAll { $0.id == worktreeID }
   state.pendingSetupScriptWorktreeIDs.remove(worktreeID)
   state.pendingTerminalFocusWorktreeIDs.remove(worktreeID)
+  state.archivingWorktreeIDs.remove(worktreeID)
+  state.archiveScriptProgressByWorktreeID.removeValue(forKey: worktreeID)
   state.deletingWorktreeIDs.remove(worktreeID)
   state.worktreeInfoByID.removeValue(forKey: worktreeID)
   let didUpdatePinned = state.pinnedWorktreeIDs.contains(worktreeID)
@@ -2347,6 +3293,47 @@ private func cleanupWorktreeState(
     didUpdatePinned: didUpdatePinned,
     didUpdateOrder: didUpdateOrder
   )
+}
+
+private nonisolated func archiveScriptCommand(_ script: String) -> String {
+  let normalized = script.replacing("\n", with: "\\n")
+  return "bash -lc \(shellQuote(normalized))"
+}
+
+private nonisolated func worktreeCreateCommand(
+  repositoryRootURL: URL,
+  name: String,
+  copyIgnored: Bool,
+  copyUntracked: Bool,
+  baseRef: String
+) -> String {
+  let baseDir = SupacodePaths.repositoryDirectory(for: repositoryRootURL).path(percentEncoded: false)
+  var parts = ["wt", "--base-dir", baseDir, "sw"]
+  if copyIgnored {
+    parts.append("--copy-ignored")
+  }
+  if copyUntracked {
+    parts.append("--copy-untracked")
+  }
+  if !baseRef.isEmpty {
+    parts.append("--from")
+    parts.append(baseRef)
+  }
+  if copyIgnored || copyUntracked {
+    parts.append("--verbose")
+  }
+  parts.append(name)
+  return parts.map(shellQuote).joined(separator: " ")
+}
+
+private nonisolated func shellQuote(_ value: String) -> String {
+  let needsQuoting = value.contains { character in
+    character.isWhitespace || character == "\"" || character == "'" || character == "\\"
+  }
+  guard needsQuoting else {
+    return value
+  }
+  return "'\(value.replacing("'", with: "'\"'\"'"))'"
 }
 
 private func updateWorktreeName(
@@ -2418,6 +3405,26 @@ private func updateWorktreePullRequest(
   }
 }
 
+private func queuePullRequestRefresh(
+  repositoryID: Repository.ID,
+  repositoryRootURL: URL,
+  worktreeIDs: [Worktree.ID],
+  refreshesByRepositoryID: inout [Repository.ID: RepositoriesFeature.PendingPullRequestRefresh]
+) {
+  if var pending = refreshesByRepositoryID[repositoryID] {
+    var seenWorktreeIDs = Set(pending.worktreeIDs)
+    for worktreeID in worktreeIDs where seenWorktreeIDs.insert(worktreeID).inserted {
+      pending.worktreeIDs.append(worktreeID)
+    }
+    refreshesByRepositoryID[repositoryID] = pending
+  } else {
+    refreshesByRepositoryID[repositoryID] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: repositoryRootURL,
+      worktreeIDs: worktreeIDs
+    )
+  }
+}
+
 private func reorderedUnpinnedWorktreeIDs(
   for worktreeID: Worktree.ID,
   in repository: Repository,
@@ -2438,11 +3445,10 @@ private func restoreSelection(
   state: inout RepositoriesFeature.State
 ) {
   guard state.selection == .worktree(pendingID) else { return }
-  if isSelectionValid(id, state: state) {
-    state.selection = id.map(SidebarSelection.worktree)
-  } else {
-    state.selection = nil
-  }
+  setSingleWorktreeSelection(
+    isSelectionValid(id, state: state) ? id : nil,
+    state: &state
+  )
 }
 
 private func isSelectionValid(
@@ -2450,6 +3456,18 @@ private func isSelectionValid(
   state: RepositoriesFeature.State
 ) -> Bool {
   state.selectedRow(for: id) != nil
+}
+
+private func setSingleWorktreeSelection(
+  _ worktreeID: Worktree.ID?,
+  state: inout RepositoriesFeature.State
+) {
+  state.selection = worktreeID.map(SidebarSelection.worktree)
+  if let worktreeID {
+    state.sidebarSelectedWorktreeIDs = [worktreeID]
+  } else {
+    state.sidebarSelectedWorktreeIDs = []
+  }
 }
 
 private func repositoryForWorktreeCreation(

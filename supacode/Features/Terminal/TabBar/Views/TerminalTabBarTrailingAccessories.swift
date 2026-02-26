@@ -18,6 +18,28 @@ struct TerminalTabBarTrailingAccessories: View {
   @State private var closeTask: Task<Void, Never>?
 
   var body: some View {
+    HStack(spacing: TerminalTabBarMetrics.contentTrailingSpacing) {
+      newTabButton
+      splitButton(
+        title: "Split Vertically",
+        systemImage: "square.split.2x1",
+        shortcutBinding: "new_split:right",
+        action: splitVertically
+      )
+      .disabled(!canSplit)
+      splitButton(
+        title: "Split Horizontally",
+        systemImage: "square.split.1x2",
+        shortcutBinding: "new_split:down",
+        action: splitHorizontally
+      )
+      .disabled(!canSplit)
+    }
+    .frame(height: TerminalTabBarMetrics.barHeight)
+    .padding(.trailing, 8)
+  }
+
+  private var newTabButton: some View {
     Button {
       createTab()
       isHoverPopoverPresented = false
@@ -56,8 +78,32 @@ struct TerminalTabBarTrailingAccessories: View {
           updateHoverPopoverVisibility()
         }
     }
-    .frame(height: TerminalTabBarMetrics.barHeight)
-    .padding(.trailing, 8)
+  }
+
+  private func splitButton(
+    title: String,
+    systemImage: String,
+    shortcutBinding: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    let shortcut = ghosttyShortcuts.display(for: shortcutBinding)
+
+    return Button(action: action) {
+      if commandKeyObserver.isPressed {
+        HStack(spacing: TerminalTabBarMetrics.contentSpacing) {
+          Text(title)
+            .font(.caption)
+          if let shortcut {
+            ShortcutHintView(text: shortcut, color: TerminalTabBarColors.inactiveText)
+          }
+        }
+      } else {
+        Label(title, systemImage: systemImage)
+          .labelStyle(.iconOnly)
+      }
+    }
+    .buttonStyle(.borderless)
+    .help(helpText(title, shortcut: shortcut))
   }
 
   private var hoverPopoverContent: some View {
@@ -87,7 +133,7 @@ struct TerminalTabBarTrailingAccessories: View {
         isHoverPopoverPresented = false
       } label: {
         HStack(spacing: 8) {
-          Image(systemName: "rectangle.righthalf.inset.filled")
+          Image(systemName: "square.split.2x1")
             .accessibilityHidden(true)
           Text("Split Vertically")
           Spacer(minLength: 0)
@@ -106,7 +152,7 @@ struct TerminalTabBarTrailingAccessories: View {
         isHoverPopoverPresented = false
       } label: {
         HStack(spacing: 8) {
-          Image(systemName: "rectangle.bottomhalf.inset.filled")
+          Image(systemName: "square.split.1x2")
             .accessibilityHidden(true)
           Text("Split Horizontally")
           Spacer(minLength: 0)
@@ -139,7 +185,7 @@ struct TerminalTabBarTrailingAccessories: View {
       openTask?.cancel()
       openTask = Task { @MainActor in
         // Intentional delay so clicks on + don't get interrupted by the hover UI.
-        try? await Task.sleep(for: .milliseconds(350))
+        try? await ContinuousClock().sleep(for: .milliseconds(350))
         guard isHoveringButton || isHoveringPopover else { return }
         // Prevent showing while the user is in the middle of a click-drag/click-hold.
         guard NSEvent.pressedMouseButtons == 0 else { return }
@@ -153,7 +199,7 @@ struct TerminalTabBarTrailingAccessories: View {
       closeTask?.cancel()
       closeTask = Task { @MainActor in
         // Allow time to move from button into popover without it flashing closed.
-        try? await Task.sleep(for: .milliseconds(350))
+        try? await ContinuousClock().sleep(for: .milliseconds(350))
         guard !(isHoveringButton || isHoveringPopover) else { return }
         isHoverPopoverPresented = false
       }

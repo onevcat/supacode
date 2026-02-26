@@ -79,6 +79,16 @@ struct AppFeatureCommandPaletteTests {
     await store.receive(\.updates.checkForUpdates)
   }
 
+  @Test(.dependencies) func closePullRequestDispatchesAction() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.commandPalette(.delegate(.closePullRequest("/tmp/repo/wt-close"))))
+    await store.receive(\.repositories.pullRequestAction)
+  }
+
   @Test(.dependencies) func removeWorktreeDispatchesRequest() async {
     let worktree = makeWorktree(
       id: "/tmp/repo-run/wt-1",

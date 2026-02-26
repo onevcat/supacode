@@ -36,6 +36,7 @@ struct WorktreeRow: View {
     let showsPullRequestTag = display.pullRequest != nil && display.pullRequestBadgeStyle != nil
     let nameColor = colorScheme == .dark ? Color.white : Color.primary
     let detailText = worktreeName.isEmpty ? name : worktreeName
+    let bodyFontAscender = NSFont.preferredFont(forTextStyle: .body).ascender
     VStack(alignment: .leading, spacing: 2) {
       HStack(alignment: .firstTextBaseline, spacing: 6) {
         ZStack {
@@ -64,7 +65,7 @@ struct WorktreeRow: View {
         }
         .frame(width: 16, height: 16)
         .alignmentGuide(.firstTextBaseline) { _ in
-          bodyFont.ascender
+          bodyFontAscender
         }
         Text(name)
           .font(.body)
@@ -74,7 +75,7 @@ struct WorktreeRow: View {
         if isRunScriptRunning {
           Image(systemName: "play.fill")
             .font(.caption)
-            .foregroundStyle(isSelected ? Color.primary : Color.green)
+            .foregroundStyle(.green)
             .help("Run script active")
             .accessibilityLabel("Run script active")
         }
@@ -111,14 +112,13 @@ struct WorktreeRow: View {
         worktreeName: detailText,
         showsPullRequestTag: showsPullRequestTag,
         pullRequestNumber: display.pullRequest?.number,
+        pullRequestState: display.pullRequestState,
         mergeReadiness: mergeReadiness,
-        isSelected: isSelected,
         shortcutHint: shortcutHint
       )
       .padding(.leading, 22)
     }
     .padding(.horizontal, 2)
-    .padding(.vertical, 4)
     .frame(maxWidth: .infinity, minHeight: worktreeRowHeight, alignment: .center)
   }
 
@@ -131,12 +131,8 @@ struct WorktreeRow: View {
     return PullRequestMergeReadiness(pullRequest: pullRequest)
   }
 
-  private var bodyFont: NSFont {
-    NSFont.preferredFont(forTextStyle: .body)
-  }
-
   private var worktreeRowHeight: CGFloat {
-    56
+    42
   }
 }
 
@@ -144,16 +140,15 @@ private struct WorktreeRowInfoView: View {
   let worktreeName: String
   let showsPullRequestTag: Bool
   let pullRequestNumber: Int?
+  let pullRequestState: String?
   let mergeReadiness: PullRequestMergeReadiness?
-  let isSelected: Bool
   let shortcutHint: String?
 
   var body: some View {
     HStack(spacing: 4) {
       summaryText
-        .lineLimit(2)
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
+        .lineLimit(1)
+        .truncationMode(.tail)
         .layoutPriority(1)
       Spacer(minLength: 0)
       if let shortcutHint {
@@ -184,10 +179,15 @@ private struct WorktreeRowInfoView: View {
       segment.foregroundColor = .secondary
       result.append(segment)
     }
-    if let mergeReadiness {
+    if pullRequestState == "MERGED" {
+      appendSeparator()
+      var segment = AttributedString("Merged")
+      segment.foregroundColor = PullRequestBadgeStyle.mergedColor
+      result.append(segment)
+    } else if let mergeReadiness {
       appendSeparator()
       var segment = AttributedString(mergeReadiness.label)
-      segment.foregroundColor = isSelected ? .secondary : (mergeReadiness.isBlocking ? .red : .green)
+      segment.foregroundColor = mergeReadiness.isBlocking ? .red : .green
       result.append(segment)
     }
     return Text(result)
@@ -202,14 +202,14 @@ private struct WorktreeRowChangeCountView: View {
   var body: some View {
     HStack(spacing: 4) {
       Text("+\(addedLines)")
-        .foregroundStyle(isSelected ? Color.secondary : Color.green)
+        .foregroundStyle(.green)
       Text("-\(removedLines)")
-        .foregroundStyle(isSelected ? Color.secondary : Color.red)
+        .foregroundStyle(.red)
     }
     .font(.caption)
     .lineLimit(1)
     .padding(.horizontal, 4)
-    .padding(.vertical, 2)
+    .padding(.vertical, 0)
     .overlay {
       RoundedRectangle(cornerRadius: 4, style: .continuous)
         .stroke(isSelected ? AnyShapeStyle(.secondary.opacity(0.3)) : AnyShapeStyle(.tertiary), lineWidth: 1)

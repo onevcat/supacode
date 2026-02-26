@@ -12,14 +12,15 @@ struct SettingsFeature {
     var updatesAutomaticallyCheckForUpdates: Bool
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
-    var dockBadgeEnabled: Bool
     var notificationSoundEnabled: Bool
     var systemNotificationsEnabled: Bool
+    var moveNotifiedWorktreeToTop: Bool
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
     var automaticallyArchiveMergedWorktrees: Bool
+    var promptForWorktreeCreation: Bool
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
 
@@ -32,14 +33,15 @@ struct SettingsFeature {
       updatesAutomaticallyCheckForUpdates = settings.updatesAutomaticallyCheckForUpdates
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
-      dockBadgeEnabled = settings.dockBadgeEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
       systemNotificationsEnabled = settings.systemNotificationsEnabled
+      moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
+      promptForWorktreeCreation = settings.promptForWorktreeCreation
     }
 
     var globalSettings: GlobalSettings {
@@ -51,14 +53,15 @@ struct SettingsFeature {
         updatesAutomaticallyCheckForUpdates: updatesAutomaticallyCheckForUpdates,
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
-        dockBadgeEnabled: dockBadgeEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
         systemNotificationsEnabled: systemNotificationsEnabled,
+        moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
-        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees
+        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees,
+        promptForWorktreeCreation: promptForWorktreeCreation
       )
     }
   }
@@ -77,7 +80,7 @@ struct SettingsFeature {
     case settingsChanged(GlobalSettings)
   }
 
-  @Dependency(\.analyticsClient) private var analyticsClient
+  @Dependency(AnalyticsClient.self) private var analyticsClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -106,14 +109,15 @@ struct SettingsFeature {
         state.updatesAutomaticallyCheckForUpdates = normalizedSettings.updatesAutomaticallyCheckForUpdates
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
-        state.dockBadgeEnabled = normalizedSettings.dockBadgeEnabled
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
+        state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:

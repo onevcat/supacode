@@ -94,10 +94,9 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          TextEditor(
+          PlainTextEditor(
             text: settings.setupScript
           )
-          .font(.body)
           .frame(minHeight: 120)
           if store.settings.setupScript.isEmpty {
             Text("claude --dangerously-skip-permissions")
@@ -116,10 +115,30 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          TextEditor(
+          PlainTextEditor(
+            text: settings.archiveScript
+          )
+          .frame(minHeight: 120)
+          if store.settings.archiveScript.isEmpty {
+            Text("docker compose down")
+              .foregroundStyle(.secondary)
+              .padding(.leading, 6)
+              .font(.body)
+              .allowsHitTesting(false)
+          }
+        }
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Archive Script")
+          Text("Archive script that runs before a worktree is archived")
+            .foregroundStyle(.secondary)
+        }
+      }
+      Section {
+        ZStack(alignment: .topLeading) {
+          PlainTextEditor(
             text: settings.runScript
           )
-          .font(.body)
           .frame(minHeight: 120)
           if store.settings.runScript.isEmpty {
             Text("npm run dev")

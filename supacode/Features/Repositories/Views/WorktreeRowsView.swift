@@ -6,6 +6,7 @@ struct WorktreeRowsView: View {
   let repository: Repository
   let isExpanded: Bool
   let hotkeyRows: [WorktreeRowModel]
+  let selectedWorktreeIDs: Set<Worktree.ID>
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
@@ -57,7 +58,7 @@ struct WorktreeRowsView: View {
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
-        moveDisabled: isRepositoryRemoving || row.isDeleting,
+        moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
         shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
       )
     }
@@ -76,7 +77,7 @@ struct WorktreeRowsView: View {
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
-        moveDisabled: isRepositoryRemoving || row.isDeleting,
+        moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
         shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
       )
     }
@@ -93,7 +94,14 @@ struct WorktreeRowsView: View {
     shortcutHint: String?
   ) -> some View {
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
-    let displayName = row.isDeleting ? "\(row.name) (deleting...)" : row.name
+    let displayName =
+      if row.isDeleting {
+        "\(row.name) (deleting...)"
+      } else if row.isArchiving {
+        "\(row.name) (archiving...)"
+      } else {
+        row.name
+      }
     let canShowRowActions = row.isRemovable && !isRepositoryRemoving
     let pinAction: (() -> Void)? =
       canShowRowActions && !row.isMainWorktree
@@ -177,8 +185,8 @@ struct WorktreeRowsView: View {
   }
 
   private func worktreeRowView(_ row: WorktreeRowModel, config: WorktreeRowViewConfig) -> some View {
-    let isSelected = row.id == store.state.selectedWorktreeID
-    let taskStatus = terminalManager.focusedTaskStatus(for: row.id)
+    let isSelected = selectedWorktreeIDs.contains(row.id)
+    let taskStatus = terminalManager.taskStatus(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
     return WorktreeRow(
       name: config.displayName,
@@ -188,7 +196,7 @@ struct WorktreeRowsView: View {
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,
-      isLoading: row.isPending || row.isDeleting,
+      isLoading: row.isPending || row.isArchiving || row.isDeleting,
       taskStatus: taskStatus,
       isRunScriptRunning: isRunScriptRunning,
       showsNotificationIndicator: config.showsNotificationIndicator,
@@ -211,6 +219,31 @@ struct WorktreeRowsView: View {
   private func rowContextMenu(worktree: Worktree, row: WorktreeRowModel) -> some View {
     let archiveShortcut = KeyboardShortcut(.delete, modifiers: .command).display
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    let contextRows = contextActionRows(for: row)
+    let isBulkSelection = contextRows.count > 1
+    let archiveTargets =
+      contextRows
+      .filter { !$0.isMainWorktree }
+      .map {
+        RepositoriesFeature.ArchiveWorktreeTarget(
+          worktreeID: $0.id,
+          repositoryID: $0.repositoryID
+        )
+      }
+    let deleteTargets = contextRows.map {
+      RepositoriesFeature.DeleteWorktreeTarget(
+        worktreeID: $0.id,
+        repositoryID: $0.repositoryID
+      )
+    }
+    let archiveTitle =
+      isBulkSelection
+      ? "Archive Selected Worktrees (\(archiveShortcut))"
+      : "Archive Worktree (\(archiveShortcut))"
+    let deleteTitle =
+      isBulkSelection
+      ? "Delete Selected Worktrees (\(deleteShortcut))"
+      : "Delete Worktree (\(deleteShortcut))"
     if !row.isMainWorktree {
       if row.isPinned {
         Button("Unpin") {
@@ -228,19 +261,19 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
-    Button("Archive Worktree (\(archiveShortcut))") {
-      archiveWorktree(worktree.id)
+    Button(archiveTitle) {
+      archiveWorktrees(archiveTargets)
     }
     .help(
-      row.isMainWorktree
+      archiveTargets.isEmpty
         ? "Main worktree can't be archived"
-        : "Archive Worktree (\(archiveShortcut))"
+        : archiveTitle
     )
-    .disabled(row.isMainWorktree)
-    Button("Delete Worktree (\(deleteShortcut))", role: .destructive) {
-      store.send(.requestDeleteWorktree(worktree.id, repository.id))
+    .disabled(archiveTargets.isEmpty)
+    Button(deleteTitle, role: .destructive) {
+      deleteWorktrees(deleteTargets)
     }
-    .help("Delete Worktree (\(deleteShortcut))")
+    .help(deleteTitle)
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {
@@ -262,7 +295,39 @@ struct WorktreeRowsView: View {
     store.send(.requestArchiveWorktree(worktreeID, repository.id))
   }
 
+  private func contextActionRows(for row: WorktreeRowModel) -> [WorktreeRowModel] {
+    guard selectedWorktreeIDs.count > 1, selectedWorktreeIDs.contains(row.id) else {
+      return [row]
+    }
+    let rows = selectedWorktreeIDs.compactMap { store.state.selectedRow(for: $0) }
+    return rows.isEmpty ? [row] : rows
+  }
+
+  private func archiveWorktrees(_ targets: [RepositoriesFeature.ArchiveWorktreeTarget]) {
+    guard !targets.isEmpty else { return }
+    if targets.count == 1, let target = targets.first {
+      store.send(.requestArchiveWorktree(target.worktreeID, target.repositoryID))
+    } else {
+      store.send(.requestArchiveWorktrees(targets))
+    }
+  }
+
+  private func deleteWorktrees(_ targets: [RepositoriesFeature.DeleteWorktreeTarget]) {
+    guard !targets.isEmpty else { return }
+    if targets.count == 1, let target = targets.first {
+      store.send(.requestDeleteWorktree(target.worktreeID, target.repositoryID))
+    } else {
+      store.send(.requestDeleteWorktrees(targets))
+    }
+  }
+
   private func worktreeName(for row: WorktreeRowModel) -> String {
+    if row.isMainWorktree {
+      return "Default"
+    }
+    if row.isPending {
+      return row.detail
+    }
     if row.id.contains("/") {
       let pathName = URL(fileURLWithPath: row.id).lastPathComponent
       if !pathName.isEmpty {

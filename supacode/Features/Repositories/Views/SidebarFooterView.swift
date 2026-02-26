@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
+  @Environment(\.surfaceBottomChromeBackgroundOpacity) private var surfaceBottomChromeBackgroundOpacity
   @Environment(\.openURL) private var openURL
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
@@ -58,8 +59,12 @@ struct SidebarFooterView: View {
     }
     .buttonStyle(.plain)
     .font(.callout)
-    .padding()
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.bar)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBottomChromeBackgroundOpacity))
+    .overlay(alignment: .top) {
+      Divider()
+    }
   }
 }

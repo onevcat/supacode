@@ -14,6 +14,11 @@ final class WorktreeInfoWatcherManager {
     let task: Task<Void, Never>
   }
 
+  private struct PullRequestSelectionCooldownTask {
+    let id: UUID
+    let task: Task<Void, Never>
+  }
+
   private struct RepeatingTaskRequest {
     let worktreeID: Worktree.ID
     let interval: Duration
@@ -28,7 +33,9 @@ final class WorktreeInfoWatcherManager {
   }
 
   private let filesChangedDebounceInterval: Duration
+  private let pullRequestSelectionRefreshCooldown: Duration
   private let refreshTiming: RefreshTiming
+  private let sleep: @Sendable (Duration) async throws -> Void
   private var worktrees: [Worktree.ID: Worktree] = [:]
   private var headWatchers: [Worktree.ID: HeadWatcher] = [:]
   private var branchDebounceTasks: [Worktree.ID: Task<Void, Never>] = [:]
@@ -37,17 +44,25 @@ final class WorktreeInfoWatcherManager {
   private var pullRequestTasks: [URL: RefreshTask] = [:]
   private var lineChangeTasks: [Worktree.ID: RefreshTask] = [:]
   private var deferredLineChangeIDs: Set<Worktree.ID> = []
+  private var hasCompletedInitialWorktreeLoad = false
   private var selectedWorktreeID: Worktree.ID?
   private var pullRequestTrackingEnabled = true
+  private var pullRequestSelectionCooldownTasksByRepo: [URL: PullRequestSelectionCooldownTask] = [:]
   private var eventContinuation: AsyncStream<WorktreeInfoWatcherClient.Event>.Continuation?
 
-  init(
+  init<C: Clock<Duration>>(
     focusedInterval: Duration = .seconds(30),
     unfocusedInterval: Duration = .seconds(60),
-    filesChangedDebounceInterval: Duration = .seconds(5)
+    filesChangedDebounceInterval: Duration = .seconds(5),
+    pullRequestSelectionRefreshCooldown: Duration = .seconds(5),
+    clock: C = ContinuousClock()
   ) {
     refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
     self.filesChangedDebounceInterval = filesChangedDebounceInterval
+    self.pullRequestSelectionRefreshCooldown = pullRequestSelectionRefreshCooldown
+    self.sleep = { duration in
+      try await clock.sleep(for: duration)
+    }
   }
 
   func handleCommand(_ command: WorktreeInfoWatcherClient.Command) {
@@ -71,6 +86,7 @@ final class WorktreeInfoWatcherManager {
   }
 
   private func setWorktrees(_ worktrees: [Worktree]) {
+    let isInitialWorktreeLoad = !hasCompletedInitialWorktreeLoad && self.worktrees.isEmpty && !worktrees.isEmpty
     let worktreesByID = Dictionary(uniqueKeysWithValues: worktrees.map { ($0.id, $0) })
     let desiredIDs = Set(worktreesByID.keys)
     let currentIDs = Set(self.worktrees.keys)
@@ -82,7 +98,7 @@ final class WorktreeInfoWatcherManager {
       deferredLineChangeIDs.subtract(removedIDs)
     }
     let newIDs = desiredIDs.subtracting(currentIDs)
-    if !newIDs.isEmpty {
+    if !newIDs.isEmpty && !isInitialWorktreeLoad {
       deferredLineChangeIDs.formUnion(newIDs)
     }
     self.worktrees = worktreesByID
@@ -90,8 +106,11 @@ final class WorktreeInfoWatcherManager {
       configureWatcher(for: worktree)
       updateLineChangeSchedule(
         worktreeID: worktree.id,
-        immediate: !deferredLineChangeIDs.contains(worktree.id)
+        immediate: isInitialWorktreeLoad || !deferredLineChangeIDs.contains(worktree.id)
       )
+    }
+    if isInitialWorktreeLoad {
+      hasCompletedInitialWorktreeLoad = true
     }
     let repositoryRoots = Set(worktrees.map(\.repositoryRootURL))
     for repositoryRootURL in repositoryRoots {
@@ -100,6 +119,12 @@ final class WorktreeInfoWatcherManager {
     let obsoleteRepositories = pullRequestTasks.keys.filter { !repositoryRoots.contains($0) }
     for repositoryRootURL in obsoleteRepositories {
       pullRequestTasks.removeValue(forKey: repositoryRootURL)?.task.cancel()
+    }
+    let obsoleteCooldownRepositories = pullRequestSelectionCooldownTasksByRepo.keys.filter {
+      !repositoryRoots.contains($0)
+    }
+    for repositoryRootURL in obsoleteCooldownRepositories {
+      cancelPullRequestSelectionCooldown(for: repositoryRootURL)
     }
   }
 
@@ -118,14 +143,20 @@ final class WorktreeInfoWatcherManager {
       updateLineChangeSchedule(worktreeID: worktreeID, immediate: true)
     }
     if let previousRepository, previousRepository == nextRepository {
-      updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: true)
+      updatePullRequestSchedule(
+        repositoryRootURL: previousRepository,
+        immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: previousRepository)
+      )
       return
     }
     if let previousRepository {
       updatePullRequestSchedule(repositoryRootURL: previousRepository, immediate: false)
     }
     if let nextRepository {
-      updatePullRequestSchedule(repositoryRootURL: nextRepository, immediate: true)
+      updatePullRequestSchedule(
+        repositoryRootURL: nextRepository,
+        immediate: shouldImmediatelyRefreshPullRequests(repositoryRootURL: nextRepository)
+      )
     }
   }
 
@@ -158,14 +189,14 @@ final class WorktreeInfoWatcherManager {
       eventMask: [.write, .rename, .delete, .attrib],
       queue: queue
     )
-    source.setEventHandler { [weak self, weak source] in
+    source.setEventHandler { @Sendable [weak self, weak source] in
       guard let source else { return }
       let event = source.data
       Task { @MainActor in
         self?.handleEvent(worktreeID: worktreeID, event: event)
       }
     }
-    source.setCancelHandler {
+    source.setCancelHandler { @Sendable in
       close(fileDescriptor)
     }
     source.resume()
@@ -188,8 +219,9 @@ final class WorktreeInfoWatcherManager {
 
   private func scheduleBranchChanged(worktreeID: Worktree.ID) {
     branchDebounceTasks[worktreeID]?.cancel()
-    let task = Task { [weak self] in
-      try? await Task.sleep(for: .milliseconds(200))
+    let sleep = self.sleep
+    let task = Task { [weak self, sleep] in
+      try? await sleep(.milliseconds(200))
       await MainActor.run {
         self?.emit(.branchChanged(worktreeID: worktreeID))
       }
@@ -200,8 +232,9 @@ final class WorktreeInfoWatcherManager {
   private func scheduleFilesChanged(worktreeID: Worktree.ID) {
     filesDebounceTasks[worktreeID]?.cancel()
     let debounceInterval = filesChangedDebounceInterval
-    let task = Task { [weak self] in
-      try? await Task.sleep(for: debounceInterval)
+    let sleep = self.sleep
+    let task = Task { [weak self, sleep] in
+      try? await sleep(debounceInterval)
       await MainActor.run {
         guard let self else { return }
         self.emit(.filesChanged(worktreeID: worktreeID))
@@ -219,8 +252,9 @@ final class WorktreeInfoWatcherManager {
 
   private func scheduleRestart(worktreeID: Worktree.ID) {
     restartTasks[worktreeID]?.cancel()
-    let task = Task { [weak self] in
-      try? await Task.sleep(for: .seconds(5))
+    let sleep = self.sleep
+    let task = Task { [weak self, sleep] in
+      try? await sleep(.seconds(5))
       await MainActor.run {
         self?.restartWatcher(worktreeID: worktreeID)
       }
@@ -279,6 +313,8 @@ final class WorktreeInfoWatcherManager {
     pullRequestTasks.removeAll()
     lineChangeTasks.removeAll()
     deferredLineChangeIDs.removeAll()
+    hasCompletedInitialWorktreeLoad = false
+    cancelAllPullRequestSelectionCooldownTasks()
     worktrees.removeAll()
     selectedWorktreeID = nil
     pullRequestTrackingEnabled = true
@@ -301,6 +337,7 @@ final class WorktreeInfoWatcherManager {
       task.task.cancel()
     }
     pullRequestTasks.removeAll()
+    cancelAllPullRequestSelectionCooldownTasks()
   }
 
   private func updatePullRequestSchedule(repositoryRootURL: URL, immediate: Bool) {
@@ -322,9 +359,17 @@ final class WorktreeInfoWatcherManager {
     if immediate {
       emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
     }
-    let task = Task { [weak self] in
+    let sleep = self.sleep
+    let task = Task { [weak self, sleep] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: interval)
+        do {
+          try await sleep(interval)
+        } catch {
+          break
+        }
+        guard !Task.isCancelled else {
+          break
+        }
         await MainActor.run {
           self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
         }
@@ -390,9 +435,17 @@ final class WorktreeInfoWatcherManager {
     if request.immediate {
       emit(request.makeEvent(worktreeID))
     }
-    let task = Task { [weak self] in
+    let sleep = self.sleep
+    let task = Task { [weak self, sleep] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: request.interval)
+        do {
+          try await sleep(request.interval)
+        } catch {
+          break
+        }
+        guard !Task.isCancelled else {
+          break
+        }
         await MainActor.run {
           self?.emit(request.makeEvent(worktreeID))
         }
@@ -408,5 +461,46 @@ final class WorktreeInfoWatcherManager {
       return
     }
     eventContinuation?.yield(event)
+  }
+
+  private func cancelPullRequestSelectionCooldown(for repositoryRootURL: URL) {
+    pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)?.task.cancel()
+  }
+
+  private func cancelAllPullRequestSelectionCooldownTasks() {
+    for task in pullRequestSelectionCooldownTasksByRepo.values {
+      task.task.cancel()
+    }
+    pullRequestSelectionCooldownTasksByRepo.removeAll()
+  }
+
+  private func shouldImmediatelyRefreshPullRequests(repositoryRootURL: URL) -> Bool {
+    guard pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] == nil else {
+      return false
+    }
+    let cooldown = pullRequestSelectionRefreshCooldown
+    let sleep = self.sleep
+    let taskID = UUID()
+    let task = Task { [weak self, sleep, taskID] in
+      do {
+        try await sleep(cooldown)
+      } catch {
+        return
+      }
+      await MainActor.run {
+        guard
+          let self,
+          self.pullRequestSelectionCooldownTasksByRepo[repositoryRootURL]?.id == taskID
+        else {
+          return
+        }
+        self.pullRequestSelectionCooldownTasksByRepo.removeValue(forKey: repositoryRootURL)
+      }
+    }
+    pullRequestSelectionCooldownTasksByRepo[repositoryRootURL] = PullRequestSelectionCooldownTask(
+      id: taskID,
+      task: task
+    )
+    return true
   }
 }

@@ -26,7 +26,7 @@ struct RepositorySettingsFeature {
     case settingsChanged(URL)
   }
 
-  @Dependency(\.gitClient) private var gitClient
+  @Dependency(GitClientDependency.self) private var gitClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -45,9 +45,8 @@ struct RepositorySettingsFeature {
             branches = try await gitClient.branchRefs(rootURL)
           } catch {
             let rootPath = rootURL.path(percentEncoded: false)
-            print(
-              "Repository settings branch refs failed for \(rootPath): "
-                + error.localizedDescription
+            SupaLogger("Settings").warning(
+              "Branch refs failed for \(rootPath): \(error.localizedDescription)"
             )
             branches = []
           }

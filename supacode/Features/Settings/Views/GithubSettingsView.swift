@@ -15,10 +15,10 @@ final class GithubSettingsViewModel {
   var state: State = .loading
 
   @ObservationIgnored
-  @Dependency(\.githubIntegration) private var githubIntegration
+  @Dependency(GithubIntegrationClient.self) private var githubIntegration
 
   @ObservationIgnored
-  @Dependency(\.githubCLI) private var githubCLI
+  @Dependency(GithubCLIClient.self) private var githubCLI
 
   func load() async {
     state = .loading

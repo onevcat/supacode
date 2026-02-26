@@ -42,7 +42,7 @@ struct AppLoadingView: View {
 
   private func cycleMessages() async {
     while !Task.isCancelled {
-      try? await Task.sleep(for: .seconds(1.8))
+      try? await ContinuousClock().sleep(for: .seconds(1.8))
       await MainActor.run {
         withAnimation(.easeInOut(duration: 0.25)) {
           messageIndex = (messageIndex + 1) % Self.messages.count

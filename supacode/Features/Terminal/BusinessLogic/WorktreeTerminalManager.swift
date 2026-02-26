@@ -1,6 +1,8 @@
 import Observation
 import Sharing
 
+private let terminalLogger = SupaLogger("Terminal")
+
 @MainActor
 @Observable
 final class WorktreeTerminalManager {
@@ -58,9 +60,9 @@ final class WorktreeTerminalManager {
     case .searchSelection(let worktree):
       state(for: worktree).performBindingActionOnFocusedSurface("search_selection")
     case .navigateSearchNext(let worktree):
-      state(for: worktree).performBindingActionOnFocusedSurface("navigate_search:next")
+      state(for: worktree).navigateSearchOnFocusedSurface(.next)
     case .navigateSearchPrevious(let worktree):
-      state(for: worktree).performBindingActionOnFocusedSurface("navigate_search:previous")
+      state(for: worktree).navigateSearchOnFocusedSurface(.previous)
     case .endSearch(let worktree):
       state(for: worktree).performBindingActionOnFocusedSurface("end_search")
     default:
@@ -81,6 +83,7 @@ final class WorktreeTerminalManager {
         previousState.setAllSurfacesOccluded()
       }
       selectedWorktreeID = id
+      terminalLogger.info("Selected worktree \(id ?? "nil")")
     default:
       return
     }
@@ -153,6 +156,7 @@ final class WorktreeTerminalManager {
       self?.emit(.setupScriptConsumed(worktreeID: worktree.id))
     }
     states[worktree.id] = state
+    terminalLogger.info("Created terminal state for worktree \(worktree.id)")
     return state
   }
 
@@ -193,6 +197,9 @@ final class WorktreeTerminalManager {
     for state in removed {
       state.closeAllSurfaces()
     }
+    if !removed.isEmpty {
+      terminalLogger.info("Pruned \(removed.count) terminal state(s)")
+    }
     states = states.filter { worktreeIDs.contains($0.key) }
     emitNotificationIndicatorCountIfNeeded()
   }
@@ -201,8 +208,8 @@ final class WorktreeTerminalManager {
     states[worktreeID]
   }
 
-  func focusedTaskStatus(for worktreeID: Worktree.ID) -> WorktreeTaskStatus? {
-    states[worktreeID]?.focusedTaskStatus
+  func taskStatus(for worktreeID: Worktree.ID) -> WorktreeTaskStatus? {
+    states[worktreeID]?.taskStatus
   }
 
   func isRunScriptRunning(for worktreeID: Worktree.ID) -> Bool {
@@ -219,6 +226,10 @@ final class WorktreeTerminalManager {
 
   func hasUnseenNotifications(for worktreeID: Worktree.ID) -> Bool {
     states[worktreeID]?.hasUnseenNotification == true
+  }
+
+  func surfaceBackgroundOpacity() -> Double {
+    runtime.backgroundOpacity()
   }
 
   private func emit(_ event: TerminalClient.Event) {

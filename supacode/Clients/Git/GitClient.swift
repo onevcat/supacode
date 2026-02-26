@@ -9,9 +9,12 @@ enum GitOperation: String {
   case worktreePrune = "worktree_prune"
   case repoIsBare = "repo_is_bare"
   case branchNames = "branch_names"
+  case branchNameValidation = "branch_name_validation"
   case branchRefs = "branch_refs"
   case defaultRemoteBranchRef = "default_remote_branch_ref"
   case localHeadRef = "local_head_ref"
+  case ignoredFileCount = "ignored_file_count"
+  case untrackedFileCount = "untracked_file_count"
   case branchRename = "branch_rename"
   case branchDelete = "branch_delete"
   case lineChanges = "line_changes"
@@ -32,6 +35,11 @@ enum GitClientError: LocalizedError {
   }
 }
 
+enum GitWorktreeCreateEvent: Equatable, Sendable {
+  case outputLine(ShellStreamLine)
+  case finished(Worktree)
+}
+
 struct GitClient {
   private struct WorktreeSortEntry {
     let worktree: Worktree
@@ -41,7 +49,7 @@ struct GitClient {
 
   private let shell: ShellClient
 
-  init(shell: ShellClient = .liveValue) {
+  nonisolated init(shell: ShellClient = .live) {
     self.shell = shell
   }
 
@@ -133,6 +141,19 @@ struct GitClient {
     return Set(names)
   }
 
+  nonisolated func isValidBranchName(_ branchName: String, for repoRoot: URL) async -> Bool {
+    let path = repoRoot.path(percentEncoded: false)
+    do {
+      _ = try await runGit(
+        operation: .branchNameValidation,
+        arguments: ["-C", path, "check-ref-format", "--branch", branchName]
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+
   nonisolated func isBareRepository(for repoRoot: URL) async throws -> Bool {
     let path = repoRoot.path(percentEncoded: false)
     let output = try await runGit(
@@ -175,9 +196,8 @@ struct GitClient {
       }
     } catch {
       let rootPath = repoRoot.path(percentEncoded: false)
-      print(
-        "Default remote branch ref failed for \(rootPath): "
-          + error.localizedDescription
+      gitLogger.warning(
+        "Default remote branch ref failed for \(rootPath): \(error.localizedDescription)"
       )
     }
     let fallback = "origin/main"
@@ -197,6 +217,24 @@ struct GitClient {
     return Self.preferredBaseRef(remote: nil, localHead: resolvedLocalHead)
   }
 
+  nonisolated func ignoredFileCount(for repoRoot: URL) async throws -> Int {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .ignoredFileCount,
+      arguments: ["-C", path, "ls-files", "--others", "-i", "--exclude-standard"]
+    )
+    return parseFileListCount(output)
+  }
+
+  nonisolated func untrackedFileCount(for repoRoot: URL) async throws -> Int {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .untrackedFileCount,
+      arguments: ["-C", path, "ls-files", "--others", "--exclude-standard"]
+    )
+    return parseFileListCount(output)
+  }
+
   nonisolated func createWorktree(
     named name: String,
     in repoRoot: URL,
@@ -204,8 +242,125 @@ struct GitClient {
     copyUntracked: Bool,
     baseRef: String
   ) async throws -> Worktree {
-    let repositoryRootURL = repoRoot.standardizedFileURL
-    let wtURL = try wtScriptURL()
+    var createdWorktree: Worktree?
+    for try await event in createWorktreeStream(
+      named: name,
+      in: repoRoot,
+      copyIgnored: copyIgnored,
+      copyUntracked: copyUntracked,
+      baseRef: baseRef
+    ) {
+      if case .finished(let worktree) = event {
+        createdWorktree = worktree
+      }
+    }
+    guard let createdWorktree else {
+      let repositoryRootURL = repoRoot.standardizedFileURL
+      let wtURL = try wtScriptURL()
+      let command =
+        ([wtURL.lastPathComponent]
+        + createWorktreeArguments(
+          repositoryRootURL: repositoryRootURL,
+          name: name,
+          copyIgnored: copyIgnored,
+          copyUntracked: copyUntracked,
+          baseRef: baseRef
+        )).joined(separator: " ")
+      throw GitClientError.commandFailed(command: command, message: "Empty output")
+    }
+    return createdWorktree
+  }
+
+  nonisolated func createWorktreeStream(
+    named name: String,
+    in repoRoot: URL,
+    copyIgnored: Bool,
+    copyUntracked: Bool,
+    baseRef: String
+  ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
+    AsyncThrowingStream { continuation in
+      Task {
+        let repositoryRootURL = repoRoot.standardizedFileURL
+        do {
+          let wtURL = try wtScriptURL()
+          let arguments = createWorktreeArguments(
+            repositoryRootURL: repositoryRootURL,
+            name: name,
+            copyIgnored: copyIgnored,
+            copyUntracked: copyUntracked,
+            baseRef: baseRef
+          )
+          let envURL = URL(fileURLWithPath: "/usr/bin/env")
+          let localeArguments = ["LANG=C", "LC_ALL=C", "LC_MESSAGES=C"]
+          let invocationArguments = localeArguments + [wtURL.path(percentEncoded: false)] + arguments
+          let command = ([envURL.path(percentEncoded: false)] + invocationArguments).joined(separator: " ")
+          var pathLine: String?
+          do {
+            for try await streamEvent in shell.runLoginStream(
+              envURL,
+              invocationArguments,
+              repoRoot
+            ) {
+              switch streamEvent {
+              case .line(let line):
+                continuation.yield(.outputLine(line))
+                if line.source == .stdout {
+                  let trimmed = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                  if !trimmed.isEmpty {
+                    pathLine = trimmed
+                  }
+                }
+              case .finished(let output):
+                if pathLine == nil {
+                  pathLine = lastNonEmptyLine(in: output.stdout)
+                }
+                guard let pathLine else {
+                  throw GitClientError.commandFailed(command: command, message: "Empty output")
+                }
+                let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
+                let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
+                let id = worktreeURL.path(percentEncoded: false)
+                let resourceValues = try? worktreeURL.resourceValues(forKeys: [
+                  .creationDateKey, .contentModificationDateKey,
+                ])
+                let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
+                let worktree = Worktree(
+                  id: id,
+                  name: name,
+                  detail: detail,
+                  workingDirectory: worktreeURL,
+                  repositoryRootURL: repositoryRootURL,
+                  createdAt: createdAt
+                )
+                continuation.yield(.finished(worktree))
+                continuation.finish()
+                return
+              }
+            }
+            continuation.finish(throwing: GitClientError.commandFailed(command: command, message: "Empty output"))
+          } catch {
+            if let gitError = error as? GitClientError {
+              continuation.finish(throwing: gitError)
+            } else {
+              continuation.finish(
+                throwing: wrapShellError(error, operation: .worktreeCreate, command: command)
+              )
+            }
+          }
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+    }
+  }
+
+  nonisolated private func createWorktreeArguments(
+    repositoryRootURL: URL,
+    name: String,
+    copyIgnored: Bool,
+    copyUntracked: Bool,
+    baseRef: String
+  ) -> [String] {
     let baseDir = SupacodePaths.repositoryDirectory(for: repositoryRootURL)
     var arguments = ["--base-dir", baseDir.path(percentEncoded: false), "sw"]
     if copyIgnored {
@@ -218,33 +373,11 @@ struct GitClient {
       arguments.append("--from")
       arguments.append(baseRef)
     }
-    arguments.append(name)
-    let output = try await runLoginShellProcess(
-      operation: .worktreeCreate,
-      executableURL: wtURL,
-      arguments: arguments,
-      currentDirectoryURL: repoRoot
-    )
-    let pathLine = output.split(whereSeparator: \.isNewline).last.map(String.init) ?? ""
-    if pathLine.isEmpty {
-      let command = ([wtURL.lastPathComponent] + arguments).joined(separator: " ")
-      throw GitClientError.commandFailed(command: command, message: "Empty output")
+    if copyIgnored || copyUntracked {
+      arguments.append("--verbose")
     }
-    let worktreeURL = URL(fileURLWithPath: pathLine).standardizedFileURL
-    let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-    let id = worktreeURL.path(percentEncoded: false)
-    let resourceValues = try? worktreeURL.resourceValues(forKeys: [
-      .creationDateKey, .contentModificationDateKey,
-    ])
-    let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
-    return Worktree(
-      id: id,
-      name: name,
-      detail: detail,
-      workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL,
-      createdAt: createdAt
-    )
+    arguments.append(name)
+    return arguments
   }
 
   nonisolated func renameBranch(in worktreeURL: URL, to branchName: String) async throws {
@@ -409,6 +542,21 @@ struct GitClient {
       removed = Int(match.1) ?? 0
     }
     return (added, removed)
+  }
+
+  nonisolated private func parseFileListCount(_ output: String) -> Int {
+    output
+      .split(whereSeparator: \.isNewline)
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .count
+  }
+
+  nonisolated private func lastNonEmptyLine(in output: String) -> String? {
+    output
+      .split(whereSeparator: \.isNewline)
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .last { !$0.isEmpty }
   }
 
   nonisolated private func parseLocalRefsWithUpstream(_ output: String) -> [String] {
@@ -654,6 +802,8 @@ struct GitClient {
 
 }
 
+private nonisolated let gitLogger = SupaLogger("Git")
+
 nonisolated private func wrapShellError(
   _ error: Error,
   operation: GitOperation,
@@ -675,6 +825,7 @@ nonisolated private func wrapShellError(
   } else {
     gitError = .commandFailed(command: command, message: error.localizedDescription)
   }
+  gitLogger.warning("git command failed operation=\(operation.rawValue) exit_code=\(exitCode)")
   #if !DEBUG
     SentrySDK.logger.error(
       "git command failed",

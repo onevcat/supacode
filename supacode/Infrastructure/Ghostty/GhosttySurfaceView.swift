@@ -29,6 +29,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
+  private var lastOcclusion: Bool?
+  private var lastSurfaceFocus: Bool?
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
   private var prevPressureStage: Int = 0
@@ -132,7 +134,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     fatalError("init(coder:) is not supported")
   }
 
-  deinit {
+  isolated deinit {
     if let eventMonitor {
       NSEvent.removeMonitor(eventMonitor)
     }
@@ -160,6 +162,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
       ghostty_surface_free(surface)
       self.surface = nil
       bridge.surface = nil
+      lastOcclusion = nil
+      lastSurfaceFocus = nil
     }
   }
 
@@ -173,7 +177,59 @@ final class GhosttySurfaceView: NSView, Identifiable {
         object: window,
         queue: .main
       ) { [weak self] _ in
-        self?.windowDidChangeScreen()
+        Task { @MainActor [weak self] in
+          self?.windowDidChangeScreen()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didEnterFullScreenNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didExitFullScreenNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didBecomeKeyNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: NSWindow.didChangeOcclusionStateNotification,
+        object: window,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
+      })
+    notificationObservers.append(
+      center.addObserver(
+        forName: .ghosttyRuntimeConfigDidChange,
+        object: runtime,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.applyWindowBackgroundAppearance()
+        }
       })
   }
 
@@ -200,6 +256,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     updateScreenObservers()
     updateContentScale()
     updateSurfaceSize()
+    applyWindowBackgroundAppearance()
   }
 
   override func viewDidChangeBackingProperties() {
@@ -235,6 +292,26 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func resetCursorRects() {
     addCursorRect(bounds, cursor: currentCursor)
+  }
+
+  private func applyWindowBackgroundAppearance() {
+    guard let window, window.isVisible else { return }
+    let opacity = runtime.backgroundOpacity()
+    if !window.styleMask.contains(.fullScreen), opacity < 1 {
+      window.isOpaque = false
+      window.titlebarAppearsTransparent = true
+      window.backgroundColor = .white.withAlphaComponent(0.001)
+      if let app = runtime.app {
+        ghostty_set_window_background_blur(
+          app,
+          Unmanaged.passUnretained(window).toOpaque()
+        )
+      }
+      return
+    }
+    window.isOpaque = true
+    window.titlebarAppearsTransparent = false
+    window.backgroundColor = runtime.backgroundColor().withAlphaComponent(1)
   }
 
   func focusDidChange(_ focused: Bool) {
@@ -640,6 +717,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.context = context
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
+    lastOcclusion = nil
+    lastSurfaceFocus = nil
     updateSurfaceSize()
   }
 
@@ -661,11 +740,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else { return }
+    if lastOcclusion == visible {
+      return
+    }
+    lastOcclusion = visible
     ghostty_surface_set_occlusion(surface, visible)
   }
 
   private func setSurfaceFocus(_ focused: Bool) {
     guard let surface else { return }
+    if lastSurfaceFocus == focused {
+      return
+    }
+    lastSurfaceFocus = focused
     ghostty_surface_set_focus(surface, focused)
   }
 
@@ -684,7 +771,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     let nextDelay: TimeInterval = if let delay { delay * 2 } else { 0.05 }
     Task { @MainActor in
       if let delay {
-        try? await Task.sleep(for: .seconds(delay))
+        try? await ContinuousClock().sleep(for: .seconds(delay))
       }
       guard let window = view.window else {
         moveFocus(to: view, from: previous, delay: nextDelay)
@@ -1378,7 +1465,9 @@ final class GhosttySurfaceScrollView: NSView {
         object: scrollView.contentView,
         queue: .main
       ) { [weak self] _ in
-        self?.handleScrollChange()
+        MainActor.assumeIsolated {
+          self?.handleScrollChange()
+        }
       })
 
     observers.append(
@@ -1387,7 +1476,9 @@ final class GhosttySurfaceScrollView: NSView {
         object: scrollView,
         queue: .main
       ) { [weak self] _ in
-        self?.isLiveScrolling = true
+        MainActor.assumeIsolated {
+          self?.isLiveScrolling = true
+        }
       })
 
     observers.append(
@@ -1396,7 +1487,9 @@ final class GhosttySurfaceScrollView: NSView {
         object: scrollView,
         queue: .main
       ) { [weak self] _ in
-        self?.isLiveScrolling = false
+        MainActor.assumeIsolated {
+          self?.isLiveScrolling = false
+        }
       })
 
     observers.append(
@@ -1405,16 +1498,20 @@ final class GhosttySurfaceScrollView: NSView {
         object: scrollView,
         queue: .main
       ) { [weak self] _ in
-        self?.handleLiveScroll()
+        MainActor.assumeIsolated {
+          self?.handleLiveScroll()
+        }
       })
 
     observers.append(
       NotificationCenter.default.addObserver(
         forName: NSScroller.preferredScrollerStyleDidChangeNotification,
         object: nil,
-        queue: nil
+        queue: .main
       ) { [weak self] _ in
-        self?.handleScrollerStyleChange()
+        MainActor.assumeIsolated {
+          self?.handleScrollerStyleChange()
+        }
       })
 
     observers.append(
@@ -1423,7 +1520,9 @@ final class GhosttySurfaceScrollView: NSView {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        self?.refreshAppearance()
+        MainActor.assumeIsolated {
+          self?.refreshAppearance()
+        }
       })
   }
 
@@ -1431,7 +1530,7 @@ final class GhosttySurfaceScrollView: NSView {
     fatalError("init(coder:) is not supported")
   }
 
-  deinit {
+  isolated deinit {
     observers.forEach { NotificationCenter.default.removeObserver($0) }
   }
 

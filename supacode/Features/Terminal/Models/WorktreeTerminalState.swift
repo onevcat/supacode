@@ -8,6 +8,11 @@ import Sharing
 @MainActor
 @Observable
 final class WorktreeTerminalState {
+  struct SurfaceActivity: Equatable {
+    let isVisible: Bool
+    let isFocused: Bool
+  }
+
   let tabManager: TerminalTabManager
   private let runtime: GhosttyRuntime
   private let worktree: Worktree
@@ -16,7 +21,7 @@ final class WorktreeTerminalState {
   private var trees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
   private var surfaces: [UUID: GhosttySurfaceView] = [:]
   private var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
-  private var tabIsRunningById: [TerminalTabID: Bool] = [:]
+  var tabIsRunningById: [TerminalTabID: Bool] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
   private var isEnsuringInitialTab = false
@@ -49,12 +54,8 @@ final class WorktreeTerminalState {
     )
   }
 
-  var focusedTaskStatus: WorktreeTaskStatus {
-    guard let tabId = tabManager.selectedTabId else { return .idle }
-    if tabIsRunningById[tabId] == true {
-      return .running
-    }
-    return .idle
+  var taskStatus: WorktreeTaskStatus {
+    tabIsRunningById.values.contains(true) ? .running : .idle
   }
 
   var isRunScriptRunning: Bool {
@@ -206,19 +207,23 @@ final class WorktreeTerminalState {
     surface.insertText(text, replacementRange: NSRange(location: 0, length: 0))
   }
 
-  func syncFocus(windowIsKey: Bool) {
+  func syncFocus(windowIsKey: Bool, windowIsVisible: Bool) {
     let selectedTabId = tabManager.selectedTabId
     var surfaceToFocus: GhosttySurfaceView?
     for (tabId, tree) in trees {
       let focusedId = focusedSurfaceIdByTab[tabId]
-      // Occlusion: only selected tab is visible, regardless of window focus
       let isSelectedTab = (tabId == selectedTabId)
       for surface in tree.leaves() {
-        surface.setOcclusion(isSelectedTab)
-        // Focus: requires both selected tab AND window key
-        let isFocused = windowIsKey && isSelectedTab && surface.id == focusedId
-        surface.focusDidChange(isFocused)
-        if isFocused {
+        let activity = Self.surfaceActivity(
+          isSelectedTab: isSelectedTab,
+          windowIsVisible: windowIsVisible,
+          windowIsKey: windowIsKey,
+          focusedSurfaceID: focusedId,
+          surfaceID: surface.id
+        )
+        surface.setOcclusion(activity.isVisible)
+        surface.focusDidChange(activity.isFocused)
+        if activity.isFocused {
           surfaceToFocus = surface
         }
       }
@@ -226,6 +231,18 @@ final class WorktreeTerminalState {
     if let surfaceToFocus, surfaceToFocus.window?.firstResponder is GhosttySurfaceView {
       surfaceToFocus.window?.makeFirstResponder(surfaceToFocus)
     }
+  }
+
+  static func surfaceActivity(
+    isSelectedTab: Bool,
+    windowIsVisible: Bool,
+    windowIsKey: Bool,
+    focusedSurfaceID: UUID?,
+    surfaceID: UUID
+  ) -> SurfaceActivity {
+    let isVisible = isSelectedTab && windowIsVisible
+    let isFocused = isVisible && windowIsKey && focusedSurfaceID == surfaceID
+    return SurfaceActivity(isVisible: isVisible, isFocused: isFocused)
   }
 
   @discardableResult
@@ -268,6 +285,18 @@ final class WorktreeTerminalState {
       return false
     }
     surface.performBindingAction(action)
+    return true
+  }
+
+  @discardableResult
+  func navigateSearchOnFocusedSurface(_ direction: GhosttySearchDirection) -> Bool {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId],
+      let surface = surfaces[focusedId]
+    else {
+      return false
+    }
+    surface.navigateSearch(direction)
     return true
   }
 
@@ -724,7 +753,7 @@ final class WorktreeTerminalState {
   }
 
   private func emitTaskStatusIfChanged() {
-    let newStatus = focusedTaskStatus
+    let newStatus = taskStatus
     if newStatus != lastReportedTaskStatus {
       lastReportedTaskStatus = newStatus
       onTaskStatusChanged?(newStatus)

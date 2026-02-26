@@ -4,42 +4,83 @@ import SwiftUI
 struct SidebarListView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
   @Binding var expandedRepoIDs: Set<Repository.ID>
+  @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
   @State private var isDragActive = false
 
   var body: some View {
-    let selection = Binding<SidebarSelection?>(
-      get: {
-        if store.isShowingArchivedWorktrees {
-          return .archivedWorktrees
-        }
-        return store.selectedWorktreeID.map(SidebarSelection.worktree)
-      },
-      set: { newValue in
-        switch newValue {
-        case .archivedWorktrees:
-          store.send(.selectArchivedWorktrees)
-        case .worktree(let id):
-          store.send(.selectWorktree(id))
-        case .repository(let id):
-          guard let repo = store.state.repositories[id: id],
-            !store.state.isRemovingRepository(repo)
-          else { return }
-          withAnimation(.easeOut(duration: 0.2)) {
-            if expandedRepoIDs.contains(id) {
-              expandedRepoIDs.remove(id)
-            } else {
-              expandedRepoIDs.insert(id)
-            }
-          }
-        case nil:
-          store.send(.selectWorktree(nil))
-        }
-      }
-    )
     let state = store.state
     let hotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
     let orderedRoots = state.orderedRepositoryRoots()
+    let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
+    let selection = Binding<Set<SidebarSelection>>(
+      get: {
+        var nextSelections = sidebarSelections
+        if state.isShowingArchivedWorktrees {
+          nextSelections = [.archivedWorktrees]
+        } else {
+          nextSelections.remove(.archivedWorktrees)
+          if let selectedWorktreeID = state.selectedWorktreeID {
+            nextSelections.insert(.worktree(selectedWorktreeID))
+          }
+        }
+        return nextSelections
+      },
+      set: { newValue in
+        var nextSelections = newValue
+        let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
+          guard case .repository(let repositoryID) = selection else { return nil }
+          return repositoryID
+        }
+        if !repositorySelections.isEmpty {
+          withAnimation(.easeOut(duration: 0.2)) {
+            for repositoryID in repositorySelections {
+              guard let repository = store.state.repositories[id: repositoryID],
+                !store.state.isRemovingRepository(repository)
+              else {
+                continue
+              }
+              if expandedRepoIDs.contains(repositoryID) {
+                expandedRepoIDs.remove(repositoryID)
+              } else {
+                expandedRepoIDs.insert(repositoryID)
+              }
+            }
+          }
+          nextSelections = Set(
+            nextSelections.filter {
+              if case .repository = $0 {
+                return false
+              }
+              return true
+            })
+        }
+
+        if nextSelections.contains(.archivedWorktrees) {
+          sidebarSelections = [.archivedWorktrees]
+          store.send(.selectArchivedWorktrees)
+          return
+        }
+
+        let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
+        guard !worktreeIDs.isEmpty else {
+          if !repositorySelections.isEmpty {
+            return
+          }
+          sidebarSelections = []
+          store.send(.selectWorktree(nil))
+          return
+        }
+        sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
+        if let selectedWorktreeID = state.selectedWorktreeID, worktreeIDs.contains(selectedWorktreeID) {
+          return
+        }
+        let nextPrimarySelection =
+          hotkeyRows.map(\.id).first(where: worktreeIDs.contains)
+          ?? worktreeIDs.first
+        store.send(.selectWorktree(nextPrimarySelection, focusTerminal: true))
+      }
+    )
     let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
     List(selection: selection) {
       if orderedRoots.isEmpty {
@@ -50,6 +91,7 @@ struct SidebarListView: View {
             showsTopSeparator: index > 0,
             isDragActive: isDragActive,
             hotkeyRows: hotkeyRows,
+            selectedWorktreeIDs: selectedWorktreeIDs,
             expandedRepoIDs: $expandedRepoIDs,
             store: store,
             terminalManager: terminalManager
@@ -99,6 +141,7 @@ struct SidebarListView: View {
               showsTopSeparator: index > 0,
               isDragActive: isDragActive,
               hotkeyRows: hotkeyRows,
+              selectedWorktreeIDs: selectedWorktreeIDs,
               expandedRepoIDs: $expandedRepoIDs,
               store: store,
               terminalManager: terminalManager
@@ -112,6 +155,7 @@ struct SidebarListView: View {
       }
     }
     .listStyle(.sidebar)
+    .scrollIndicators(.never)
     .frame(minWidth: 220)
     .onDragSessionUpdated { session in
       if case .ended = session.phase {
@@ -154,6 +198,8 @@ struct SidebarListView: View {
       let hasCommandModifier = keyPress.modifiers.contains(.command)
       if hasCommandModifier { return .ignored }
       guard let worktreeID = store.selectedWorktreeID,
+        state.sidebarSelectedWorktreeIDs.count == 1,
+        state.sidebarSelectedWorktreeIDs.contains(worktreeID),
         let terminalState = terminalManager.stateIfExists(for: worktreeID)
       else { return .ignored }
       terminalState.focusAndInsertText(keyPress.characters)

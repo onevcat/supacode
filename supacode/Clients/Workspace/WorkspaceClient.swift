@@ -6,7 +6,7 @@ struct WorkspaceClient {
     @MainActor @Sendable (
       _ action: OpenWorktreeAction,
       _ worktree: Worktree,
-      _ onError: @escaping @MainActor (OpenActionError) -> Void
+      _ onError: @escaping @MainActor @Sendable (OpenActionError) -> Void
     ) -> Void
 }
 

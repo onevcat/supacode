@@ -18,7 +18,7 @@ VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework build-app run-app install-dev-build archive export-archive format lint check test update-wt bump-version bump-and-release
+.PHONY: build-ghostty-xcframework build-app run-app install-dev-build archive export-archive format lint check test bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -82,12 +82,8 @@ lint: # Lint code with swiftlint
 
 check: format lint # Format and lint
 
-update-wt: # Download git-wt binary to Resources
-	@mkdir -p "$(CURRENT_MAKEFILE_DIR)/Resources/git-wt"
-	@curl -fsSL "https://raw.githubusercontent.com/khoi/git-wt/refs/heads/main/wt" -o "$(CURRENT_MAKEFILE_DIR)/Resources/git-wt/wt"
-	@chmod +x "$(CURRENT_MAKEFILE_DIR)/Resources/git-wt/wt"
-	@git add "$(CURRENT_MAKEFILE_DIR)/Resources/git-wt/wt"
-	@git commit -m "update git-wt"
+log-stream: # Stream logs from the app via log stream
+	log stream --predicate 'subsystem == "app.supabit.supacode"' --style compact --color always
 
 bump-version: # Bump app version (usage: make bump-version [VERSION=x.x.x] [BUILD=123])
 	@if [ -z "$(VERSION)" ]; then \

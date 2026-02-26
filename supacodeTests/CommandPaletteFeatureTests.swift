@@ -41,8 +41,13 @@ struct CommandPaletteFeatureTests {
       PendingWorktree(
         id: "\(rootPath)/wt-pending",
         repositoryID: repository.id,
-        name: "pending",
-        detail: "pending"
+        progress: WorktreeCreationProgress(
+          stage: .creatingWorktree,
+          worktreeName: "pending",
+          baseRef: "origin/main",
+          copyIgnored: false,
+          copyUntracked: false
+        )
       ),
     ]
 
@@ -394,6 +399,29 @@ struct CommandPaletteFeatureTests {
     var state = RepositoriesFeature.State(repositories: [repository])
     state.selection = .worktree(worktree.id)
     let failingCheck = GithubPullRequestStatusCheck(
+      detailsUrl: "https://example.com/check/1",
+      status: "COMPLETED",
+      conclusion: "FAILURE",
+      state: nil
+    )
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(checks: [failingCheck])
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
+    #expect(ordered.first?.title == "Copy failing job URL")
+  }
+
+  @Test func commandPaletteFailingActionFallsBackToLogsWhenCheckURLMissing() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-failing", name: "failing", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    let failingCheck = GithubPullRequestStatusCheck(
       status: "COMPLETED",
       conclusion: "FAILURE",
       state: nil
@@ -427,6 +455,45 @@ struct CommandPaletteFeatureTests {
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let ordered = CommandPaletteFeature.filterItems(items: items, query: "")
     #expect(ordered.first?.title == "Merge PR")
+  }
+
+  @Test func commandPaletteShowsCloseActionForOpenPullRequest() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-close", name: "close", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "OPEN")
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let closeItem = items.first(where: { $0.title == "Close PR" })
+    #expect(closeItem != nil)
+    #expect(closeItem?.subtitle == "PR")
+    if case .some(.closePullRequest(let closeWorktreeID)) = closeItem?.kind {
+      #expect(closeWorktreeID == worktree.id)
+    } else {
+      Issue.record("Expected close pull request command palette action")
+    }
+  }
+
+  @Test func commandPaletteDoesNotShowCloseActionForMergedPullRequest() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(rootPath)/wt-merged", name: "merged", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "MERGED")
+    )
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    #expect(!items.contains(where: { $0.title == "Close PR" }))
   }
 
   @Test func commandPaletteDoesNotShowMergeActionWhenBlocked() {

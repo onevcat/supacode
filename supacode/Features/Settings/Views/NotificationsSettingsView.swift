@@ -14,20 +14,20 @@ struct NotificationsSettingsView: View {
           )
           .help("Show bell icon next to worktree")
           Toggle(
-            "Show Dock badge",
-            isOn: $store.dockBadgeEnabled
-          )
-          .help("Show a badge on the Dock icon for unread notifications")
-          Toggle(
-            "Play in app notification sound",
+            "Play notification sound",
             isOn: $store.notificationSoundEnabled
           )
           .help("Play a sound when a notification is received")
           Toggle(
-            "System notification",
+            "System notifications",
             isOn: $store.systemNotificationsEnabled
           )
           .help("Show macOS system notifications")
+          Toggle(
+            "Move notified worktree to top",
+            isOn: $store.moveNotifiedWorktreeToTop
+          )
+          .help("Bring the worktree to the top when the terminal receives a notification")
         }
       }
       .formStyle(.grouped)

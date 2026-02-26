@@ -13,6 +13,12 @@ struct Repository: Identifiable, Hashable, Sendable {
 
   static func name(for rootURL: URL) -> String {
     let name = rootURL.lastPathComponent
+    if name == ".bare" || name == ".git" {
+      let parentName = rootURL.deletingLastPathComponent().lastPathComponent
+      if !parentName.isEmpty, parentName != "/" {
+        return parentName
+      }
+    }
     if name.isEmpty {
       return rootURL.path(percentEncoded: false)
     }

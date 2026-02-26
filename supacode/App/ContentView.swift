@@ -46,6 +46,7 @@ struct ContentView: View {
           .background(.background)
       }
     }
+    .environment(\.surfaceBackgroundOpacity, terminalManager.surfaceBackgroundOpacity())
     .onChange(of: scenePhase) { _, newValue in
       store.send(.scenePhaseChanged(newValue))
     }
@@ -70,6 +71,10 @@ struct ContentView: View {
     }
     .alert(store: repositoriesStore.scope(state: \.$alert, action: \.alert))
     .alert(store: store.scope(state: \.$alert, action: \.alert))
+    .sheet(store: repositoriesStore.scope(state: \.$worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
+      promptStore in
+      WorktreeCreationPromptView(store: promptStore)
+    }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(
         script: runScriptDraft,
@@ -99,6 +104,43 @@ struct ContentView: View {
 
 }
 
+private struct SurfaceBackgroundOpacityKey: EnvironmentKey {
+  static let defaultValue: Double = 1
+}
+
+extension EnvironmentValues {
+  var surfaceBackgroundOpacity: Double {
+    get { self[SurfaceBackgroundOpacityKey.self] }
+    set { self[SurfaceBackgroundOpacityKey.self] = newValue }
+  }
+
+  var surfaceTopChromeBackgroundOpacity: Double {
+    get {
+      if surfaceBackgroundOpacity < 1 {
+        let proportionalOpacity = surfaceBackgroundOpacity * 0.56
+        return min(max(proportionalOpacity, 0.36), 0.62)
+      }
+      return 1
+    }
+    set {
+      surfaceBackgroundOpacity = newValue
+    }
+  }
+
+  var surfaceBottomChromeBackgroundOpacity: Double {
+    get {
+      if surfaceBackgroundOpacity < 1 {
+        let proportionalOpacity = surfaceBackgroundOpacity * 0.78
+        return min(max(proportionalOpacity, 0.52), 0.82)
+      }
+      return 1
+    }
+    set {
+      surfaceBackgroundOpacity = newValue
+    }
+  }
+}
+
 private struct RunScriptPromptView: View {
   @Binding var script: String
   let onCancel: () -> Void
@@ -118,8 +160,10 @@ private struct RunScriptPromptView: View {
       }
 
       ZStack(alignment: .topLeading) {
-        TextEditor(text: $script)
-          .font(.body.monospaced())
+        PlainTextEditor(
+          text: $script,
+          isMonospaced: true
+        )
           .frame(minHeight: 160)
         if script.isEmpty {
           Text("npm run dev")

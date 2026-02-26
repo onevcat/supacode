@@ -24,7 +24,7 @@ final class CommandKeyObserver {
   private func configureObservers() {
     monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
       MainActor.assumeIsolated {
-        self?.handleCommandKeyChange(isDown: event.modifierFlags.contains(.command))
+        self?.handleCommandKeyChange(isDown: Self.shouldShowShortcuts(for: event.modifierFlags))
       }
       return event
     }
@@ -35,7 +35,7 @@ final class CommandKeyObserver {
       queue: .main
     ) { [weak self] _ in
       MainActor.assumeIsolated {
-        self?.handleCommandKeyChange(isDown: NSEvent.modifierFlags.contains(.command))
+        self?.handleCommandKeyChange(isDown: Self.shouldShowShortcuts(for: NSEvent.modifierFlags))
       }
     }
     didResignActiveObserver = center.addObserver(
@@ -49,13 +49,17 @@ final class CommandKeyObserver {
     }
   }
 
+  nonisolated static func shouldShowShortcuts(for modifierFlags: NSEvent.ModifierFlags) -> Bool {
+    modifierFlags.contains(.command) || modifierFlags.contains(.control)
+  }
+
   private func handleCommandKeyChange(isDown: Bool) {
     holdTask?.cancel()
     holdTask = nil
 
     if isDown {
       holdTask = Task {
-        try? await Task.sleep(for: Self.holdDelay)
+        try? await ContinuousClock().sleep(for: Self.holdDelay)
         guard !Task.isCancelled else { return }
         isPressed = true
       }

@@ -5,6 +5,7 @@ struct WorktreeDetailTitleView: View {
   let onSubmit: (String) -> Void
 
   @State private var isPresented = false
+  @State private var isHovered = false
   @State private var draftName = ""
 
   var body: some View {
@@ -17,10 +18,19 @@ struct WorktreeDetailTitleView: View {
           .foregroundStyle(.secondary)
           .accessibilityHidden(true)
         Text(branchName)
+        if isHovered {
+          Image(systemName: "pencil")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
       }
       .font(.headline)
     }
-    .help("Rename branch")
+    .help("Rename branch (⌘M)")
+    .keyboardShortcut("m", modifiers: .command)
+    .onHover { hovering in
+      isHovered = hovering
+    }
     .popover(isPresented: $isPresented) {
       RenameBranchPopover(
         draftName: $draftName,

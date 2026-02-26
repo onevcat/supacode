@@ -1,7 +1,10 @@
+import Clocks
 import ComposableArchitecture
 import CustomDump
+import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import supacode
@@ -71,6 +74,63 @@ struct RepositoriesFeatureTests {
 
     await store.send(.selectWorktree(worktree.id)) {
       $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectWorktreeCollapsesSidebarSelectedWorktreeIDs() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let wt3 = makeWorktree(id: "/tmp/repo/wt3", name: "wt3", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2, wt3])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    initialState.sidebarSelectedWorktreeIDs = [wt1.id, wt2.id, wt3.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectWorktree(wt2.id)) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func setSidebarSelectedWorktreeIDsKeepsSelectedAndPrunesUnknown() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .setSidebarSelectedWorktreeIDs(
+        [worktree2.id, "/tmp/repo/unknown"]
+      )
+    ) {
+      $0.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    }
+  }
+
+  @Test func selectArchivedWorktreesClearsSidebarSelectedWorktreeIDs() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectArchivedWorktrees) {
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
@@ -93,6 +153,453 @@ struct RepositoriesFeatureTests {
     await store.send(.createRandomWorktree) {
       $0.alert = expectedAlert
     }
+  }
+
+  @Test func createRandomWorktreeInRepositoryWithPromptEnabledPresentsPrompt() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.branchRefs = { _ in ["origin/main", "origin/dev"] }
+    }
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.promptedWorktreeCreationDataLoaded) {
+      $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+        repositoryID: repository.id,
+        repositoryName: repository.name,
+        automaticBaseRefLabel: "Automatic (origin/main)",
+        baseRefOptions: ["origin/dev", "origin/main"],
+        branchName: "",
+        selectedBaseRef: nil,
+        validationMessage: nil
+      )
+    }
+  }
+
+  @Test func promptedWorktreeCreationCancelDismissesPrompt() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRefLabel: "Automatic (origin/main)",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/new-branch",
+      selectedBaseRef: nil,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
+      $0.worktreeCreationPrompt = nil
+    }
+  }
+
+  @Test func startPromptedWorktreeCreationWithDuplicateLocalBranchShowsValidation() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRefLabel: "Automatic (origin/main)",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/existing",
+      selectedBaseRef: nil,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.localBranchNames = { _ in ["feature/existing"] }
+    }
+
+    await store.send(
+      .startPromptedWorktreeCreation(
+        repositoryID: repository.id,
+        branchName: "feature/existing",
+        baseRef: nil
+      )
+    ) {
+      $0.worktreeCreationPrompt?.validationMessage = nil
+      $0.worktreeCreationPrompt?.isValidating = true
+    }
+    await store.receive(\.promptedWorktreeCreationChecked) {
+      $0.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
+      $0.worktreeCreationPrompt?.isValidating = false
+    }
+  }
+
+  @Test func createRandomWorktreeInRepositoryLatestPromptRequestWins() async {
+    actor PromptLoadGate {
+      var continuation: CheckedContinuation<Void, Never>?
+
+      func wait() async {
+        await withCheckedContinuation { continuation in
+          self.continuation = continuation
+        }
+      }
+
+      func waitUntilArmed() async {
+        while continuation == nil {
+          await Task.yield()
+        }
+      }
+
+      func resume() {
+        continuation?.resume()
+        continuation = nil
+      }
+    }
+
+    let repoRootA = "/tmp/repo-a"
+    let repoRootB = "/tmp/repo-b"
+    let promptLoadGate = PromptLoadGate()
+    let repoA = makeRepository(
+      id: repoRootA,
+      worktrees: [makeWorktree(id: repoRootA, name: "main", repoRoot: repoRootA)]
+    )
+    let repoB = makeRepository(
+      id: repoRootB,
+      worktrees: [makeWorktree(id: repoRootB, name: "main", repoRoot: repoRootB)]
+    )
+    let store = TestStore(initialState: makeState(repositories: [repoA, repoB])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.automaticWorktreeBaseRef = { root in
+        if root.path(percentEncoded: false) == repoRootA {
+          await promptLoadGate.wait()
+        }
+        return "origin/main"
+      }
+      $0.gitClient.branchRefs = { _ in ["origin/main"] }
+    }
+
+    await store.send(.createRandomWorktreeInRepository(repoA.id))
+    await promptLoadGate.waitUntilArmed()
+    await store.send(.createRandomWorktreeInRepository(repoB.id))
+    await promptLoadGate.resume()
+    await store.receive(\.promptedWorktreeCreationDataLoaded) {
+      $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+        repositoryID: repoB.id,
+        repositoryName: repoB.name,
+        automaticBaseRefLabel: "Automatic (origin/main)",
+        baseRefOptions: ["origin/main"],
+        branchName: "",
+        selectedBaseRef: nil,
+        validationMessage: nil
+      )
+    }
+    await store.finish()
+  }
+
+  @Test func promptedWorktreeCreationCancelDuringValidationStopsCreation() async {
+    let validationClock = TestClock()
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRefLabel: "Automatic (origin/main)",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/new-branch",
+      selectedBaseRef: nil,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.localBranchNames = { _ in
+        try? await validationClock.sleep(for: .seconds(1))
+        return []
+      }
+    }
+
+    await store.send(
+      .startPromptedWorktreeCreation(
+        repositoryID: repository.id,
+        branchName: "feature/new-branch",
+        baseRef: nil
+      )
+    ) {
+      $0.worktreeCreationPrompt?.validationMessage = nil
+      $0.worktreeCreationPrompt?.isValidating = true
+    }
+    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
+      $0.worktreeCreationPrompt = nil
+    }
+    await validationClock.advance(by: .seconds(1))
+    await store.finish()
+  }
+
+  @Test func createWorktreeInRepositoryWithInvalidBranchNameFails() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.isValidBranchName = { _, _ in false }
+      $0.gitClient.localBranchNames = { _ in [] }
+    }
+    store.exhaustivity = .off
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Branch name invalid")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Enter a valid git branch name and try again.")
+    }
+
+    await store.send(
+      .createWorktreeInRepository(
+        repositoryID: repository.id,
+        nameSource: .explicit("../../Desktop"),
+        baseRefSource: .repositorySetting
+      )
+    )
+    await store.receive(\.createRandomWorktreeFailed) {
+      $0.alert = expectedAlert
+    }
+    #expect(store.state.pendingWorktrees.isEmpty)
+    await store.finish()
+  }
+
+  @Test func createRandomWorktreeFailedWithTraversalNameSkipsCleanup() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let removed = LockIsolated(false)
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.removeWorktree = { _, _ in
+        removed.withValue { $0 = true }
+        return URL(fileURLWithPath: "/tmp/removed")
+      }
+      $0.gitClient.pruneWorktrees = { _ in }
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("boom")
+    }
+
+    await store.send(
+      .createRandomWorktreeFailed(
+        title: "Unable to create worktree",
+        message: "boom",
+        pendingID: "pending:1",
+        previousSelection: nil,
+        repositoryID: repository.id,
+        name: "../../Desktop"
+      )
+    ) {
+      $0.alert = expectedAlert
+    }
+    await store.finish()
+    #expect(removed.value == false)
+  }
+
+  @Test(.dependencies) func createRandomWorktreeInRepositoryStreamsOutputLines() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global.promptForWorktreeCreation = false }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 2 }
+      $0.gitClient.untrackedFileCount = { _ in 1 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[2/2] copy .cache")))
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(store.state.pendingWorktrees.isEmpty)
+    #expect(store.state.selection == .worktree(createdWorktree.id))
+    #expect(store.state.sidebarSelectedWorktreeIDs == [createdWorktree.id])
+    #expect(store.state.pendingSetupScriptWorktreeIDs.contains(createdWorktree.id))
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.contains(createdWorktree.id))
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: createdWorktree.id] != nil)
+    #expect(store.state.alert == nil)
+  }
+
+  @Test(.dependencies) func createRandomWorktreeInRepositoryStreamFailureRemovesPendingWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global.promptForWorktreeCreation = false }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 2 }
+      $0.gitClient.untrackedFileCount = { _ in 1 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: "[1/2] copy .env")))
+          continuation.finish(throwing: GitClientError.commandFailed(command: "wt sw", message: "boom"))
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeFailed)
+    await store.finish()
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Git command failed: wt sw\nboom")
+    }
+
+    #expect(store.state.pendingWorktrees.isEmpty)
+    #expect(store.state.selection == nil)
+    #expect(store.state.alert == expectedAlert)
+    #expect(store.state.repositories[id: repository.id]?.worktrees[id: mainWorktree.id] != nil)
+  }
+
+  @Test func pendingProgressUpdateUpdatesPendingWorktreeState() async {
+    let repoRoot = "/tmp/repo"
+    let repository = makeRepository(
+      id: repoRoot,
+      worktrees: [makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)]
+    )
+    let pendingID = "pending:test"
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(pendingID)
+    state.pendingWorktrees = [
+      PendingWorktree(
+        id: pendingID,
+        repositoryID: repository.id,
+        progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
+      ),
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    let nextProgress = WorktreeCreationProgress(
+      stage: .creatingWorktree,
+      worktreeName: "swift-otter",
+      baseRef: "origin/main",
+      copyIgnored: false,
+      copyUntracked: true
+    )
+    await store.send(
+      .pendingWorktreeProgressUpdated(
+        id: pendingID,
+        progress: nextProgress
+      )
+    ) {
+      $0.pendingWorktrees[0].progress = nextProgress
+    }
+  }
+
+  @Test func pendingProgressUpdateIsIgnoredAfterCreateFailureRemovesPendingWorktree() async {
+    let repoRoot = "/tmp/repo"
+    let repository = makeRepository(id: repoRoot, worktrees: [makeWorktree(id: repoRoot, name: "main")])
+    let pendingID = "pending:test"
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(pendingID)
+    state.pendingWorktrees = [
+      PendingWorktree(
+        id: pendingID,
+        repositoryID: repository.id,
+        progress: WorktreeCreationProgress(
+          stage: .checkingRepositoryMode,
+          worktreeName: "swift-otter"
+        )
+      ),
+    ]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Unable to create worktree")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("boom")
+    }
+
+    await store.send(
+      .createRandomWorktreeFailed(
+        title: "Unable to create worktree",
+        message: "boom",
+        pendingID: pendingID,
+        previousSelection: nil,
+        repositoryID: repository.id,
+        name: nil
+      )
+    ) {
+      $0.pendingWorktrees = []
+      $0.selection = nil
+      $0.alert = expectedAlert
+    }
+
+    await store.send(
+      .pendingWorktreeProgressUpdated(
+        id: pendingID,
+        progress: WorktreeCreationProgress(stage: .creatingWorktree)
+      )
+    )
+    #expect(store.state.pendingWorktrees.isEmpty)
   }
 
   @Test func requestDeleteWorktreeShowsConfirmation() async {
@@ -197,6 +704,36 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func requestArchiveWorktreesShowsBatchConfirmation() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "owl", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "hawk", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    let targets = [
+      RepositoriesFeature.ArchiveWorktreeTarget(worktreeID: worktree1.id, repositoryID: repository.id),
+      RepositoriesFeature.ArchiveWorktreeTarget(worktreeID: worktree2.id, repositoryID: repository.id),
+    ]
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive 2 worktrees?")
+    } actions: {
+      ButtonState(role: .destructive, action: .confirmArchiveWorktrees(targets)) {
+        TextState("Archive 2 (⌘↩)")
+      }
+      ButtonState(role: .cancel) {
+        TextState("Cancel")
+      }
+    } message: {
+      TextState("Archive 2 worktrees?")
+    }
+
+    await store.send(.requestArchiveWorktrees(targets)) {
+      $0.alert = expectedAlert
+    }
+  }
+
   @Test func requestArchiveWorktreeMergedArchivesImmediately() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -222,7 +759,8 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.requestArchiveWorktree(featureWorktree.id, repository.id))
-    await store.receive(\.archiveWorktreeConfirmed) {
+    await store.receive(\.archiveWorktreeConfirmed)
+    await store.receive(\.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
       $0.pinnedWorktreeIDs = []
       $0.worktreeOrderByRepository = [:]
@@ -230,6 +768,234 @@ struct RepositoriesFeatureTests {
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test(.dependencies) func archiveWorktreeConfirmedRunsArchiveScriptAndShowsProgress() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(mainWorktree.id)
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.archiveScript = "echo syncing\necho done"
+    }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.shellClient.runLoginStreamImpl = { _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.line(ShellStreamLine(source: .stdout, text: "syncing")))
+          continuation.yield(.line(ShellStreamLine(source: .stdout, text: "done")))
+          continuation.yield(.finished(ShellOutput(stdout: "syncing\ndone", stderr: "", exitCode: 0)))
+          continuation.finish()
+        }
+      }
+    }
+
+    await store.send(.archiveWorktreeConfirmed(featureWorktree.id, repository.id)) {
+      $0.archivingWorktreeIDs = [featureWorktree.id]
+      $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+        titleText: "Running archive script",
+        detailText: "Preparing archive script",
+        commandText: "bash -lc 'echo syncing\\necho done'"
+      )
+    }
+    await store.receive(\.archiveScriptProgressUpdated) {
+      $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+        titleText: "Running archive script",
+        detailText: "syncing",
+        commandText: "bash -lc 'echo syncing\\necho done'",
+        outputLines: ["syncing"]
+      )
+    }
+    await store.receive(\.archiveScriptProgressUpdated) {
+      $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+        titleText: "Running archive script",
+        detailText: "done",
+        commandText: "bash -lc 'echo syncing\\necho done'",
+        outputLines: ["syncing", "done"]
+      )
+    }
+    await store.receive(\.archiveScriptSucceeded) {
+      $0.archivingWorktreeIDs = []
+      $0.archiveScriptProgressByWorktreeID = [:]
+    }
+    await store.receive(\.archiveWorktreeApply) {
+      $0.archivedWorktreeIDs = [featureWorktree.id]
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+  }
+
+  @Test(.dependencies) func archiveWorktreeConfirmedScriptFailureBlocksArchive() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.archiveScript = "exit 7"
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.shellClient.runLoginStreamImpl = { _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.finish(
+            throwing: ShellClientError(
+              command: "bash -lc exit 7",
+              stdout: "",
+              stderr: "fail",
+              exitCode: 7
+            )
+          )
+        }
+      }
+    }
+
+    let expectedAlert = AlertState<RepositoriesFeature.Alert> {
+      TextState("Archive script failed")
+    } actions: {
+      ButtonState(role: .cancel) {
+        TextState("OK")
+      }
+    } message: {
+      TextState("Command failed: bash -lc exit 7\nstderr:\nfail")
+    }
+
+    await store.send(.archiveWorktreeConfirmed(featureWorktree.id, repository.id)) {
+      $0.archivingWorktreeIDs = [featureWorktree.id]
+      $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+        titleText: "Running archive script",
+        detailText: "Preparing archive script",
+        commandText: "bash -lc 'exit 7'"
+      )
+    }
+    await store.receive(\.archiveScriptFailed) {
+      $0.archivingWorktreeIDs = []
+      $0.archiveScriptProgressByWorktreeID = [:]
+      $0.alert = expectedAlert
+    }
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+  }
+
+  @Test func archiveScriptSucceededIgnoredWhenNotArchiving() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id))
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+  }
+
+  @Test func archiveScriptFailedIgnoredWhenNotArchiving() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "late failure"))
+    #expect(store.state.alert == nil)
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+  }
+
+  @Test func repositoriesLoadedKeepsArchiveInFlightUntilSuccessCompletion() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let reloadedRepository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.archivingWorktreeIDs = [featureWorktree.id]
+    state.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+      titleText: "Running archive script",
+      detailText: "still running"
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded(
+        [reloadedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    )
+    #expect(store.state.archivingWorktreeIDs.contains(featureWorktree.id))
+    #expect(store.state.archiveScriptProgressByWorktreeID[featureWorktree.id] != nil)
+
+    await store.send(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id))
+    #expect(store.state.archivingWorktreeIDs.isEmpty)
+    #expect(store.state.archiveScriptProgressByWorktreeID.isEmpty)
+  }
+
+  @Test func repositoriesLoadedKeepsArchiveInFlightUntilFailureCompletion() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let reloadedRepository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    var state = makeState(repositories: [repository])
+    state.archivingWorktreeIDs = [featureWorktree.id]
+    state.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
+      titleText: "Running archive script",
+      detailText: "still running"
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .repositoriesLoaded(
+        [reloadedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    )
+    #expect(store.state.archivingWorktreeIDs.contains(featureWorktree.id))
+    #expect(store.state.archiveScriptProgressByWorktreeID[featureWorktree.id] != nil)
+
+    await store.send(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "script failed"))
+    #expect(store.state.archivingWorktreeIDs.isEmpty)
+    #expect(store.state.archiveScriptProgressByWorktreeID.isEmpty)
+    #expect(store.state.alert != nil)
   }
 
   @Test func requestRenameBranchWithEmptyNameShowsAlert() async {
@@ -307,6 +1073,36 @@ struct RepositoriesFeatureTests {
       $0.worktreeOrderByRepository[repoRoot] = [featureB.id, featureA.id]
     }
     #expect(store.state.statusToast == nil)
+  }
+
+  @Test func worktreeNotificationReceivedDoesNotReorderWhenMoveToTopDisabled() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let featureB = makeWorktree(id: "/tmp/repo/b", name: "b", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA, featureB])
+    var state = makeState(repositories: [repository])
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id, featureB.id]
+    state.moveNotifiedWorktreeToTop = false
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeNotificationReceived(featureB.id))
+    #expect(store.state.worktreeOrderByRepository[repoRoot] == [featureA.id, featureB.id])
+    #expect(store.state.statusToast == nil)
+  }
+
+  @Test func setMoveNotifiedWorktreeToTopUpdatesState() async {
+    var state = makeState(repositories: [])
+    state.moveNotifiedWorktreeToTop = true
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.setMoveNotifiedWorktreeToTop(false)) {
+      $0.moveNotifiedWorktreeToTop = false
+    }
   }
 
   @Test func worktreeBranchNameLoadedPreservesCreatedAt() async {
@@ -637,8 +1433,7 @@ struct RepositoriesFeatureTests {
       PendingWorktree(
         id: removedWorktree.id,
         repositoryID: repository.id,
-        name: "pending",
-        detail: ""
+        progress: WorktreeCreationProgress(stage: .choosingWorktreeName)
       ),
     ]
     initialState.pinnedWorktreeIDs = [removedWorktree.id]
@@ -721,11 +1516,11 @@ struct RepositoriesFeatureTests {
       PendingWorktree(
         id: pendingID,
         repositoryID: repository.id,
-        name: "Creating worktree...",
-        detail: ""
+        progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
       ),
     ]
     initialState.selection = .worktree(pendingID)
+    initialState.sidebarSelectedWorktreeIDs = [existingWorktree.id, pendingID]
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
@@ -743,6 +1538,7 @@ struct RepositoriesFeatureTests {
       $0.pendingTerminalFocusWorktreeIDs.insert(newWorktree.id)
       $0.pendingWorktrees = []
       $0.selection = .worktree(newWorktree.id)
+      $0.sidebarSelectedWorktreeIDs = [newWorktree.id]
       $0.repositories = [updatedRepository]
     }
 
@@ -755,7 +1551,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test func worktreePullRequestLoadedAutoArchivesWhenEnabled() async {
+  @Test func repositoryPullRequestsLoadedAutoArchivesWhenEnabled() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let featureWorktree = makeWorktree(
@@ -772,7 +1568,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: featureWorktree.name)
 
     await store.send(
-      .worktreePullRequestLoaded(worktreeID: featureWorktree.id, pullRequest: mergedPullRequest)
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: [featureWorktree.id: mergedPullRequest]
+      )
     ) {
       $0.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -780,13 +1579,14 @@ struct RepositoriesFeatureTests {
         pullRequest: mergedPullRequest
       )
     }
-    await store.receive(\.archiveWorktreeConfirmed) {
+    await store.receive(\.archiveWorktreeConfirmed)
+    await store.receive(\.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
   }
 
-  @Test func worktreePullRequestLoadedSkipsAutoArchiveForMainWorktree() async {
+  @Test func repositoryPullRequestsLoadedSkipsAutoArchiveForMainWorktree() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
@@ -798,7 +1598,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: mainWorktree.name)
 
     await store.send(
-      .worktreePullRequestLoaded(worktreeID: mainWorktree.id, pullRequest: mergedPullRequest)
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
+      )
     ) {
       $0.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -807,6 +1610,406 @@ struct RepositoriesFeatureTests {
       )
     }
     await store.finish()
+  }
+
+  @Test func pullRequestActionMergeRefreshesImmediatelyWithoutSyntheticMergedState() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .disabled
+    state.automaticallyArchiveMergedWorktrees = true
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: openPullRequest
+    )
+    let mergedNumbers = LockIsolated<[Int]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.mergePullRequest = { _, number, _ in
+        mergedNumbers.withValue { $0.append(number) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.pullRequestAction(featureWorktree.id, .merge))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Merging pull request…")
+    }
+    await store.receive(\.showToast) {
+      $0.statusToast = .success("Pull request merged")
+    }
+    await store.receive(\.worktreeInfoEvent)
+    #expect(store.state.worktreeInfoByID[featureWorktree.id]?.pullRequest?.state == "OPEN")
+    #expect(store.state.archivedWorktreeIDs.isEmpty)
+    #expect(mergedNumbers.value == [12])
+    await store.finish()
+  }
+
+  @Test func pullRequestActionCloseRefreshesImmediately() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .disabled
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: openPullRequest
+    )
+    let closedNumbers = LockIsolated<[Int]>([])
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { true }
+      $0.githubCLI.closePullRequest = { _, number in
+        closedNumbers.withValue { $0.append(number) }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.pullRequestAction(featureWorktree.id, .close))
+    await store.receive(\.showToast) {
+      $0.statusToast = .inProgress("Closing pull request…")
+    }
+    await store.receive(\.showToast) {
+      $0.statusToast = .success("Pull request closed")
+    }
+    await store.receive(\.worktreeInfoEvent)
+    #expect(closedNumbers.value == [12])
+    await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshMarksInFlightThenCompletes() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .available
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.batchPullRequests = { _, _, _, _ in
+        Issue.record("batchPullRequests should not run when remoteInfo is unavailable")
+        return [:]
+      }
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    ) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    }
+    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshQueuesWhileAvailabilityUnknown() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.githubIntegration.isAvailable = { false }
+      $0.gitClient.remoteInfo = { _ in
+        Issue.record("remoteInfo should not be requested when GitHub integration is unavailable")
+        return nil
+      }
+      $0.githubCLI.batchPullRequests = { _, _, _, _ in
+        Issue.record("batchPullRequests should not run when GitHub integration is unavailable")
+        return [:]
+      }
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    ) {
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    }
+    await store.receive(\.refreshGithubIntegrationAvailability) {
+      $0.githubIntegrationAvailability = .checking
+    }
+    await store.receive(\.githubIntegrationAvailabilityUpdated) {
+      $0.githubIntegrationAvailability = .unavailable
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.send(.setGithubIntegrationEnabled(false)) {
+      $0.githubIntegrationAvailability = .disabled
+      $0.pendingPullRequestRefreshByRepositoryID = [:]
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func worktreeInfoEventRepositoryPullRequestRefreshQueuesWhileAvailabilityUnavailable() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .worktreeInfoEvent(
+        .repositoryPullRequestRefresh(
+          repositoryRootURL: URL(fileURLWithPath: repoRoot),
+          worktreeIDs: [mainWorktree.id, featureWorktree.id]
+        )
+      )
+    ) {
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityRecoveryReplaysPendingRefreshes() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .unavailable
+    initialState.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      worktreeIDs: [mainWorktree.id, featureWorktree.id]
+    )
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.batchPullRequests = { _, _, _, _ in
+        Issue.record("batchPullRequests should not run when remoteInfo is unavailable")
+        return [:]
+      }
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(true)) {
+      $0.githubIntegrationAvailability = .available
+      $0.pendingPullRequestRefreshByRepositoryID = [:]
+    }
+    await store.receive(\.worktreeInfoEvent) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    }
+    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityUnavailablePromotesQueuedRefreshesToPending() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.githubIntegrationAvailability = .available
+    initialState.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    initialState.queuedPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      worktreeIDs: [mainWorktree.id, featureWorktree.id]
+    )
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(false)) {
+      $0.githubIntegrationAvailability = .unavailable
+      $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.send(.setGithubIntegrationEnabled(false)) {
+      $0.githubIntegrationAvailability = .disabled
+      $0.pendingPullRequestRefreshByRepositoryID = [:]
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func githubIntegrationAvailabilityUpdatedWhileDisabledIsIgnored() async {
+    var state = makeState(repositories: [])
+    state.githubIntegrationAvailability = .disabled
+    state.pendingPullRequestRefreshByRepositoryID["repo"] = RepositoriesFeature.PendingPullRequestRefresh(
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo"),
+      worktreeIDs: []
+    )
+    let expectedState = state
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.githubIntegrationAvailabilityUpdated(false))
+    await store.send(.githubIntegrationAvailabilityUpdated(true))
+    #expect(store.state == expectedState)
+    await store.finish()
+  }
+
+  @Test func repositoryPullRequestRefreshCompletedReplaysQueuedRefresh() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var state = makeState(repositories: [repository])
+    state.githubIntegrationAvailability = .available
+    state.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    state.queuedPullRequestRefreshByRepositoryID[repository.id] =
+      RepositoriesFeature
+      .PendingPullRequestRefresh(
+        repositoryRootURL: URL(fileURLWithPath: repoRoot),
+        worktreeIDs: [mainWorktree.id, featureWorktree.id]
+      )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.remoteInfo = { _ in nil }
+      $0.githubCLI.batchPullRequests = { _, _, _, _ in
+        Issue.record("batchPullRequests should not run when remoteInfo is unavailable")
+        return [:]
+      }
+    }
+
+    await store.send(
+      .repositoryPullRequestRefreshCompleted(repository.id)
+    ) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+      $0.queuedPullRequestRefreshByRepositoryID = [:]
+    }
+    await store.receive(\.worktreeInfoEvent) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
+    }
+    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+      $0.inFlightPullRequestRefreshRepositoryIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test func repositoryPullRequestsLoadedSkipsNoopPayload() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    let pullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name)
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: pullRequest
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: [featureWorktree.id: pullRequest]
+      )
+    )
+    await store.finish()
+  }
+
+  @Test func repositoryPullRequestsLoadedClearsStalePullRequestWhenNil() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureWorktree = makeWorktree(
+      id: "\(repoRoot)/feature",
+      name: "feature",
+      repoRoot: repoRoot
+    )
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: makePullRequest(state: "OPEN", headRefName: featureWorktree.name)
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+    let pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [featureWorktree.id: nil]
+
+    await store.send(
+      .repositoryPullRequestsLoaded(
+        repositoryID: repository.id,
+        pullRequestsByWorktreeID: pullRequestsByWorktreeID
+      )
+    ) {
+      $0.worktreeInfoByID.removeValue(forKey: featureWorktree.id)
+    }
   }
 
   @Test func unarchiveWorktreeNoopsWhenNotArchived() async {
@@ -818,6 +2021,213 @@ struct RepositoriesFeatureTests {
 
     await store.send(.unarchiveWorktree(worktree.id))
     expectNoDifference(store.state.archivedWorktreeIDs, [])
+  }
+
+  // MARK: - Select Next/Previous Worktree
+
+  @Test func selectNextWorktreeWrapsForward() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt2.id)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectPreviousWorktreeWrapsBackward() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeWithNoSelectionSelectsFirst() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeCollapsesSidebarSelectionToSingleWorktree() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let wt3 = makeWorktree(id: "/tmp/wt3", name: "gamma")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2, wt3])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.sidebarSelectedWorktreeIDs = [wt1.id, wt3.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectPreviousWorktreeWithNoSelectionSelectsLast() async {
+    let wt1 = makeWorktree(id: "/tmp/wt1", name: "alpha")
+    let wt2 = makeWorktree(id: "/tmp/wt2", name: "beta")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeWithEmptyRowsIsNoOp() async {
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+  }
+
+  @Test func selectNextWorktreeSingleWorktreeReturnsSame() async {
+    let worktree = makeWorktree(id: "/tmp/wt", name: "solo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeSkipsCollapsedRepository() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt3.id)
+      $0.sidebarSelectedWorktreeIDs = [wt3.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectPreviousWorktreeSkipsCollapsedRepository() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt3.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectNextWorktreeAllCollapsedIsNoOp() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    var state = makeState(repositories: [repo1])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo1.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+  }
+
+  @Test func selectPreviousWorktreeAllCollapsedIsNoOp() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    var state = makeState(repositories: [repo1])
+    state.selection = .worktree(wt1.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo1.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectPreviousWorktree)
+  }
+
+  @Test func selectNextWorktreeWrapsAroundSkippingCollapsedRepo() async {
+    let wt1 = makeWorktree(id: "/tmp/repo1/wt1", name: "alpha", repoRoot: "/tmp/repo1")
+    let wt2 = makeWorktree(id: "/tmp/repo2/wt2", name: "beta", repoRoot: "/tmp/repo2")
+    let wt3 = makeWorktree(id: "/tmp/repo3/wt3", name: "gamma", repoRoot: "/tmp/repo3")
+    let repo1 = makeRepository(id: "/tmp/repo1", worktrees: [wt1])
+    let repo2 = makeRepository(id: "/tmp/repo2", worktrees: [wt2])
+    let repo3 = makeRepository(id: "/tmp/repo3", worktrees: [wt3])
+    var state = makeState(repositories: [repo1, repo2, repo3])
+    state.selection = .worktree(wt3.id)
+    state.$collapsedRepositoryIDs.withLock { $0 = [repo2.id] }
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextWorktree)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
   private func makeWorktree(
@@ -836,9 +2246,13 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  private func makePullRequest(state: String, headRefName: String? = nil) -> GithubPullRequest {
+  private func makePullRequest(
+    state: String,
+    headRefName: String? = nil,
+    number: Int = 1
+  ) -> GithubPullRequest {
     GithubPullRequest(
-      number: 1,
+      number: number,
       title: "PR",
       state: state,
       additions: 0,
@@ -848,7 +2262,7 @@ struct RepositoriesFeatureTests {
       mergeable: nil,
       mergeStateStatus: nil,
       updatedAt: nil,
-      url: "https://example.com/pull/1",
+      url: "https://example.com/pull/\(number)",
       headRefName: headRefName,
       baseRefName: "main",
       commitsCount: 1,
