@@ -5,13 +5,6 @@ import PostHog
 import Sentry
 import SwiftUI
 
-private let notificationSound: NSSound? = {
-  guard let url = Bundle.main.url(forResource: "notification", withExtension: "wav") else {
-    return nil
-  }
-  return NSSound(contentsOf: url, byReference: true)
-}()
-
 private enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
 }
@@ -87,6 +80,7 @@ struct AppFeature {
   @Dependency(\.repositoryPersistence) private var repositoryPersistence
   @Dependency(\.workspaceClient) private var workspaceClient
   @Dependency(\.settingsWindowClient) private var settingsWindowClient
+  @Dependency(\.notificationSoundClient) private var notificationSoundClient
   @Dependency(\.systemNotificationClient) private var systemNotificationClient
   @Dependency(\.terminalClient) private var terminalClient
   @Dependency(\.worktreeInfoWatcher) private var worktreeInfoWatcher
@@ -674,7 +668,7 @@ struct AppFeature {
         if state.settings.notificationSoundEnabled && !state.settings.systemNotificationsEnabled {
           effects.append(
             .run { _ in
-              await MainActor.run { _ = notificationSound?.play() }
+              await notificationSoundClient.play()
             }
           )
         }

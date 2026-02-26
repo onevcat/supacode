@@ -135,4 +135,73 @@ struct AppFeatureSystemNotificationTests {
 
     #expect(sends.value == [("Done", "Build succeeded")])
   }
+
+  @Test(.dependencies) func notificationReceivedSkipsLocalSoundWhenSystemNotificationsEnabled() async {
+    var globalSettings = GlobalSettings.default
+    globalSettings.systemNotificationsEnabled = true
+    globalSettings.notificationSoundEnabled = true
+    let plays = LockIsolated(0)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        settings: SettingsFeature.State(settings: globalSettings)
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.notificationSoundClient.play = {
+        plays.withValue { $0 += 1 }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(
+        .notificationReceived(
+          worktreeID: "/tmp/repo/wt-1",
+          title: "Done",
+          body: "Build succeeded"
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(plays.value == 0)
+  }
+
+  @Test(.dependencies) func notificationReceivedPlaysLocalSoundWhenSystemNotificationsDisabled() async {
+    var globalSettings = GlobalSettings.default
+    globalSettings.systemNotificationsEnabled = false
+    globalSettings.notificationSoundEnabled = true
+    let plays = LockIsolated(0)
+    let sends = LockIsolated(0)
+    let store = TestStore(
+      initialState: AppFeature.State(
+        settings: SettingsFeature.State(settings: globalSettings)
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.notificationSoundClient.play = {
+        plays.withValue { $0 += 1 }
+      }
+      $0.systemNotificationClient.send = { _, _ in
+        sends.withValue { $0 += 1 }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(
+        .notificationReceived(
+          worktreeID: "/tmp/repo/wt-1",
+          title: "Done",
+          body: "Build succeeded"
+        )
+      )
+    )
+    await store.finish()
+
+    #expect(plays.value == 1)
+    #expect(sends.value == 0)
+  }
 }
