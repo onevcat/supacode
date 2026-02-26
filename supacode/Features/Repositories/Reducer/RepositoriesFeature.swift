@@ -3295,12 +3295,12 @@ private func cleanupWorktreeState(
   )
 }
 
-private func archiveScriptCommand(_ script: String) -> String {
+private nonisolated func archiveScriptCommand(_ script: String) -> String {
   let normalized = script.replacing("\n", with: "\\n")
   return "bash -lc \(shellQuote(normalized))"
 }
 
-private func worktreeCreateCommand(
+private nonisolated func worktreeCreateCommand(
   repositoryRootURL: URL,
   name: String,
   copyIgnored: Bool,
@@ -3326,7 +3326,7 @@ private func worktreeCreateCommand(
   return parts.map(shellQuote).joined(separator: " ")
 }
 
-private func shellQuote(_ value: String) -> String {
+private nonisolated func shellQuote(_ value: String) -> String {
   let needsQuoting = value.contains { character in
     character.isWhitespace || character == "\"" || character == "'" || character == "\\"
   }
