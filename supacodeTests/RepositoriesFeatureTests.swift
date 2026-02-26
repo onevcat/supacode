@@ -759,7 +759,8 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.requestArchiveWorktree(featureWorktree.id, repository.id))
-    await store.receive(\.archiveWorktreeConfirmed) {
+    await store.receive(\.archiveWorktreeConfirmed)
+    await store.receive(\.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
       $0.pinnedWorktreeIDs = []
       $0.worktreeOrderByRepository = [:]
@@ -1464,7 +1465,8 @@ struct RepositoriesFeatureTests {
         pullRequest: mergedPullRequest
       )
     }
-    await store.receive(\.archiveWorktreeConfirmed) {
+    await store.receive(\.archiveWorktreeConfirmed)
+    await store.receive(\.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
