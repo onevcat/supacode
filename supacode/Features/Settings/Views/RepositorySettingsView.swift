@@ -94,10 +94,9 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          TextEditor(
+          PlainTextEditor(
             text: settings.setupScript
           )
-          .font(.body)
           .frame(minHeight: 120)
           if store.settings.setupScript.isEmpty {
             Text("claude --dangerously-skip-permissions")
@@ -116,10 +115,9 @@ struct RepositorySettingsView: View {
       }
       Section {
         ZStack(alignment: .topLeading) {
-          TextEditor(
+          PlainTextEditor(
             text: settings.runScript
           )
-          .font(.body)
           .frame(minHeight: 120)
           if store.settings.runScript.isEmpty {
             Text("npm run dev")
