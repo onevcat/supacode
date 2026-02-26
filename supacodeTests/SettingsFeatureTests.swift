@@ -67,8 +67,8 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: false,
       inAppNotificationsEnabled: false,
       notificationSoundEnabled: false,
-      moveNotifiedWorktreeToTop: true,
       systemNotificationsEnabled: false,
+      moveNotifiedWorktreeToTop: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,
@@ -95,8 +95,8 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
       notificationSoundEnabled: initialSettings.notificationSoundEnabled,
-      moveNotifiedWorktreeToTop: initialSettings.moveNotifiedWorktreeToTop,
       systemNotificationsEnabled: initialSettings.systemNotificationsEnabled,
+      moveNotifiedWorktreeToTop: initialSettings.moveNotifiedWorktreeToTop,
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
       githubIntegrationEnabled: initialSettings.githubIntegrationEnabled,
@@ -107,6 +107,23 @@ struct SettingsFeatureTests {
     await store.receive(\.delegate.settingsChanged)
 
     expectNoDifference(settingsFile.global, expectedSettings)
+  }
+
+  @Test(.dependencies) func setSystemNotificationsEnabledPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.systemNotificationsEnabled = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSystemNotificationsEnabled(true)) {
+      $0.systemNotificationsEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.systemNotificationsEnabled == true)
   }
 
   @Test(.dependencies) func selectionDoesNotMutateRepositorySettings() async {
@@ -146,8 +163,8 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
       notificationSoundEnabled: false,
-      moveNotifiedWorktreeToTop: true,
       systemNotificationsEnabled: true,
+      moveNotifiedWorktreeToTop: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
       githubIntegrationEnabled: true,

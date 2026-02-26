@@ -560,7 +560,7 @@ struct AppFeature {
         } message: {
           TextState(message)
         }
-        return .send(.settings(.binding(.set(\.systemNotificationsEnabled, false))))
+        return .send(.settings(.setSystemNotificationsEnabled(false)))
 
       case .alert(.dismiss):
         state.alert = nil

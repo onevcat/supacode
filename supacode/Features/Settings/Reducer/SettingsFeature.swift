@@ -70,6 +70,7 @@ struct SettingsFeature {
     case task
     case settingsLoaded(GlobalSettings)
     case setSelection(SettingsSection?)
+    case setSystemNotificationsEnabled(Bool)
     case repositorySettings(RepositorySettingsFeature.Action)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -121,13 +122,11 @@ struct SettingsFeature {
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
-        let settings = state.globalSettings
-        @Shared(.settingsFile) var settingsFile
-        $settingsFile.withLock { $0.global = settings }
-        if settings.analyticsEnabled {
-          analyticsClient.capture("settings_changed", nil)
-        }
-        return .send(.delegate(.settingsChanged(settings)))
+        return persist(state)
+
+      case .setSystemNotificationsEnabled(let isEnabled):
+        state.systemNotificationsEnabled = isEnabled
+        return persist(state)
 
       case .setSelection(let selection):
         state.selection = selection ?? .general
@@ -143,5 +142,15 @@ struct SettingsFeature {
     .ifLet(\.repositorySettings, action: \.repositorySettings) {
       RepositorySettingsFeature()
     }
+  }
+
+  private func persist(_ state: State) -> Effect<Action> {
+    let settings = state.globalSettings
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = settings }
+    if settings.analyticsEnabled {
+      analyticsClient.capture("settings_changed", nil)
+    }
+    return .send(.delegate(.settingsChanged(settings)))
   }
 }

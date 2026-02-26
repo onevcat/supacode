@@ -32,7 +32,7 @@ struct AppFeatureSystemNotificationTests {
       $0.settings.systemNotificationsEnabled = true
     }
     await store.receive(\.systemNotificationsPermissionFailed)
-    await store.receive(\.settings.binding) {
+    await store.receive(\.settings.setSystemNotificationsEnabled) {
       $0.settings.systemNotificationsEnabled = false
     }
 
@@ -83,7 +83,7 @@ struct AppFeatureSystemNotificationTests {
       $0.settings.systemNotificationsEnabled = true
     }
     await store.receive(\.systemNotificationsPermissionFailed)
-    await store.receive(\.settings.binding) {
+    await store.receive(\.settings.setSystemNotificationsEnabled) {
       $0.settings.systemNotificationsEnabled = false
     }
 
