@@ -34,6 +34,7 @@ struct AppFeatureDefaultEditorTests {
 
     await store.send(.repositories(.delegate(.selectedWorktreeChanged(worktree))))
     await store.receive(\.worktreeSettingsLoaded)
+    await store.receive(\.worktreeOnevcatSettingsLoaded)
     #expect(store.state.openActionSelection == .finder)
     #expect(store.state.selectedRunScript == "")
     await store.finish()
@@ -90,6 +91,7 @@ struct AppFeatureDefaultEditorTests {
       $0.openActionSelection = .terminal
       $0.selectedRunScript = "pnpm dev"
     }
+    await store.receive(\.worktreeOnevcatSettingsLoaded)
     await store.finish()
   }
 
@@ -123,6 +125,7 @@ struct AppFeatureDefaultEditorTests {
     await store.receive(\.worktreeSettingsLoaded) {
       $0.openActionSelection = expectedOpenActionSelection
     }
+    await store.receive(\.worktreeOnevcatSettingsLoaded)
     await store.finish()
 
     #expect(watcherCommands.value == [.setSelectedWorktreeID(worktree.id)])

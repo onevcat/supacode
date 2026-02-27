@@ -10,6 +10,7 @@ struct TerminalClient {
     case createTabWithInput(Worktree, input: String, runSetupScriptIfNew: Bool)
     case ensureInitialTab(Worktree, runSetupScriptIfNew: Bool, focusing: Bool)
     case runScript(Worktree, script: String)
+    case insertText(Worktree, text: String)
     case stopRunScript(Worktree)
     case closeFocusedTab(Worktree)
     case closeFocusedSurface(Worktree)

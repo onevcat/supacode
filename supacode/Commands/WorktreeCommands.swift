@@ -18,10 +18,12 @@ struct WorktreeCommands: Commands {
 
   var body: some Commands {
     let repositories = store.repositories
+    let hasActiveWorktree = repositories.worktree(for: repositories.selectedWorktreeID) != nil
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
     let pullRequestURL = selectedPullRequestURL
     let githubIntegrationEnabled = store.settings.githubIntegrationEnabled
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
+    let customCommands = store.selectedCustomCommands
     CommandMenu("Worktrees") {
       Button("Select Next Worktree") {
         store.send(.repositories(.selectNextWorktree))
@@ -48,6 +50,16 @@ struct WorktreeCommands: Commands {
       }
     }
     CommandGroup(replacing: .newItem) {
+      if !customCommands.isEmpty {
+        ForEach(Array(customCommands.enumerated()), id: \.element.id) { index, command in
+          customCommandButton(
+            index: index,
+            command: command,
+            hasActiveWorktree: hasActiveWorktree
+          )
+        }
+        Divider()
+      }
       Button("Open Repository...", systemImage: "folder") {
         store.send(.repositories(.setOpenPanelPresented(true)))
       }
@@ -170,6 +182,39 @@ struct WorktreeCommands: Commands {
     guard let row else { return "Worktree \(index + 1)" }
     let repositoryName = store.repositories.repositoryName(for: row.repositoryID) ?? "Repository"
     return "\(repositoryName) — \(row.name)"
+  }
+
+  @ViewBuilder
+  private func customCommandButton(
+    index: Int,
+    command: OnevcatCustomCommand,
+    hasActiveWorktree: Bool
+  ) -> some View {
+    let title = command.resolvedTitle
+    let helpText: String =
+      if let shortcut = command.shortcut?.keyboardShortcut?.display {
+        "\(title) (\(shortcut))"
+      } else {
+        title
+      }
+    Button(title, systemImage: command.resolvedSystemImage) {
+      store.send(.runCustomCommand(index))
+    }
+    .modifier(KeyboardShortcutModifier(shortcut: command.shortcut?.keyboardShortcut))
+    .help(helpText)
+    .disabled(!hasActiveWorktree)
+  }
+}
+
+private struct KeyboardShortcutModifier: ViewModifier {
+  let shortcut: KeyboardShortcut?
+
+  func body(content: Content) -> some View {
+    if let shortcut {
+      content.keyboardShortcut(shortcut)
+    } else {
+      content
+    }
   }
 }
 

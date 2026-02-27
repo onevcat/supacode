@@ -9,11 +9,7 @@ struct UpdateCommands: Commands {
       Button("Check for Updates...") {
         store.send(.checkForUpdates)
       }
-      .keyboardShortcut(
-        AppShortcuts.checkForUpdates.keyEquivalent,
-        modifiers: AppShortcuts.checkForUpdates.modifiers
-      )
-      .help("Check for Updates (\(AppShortcuts.checkForUpdates.display))")
+      .help("Check for updates")
     }
   }
 }

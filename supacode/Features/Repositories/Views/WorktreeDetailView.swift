@@ -32,6 +32,7 @@ struct WorktreeDetailView: View {
     let openActionSelection = state.openActionSelection
     let runScriptEnabled = hasActiveWorktree
     let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let customCommands = state.selectedCustomCommands
     let notificationGroups = repositories.toolbarNotificationGroups(terminalManager: terminalManager)
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
       count + repository.unseenWorktreeCount
@@ -61,7 +62,8 @@ struct WorktreeDetailView: View {
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed,
           runScriptEnabled: runScriptEnabled,
-          runScriptIsRunning: runScriptIsRunning
+          runScriptIsRunning: runScriptIsRunning,
+          customCommands: customCommands
         )
         WorktreeToolbarContent(
           toolbarState: toolbarState,
@@ -81,7 +83,10 @@ struct WorktreeDetailView: View {
           onSelectNotification: selectToolbarNotification,
           onDismissAllNotifications: { dismissAllToolbarNotifications(in: notificationGroups) },
           onRunScript: { store.send(.runScript) },
-          onStopRunScript: { store.send(.stopRunScript) }
+          onStopRunScript: { store.send(.stopRunScript) },
+          onRunCustomCommand: { index in
+            store.send(.runCustomCommand(index))
+          }
         )
       }
     }
@@ -247,6 +252,7 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
+    let customCommands: [OnevcatCustomCommand]
 
     var runScriptHelpText: String {
       "Run Script (\(AppShortcuts.runScript.display))"
@@ -267,6 +273,7 @@ struct WorktreeDetailView: View {
     let onDismissAllNotifications: () -> Void
     let onRunScript: () -> Void
     let onStopRunScript: () -> Void
+    let onRunCustomCommand: (Int) -> Void
 
     var body: some ToolbarContent {
       ToolbarItem {
@@ -307,21 +314,7 @@ struct WorktreeDetailView: View {
         )
       }
       ToolbarSpacer(.fixed)
-
-      if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
-        ToolbarItem {
-          RunScriptToolbarButton(
-            isRunning: toolbarState.runScriptIsRunning,
-            isEnabled: toolbarState.runScriptEnabled,
-            runHelpText: toolbarState.runScriptHelpText,
-            stopHelpText: toolbarState.stopRunScriptHelpText,
-            runShortcut: AppShortcuts.runScript.display,
-            stopShortcut: AppShortcuts.stopRunScript.display,
-            runAction: onRunScript,
-            stopAction: onStopRunScript
-          )
-        }
-      }
+      commandToolbarItems
 
     }
 
@@ -372,6 +365,58 @@ struct WorktreeDetailView: View {
       isDefault
         ? "\(action.title) (\(AppShortcuts.openFinder.display))"
         : action.title
+    }
+
+    @ToolbarContentBuilder
+    private var commandToolbarItems: some ToolbarContent {
+      if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
+        ToolbarItem {
+          RunScriptToolbarButton(
+            isRunning: toolbarState.runScriptIsRunning,
+            isEnabled: toolbarState.runScriptEnabled,
+            runHelpText: toolbarState.runScriptHelpText,
+            stopHelpText: toolbarState.stopRunScriptHelpText,
+            runShortcut: AppShortcuts.runScript.display,
+            stopShortcut: AppShortcuts.stopRunScript.display,
+            runAction: onRunScript,
+            stopAction: onStopRunScript
+          )
+        }
+      }
+
+      if let command = customCommand(at: 0) {
+        ToolbarItem {
+          customCommandButton(command, index: 0)
+        }
+      }
+      if let command = customCommand(at: 1) {
+        ToolbarItem {
+          customCommandButton(command, index: 1)
+        }
+      }
+      if let command = customCommand(at: 2) {
+        ToolbarItem {
+          customCommandButton(command, index: 2)
+        }
+      }
+    }
+
+    private func customCommand(at index: Int) -> OnevcatCustomCommand? {
+      guard toolbarState.customCommands.indices.contains(index) else {
+        return nil
+      }
+      return toolbarState.customCommands[index]
+    }
+
+    private func customCommandButton(_ command: OnevcatCustomCommand, index: Int) -> some View {
+      OnevcatCustomCommandToolbarButton(
+        title: command.resolvedTitle,
+        systemImage: command.resolvedSystemImage,
+        shortcut: command.shortcut?.isValid == true ? command.shortcut?.display : nil,
+        action: {
+          onRunCustomCommand(index)
+        }
+      )
     }
   }
 
@@ -542,6 +587,40 @@ private struct RunScriptToolbarButton: View {
   }
 }
 
+private struct OnevcatCustomCommandToolbarButton: View {
+  let title: String
+  let systemImage: String
+  let shortcut: String?
+  let action: () -> Void
+  @Environment(CommandKeyObserver.self) private var commandKeyObserver
+
+  var body: some View {
+    Button {
+      action()
+    } label: {
+      HStack(spacing: 6) {
+        Image(systemName: systemImage)
+          .accessibilityHidden(true)
+        Text(title)
+        if commandKeyObserver.isPressed, let shortcut {
+          Text(shortcut)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .font(.caption)
+    .help(helpText)
+  }
+
+  private var helpText: String {
+    if let shortcut {
+      return "\(title) (\(shortcut))"
+    }
+    return title
+  }
+}
+
 @MainActor
 private struct WorktreeToolbarPreview: View {
   private let toolbarState: WorktreeDetailView.WorktreeToolbarState
@@ -557,7 +636,19 @@ private struct WorktreeToolbarPreview: View {
       openActionSelection: .finder,
       showExtras: false,
       runScriptEnabled: true,
-      runScriptIsRunning: false
+      runScriptIsRunning: false,
+      customCommands: [
+        OnevcatCustomCommand(
+          title: "Test",
+          systemImage: "checkmark.circle.fill",
+          command: "swift test",
+          execution: .shellScript,
+          shortcut: OnevcatCustomShortcut(
+            key: "u",
+            modifiers: OnevcatCustomShortcutModifiers()
+          )
+        ),
+      ]
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false
@@ -579,7 +670,8 @@ private struct WorktreeToolbarPreview: View {
         onSelectNotification: { _, _ in },
         onDismissAllNotifications: {},
         onRunScript: {},
-        onStopRunScript: {}
+        onStopRunScript: {},
+        onRunCustomCommand: { _ in }
       )
     }
     .environment(commandKeyObserver)

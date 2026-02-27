@@ -148,7 +148,8 @@ struct SettingsFeatureTests {
     state.selection = selection
     state.repositorySettings = RepositorySettingsFeature.State(
       rootURL: rootURL,
-      settings: .default
+      settings: .default,
+      onevcatSettings: .default
     )
     let store = TestStore(initialState: state) {
       SettingsFeature()
@@ -193,7 +194,8 @@ struct SettingsFeatureTests {
       $0.selection = selection
       $0.repositorySettings = RepositorySettingsFeature.State(
         rootURL: rootURL,
-        settings: .default
+        settings: .default,
+        onevcatSettings: .default
       )
     }
     await store.receive(\.delegate.settingsChanged)

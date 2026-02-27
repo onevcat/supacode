@@ -799,6 +799,13 @@ final class GhosttySurfaceView: NSView, Identifiable {
     guard let surface else { return false }
     guard focused else { return false }
 
+    if OnevcatCustomShortcutRegistry.shared.matches(event: event),
+      let menu = NSApp.mainMenu,
+      menu.performKeyEquivalent(with: event)
+    {
+      return true
+    }
+
     if let bindingFlags = bindingFlags(for: event, surface: surface) {
       if shouldAttemptMenu(for: bindingFlags),
         let menu = NSApp.mainMenu,

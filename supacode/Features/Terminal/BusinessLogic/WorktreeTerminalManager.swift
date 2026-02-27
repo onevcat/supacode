@@ -41,6 +41,16 @@ final class WorktreeTerminalManager {
       state.ensureInitialTab(focusing: focusing)
     case .runScript(let worktree, let script):
       _ = state(for: worktree).runScript(script)
+    case .insertText(let worktree, let text):
+      if !state(for: worktree).focusAndInsertText(text) {
+        Task {
+          createTabAsync(
+            in: worktree,
+            runSetupScriptIfNew: false,
+            initialInput: text
+          )
+        }
+      }
     case .stopRunScript(let worktree):
       _ = state(for: worktree).stopRunScript()
     case .closeFocusedTab(let worktree):

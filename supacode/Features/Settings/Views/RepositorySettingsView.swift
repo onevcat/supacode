@@ -10,6 +10,7 @@ struct RepositorySettingsView: View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
     let settings = $store.settings
+    let onevcatSettings = $store.onevcatSettings
     Form {
       Section {
         if store.isBranchDataLoaded {
@@ -155,12 +156,46 @@ struct RepositorySettingsView: View {
             .foregroundStyle(.secondary)
         }
       }
+      Section {
+        ForEach(onevcatSettings.customCommands) { $command in
+          OnevcatCustomCommandCard(
+            command: $command,
+            onRemove: {
+              removeCustomCommand(id: command.id)
+            }
+          )
+        }
+        if store.onevcatSettings.customCommands.count < OnevcatRepositorySettings.maxCustomCommands {
+          Button {
+            addCustomCommand()
+          } label: {
+            Label("Add Command", systemImage: "plus")
+          }
+          .help("Add a custom command")
+        }
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Custom Commands")
+          Text("Onevcat-only commands shown after Run in the toolbar (up to 3)")
+            .foregroundStyle(.secondary)
+        }
+      }
     }
     .formStyle(.grouped)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .task {
       store.send(.task)
     }
+  }
+
+  private func addCustomCommand() {
+    let current = store.onevcatSettings.customCommands
+    let next = current + [.default(index: current.count)]
+    store.onevcatSettings.customCommands = OnevcatRepositorySettings.normalizedCommands(next)
+  }
+
+  private func removeCustomCommand(id: OnevcatCustomCommand.ID) {
+    store.onevcatSettings.customCommands.removeAll { $0.id == id }
   }
 }
 
@@ -224,5 +259,115 @@ private struct BranchPickerPopover: View {
     }
     .frame(width: 300, height: 350)
     .onAppear { isSearchFocused = true }
+  }
+}
+
+private struct OnevcatCustomCommandCard: View {
+  @Binding var command: OnevcatCustomCommand
+  let onRemove: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        TextField("Name", text: $command.title)
+          .textFieldStyle(.roundedBorder)
+        TextField("SF Symbol", text: $command.systemImage)
+          .textFieldStyle(.roundedBorder)
+        Picker("Type", selection: $command.execution) {
+          ForEach(OnevcatCustomCommandExecution.allCases) { execution in
+            Text(execution.title)
+              .tag(execution)
+          }
+        }
+        .labelsHidden()
+        .frame(maxWidth: 180)
+        Button(role: .destructive) {
+          onRemove()
+        } label: {
+          Image(systemName: "trash")
+            .accessibilityLabel("Remove command")
+        }
+        .help("Remove this custom command")
+      }
+      .font(.caption)
+
+      shortcutEditor
+
+      ZStack(alignment: .topLeading) {
+        PlainTextEditor(
+          text: $command.command,
+          isMonospaced: true
+        )
+        .frame(minHeight: 100)
+        if command.command.isEmpty {
+          Text(placeholder)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 6)
+            .font(.body.monospaced())
+            .allowsHitTesting(false)
+        }
+      }
+    }
+    .padding(.vertical, 4)
+  }
+
+  @ViewBuilder
+  private var shortcutEditor: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Toggle("Enable Shortcut", isOn: shortcutEnabled)
+      if let shortcut = Binding($command.shortcut) {
+        HStack(spacing: 12) {
+          TextField("Key", text: shortcutKeyBinding(shortcut))
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 70)
+          Toggle("⌘", isOn: shortcut.modifiers.command)
+          Toggle("⇧", isOn: shortcut.modifiers.shift)
+          Toggle("⌥", isOn: shortcut.modifiers.option)
+          Toggle("⌃", isOn: shortcut.modifiers.control)
+          Spacer(minLength: 0)
+          Text(shortcut.wrappedValue.display)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+      }
+    }
+  }
+
+  private var shortcutEnabled: Binding<Bool> {
+    Binding(
+      get: { command.shortcut != nil },
+      set: { enabled in
+        if enabled {
+          command.shortcut =
+            command.shortcut
+            ?? OnevcatCustomShortcut(
+              key: "",
+              modifiers: OnevcatCustomShortcutModifiers()
+            )
+        } else {
+          command.shortcut = nil
+        }
+      }
+    )
+  }
+
+  private func shortcutKeyBinding(_ shortcut: Binding<OnevcatCustomShortcut>) -> Binding<String> {
+    Binding(
+      get: { shortcut.wrappedValue.key },
+      set: { value in
+        let scalar = value.trimmingCharacters(in: .whitespacesAndNewlines).first
+        shortcut.wrappedValue.key = scalar.map { String($0).lowercased() } ?? ""
+      }
+    )
+  }
+
+  private var placeholder: String {
+    switch command.execution {
+    case .shellScript:
+      return "npm test && swift test"
+    case .terminalInput:
+      return "pnpm test --watch"
+    }
   }
 }

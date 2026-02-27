@@ -7,6 +7,7 @@ struct RepositorySettingsFeature {
   struct State: Equatable {
     var rootURL: URL
     var settings: RepositorySettings
+    var onevcatSettings: OnevcatRepositorySettings
     var isBareRepository = false
     var branchOptions: [String] = []
     var defaultWorktreeBaseRef = "origin/main"
@@ -15,7 +16,7 @@ struct RepositorySettingsFeature {
 
   enum Action: BindableAction {
     case task
-    case settingsLoaded(RepositorySettings, isBareRepository: Bool)
+    case settingsLoaded(RepositorySettings, OnevcatRepositorySettings, isBareRepository: Bool)
     case branchDataLoaded([String], defaultBaseRef: String)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -35,11 +36,13 @@ struct RepositorySettingsFeature {
       case .task:
         let rootURL = state.rootURL
         @Shared(.repositorySettings(rootURL)) var repositorySettings
+        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
         let settings = repositorySettings
+        let onevcatSettings = onevcatRepositorySettings
         let gitClient = gitClient
         return .run { send in
           let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
-          await send(.settingsLoaded(settings, isBareRepository: isBareRepository))
+          await send(.settingsLoaded(settings, onevcatSettings, isBareRepository: isBareRepository))
           let branches: [String]
           do {
             branches = try await gitClient.branchRefs(rootURL)
@@ -54,13 +57,14 @@ struct RepositorySettingsFeature {
           await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
         }
 
-      case .settingsLoaded(let settings, let isBareRepository):
+      case .settingsLoaded(let settings, let onevcatSettings, let isBareRepository):
         var updatedSettings = settings
         if isBareRepository {
           updatedSettings.copyIgnoredOnWorktreeCreate = false
           updatedSettings.copyUntrackedOnWorktreeCreate = false
         }
         state.settings = updatedSettings
+        state.onevcatSettings = onevcatSettings.normalized()
         state.isBareRepository = isBareRepository
         guard isBareRepository, updatedSettings != settings else { return .none }
         let rootURL = state.rootURL
@@ -86,9 +90,12 @@ struct RepositorySettingsFeature {
           state.settings.copyIgnoredOnWorktreeCreate = false
           state.settings.copyUntrackedOnWorktreeCreate = false
         }
+        state.onevcatSettings = state.onevcatSettings.normalized()
         let rootURL = state.rootURL
         @Shared(.repositorySettings(rootURL)) var repositorySettings
+        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
         $repositorySettings.withLock { $0 = state.settings }
+        $onevcatRepositorySettings.withLock { $0 = state.onevcatSettings }
         return .send(.delegate(.settingsChanged(rootURL)))
 
       case .delegate:

@@ -18,6 +18,7 @@ struct AppFeature {
     var commandPalette = CommandPaletteFeature.State()
     var openActionSelection: OpenWorktreeAction = .finder
     var selectedRunScript: String = ""
+    var selectedCustomCommands: [OnevcatCustomCommand] = []
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
@@ -47,12 +48,14 @@ struct AppFeature {
     case commandPalette(CommandPaletteFeature.Action)
     case openActionSelectionChanged(OpenWorktreeAction)
     case worktreeSettingsLoaded(RepositorySettings, worktreeID: Worktree.ID)
+    case worktreeOnevcatSettingsLoaded(OnevcatRepositorySettings, worktreeID: Worktree.ID)
     case openSelectedWorktree
     case openWorktree(OpenWorktreeAction)
     case openWorktreeFailed(OpenActionError)
     case requestQuit
     case newTerminal
     case runScript
+    case runCustomCommand(Int)
     case runScriptDraftChanged(String)
     case runScriptPromptPresented(Bool)
     case saveRunScriptAndRun
@@ -135,6 +138,7 @@ struct AppFeature {
         guard let worktree else {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
+          state.selectedCustomCommands = []
           state.runScriptDraft = ""
           state.isRunScriptPromptPresented = false
           var effects: [Effect<Action>] = [
@@ -153,14 +157,24 @@ struct AppFeature {
               at: 0
             )
           }
-          return .merge(effects)
+          return .merge(
+            .merge(effects),
+            .run { _ in
+              await MainActor.run {
+                OnevcatCustomShortcutRegistry.shared.setShortcuts([])
+              }
+            }
+          )
         }
         let rootURL = worktree.repositoryRootURL
         let worktreeID = worktree.id
+        state.selectedCustomCommands = []
         state.runScriptDraft = ""
         state.isRunScriptPromptPresented = false
         @Shared(.repositorySettings(rootURL)) var repositorySettings
+        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
         let settings = repositorySettings
+        let onevcatSettings = onevcatRepositorySettings
         return .merge(
           .run { _ in
             await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
@@ -171,7 +185,15 @@ struct AppFeature {
           .run { _ in
             await worktreeInfoWatcher.send(.setSelectedWorktreeID(worktree.id))
           },
-          .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID))
+          .run { _ in
+            await MainActor.run {
+              OnevcatCustomShortcutRegistry.shared.setShortcuts([])
+            }
+          },
+          .concatenate(
+            .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID)),
+            .send(.worktreeOnevcatSettingsLoaded(onevcatSettings, worktreeID: worktreeID))
+          )
         )
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
@@ -237,9 +259,11 @@ struct AppFeature {
             return .none
           }
           @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+          @Shared(.onevcatRepositorySettings(repository.rootURL)) var onevcatRepositorySettings
           state.settings.repositorySettings = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
-            settings: repositorySettings
+            settings: repositorySettings,
+            onevcatSettings: onevcatRepositorySettings
           )
         case .general, .notifications, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
@@ -416,6 +440,36 @@ struct AppFeature {
           await terminalClient.send(.runScript(worktree, script: script))
         }
 
+      case .runCustomCommand(let index):
+        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+          return .none
+        }
+        guard state.selectedCustomCommands.indices.contains(index) else {
+          return .none
+        }
+        let customCommand = state.selectedCustomCommands[index]
+        guard customCommand.hasRunnableCommand else {
+          return .none
+        }
+        let command = customCommand.command
+        switch customCommand.execution {
+        case .shellScript:
+          return .run { _ in
+            await terminalClient.send(
+              .createTabWithInput(
+                worktree,
+                input: command,
+                runSetupScriptIfNew: false
+              )
+            )
+          }
+        case .terminalInput:
+          let input = command.hasSuffix("\n") ? command : "\(command)\n"
+          return .run { _ in
+            await terminalClient.send(.insertText(worktree, text: input))
+          }
+        }
+
       case .runScriptDraftChanged(let script):
         state.runScriptDraft = script
         return .none
@@ -522,7 +576,11 @@ struct AppFeature {
         }
         let worktreeID = selectedWorktree.id
         @Shared(.repositorySettings(rootURL)) var repositorySettings
-        return .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID))
+        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
+        return .concatenate(
+          .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
+          .send(.worktreeOnevcatSettingsLoaded(onevcatRepositorySettings, worktreeID: worktreeID))
+        )
 
       case .worktreeSettingsLoaded(let settings, let worktreeID):
         guard state.repositories.selectedWorktreeID == worktreeID else {
@@ -538,6 +596,22 @@ struct AppFeature {
         )
         state.selectedRunScript = settings.runScript
         return .none
+
+      case .worktreeOnevcatSettingsLoaded(let settings, let worktreeID):
+        guard state.repositories.selectedWorktreeID == worktreeID else {
+          return .none
+        }
+        state.selectedCustomCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
+          .filter(\.hasRunnableCommand)
+        let shortcuts: [OnevcatCustomShortcut] = state.selectedCustomCommands.compactMap { command in
+          guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
+          return shortcut.normalized()
+        }
+        return .run { _ in
+          await MainActor.run {
+            OnevcatCustomShortcutRegistry.shared.setShortcuts(shortcuts)
+          }
+        }
 
       case .systemNotificationsPermissionFailed(let errorMessage):
         let message: String

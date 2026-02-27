@@ -32,7 +32,7 @@ struct UpdatesSettingsView: View {
         Button("Check for Updates Now") {
           updatesStore.send(.checkForUpdates)
         }
-        .help("Check for Updates (\(AppShortcuts.checkForUpdates.display))")
+        .help("Check for updates now")
         Spacer()
       }
       .padding(.top)

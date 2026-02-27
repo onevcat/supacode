@@ -26,7 +26,8 @@ struct AppFeatureSettingsSelectionTests {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
         rootURL: repository.rootURL,
-        settings: .default
+        settings: .default,
+        onevcatSettings: .default
       )
     }
   }
@@ -61,7 +62,8 @@ struct AppFeatureSettingsSelectionTests {
     state.settings.selection = .repository(repository.id)
     state.settings.repositorySettings = RepositorySettingsFeature.State(
       rootURL: repository.rootURL,
-      settings: .default
+      settings: .default,
+      onevcatSettings: .default
     )
     let store = TestStore(initialState: state) {
       AppFeature()
