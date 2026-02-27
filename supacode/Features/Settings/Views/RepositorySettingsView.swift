@@ -320,10 +320,10 @@ private struct OnevcatCustomCommandCard: View {
           TextField("Key", text: shortcutKeyBinding(shortcut))
             .textFieldStyle(.roundedBorder)
             .frame(width: 70)
-          Toggle("⌘", isOn: shortcut.modifiers.command)
-          Toggle("⇧", isOn: shortcut.modifiers.shift)
-          Toggle("⌥", isOn: shortcut.modifiers.option)
-          Toggle("⌃", isOn: shortcut.modifiers.control)
+          modifierToggle("⌘", isOn: shortcut.modifiers.command)
+          modifierToggle("⇧", isOn: shortcut.modifiers.shift)
+          modifierToggle("⌥", isOn: shortcut.modifiers.option)
+          modifierToggle("⌃", isOn: shortcut.modifiers.control)
           Spacer(minLength: 0)
           Text(shortcut.wrappedValue.display)
             .font(.caption.monospaced())
@@ -360,6 +360,15 @@ private struct OnevcatCustomCommandCard: View {
         shortcut.wrappedValue.key = scalar.map { String($0).lowercased() } ?? ""
       }
     )
+  }
+
+  private func modifierToggle(_ symbol: String, isOn: Binding<Bool>) -> some View {
+    HStack(spacing: 4) {
+      Text(symbol)
+      Toggle("", isOn: isOn)
+        .labelsHidden()
+    }
+    .fixedSize()
   }
 
   private var placeholder: String {
