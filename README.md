@@ -2,7 +2,7 @@
 
 Native terminal coding agents command center.
 
-<img width="3600" height="2260" alt="image" src="https://github.com/user-attachments/assets/31eb062c-f2d6-406d-8c60-d2f1664a0c21" />
+![screenshot](https://www.supacode.sh/screenshot.png)
 
 ## Technical Stack
 
