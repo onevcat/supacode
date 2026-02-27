@@ -25,15 +25,38 @@ nonisolated struct RepositorySettingsKey: SharedKey {
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
     let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let decoder = JSONDecoder()
     if let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL) {
-      let decoder = JSONDecoder()
       if let settings = try? decoder.decode(RepositorySettings.self, from: localData) {
         continuation.resume(returning: settings)
         return
       }
       let path = repositorySettingsURL.path(percentEncoded: false)
       SupaLogger("Settings").warning(
-        "Unable to decode repository settings at \(path); migrating from global settings."
+        "Unable to decode repository settings at \(path); trying legacy and global migrations."
+      )
+    }
+
+    let legacySettingsURL = SupacodePaths.legacyRepositorySettingsURL(for: rootURL)
+    if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
+      if let legacySettings = try? decoder.decode(RepositorySettings.self, from: legacyData) {
+        do {
+          let encoder = JSONEncoder()
+          encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+          let data = try encoder.encode(legacySettings)
+          try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
+        } catch {
+          let path = repositorySettingsURL.path(percentEncoded: false)
+          SupaLogger("Settings").warning(
+            "Unable to write migrated repository settings to \(path): \(error.localizedDescription)"
+          )
+        }
+        continuation.resume(returning: legacySettings)
+        return
+      }
+      let path = legacySettingsURL.path(percentEncoded: false)
+      SupaLogger("Settings").warning(
+        "Unable to decode legacy repository settings at \(path); migrating from global settings."
       )
     }
 

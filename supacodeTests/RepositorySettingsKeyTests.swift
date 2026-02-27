@@ -207,6 +207,34 @@ struct RepositorySettingsKeyTests {
     #expect(localDecoded == globalSettings)
   }
 
+  @Test(.dependencies) func loadMigratesLegacyRepositoryRootFile() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    let legacyURL = SupacodePaths.legacyRepositorySettingsURL(for: rootURL)
+    var legacySettings = RepositorySettings.default
+    legacySettings.runScript = "echo from-legacy"
+
+    try localStorage.save(encode(legacySettings), at: legacyURL)
+
+    let loaded = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.repositorySettings(rootURL)) var repositorySettings: RepositorySettings
+      return repositorySettings
+    }
+
+    #expect(loaded == legacySettings)
+
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == legacySettings)
+  }
+
   @Test(.dependencies) func saveWritesLocalWhenLocalFileExists() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()

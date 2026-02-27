@@ -6,6 +6,10 @@ nonisolated enum SupacodePaths {
       .appending(path: ".supacode", directoryHint: .isDirectory)
   }
 
+  static var repositorySettingsDirectory: URL {
+    baseDirectory.appending(path: "repo", directoryHint: .isDirectory)
+  }
+
   static var reposDirectory: URL {
     baseDirectory.appending(path: "repos", directoryHint: .isDirectory)
   }
@@ -20,11 +24,26 @@ nonisolated enum SupacodePaths {
   }
 
   static func repositorySettingsURL(for rootURL: URL) -> URL {
-    rootURL.standardizedFileURL.appending(path: "supacode.json", directoryHint: .notDirectory)
+    repositorySettingsDirectory(for: rootURL)
+      .appending(path: "supacode.json", directoryHint: .notDirectory)
   }
 
   static func onevcatRepositorySettingsURL(for rootURL: URL) -> URL {
+    repositorySettingsDirectory(for: rootURL)
+      .appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
+  }
+
+  static func legacyRepositorySettingsURL(for rootURL: URL) -> URL {
+    rootURL.standardizedFileURL.appending(path: "supacode.json", directoryHint: .notDirectory)
+  }
+
+  static func legacyOnevcatRepositorySettingsURL(for rootURL: URL) -> URL {
     rootURL.standardizedFileURL.appending(path: "supacode.onevcat.json", directoryHint: .notDirectory)
+  }
+
+  private static func repositorySettingsDirectory(for rootURL: URL) -> URL {
+    let name = repositorySettingsDirectoryName(for: rootURL)
+    return repositorySettingsDirectory.appending(path: name, directoryHint: .isDirectory)
   }
 
   private static func repositoryDirectoryName(for rootURL: URL) -> String {
@@ -36,6 +55,14 @@ nonisolated enum SupacodePaths {
         return "_"
       }
       return trimmed.replacing("/", with: "_")
+    }
+    return repoName
+  }
+
+  private static func repositorySettingsDirectoryName(for rootURL: URL) -> String {
+    let repoName = rootURL.standardizedFileURL.lastPathComponent
+    if repoName.isEmpty || repoName == "/" {
+      return "_"
     }
     return repoName
   }

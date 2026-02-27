@@ -25,15 +25,39 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
     let settingsURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+    let decoder = JSONDecoder()
     if let localData = try? repositoryLocalSettingsStorage.load(settingsURL) {
-      let decoder = JSONDecoder()
       if let settings = try? decoder.decode(OnevcatRepositorySettings.self, from: localData) {
         continuation.resume(returning: settings.normalized())
         return
       }
       let path = settingsURL.path(percentEncoded: false)
       SupaLogger("Settings").warning(
-        "Unable to decode onevcat repository settings at \(path); using defaults."
+        "Unable to decode onevcat repository settings at \(path); trying legacy settings."
+      )
+    }
+
+    let legacySettingsURL = SupacodePaths.legacyOnevcatRepositorySettingsURL(for: rootURL)
+    if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
+      if let legacySettings = try? decoder.decode(OnevcatRepositorySettings.self, from: legacyData) {
+        let normalized = legacySettings.normalized()
+        do {
+          let encoder = JSONEncoder()
+          encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+          let data = try encoder.encode(normalized)
+          try repositoryLocalSettingsStorage.save(data, settingsURL)
+        } catch {
+          let path = settingsURL.path(percentEncoded: false)
+          SupaLogger("Settings").warning(
+            "Unable to write onevcat repository settings to \(path): \(error.localizedDescription)"
+          )
+        }
+        continuation.resume(returning: normalized)
+        return
+      }
+      let path = legacySettingsURL.path(percentEncoded: false)
+      SupaLogger("Settings").warning(
+        "Unable to decode legacy onevcat repository settings at \(path); using defaults."
       )
     }
 

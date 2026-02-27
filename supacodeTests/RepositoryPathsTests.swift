@@ -41,4 +41,22 @@ struct SupacodePathsTests {
 
     #expect(firstDirectory != secondDirectory)
   }
+
+  @Test func repositorySettingsURLUsesSupacodeRepoDirectory() {
+    let root = URL(fileURLWithPath: "/tmp/work/repo-alpha")
+    let settingsURL = SupacodePaths.repositorySettingsURL(for: root)
+
+    #expect(settingsURL.lastPathComponent == "supacode.json")
+    #expect(settingsURL.deletingLastPathComponent().lastPathComponent == "repo-alpha")
+    #expect(settingsURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "repo")
+  }
+
+  @Test func onevcatRepositorySettingsURLUsesSupacodeRepoDirectory() {
+    let root = URL(fileURLWithPath: "/tmp/work/repo-alpha/.bare")
+    let settingsURL = SupacodePaths.onevcatRepositorySettingsURL(for: root)
+
+    #expect(settingsURL.lastPathComponent == "supacode.onevcat.json")
+    #expect(settingsURL.deletingLastPathComponent().lastPathComponent == ".bare")
+    #expect(settingsURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "repo")
+  }
 }
