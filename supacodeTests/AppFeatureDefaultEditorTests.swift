@@ -39,6 +39,60 @@ struct AppFeatureDefaultEditorTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func repositoryLocalSettingsOverrideGlobalRepositorySettings() async throws {
+    let worktree = makeWorktree()
+    let repositoriesState = makeRepositoriesState(worktree: worktree)
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(
+      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+    )
+    let repositoryID = worktree.repositoryRootURL.standardizedFileURL.path(percentEncoded: false)
+    var globalRepositorySettings = RepositorySettings.default
+    globalRepositorySettings.openActionID = OpenWorktreeAction.finder.settingsID
+    var localRepositorySettings = RepositorySettings.default
+    localRepositorySettings.openActionID = OpenWorktreeAction.terminal.settingsID
+    localRepositorySettings.runScript = "pnpm dev"
+
+    withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.repositories[repositoryID] = globalRepositorySettings
+      }
+    }
+
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try localStorage.save(
+      encoder.encode(localRepositorySettings),
+      at: SupacodePaths.repositorySettingsURL(for: worktree.repositoryRootURL)
+    )
+
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: repositoriesState,
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    }
+
+    await store.send(.repositories(.delegate(.selectedWorktreeChanged(worktree))))
+    await store.receive(\.worktreeSettingsLoaded) {
+      $0.openActionSelection = .terminal
+      $0.selectedRunScript = "pnpm dev"
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func selectedWorktreeChangedOnlyUpdatesWatcherSelection() async {
     let worktree = makeWorktree()
     let repositoriesState = makeRepositoriesState(worktree: worktree)

@@ -1,3 +1,4 @@
+import Dependencies
 import Foundation
 import Sharing
 
@@ -7,9 +8,11 @@ nonisolated struct RepositorySettingsKeyID: Hashable, Sendable {
 
 nonisolated struct RepositorySettingsKey: SharedKey {
   let repositoryID: String
+  let rootURL: URL
 
   init(rootURL: URL) {
-    repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    self.rootURL = rootURL.standardizedFileURL
+    repositoryID = self.rootURL.path(percentEncoded: false)
   }
 
   var id: RepositorySettingsKeyID {
@@ -20,16 +23,36 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     context: LoadContext<RepositorySettings>,
     continuation: LoadContinuation<RepositorySettings>
   ) {
-    @Shared(.settingsFile) var settingsFile: SettingsFile
-    let settings = $settingsFile.withLock { settings in
-      if let existing = settings.repositories[repositoryID] {
-        return existing
+    @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
+    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    if let localData = try? repositoryLocalSettingsStorage.load(repositorySettingsURL) {
+      let decoder = JSONDecoder()
+      if let settings = try? decoder.decode(RepositorySettings.self, from: localData) {
+        continuation.resume(returning: settings)
+        return
       }
-      let defaults = context.initialValue ?? .default
-      settings.repositories[repositoryID] = defaults
-      return defaults
+      let path = repositorySettingsURL.path(percentEncoded: false)
+      SupaLogger("Settings").warning(
+        "Unable to decode repository settings at \(path); migrating from global settings."
+      )
     }
-    continuation.resume(returning: settings)
+
+    @Shared(.settingsFile) var settingsFile: SettingsFile
+    let migratedSettings = $settingsFile.withLock { settings in
+      settings.repositories[repositoryID] ?? (context.initialValue ?? .default)
+    }
+    do {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      let data = try encoder.encode(migratedSettings)
+      try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
+    } catch {
+      let path = repositorySettingsURL.path(percentEncoded: false)
+      SupaLogger("Settings").warning(
+        "Unable to write migrated repository settings to \(path): \(error.localizedDescription)"
+      )
+    }
+    continuation.resume(returning: migratedSettings)
   }
 
   func subscribe(
@@ -44,11 +67,17 @@ nonisolated struct RepositorySettingsKey: SharedKey {
     context _: SaveContext,
     continuation: SaveContinuation
   ) {
-    @Shared(.settingsFile) var settingsFile: SettingsFile
-    $settingsFile.withLock {
-      $0.repositories[repositoryID] = value
+    @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
+    let repositorySettingsURL = SupacodePaths.repositorySettingsURL(for: rootURL)
+    do {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      let data = try encoder.encode(value)
+      try repositoryLocalSettingsStorage.save(data, repositorySettingsURL)
+      continuation.resume()
+    } catch {
+      continuation.resume(throwing: error)
     }
-    continuation.resume()
   }
 }
 
