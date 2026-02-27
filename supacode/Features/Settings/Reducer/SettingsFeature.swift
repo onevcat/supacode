@@ -13,6 +13,7 @@ struct SettingsFeature {
     var updatesAutomaticallyDownloadUpdates: Bool
     var inAppNotificationsEnabled: Bool
     var notificationSoundEnabled: Bool
+    var systemNotificationsEnabled: Bool
     var moveNotifiedWorktreeToTop: Bool
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
@@ -33,6 +34,7 @@ struct SettingsFeature {
       updatesAutomaticallyDownloadUpdates = settings.updatesAutomaticallyDownloadUpdates
       inAppNotificationsEnabled = settings.inAppNotificationsEnabled
       notificationSoundEnabled = settings.notificationSoundEnabled
+      systemNotificationsEnabled = settings.systemNotificationsEnabled
       moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
@@ -52,6 +54,7 @@ struct SettingsFeature {
         updatesAutomaticallyDownloadUpdates: updatesAutomaticallyDownloadUpdates,
         inAppNotificationsEnabled: inAppNotificationsEnabled,
         notificationSoundEnabled: notificationSoundEnabled,
+        systemNotificationsEnabled: systemNotificationsEnabled,
         moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
@@ -67,6 +70,7 @@ struct SettingsFeature {
     case task
     case settingsLoaded(GlobalSettings)
     case setSelection(SettingsSection?)
+    case setSystemNotificationsEnabled(Bool)
     case repositorySettings(RepositorySettingsFeature.Action)
     case delegate(Delegate)
     case binding(BindingAction<State>)
@@ -107,6 +111,7 @@ struct SettingsFeature {
         state.updatesAutomaticallyDownloadUpdates = normalizedSettings.updatesAutomaticallyDownloadUpdates
         state.inAppNotificationsEnabled = normalizedSettings.inAppNotificationsEnabled
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
+        state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
@@ -117,13 +122,11 @@ struct SettingsFeature {
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
-        let settings = state.globalSettings
-        @Shared(.settingsFile) var settingsFile
-        $settingsFile.withLock { $0.global = settings }
-        if settings.analyticsEnabled {
-          analyticsClient.capture("settings_changed", nil)
-        }
-        return .send(.delegate(.settingsChanged(settings)))
+        return persist(state)
+
+      case .setSystemNotificationsEnabled(let isEnabled):
+        state.systemNotificationsEnabled = isEnabled
+        return persist(state)
 
       case .setSelection(let selection):
         state.selection = selection ?? .general
@@ -139,5 +142,15 @@ struct SettingsFeature {
     .ifLet(\.repositorySettings, action: \.repositorySettings) {
       RepositorySettingsFeature()
     }
+  }
+
+  private func persist(_ state: State) -> Effect<Action> {
+    let settings = state.globalSettings
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = settings }
+    if settings.analyticsEnabled {
+      analyticsClient.capture("settings_changed", nil)
+    }
+    return .send(.delegate(.settingsChanged(settings)))
   }
 }

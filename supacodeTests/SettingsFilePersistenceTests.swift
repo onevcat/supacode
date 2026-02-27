@@ -102,6 +102,7 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.updatesAutomaticallyDownloadUpdates == true)
     #expect(settings.global.inAppNotificationsEnabled == true)
     #expect(settings.global.notificationSoundEnabled == true)
+    #expect(settings.global.systemNotificationsEnabled == false)
     #expect(settings.global.moveNotifiedWorktreeToTop == true)
     #expect(settings.global.analyticsEnabled == true)
     #expect(settings.global.crashReportsEnabled == true)

@@ -19,6 +19,10 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "settings.json", directoryHint: .notDirectory)
   }
 
+  static func repositorySettingsURL(for rootURL: URL) -> URL {
+    rootURL.standardizedFileURL.appending(path: "supacode.json", directoryHint: .notDirectory)
+  }
+
   private static func repositoryDirectoryName(for rootURL: URL) -> String {
     let repoName = rootURL.lastPathComponent
     if repoName.isEmpty || repoName == ".bare" || repoName == ".git" {

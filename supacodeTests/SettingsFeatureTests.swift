@@ -19,6 +19,7 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
       notificationSoundEnabled: true,
+      systemNotificationsEnabled: true,
       moveNotifiedWorktreeToTop: false,
       analyticsEnabled: false,
       crashReportsEnabled: true,
@@ -45,6 +46,7 @@ struct SettingsFeatureTests {
       $0.inAppNotificationsEnabled = false
       $0.notificationSoundEnabled = true
       $0.moveNotifiedWorktreeToTop = false
+      $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = false
       $0.crashReportsEnabled = true
       $0.githubIntegrationEnabled = true
@@ -65,6 +67,7 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: false,
       inAppNotificationsEnabled: false,
       notificationSoundEnabled: false,
+      systemNotificationsEnabled: false,
       moveNotifiedWorktreeToTop: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
@@ -92,6 +95,7 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: initialSettings.updatesAutomaticallyDownloadUpdates,
       inAppNotificationsEnabled: initialSettings.inAppNotificationsEnabled,
       notificationSoundEnabled: initialSettings.notificationSoundEnabled,
+      systemNotificationsEnabled: initialSettings.systemNotificationsEnabled,
       moveNotifiedWorktreeToTop: initialSettings.moveNotifiedWorktreeToTop,
       analyticsEnabled: initialSettings.analyticsEnabled,
       crashReportsEnabled: initialSettings.crashReportsEnabled,
@@ -103,6 +107,23 @@ struct SettingsFeatureTests {
     await store.receive(\.delegate.settingsChanged)
 
     expectNoDifference(settingsFile.global, expectedSettings)
+  }
+
+  @Test(.dependencies) func setSystemNotificationsEnabledPersistsChanges() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.systemNotificationsEnabled = false
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.setSystemNotificationsEnabled(true)) {
+      $0.systemNotificationsEnabled = true
+    }
+    await store.receive(\.delegate.settingsChanged)
+    #expect(settingsFile.global.systemNotificationsEnabled == true)
   }
 
   @Test(.dependencies) func selectionDoesNotMutateRepositorySettings() async {
@@ -142,6 +163,7 @@ struct SettingsFeatureTests {
       updatesAutomaticallyDownloadUpdates: true,
       inAppNotificationsEnabled: false,
       notificationSoundEnabled: false,
+      systemNotificationsEnabled: true,
       moveNotifiedWorktreeToTop: true,
       analyticsEnabled: true,
       crashReportsEnabled: false,
@@ -161,6 +183,7 @@ struct SettingsFeatureTests {
       $0.inAppNotificationsEnabled = false
       $0.notificationSoundEnabled = false
       $0.moveNotifiedWorktreeToTop = true
+      $0.systemNotificationsEnabled = true
       $0.analyticsEnabled = true
       $0.crashReportsEnabled = false
       $0.githubIntegrationEnabled = true

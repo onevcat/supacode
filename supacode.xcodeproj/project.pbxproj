@@ -251,6 +251,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		D67F9B122F33000100A1B2C3 /* Verify git-wt script */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
