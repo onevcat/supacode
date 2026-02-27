@@ -20,7 +20,7 @@ struct AppFeatureCustomCommandTests {
         systemImage: "checkmark.circle",
         command: "swift test",
         execution: .shellScript,
-        shortcut: nil
+        shortcut: nil,
       ),
     ]
 
@@ -37,12 +37,12 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .createTabWithInput(worktree, input: "swift test", runSetupScriptIfNew: false)
-      ]
+        .createTabWithInput(worktree, input: "swift test", runSetupScriptIfNew: false),
+      ],
     )
   }
 
-  @Test(.dependencies) func terminalInputCommandInsertsTextWithNewline() async {
+  @Test(.dependencies) func terminalInputCommandSendsRawCommandText() async {
     let worktree = makeWorktree()
     let sent = LockIsolated<[TerminalClient.Command]>([])
     var state = AppFeature.State(
@@ -55,7 +55,7 @@ struct AppFeatureCustomCommandTests {
         systemImage: "terminal",
         command: "pnpm test --watch",
         execution: .terminalInput,
-        shortcut: nil
+        shortcut: nil,
       ),
     ]
 
@@ -72,8 +72,8 @@ struct AppFeatureCustomCommandTests {
 
     #expect(
       sent.value == [
-        .insertText(worktree, text: "pnpm test --watch\n")
-      ]
+        .insertText(worktree, text: "pnpm test --watch"),
+      ],
     )
   }
 

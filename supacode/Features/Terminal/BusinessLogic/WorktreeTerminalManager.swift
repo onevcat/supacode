@@ -42,7 +42,7 @@ final class WorktreeTerminalManager {
     case .runScript(let worktree, let script):
       _ = state(for: worktree).runScript(script)
     case .insertText(let worktree, let text):
-      if !state(for: worktree).focusAndInsertText(text) {
+      if !state(for: worktree).focusAndRunCommand(text) {
         Task {
           createTabAsync(
             in: worktree,

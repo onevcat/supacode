@@ -1398,6 +1398,43 @@ extension GhosttySurfaceView: NSTextInputClient {
       ghostty_surface_text(surface, ptr, UInt(len - 1))
     }
   }
+
+  @discardableResult
+  func submitLine() -> Bool {
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let windowNumber = window?.windowNumber ?? 0
+    guard
+      let keyDownEvent = NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: timestamp,
+        windowNumber: windowNumber,
+        context: nil,
+        characters: "\r",
+        charactersIgnoringModifiers: "\r",
+        isARepeat: false,
+        keyCode: 36
+      ),
+      let keyUpEvent = NSEvent.keyEvent(
+        with: .keyUp,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: timestamp,
+        windowNumber: windowNumber,
+        context: nil,
+        characters: "\r",
+        charactersIgnoringModifiers: "\r",
+        isARepeat: false,
+        keyCode: 36
+      )
+    else {
+      return false
+    }
+    keyDown(with: keyDownEvent)
+    keyUp(with: keyUpEvent)
+    return true
+  }
 }
 
 extension GhosttySurfaceView: NSServicesMenuRequestor {

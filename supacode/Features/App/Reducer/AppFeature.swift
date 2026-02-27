@@ -464,9 +464,8 @@ struct AppFeature {
             )
           }
         case .terminalInput:
-          let input = command.hasSuffix("\n") ? command : "\(command)\n"
           return .run { _ in
-            await terminalClient.send(.insertText(worktree, text: input))
+            await terminalClient.send(.insertText(worktree, text: command))
           }
         }
 

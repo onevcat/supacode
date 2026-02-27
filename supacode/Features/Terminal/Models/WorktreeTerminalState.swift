@@ -209,6 +209,20 @@ final class WorktreeTerminalState {
     return true
   }
 
+  @discardableResult
+  func focusAndRunCommand(_ text: String) -> Bool {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId],
+      let surface = surfaces[focusedId]
+    else { return false }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    let command = text.trimmingCharacters(in: .newlines)
+    surface.requestFocus()
+    surface.insertText(command, replacementRange: NSRange(location: 0, length: 0))
+    return surface.submitLine()
+  }
+
   func syncFocus(windowIsKey: Bool, windowIsVisible: Bool) {
     let selectedTabId = tabManager.selectedTabId
     var surfaceToFocus: GhosttySurfaceView?
