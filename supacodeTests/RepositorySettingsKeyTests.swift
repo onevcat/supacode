@@ -14,54 +14,67 @@ struct RepositorySettingsKeyTests {
     #expect(!json.contains("worktreeBaseRef"))
   }
 
-  @Test(.dependencies) func loadCreatesDefaultAndPersists() throws {
-    let storage = SettingsTestStorage()
+  @Test(.dependencies) func loadCreatesDefaultAndMigratesToLocal() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
 
-    let settings = withDependencies {
-      $0.settingsFileStorage = storage.storage
+    let loaded = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
       @Shared(.repositorySettings(rootURL)) var repositorySettings: RepositorySettings
       return repositorySettings
     }
 
-    #expect(settings == RepositorySettings.default)
+    #expect(loaded == .default)
 
-    let saved: SettingsFile = withDependencies {
-      $0.settingsFileStorage = storage.storage
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == .default)
+
+    let globalSaved: SettingsFile = withDependencies {
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.settingsFile) var settings: SettingsFile
-      return settings
+      @Shared(.settingsFile) var settingsFile: SettingsFile
+      return settingsFile
     }
 
-    #expect(
-      saved.repositories[rootURL.path(percentEncoded: false)] == RepositorySettings.default
-    )
+    #expect(globalSaved.repositories[repositoryID] == nil)
   }
 
-  @Test(.dependencies) func saveOverwritesExistingSettings() throws {
-    let storage = SettingsTestStorage()
+  @Test(.dependencies) func saveOverwritesExistingSettingsInLocalFile() throws {
+    let globalStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
 
-    var settings = RepositorySettings.default
-    settings.runScript = "echo updated"
+    try localStorage.save(encode(.default), at: localURL)
+
+    var updated = RepositorySettings.default
+    updated.runScript = "echo updated"
+
     withDependencies {
-      $0.settingsFileStorage = storage.storage
+      $0.settingsFileStorage = globalStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
       @Shared(.repositorySettings(rootURL)) var repositorySettings: RepositorySettings
       $repositorySettings.withLock {
-        $0 = settings
+        $0 = updated
       }
     }
 
-    let reloaded: SettingsFile = withDependencies {
-      $0.settingsFileStorage = storage.storage
-    } operation: {
-      @Shared(.settingsFile) var settings: SettingsFile
-      return settings
-    }
-
-    #expect(reloaded.repositories[rootURL.path(percentEncoded: false)] == settings)
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == updated)
   }
 
   @Test func decodeMissingArchiveScriptDefaultsToEmpty() throws {
@@ -118,12 +131,13 @@ struct RepositorySettingsKeyTests {
     #expect(loaded == localSettings)
   }
 
-  @Test(.dependencies) func loadFallsBackToGlobalWhenLocalMissing() throws {
+  @Test(.dependencies) func loadMigratesGlobalWhenLocalMissing() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
     var globalSettings = RepositorySettings.default
     globalSettings.runScript = "echo global"
 
@@ -148,14 +162,19 @@ struct RepositorySettingsKeyTests {
     }
 
     #expect(loaded == globalSettings)
+
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == globalSettings)
   }
 
-  @Test(.dependencies) func loadFallsBackToGlobalWhenLocalInvalid() throws {
+  @Test(.dependencies) func loadMigratesGlobalWhenLocalInvalid() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
     var globalSettings = RepositorySettings.default
     globalSettings.runScript = "echo global"
 
@@ -170,10 +189,7 @@ struct RepositorySettingsKeyTests {
       }
     }
 
-    try localStorage.save(
-      Data("{".utf8),
-      at: SupacodePaths.repositorySettingsURL(for: rootURL)
-    )
+    try localStorage.save(Data("{".utf8), at: localURL)
 
     let loaded = withDependencies {
       $0.settingsFileStorage = globalStorage.storage
@@ -185,6 +201,10 @@ struct RepositorySettingsKeyTests {
     }
 
     #expect(loaded == globalSettings)
+
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == globalSettings)
   }
 
   @Test(.dependencies) func saveWritesLocalWhenLocalFileExists() throws {
@@ -227,7 +247,7 @@ struct RepositorySettingsKeyTests {
     #expect(globalSaved.repositories[repositoryID] == nil)
   }
 
-  @Test(.dependencies) func saveWritesGlobalWhenLocalFileMissing() throws {
+  @Test(.dependencies) func saveWritesLocalWhenLocalFileMissing() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
@@ -236,7 +256,7 @@ struct RepositorySettingsKeyTests {
     let localURL = SupacodePaths.repositorySettingsURL(for: rootURL)
 
     var updated = RepositorySettings.default
-    updated.runScript = "echo global"
+    updated.runScript = "echo local"
 
     withDependencies {
       $0.settingsFileStorage = globalStorage.storage
@@ -249,6 +269,10 @@ struct RepositorySettingsKeyTests {
       }
     }
 
+    let localData = try #require(localStorage.data(at: localURL))
+    let localDecoded = try JSONDecoder().decode(RepositorySettings.self, from: localData)
+    #expect(localDecoded == updated)
+
     let globalSaved: SettingsFile = withDependencies {
       $0.settingsFileStorage = globalStorage.storage
       $0.settingsFileURL = settingsFileURL
@@ -258,8 +282,7 @@ struct RepositorySettingsKeyTests {
       return settingsFile
     }
 
-    #expect(globalSaved.repositories[repositoryID] == updated)
-    #expect(localStorage.data(at: localURL) == nil)
+    #expect(globalSaved.repositories[repositoryID] == nil)
   }
 
   private func encode(_ settings: RepositorySettings) throws -> Data {
