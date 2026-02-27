@@ -80,7 +80,7 @@ Default flow:
 4) Zip app bundle.
 5) Create tag and upload zip to your fork GitHub Release page.
 
-If you want the old behavior (no notarization), set `ENABLE_NOTARIZATION=0`.
+Non-notarized publishing is intentionally disabled for this fork.
 
 ## Helper Scripts
 
@@ -89,7 +89,7 @@ If you want the old behavior (no notarization), set `ENABLE_NOTARIZATION=0`.
   - Default target repo: auto-detected from `origin`
   - Override target repo: `GH_REPO=owner/repo`
   - Release create fallback: if `gh release create` fails (for example token scope mismatch), script falls back to `gh api` and then uploads assets
-  - Notarization: enabled by default (`ENABLE_NOTARIZATION=1`)
+  - Notarization: mandatory (the script exits if `ENABLE_NOTARIZATION!=1`)
   - Default keychain profile name: `supacode-notary` (override with `APPLE_NOTARY_KEYCHAIN_PROFILE`)
 
 ### Example

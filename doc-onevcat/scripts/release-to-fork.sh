@@ -169,12 +169,18 @@ fi
 SHORT_SHA="$(git rev-parse --short HEAD)"
 DEFAULT_TAG="onevcat-v$(date +%Y.%m.%d)-${SHORT_SHA}"
 TAG="${1:-$DEFAULT_TAG}"
-ENABLE_NOTARIZATION="${ENABLE_NOTARIZATION:-1}"
 KEYCHAIN_PROFILE="${APPLE_NOTARY_KEYCHAIN_PROFILE:-supacode-notary}"
 SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 TEAM_ID_INPUT="${APPLE_TEAM_ID:-}"
 APPLE_ID_INPUT="${APPLE_ID:-}"
 APPLE_PASSWORD_INPUT="${APPLE_PASSWORD:-}"
+
+if [[ "${ENABLE_NOTARIZATION:-1}" != "1" ]]; then
+  echo "error: publishing non-notarized releases is forbidden for this fork"
+  echo "error: remove ENABLE_NOTARIZATION=0 and provide notarization credentials"
+  exit 1
+fi
+ENABLE_NOTARIZATION="1"
 
 echo "[release] repository: ${REPO}"
 echo "[release] tag: ${TAG}"
@@ -203,27 +209,24 @@ mkdir -p build
 ZIP_PATH="build/${PRODUCT_NAME%.app}-${TAG}.app.zip"
 NOTES_PATH="build/release-notes-${TAG}.md"
 SUBMISSION_ZIP="build/notary-submit-${TAG}.app.zip"
-BUILD_TYPE="Debug (unsigned)"
+BUILD_TYPE="Debug (Developer ID signed + notarized)"
 
-if [[ "${ENABLE_NOTARIZATION}" == "1" ]]; then
-  if ! command -v xcrun >/dev/null 2>&1; then
-    echo "error: xcrun is required for notarization"
-    exit 1
-  fi
-  if ! command -v codesign >/dev/null 2>&1; then
-    echo "error: codesign is required for notarization"
-    exit 1
-  fi
-  if [[ -z "$SIGNING_IDENTITY" ]]; then
-    SIGNING_IDENTITY="$(default_signing_identity || true)"
-  fi
-  if [[ -z "$SIGNING_IDENTITY" ]]; then
-    echo "error: APPLE_SIGNING_IDENTITY is not set and no Developer ID Application identity was found"
-    exit 1
-  fi
-  sign_and_notarize_app "${APP_PATH}" "${SUBMISSION_ZIP}"
-  BUILD_TYPE="Debug (Developer ID signed + notarized)"
+if ! command -v xcrun >/dev/null 2>&1; then
+  echo "error: xcrun is required for notarization"
+  exit 1
 fi
+if ! command -v codesign >/dev/null 2>&1; then
+  echo "error: codesign is required for notarization"
+  exit 1
+fi
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  SIGNING_IDENTITY="$(default_signing_identity || true)"
+fi
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  echo "error: APPLE_SIGNING_IDENTITY is not set and no Developer ID Application identity was found"
+  exit 1
+fi
+sign_and_notarize_app "${APP_PATH}" "${SUBMISSION_ZIP}"
 
 echo "[release] package ${APP_PATH} -> ${ZIP_PATH}"
 ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
