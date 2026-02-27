@@ -7,6 +7,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var updatesAutomaticallyDownloadUpdates: Bool
   var inAppNotificationsEnabled: Bool
   var notificationSoundEnabled: Bool
+  var systemNotificationsEnabled: Bool
   var moveNotifiedWorktreeToTop: Bool
   var analyticsEnabled: Bool
   var crashReportsEnabled: Bool
@@ -24,6 +25,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyDownloadUpdates: false,
     inAppNotificationsEnabled: true,
     notificationSoundEnabled: true,
+    systemNotificationsEnabled: false,
     moveNotifiedWorktreeToTop: true,
     analyticsEnabled: true,
     crashReportsEnabled: true,
@@ -42,6 +44,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     updatesAutomaticallyDownloadUpdates: Bool,
     inAppNotificationsEnabled: Bool,
     notificationSoundEnabled: Bool,
+    systemNotificationsEnabled: Bool = false,
     moveNotifiedWorktreeToTop: Bool,
     analyticsEnabled: Bool,
     crashReportsEnabled: Bool,
@@ -58,6 +61,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.updatesAutomaticallyDownloadUpdates = updatesAutomaticallyDownloadUpdates
     self.inAppNotificationsEnabled = inAppNotificationsEnabled
     self.notificationSoundEnabled = notificationSoundEnabled
+    self.systemNotificationsEnabled = systemNotificationsEnabled
     self.moveNotifiedWorktreeToTop = moveNotifiedWorktreeToTop
     self.analyticsEnabled = analyticsEnabled
     self.crashReportsEnabled = crashReportsEnabled
@@ -87,6 +91,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     notificationSoundEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .notificationSoundEnabled)
       ?? Self.default.notificationSoundEnabled
+    systemNotificationsEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled)
+      ?? Self.default.systemNotificationsEnabled
     moveNotifiedWorktreeToTop =
       try container.decodeIfPresent(Bool.self, forKey: .moveNotifiedWorktreeToTop)
       ?? Self.default.moveNotifiedWorktreeToTop

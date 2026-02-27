@@ -19,6 +19,11 @@ struct NotificationsSettingsView: View {
           )
           .help("Play a sound when a notification is received")
           Toggle(
+            "System notifications",
+            isOn: $store.systemNotificationsEnabled
+          )
+          .help("Show macOS system notifications")
+          Toggle(
             "Move notified worktree to top",
             isOn: $store.moveNotifiedWorktreeToTop
           )
