@@ -36,7 +36,8 @@ Out of the box, these workflows are not fork-friendly:
 ## One-Time Setup
 
 ```bash
-git fetch origin upstream --prune
+git fetch origin --prune
+git fetch upstream --prune
 git config rerere.enabled true
 git config rerere.autoupdate true
 ```
@@ -47,8 +48,9 @@ git config rerere.autoupdate true
 
 ```bash
 git switch main
-git fetch origin upstream --prune
-git pull --ff-only origin main
+git fetch origin --prune
+git fetch upstream --prune
+git merge --ff-only origin/main
 git merge --no-ff upstream/main
 make build-app
 make test
@@ -56,6 +58,15 @@ git push origin main
 ```
 
 If conflicts happen, resolve once, commit, and `rerere` will likely auto-apply next time.
+
+## Common Pitfalls and Fixes
+
+- `git fetch origin upstream --prune` is invalid for this use case.
+  `upstream` is interpreted as a refspec, which may fail with `fatal: couldn't find remote ref upstream`.
+  Use two fetch commands (or `git fetch --all --prune`) instead.
+- Prefer `git merge --ff-only origin/main` in scripted sync flow.
+  It is deterministic and avoids `git pull` edge cases around `FETCH_HEAD`.
+- Keep working tree clean before sync (`git status --short` should be empty), otherwise abort and stash/commit first.
 
 ## Personal Release Strategy (Fork Release Page)
 
