@@ -91,6 +91,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
     .URL,
   ]
 
+  static func normalizedWorkingDirectoryPath(_ path: String) -> String {
+    var normalized = path
+    while normalized.count > 1 && normalized.hasSuffix("/") {
+      normalized.removeLast()
+    }
+    return normalized
+  }
+
   override var acceptsFirstResponder: Bool { true }
 
   init(
@@ -105,7 +113,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
     self.fontSize = fontSize ?? 0
     self.context = context
     if let workingDirectory {
-      let path = workingDirectory.path(percentEncoded: false)
+      let path = Self.normalizedWorkingDirectoryPath(
+        workingDirectory.path(percentEncoded: false)
+      )
       workingDirectoryCString = path.withCString { strdup($0) }
     } else {
       workingDirectoryCString = nil
