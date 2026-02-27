@@ -64,6 +64,21 @@ struct RepositorySettingsKeyTests {
     #expect(reloaded.repositories[rootURL.path(percentEncoded: false)] == settings)
   }
 
+  @Test func decodeMissingArchiveScriptDefaultsToEmpty() throws {
+    let data = Data(
+      """
+      {
+        "setupScript": "echo setup",
+        "runScript": "echo run",
+        "openActionID": "automatic"
+      }
+      """.utf8
+    )
+    let settings = try JSONDecoder().decode(RepositorySettings.self, from: data)
+
+    #expect(settings.archiveScript.isEmpty)
+  }
+
   @Test(.dependencies) func loadPrefersLocalSupacodeJSONOverGlobalEntry() throws {
     let globalStorage = SettingsTestStorage()
     let localStorage = RepositoryLocalSettingsTestStorage()
@@ -86,7 +101,10 @@ struct RepositorySettingsKeyTests {
       }
     }
 
-    try localStorage.save(encode(localSettings), at: SupacodePaths.repositorySettingsURL(for: rootURL))
+    try localStorage.save(
+      encode(localSettings),
+      at: SupacodePaths.repositorySettingsURL(for: rootURL)
+    )
 
     let loaded = withDependencies {
       $0.settingsFileStorage = globalStorage.storage
@@ -152,7 +170,10 @@ struct RepositorySettingsKeyTests {
       }
     }
 
-    try localStorage.save(Data("{".utf8), at: SupacodePaths.repositorySettingsURL(for: rootURL))
+    try localStorage.save(
+      Data("{".utf8),
+      at: SupacodePaths.repositorySettingsURL(for: rootURL)
+    )
 
     let loaded = withDependencies {
       $0.settingsFileStorage = globalStorage.storage

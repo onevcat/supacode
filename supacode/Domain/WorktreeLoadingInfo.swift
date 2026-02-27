@@ -4,5 +4,6 @@ struct WorktreeLoadingInfo: Hashable {
   let state: WorktreeLoadingState
   let statusTitle: String?
   let statusDetail: String?
+  let statusCommand: String?
   let statusLines: [String]
 }

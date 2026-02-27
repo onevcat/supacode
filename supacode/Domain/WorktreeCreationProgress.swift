@@ -6,6 +6,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var copyUntracked: Bool?
   var ignoredFilesToCopyCount: Int?
   var untrackedFilesToCopyCount: Int?
+  var commandText: String?
   var latestOutputLine: String?
   var outputLines: [String]
 
@@ -17,6 +18,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     copyUntracked: Bool? = nil,
     ignoredFilesToCopyCount: Int? = nil,
     untrackedFilesToCopyCount: Int? = nil,
+    commandText: String? = nil,
     latestOutputLine: String? = nil,
     outputLines: [String] = []
   ) {
@@ -27,6 +29,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     self.copyUntracked = copyUntracked
     self.ignoredFilesToCopyCount = ignoredFilesToCopyCount
     self.untrackedFilesToCopyCount = untrackedFilesToCopyCount
+    self.commandText = commandText
     self.latestOutputLine = latestOutputLine
     self.outputLines = outputLines
   }
