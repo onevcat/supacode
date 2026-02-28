@@ -11,6 +11,40 @@ final class GhosttySurfaceView: NSView, Identifiable {
     let length: UInt64
   }
 
+  private final class CachedValue<T> {
+    private var value: T?
+    private let fetch: () -> T
+    private let duration: Duration
+    private var expiryTask: Task<Void, Never>?
+
+    init(duration: Duration, fetch: @escaping () -> T) {
+      self.duration = duration
+      self.fetch = fetch
+    }
+
+    deinit {
+      expiryTask?.cancel()
+    }
+
+    func get() -> T {
+      if let value {
+        return value
+      }
+
+      let fetched = fetch()
+      value = fetched
+      expiryTask?.cancel()
+      expiryTask = Task { [weak self] in
+        guard let self else { return }
+        try? await ContinuousClock().sleep(for: self.duration)
+        guard !Task.isCancelled else { return }
+        self.value = nil
+        self.expiryTask = nil
+      }
+      return fetched
+    }
+  }
+
   private let runtime: GhosttyRuntime
   let id = UUID()
   let bridge: GhosttySurfaceBridge
@@ -34,6 +68,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
   private var prevPressureStage: Int = 0
+  private lazy var cachedScreenContents = CachedValue<String>(duration: .milliseconds(500)) {
+    [weak self] in
+    self?.readScreenContents() ?? ""
+  }
   var passwordInput: Bool = false {
     didSet {
       let input = SecureInput.shared
@@ -97,6 +135,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
       normalized.removeLast()
     }
     return normalized
+  }
+
+  static func accessibilityLine(for index: Int, in content: String) -> Int {
+    let clampedIndex = min(max(index, 0), content.count)
+    let prefix = String(content.prefix(clampedIndex))
+    return max(0, prefix.components(separatedBy: .newlines).count - 1)
+  }
+
+  static func accessibilityString(for range: NSRange, in content: String) -> String? {
+    guard let swiftRange = Range(range, in: content) else { return nil }
+    return String(content[swiftRange])
   }
 
   override var acceptsFirstResponder: Bool { true }
@@ -352,8 +401,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func accessibilityRole() -> NSAccessibility.Role? {
-    // De facto role used by terminal emulators; AppKit doesn't provide a named constant for it.
-    NSAccessibility.Role(rawValue: "AXTerminal")
+    // Match Ghostty.app so speech/input tools can treat the surface as editable text.
+    .textArea
   }
 
   override func accessibilityLabel() -> String? {
@@ -369,11 +418,55 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func accessibilityValue() -> Any? {
-    bridge.state.pwd
+    cachedScreenContents.get()
   }
 
   override func accessibilityHelp() -> String? {
     accessibilityPaneIndexHelp
+  }
+
+  override func accessibilitySelectedTextRange() -> NSRange {
+    selectedRange()
+  }
+
+  override func accessibilitySelectedText() -> String? {
+    guard let surface else { return nil }
+    var text = ghostty_text_s()
+    guard ghostty_surface_read_selection(surface, &text) else { return nil }
+    defer { ghostty_surface_free_text(surface, &text) }
+    let value = String(cString: text.text)
+    return value.isEmpty ? nil : value
+  }
+
+  override func accessibilityNumberOfCharacters() -> Int {
+    cachedScreenContents.get().count
+  }
+
+  override func accessibilityVisibleCharacterRange() -> NSRange {
+    let content = cachedScreenContents.get()
+    return NSRange(location: 0, length: content.count)
+  }
+
+  override func accessibilityLine(for index: Int) -> Int {
+    Self.accessibilityLine(for: index, in: cachedScreenContents.get())
+  }
+
+  override func accessibilityString(for range: NSRange) -> String? {
+    Self.accessibilityString(for: range, in: cachedScreenContents.get())
+  }
+
+  override func accessibilityAttributedString(for range: NSRange) -> NSAttributedString? {
+    guard let surface else { return nil }
+    guard let plainString = accessibilityString(for: range) else { return nil }
+
+    var attributes: [NSAttributedString.Key: Any] = [:]
+    if let fontRaw = ghostty_surface_quicklook_font(surface) {
+      let font = Unmanaged<CTFont>.fromOpaque(fontRaw)
+      attributes[.font] = font.takeUnretainedValue()
+      font.release()
+    }
+
+    return NSAttributedString(string: plainString, attributes: attributes)
   }
 
   override func becomeFirstResponder() -> Bool {
@@ -401,6 +494,29 @@ final class GhosttySurfaceView: NSView, Identifiable {
     } else {
       NSAccessibility.post(element: self, notification: .focusedUIElementChanged)
     }
+  }
+
+  private func readScreenContents() -> String {
+    guard let surface else { return "" }
+    var text = ghostty_text_s()
+    let selection = ghostty_selection_s(
+      top_left: ghostty_point_s(
+        tag: GHOSTTY_POINT_SCREEN,
+        coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+        x: 0,
+        y: 0
+      ),
+      bottom_right: ghostty_point_s(
+        tag: GHOSTTY_POINT_SCREEN,
+        coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+        x: 0,
+        y: 0
+      ),
+      rectangle: false
+    )
+    guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
+    defer { ghostty_surface_free_text(surface, &text) }
+    return String(cString: text.text)
   }
 
   override func keyDown(with event: NSEvent) {
