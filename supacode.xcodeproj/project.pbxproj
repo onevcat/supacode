@@ -10,6 +10,7 @@
 		32513D1E25BB4F418CABB2A8 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 8B2985744DB94333AE1B5878 /* Sentry */; };
 		886A649F771240E8A5AC792D /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = 8D787DCF45744283A83F226F /* Dependencies */; };
 		C8B33B9AFE69E738ABFA08BE /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 497B582F42253CBC8FBF101F /* ComposableArchitecture */; };
+		D1BB05892F5ACB5900553512 /* YiTong in Frameworks */ = {isa = PBXBuildFile; productRef = D1BB05882F5ACB5900553512 /* YiTong */; };
 		D63D00F72F2A5EEE00018D05 /* DependenciesTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D63D00F62F2A5EEE00018D05 /* DependenciesTestSupport */; };
 		D64162B02F23CAF100260CA3 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = D64162AD2F23CAF100260CA3 /* ghostty */; };
 		D64162B12F23CAF100260CA3 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = D64162AE2F23CAF100260CA3 /* terminfo */; };
@@ -72,6 +73,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1BB05892F5ACB5900553512 /* YiTong in Frameworks */,
 				C8B33B9AFE69E738ABFA08BE /* ComposableArchitecture in Frameworks */,
 				886A649F771240E8A5AC792D /* Dependencies in Frameworks */,
 				D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */,
@@ -152,6 +154,7 @@
 				D661760A2F250A60000FC27C /* CasePaths */,
 				8B2985744DB94333AE1B5878 /* Sentry */,
 				D6D054272F2E3EBF00D70ED5 /* PostHog */,
+				D1BB05882F5ACB5900553512 /* YiTong */,
 			);
 			productName = supacode;
 			productReference = D69CE04A2F1F378200584C57 /* supacode.app */;
@@ -216,6 +219,7 @@
 				B43B9188E1D223E6F7344501 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
 				899A0B6B6B42424B92CD20C2 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				D6D054262F2E3EB300D70ED5 /* XCRemoteSwiftPackageReference "posthog-ios" */,
+				D1BB05872F5ACB5900553512 /* XCRemoteSwiftPackageReference "YiTong" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D69CE04B2F1F378200584C57 /* Products */;
@@ -431,9 +435,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-					AUTOMATION_APPLE_EVENTS = YES;
-					CODE_SIGN_ENTITLEMENTS = supacode/supacodeDebug.entitlements;
-					CODE_SIGN_STYLE = Automatic;
+				AUTOMATION_APPLE_EVENTS = YES;
+				CODE_SIGN_ENTITLEMENTS = supacode/supacodeDebug.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COMPILATION_CACHE_ENABLE_CACHING = YES;
 				CURRENT_PROJECT_VERSION = 110;
@@ -487,9 +491,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-					AUTOMATION_APPLE_EVENTS = YES;
-					CODE_SIGN_ENTITLEMENTS = supacode/supacode.entitlements;
-					CODE_SIGN_STYLE = Automatic;
+				AUTOMATION_APPLE_EVENTS = YES;
+				CODE_SIGN_ENTITLEMENTS = supacode/supacode.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COMPILATION_CACHE_ENABLE_CACHING = NO;
 				CURRENT_PROJECT_VERSION = 110;
@@ -655,6 +659,14 @@
 				minimumVersion = 1.0.0;
 			};
 		};
+		D1BB05872F5ACB5900553512 /* XCRemoteSwiftPackageReference "YiTong" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/YiTong.git";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 		D6D054262F2E3EB300D70ED5 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
@@ -685,6 +697,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8E10C2184F9342AC850013F5 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		D1BB05882F5ACB5900553512 /* YiTong */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1BB05872F5ACB5900553512 /* XCRemoteSwiftPackageReference "YiTong" */;
+			productName = YiTong;
 		};
 		D63D00F62F2A5EEE00018D05 /* DependenciesTestSupport */ = {
 			isa = XCSwiftPackageProductDependency;

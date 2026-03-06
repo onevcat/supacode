@@ -89,6 +89,7 @@ enum AppShortcuts {
   static let runScript = AppShortcut(key: "r", modifiers: .command)
   static let stopRunScript = AppShortcut(key: ".", modifiers: .command)
   static let checkForUpdates = AppShortcut(key: "u", modifiers: .command)
+  static let showDiff = AppShortcut(key: "]", modifiers: .command)
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
   static let selectNextWorktree = AppShortcut(
     keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .control]
@@ -142,6 +143,7 @@ enum AppShortcuts {
     runScript,
     stopRunScript,
     checkForUpdates,
+    showDiff,
     archivedWorktrees,
     selectNextWorktree,
     selectPreviousWorktree,

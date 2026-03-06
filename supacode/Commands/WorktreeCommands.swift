@@ -121,6 +121,22 @@ struct WorktreeCommands: Commands {
       .keyboardShortcut(.return, modifiers: .command)
       .help("Confirm Worktree Action (⌘↩)")
       .disabled(confirmWorktreeAction == nil)
+      Button("Show Diff") {
+        let repos = store.repositories
+        guard let worktreeID = repos.selectedWorktreeID,
+          let worktree = repos.worktree(for: worktreeID)
+        else { return }
+        DiffWindowManager.shared.show(
+          worktreeURL: worktree.workingDirectory,
+          branchName: worktree.name,
+        )
+      }
+      .keyboardShortcut(
+        AppShortcuts.showDiff.keyEquivalent,
+        modifiers: AppShortcuts.showDiff.modifiers
+      )
+      .help("Show Diff (\(AppShortcuts.showDiff.display))")
+      .disabled(!hasActiveWorktree)
       Button("Refresh Worktrees") {
         store.send(.repositories(.refreshWorktrees))
       }

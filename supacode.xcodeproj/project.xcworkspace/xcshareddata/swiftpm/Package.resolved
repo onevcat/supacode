@@ -1,5 +1,5 @@
 {
-  "originHash" : "296c41175f338e41eab03bab9aa17a7cab425a0ac3a069540ffc2f8803489c5c",
+  "originHash" : "bff63941030a723fd0d04591f427af4a080c1f826220929fca37799cf784ab71",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -152,6 +152,15 @@
       "state" : {
         "revision" : "34e463e98ab8541c604af706c99bed7160f5ec70",
         "version" : "1.8.1"
+      }
+    },
+    {
+      "identity" : "yitong",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/onevcat/YiTong.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "03208b0e59f01dcb9662e10aa02f4af99306d6e9"
       }
     }
   ],

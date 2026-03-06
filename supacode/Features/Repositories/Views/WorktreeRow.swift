@@ -19,6 +19,7 @@ struct WorktreeRow: View {
   let pinAction: (() -> Void)?
   let isSelected: Bool
   let archiveAction: (() -> Void)?
+  let onDiffTap: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
@@ -79,11 +80,17 @@ struct WorktreeRow: View {
             .accessibilityLabel("Run script active")
         }
         if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
-          WorktreeRowChangeCountView(
-            addedLines: displayAddedLines,
-            removedLines: displayRemovedLines,
-            isSelected: isSelected
-          )
+          Button {
+            onDiffTap?()
+          } label: {
+            WorktreeRowChangeCountView(
+              addedLines: displayAddedLines,
+              removedLines: displayRemovedLines,
+              isSelected: isSelected,
+            )
+          }
+          .buttonStyle(.plain)
+          .help("Show Diff (\(AppShortcuts.showDiff.display))")
         }
         if isHovered {
           Button {

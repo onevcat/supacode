@@ -18,6 +18,9 @@ enum GitOperation: String {
   case branchRename = "branch_rename"
   case branchDelete = "branch_delete"
   case lineChanges = "line_changes"
+  case diffNameStatus = "diff_name_status"
+  case untrackedFilePaths = "untracked_file_paths"
+  case showFile = "show_file"
   case remoteInfo = "remote_info"
 }
 
@@ -448,6 +451,46 @@ struct GitClient {
     let gitDirectory = headURL.deletingLastPathComponent()
     let lockURL = gitDirectory.appending(path: "index.lock")
     return FileManager.default.fileExists(atPath: lockURL.path(percentEncoded: false))
+  }
+
+  nonisolated func diffNameStatus(at worktreeURL: URL) async -> String {
+    let path = worktreeURL.path(percentEncoded: false)
+    do {
+      return try await runGit(
+        operation: .diffNameStatus,
+        arguments: ["-C", path, "diff", "HEAD", "--name-status"]
+      )
+    } catch {
+      return ""
+    }
+  }
+
+  nonisolated func untrackedFilePaths(at worktreeURL: URL) async -> [String] {
+    let path = worktreeURL.path(percentEncoded: false)
+    do {
+      let output = try await runGit(
+        operation: .untrackedFilePaths,
+        arguments: ["-C", path, "ls-files", "--others", "--exclude-standard"]
+      )
+      return output
+        .split(whereSeparator: \.isNewline)
+        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+    } catch {
+      return []
+    }
+  }
+
+  nonisolated func showFileAtHEAD(_ relativePath: String, in worktreeURL: URL) async -> String? {
+    let path = worktreeURL.path(percentEncoded: false)
+    do {
+      return try await runGit(
+        operation: .showFile,
+        arguments: ["-C", path, "show", "HEAD:\(relativePath)"]
+      )
+    } catch {
+      return nil
+    }
   }
 
   nonisolated func remoteInfo(for repositoryRoot: URL) async -> GithubRemoteInfo? {

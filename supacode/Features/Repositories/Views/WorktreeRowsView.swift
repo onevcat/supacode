@@ -118,6 +118,13 @@ struct WorktreeRowsView: View {
       }
       _ = terminalState.focusSurface(id: notification.surfaceId)
     }
+    let onDiffTap: (() -> Void)? = {
+      guard let worktree = store.state.worktree(for: row.id) else { return }
+      DiffWindowManager.shared.show(
+        worktreeURL: worktree.workingDirectory,
+        branchName: worktree.name,
+      )
+    }
     let config = WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
@@ -128,7 +135,8 @@ struct WorktreeRowsView: View {
       shortcutHint: shortcutHint,
       pinAction: pinAction,
       archiveAction: archiveAction,
-      moveDisabled: moveDisabled
+      onDiffTap: onDiffTap,
+      moveDisabled: moveDisabled,
     )
     let baseRow = worktreeRowView(row, config: config)
     Group {
@@ -181,6 +189,7 @@ struct WorktreeRowsView: View {
     let shortcutHint: String?
     let pinAction: (() -> Void)?
     let archiveAction: (() -> Void)?
+    let onDiffTap: (() -> Void)?
     let moveDisabled: Bool
   }
 
@@ -205,7 +214,8 @@ struct WorktreeRowsView: View {
       shortcutHint: config.shortcutHint,
       pinAction: config.pinAction,
       isSelected: isSelected,
-      archiveAction: config.archiveAction
+      archiveAction: config.archiveAction,
+      onDiffTap: config.onDiffTap,
     )
     .tag(SidebarSelection.worktree(row.id))
     .typeSelectEquivalent("")
