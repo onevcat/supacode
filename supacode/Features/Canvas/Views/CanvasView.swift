@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CanvasView: View {
@@ -18,58 +19,60 @@ struct CanvasView: View {
   private let titleBarHeight: CGFloat = 28
 
   var body: some View {
-    GeometryReader { geometry in
-      let activeStates = terminalManager.activeWorktreeStates
+    CanvasScrollContainer(offset: $canvasOffset, lastOffset: $lastCanvasOffset) {
+      GeometryReader { geometry in
+        let activeStates = terminalManager.activeWorktreeStates
 
-      // Background layer: handles canvas pan and tap-to-unfocus.
-      Color.clear
-        .contentShape(.rect)
-        .accessibilityAddTraits(.isButton)
-        .onTapGesture { unfocusAll() }
-        .gesture(canvasPanGesture)
+        // Background layer: handles canvas pan and tap-to-unfocus.
+        Color.clear
+          .contentShape(.rect)
+          .accessibilityAddTraits(.isButton)
+          .onTapGesture { unfocusAll() }
+          .gesture(canvasPanGesture)
 
-      // Cards layer: uses .offset() (not .position()) to avoid parent size
-      // proposals reaching the NSView, keeping terminal grid stable during zoom.
-      ForEach(activeStates, id: \.worktreeID) { state in
-        if let surfaceView = state.activeSurfaceView {
-          let worktreeID = state.worktreeID
-          let baseLayout = resolvedLayout(for: worktreeID, canvasSize: geometry.size)
-          let resized = resizedFrame(for: worktreeID, baseLayout: baseLayout)
-          let screenCenter = screenPosition(for: resized.center)
-          let cardTotalHeight = resized.size.height + titleBarHeight
+        // Cards layer: uses .offset() (not .position()) to avoid parent size
+        // proposals reaching the NSView, keeping terminal grid stable during zoom.
+        ForEach(activeStates, id: \.worktreeID) { state in
+          if let surfaceView = state.activeSurfaceView {
+            let worktreeID = state.worktreeID
+            let baseLayout = resolvedLayout(for: worktreeID, canvasSize: geometry.size)
+            let resized = resizedFrame(for: worktreeID, baseLayout: baseLayout)
+            let screenCenter = screenPosition(for: resized.center)
+            let cardTotalHeight = resized.size.height + titleBarHeight
 
-          CanvasCardView(
-            repositoryName: Repository.name(for: state.repositoryRootURL),
-            worktreeName: state.worktreeName,
-            surfaceView: surfaceView,
-            isFocused: focusedWorktreeID == worktreeID,
-            hasUnseenNotification: state.hasUnseenNotification,
-            cardSize: resized.size,
-            canvasScale: canvasScale,
-            onTap: { focusCard(worktreeID, states: activeStates) },
-            onDragCommit: { translation in commitDrag(for: worktreeID, translation: translation) },
-            onResize: { edge, translation in
-              activeResize[worktreeID] = ActiveResize(
-                edge: edge,
-                translation: CGSize(
-                  width: translation.width / canvasScale,
-                  height: translation.height / canvasScale
+            CanvasCardView(
+              repositoryName: Repository.name(for: state.repositoryRootURL),
+              worktreeName: state.worktreeName,
+              surfaceView: surfaceView,
+              isFocused: focusedWorktreeID == worktreeID,
+              hasUnseenNotification: state.hasUnseenNotification,
+              cardSize: resized.size,
+              canvasScale: canvasScale,
+              onTap: { focusCard(worktreeID, states: activeStates) },
+              onDragCommit: { translation in commitDrag(for: worktreeID, translation: translation) },
+              onResize: { edge, translation in
+                activeResize[worktreeID] = ActiveResize(
+                  edge: edge,
+                  translation: CGSize(
+                    width: translation.width / canvasScale,
+                    height: translation.height / canvasScale
+                  )
                 )
-              )
-            },
-            onResizeEnd: { commitResize(for: worktreeID, surfaceView: surfaceView) }
-          )
-          .scaleEffect(canvasScale, anchor: .center)
-          .offset(
-            x: screenCenter.x - resized.size.width / 2,
-            y: screenCenter.y - cardTotalHeight / 2
-          )
-          .zIndex(focusedWorktreeID == worktreeID ? 1 : 0)
+              },
+              onResizeEnd: { commitResize(for: worktreeID, surfaceView: surfaceView) }
+            )
+            .scaleEffect(canvasScale, anchor: .center)
+            .offset(
+              x: screenCenter.x - resized.size.width / 2,
+              y: screenCenter.y - cardTotalHeight / 2
+            )
+            .zIndex(focusedWorktreeID == worktreeID ? 1 : 0)
+          }
         }
       }
+      .contentShape(.rect)
+      .simultaneousGesture(canvasZoomGesture)
     }
-    .contentShape(.rect)
-    .simultaneousGesture(canvasZoomGesture)
     .task { activateCanvas() }
     .onDisappear { deactivateCanvas() }
   }
@@ -286,4 +289,69 @@ struct CanvasView: View {
 private struct ActiveResize {
   let edge: CanvasCardView.CardResizeEdge
   var translation: CGSize
+}
+
+// MARK: - Scroll Container
+
+/// Wraps SwiftUI content in an NSView whose `scrollWheel` override catches
+/// unhandled scroll-wheel events and translates them into canvas-offset changes.
+/// Focused terminals consume their own scroll events (they don't call super),
+/// so only events over empty space or unfocused cards reach this container.
+private struct CanvasScrollContainer<Content: View>: NSViewRepresentable {
+  @Binding var offset: CGSize
+  @Binding var lastOffset: CGSize
+  @ViewBuilder var content: Content
+
+  func makeCoordinator() -> CanvasScrollCoordinator {
+    CanvasScrollCoordinator()
+  }
+
+  func makeNSView(context: Context) -> CanvasScrollContainerView {
+    let container = CanvasScrollContainerView()
+    let hosting = NSHostingView(rootView: content)
+    hosting.translatesAutoresizingMaskIntoConstraints = false
+    container.addSubview(hosting)
+    NSLayoutConstraint.activate([
+      hosting.topAnchor.constraint(equalTo: container.topAnchor),
+      hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+    ])
+    container.scrollCoordinator = context.coordinator
+    return container
+  }
+
+  func updateNSView(_ nsView: CanvasScrollContainerView, context: Context) {
+    context.coordinator.offset = $offset
+    context.coordinator.lastOffset = $lastOffset
+    if let hosting = nsView.subviews.first as? NSHostingView<Content> {
+      hosting.rootView = content
+    }
+  }
+}
+
+private class CanvasScrollCoordinator {
+  var offset: Binding<CGSize> = .constant(.zero)
+  var lastOffset: Binding<CGSize> = .constant(.zero)
+
+  func handleScroll(deltaX: CGFloat, deltaY: CGFloat) {
+    let current = offset.wrappedValue
+    let newOffset = CGSize(
+      width: current.width + deltaX,
+      height: current.height + deltaY
+    )
+    offset.wrappedValue = newOffset
+    lastOffset.wrappedValue = newOffset
+  }
+}
+
+private class CanvasScrollContainerView: NSView {
+  var scrollCoordinator: CanvasScrollCoordinator?
+
+  override func scrollWheel(with event: NSEvent) {
+    scrollCoordinator?.handleScroll(
+      deltaX: event.scrollingDeltaX,
+      deltaY: event.scrollingDeltaY
+    )
+  }
 }
