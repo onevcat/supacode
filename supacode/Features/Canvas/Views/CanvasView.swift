@@ -45,10 +45,17 @@ struct CanvasView: View {
             isFocused: focusedWorktreeID == worktreeID,
             hasUnseenNotification: state.hasUnseenNotification,
             cardSize: resized.size,
+            canvasScale: canvasScale,
             onTap: { focusCard(worktreeID, states: activeStates) },
             onDragCommit: { translation in commitDrag(for: worktreeID, translation: translation) },
             onResize: { edge, translation in
-              activeResize[worktreeID] = ActiveResize(edge: edge, translation: translation)
+              activeResize[worktreeID] = ActiveResize(
+                edge: edge,
+                translation: CGSize(
+                  width: translation.width / canvasScale,
+                  height: translation.height / canvasScale
+                )
+              )
             },
             onResizeEnd: { commitResize(for: worktreeID, surfaceView: surfaceView) }
           )

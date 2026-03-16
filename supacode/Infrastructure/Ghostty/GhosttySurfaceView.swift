@@ -1611,6 +1611,11 @@ final class GhosttySurfaceScrollView: NSView {
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
 
+  /// When set, the surface renders at this fixed size regardless of the hosting
+  /// view's bounds. Used in canvas mode to prevent `.scaleEffect()` from causing
+  /// terminal reflow.
+  var pinnedSize: CGSize?
+
   init(surfaceView: GhosttySurfaceView) {
     self.surfaceView = surfaceView
     scrollView = NSScrollView()
@@ -1706,9 +1711,10 @@ final class GhosttySurfaceScrollView: NSView {
 
   override func layout() {
     super.layout()
-    scrollView.frame = bounds
-    surfaceView.frame.size = scrollView.bounds.size
-    documentView.frame.size.width = scrollView.bounds.width
+    let effectiveSize = pinnedSize ?? bounds.size
+    scrollView.frame = CGRect(origin: .zero, size: effectiveSize)
+    surfaceView.frame.size = effectiveSize
+    documentView.frame.size.width = effectiveSize.width
     synchronizeScrollView()
     synchronizeSurfaceView()
     surfaceView.updateSurfaceSize()

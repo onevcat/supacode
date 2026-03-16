@@ -8,6 +8,7 @@ struct CanvasCardView: View {
   let isFocused: Bool
   let hasUnseenNotification: Bool
   let cardSize: CGSize
+  let canvasScale: CGFloat
   let onTap: () -> Void
   let onDragCommit: (CGSize) -> Void
   let onResize: (CardResizeEdge, CGSize) -> Void
@@ -39,7 +40,10 @@ struct CanvasCardView: View {
     .contentShape(.rect)
     .accessibilityAddTraits(.isButton)
     .onTapGesture { onTap() }
-    .offset(dragTranslation)
+    .offset(
+      x: dragTranslation.width / canvasScale,
+      y: dragTranslation.height / canvasScale
+    )
     .overlay { resizeHandles }
   }
 
@@ -69,13 +73,17 @@ struct CanvasCardView: View {
           state = value.translation
         }
         .onEnded { value in
-          onDragCommit(value.translation)
+          onDragCommit(
+            CGSize(
+              width: value.translation.width / canvasScale,
+              height: value.translation.height / canvasScale
+            ))
         }
     )
   }
 
   private var terminalContent: some View {
-    GhosttyTerminalView(surfaceView: surfaceView)
+    GhosttyTerminalView(surfaceView: surfaceView, pinnedSize: cardSize)
       .frame(width: cardSize.width, height: cardSize.height)
       .allowsHitTesting(isFocused)
   }
