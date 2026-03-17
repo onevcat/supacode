@@ -11,17 +11,22 @@ struct CanvasView: View {
   @State private var lastCanvasScale: CGFloat = 1.0
   @State private var focusedTabID: TerminalTabID?
   @State private var activeResize: [TerminalTabID: ActiveResize] = [:]
+  @State private var hasPerformedInitialFit = false
+  @State private var viewportSize: CGSize = .zero
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
   private let maxCardWidth: CGFloat = 1200
   private let maxCardHeight: CGFloat = 900
   private let titleBarHeight: CGFloat = 28
+  private let cardSpacing: CGFloat = 20
 
   var body: some View {
     CanvasScrollContainer(offset: $canvasOffset, lastOffset: $lastCanvasOffset) {
       GeometryReader { geometry in
         let activeStates = terminalManager.activeWorktreeStates
+        let allCardKeys = collectCardKeys(from: activeStates)
+        let _ = ensureLayouts(for: allCardKeys)
 
         // Background layer: handles canvas pan and tap-to-unfocus.
         Color.clear
@@ -37,7 +42,7 @@ struct CanvasView: View {
           ForEach(state.tabManager.tabs) { tab in
             if let surfaceView = state.surfaceView(for: tab.id) {
               let cardKey = tab.id.rawValue.uuidString
-              let baseLayout = resolvedLayout(for: cardKey, canvasSize: geometry.size)
+              let baseLayout = layoutStore.cardLayouts[cardKey] ?? CanvasCardLayout(position: .zero)
               let resized = resizedFrame(for: tab.id, baseLayout: baseLayout)
               let screenCenter = screenPosition(for: resized.center)
               let cardTotalHeight = resized.size.height + titleBarHeight
@@ -75,6 +80,18 @@ struct CanvasView: View {
       }
       .contentShape(.rect)
       .simultaneousGesture(canvasZoomGesture)
+      .onGeometryChange(for: CGSize.self) { proxy in
+        proxy.size
+      } action: { newSize in
+        viewportSize = newSize
+        if !hasPerformedInitialFit {
+          hasPerformedInitialFit = true
+          fitToView(canvasSize: newSize)
+        }
+      }
+    }
+    .overlay(alignment: .bottomTrailing) {
+      organizeButton
     }
     .task { activateCanvas() }
     .onDisappear { deactivateCanvas() }
@@ -122,27 +139,42 @@ struct CanvasView: View {
 
   // MARK: - Layout
 
-  private func resolvedLayout(for cardKey: String, canvasSize: CGSize) -> CanvasCardLayout {
-    if let existing = layoutStore.cardLayouts[cardKey] {
-      return existing
+  /// Batch-position all cards that don't have stored layouts yet.
+  /// Uses a single, consistent column count to avoid overlap between
+  /// cards positioned in different passes.
+  private func ensureLayouts(for cardKeys: [String]) {
+    let unpositioned = cardKeys.filter { layoutStore.cardLayouts[$0] == nil }
+    guard !unpositioned.isEmpty else { return }
+
+    // Count only VISIBLE cards that already have layouts (ignores stale entries).
+    let positionedCount = cardKeys.count - unpositioned.count
+    // For incremental adds, preserve the existing grid shape.
+    // For initial layout, use total count for a balanced grid.
+    let columns = positionedCount > 0
+      ? gridColumns(for: positionedCount)
+      : gridColumns(for: cardKeys.count)
+
+    for (i, key) in unpositioned.enumerated() {
+      layoutStore.cardLayouts[key] = CanvasCardLayout(
+        position: gridPosition(index: positionedCount + i, columns: columns)
+      )
     }
-    let position = autoPosition(canvasSize: canvasSize)
-    let layout = CanvasCardLayout(position: position)
-    layoutStore.cardLayouts[cardKey] = layout
-    return layout
   }
 
-  private func autoPosition(canvasSize: CGSize) -> CGPoint {
-    let existingCount = layoutStore.cardLayouts.count
+  /// Balanced grid: columns ≈ sqrt(N). No viewport constraint — the canvas
+  /// is infinite and fitToView handles zoom.
+  private func gridColumns(for count: Int) -> Int {
+    max(1, Int(ceil(sqrt(Double(count)))))
+  }
+
+  private func gridPosition(index: Int, columns: Int) -> CGPoint {
     let cardW = CanvasCardLayout.defaultSize.width
     let cardH = CanvasCardLayout.defaultSize.height + titleBarHeight
-    let spacing: CGFloat = 20
-    let columns = max(1, Int(canvasSize.width / (cardW + spacing)))
-    let row = existingCount / columns
-    let col = existingCount % columns
+    let row = index / columns
+    let col = index % columns
     return CGPoint(
-      x: spacing + (cardW + spacing) * CGFloat(col) + cardW / 2,
-      y: spacing + (cardH + spacing) * CGFloat(row) + cardH / 2
+      x: cardSpacing + (cardW + cardSpacing) * CGFloat(col) + cardW / 2,
+      y: cardSpacing + (cardH + cardSpacing) * CGFloat(row) + cardH / 2
     )
   }
 
@@ -213,6 +245,89 @@ struct CanvasView: View {
     max(minCardHeight, min(maxCardHeight, height))
   }
 
+  // MARK: - Organize & Fit
+
+  private func collectCardKeys(from states: [WorktreeTerminalState]) -> [String] {
+    states.flatMap { state in
+      state.tabManager.tabs.compactMap { tab in
+        state.surfaceView(for: tab.id) != nil ? tab.id.rawValue.uuidString : nil
+      }
+    }
+  }
+
+  /// Reset all card positions to a clean grid layout.
+  private func organizeCards() {
+    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    let columns = gridColumns(for: keys.count)
+    for (index, key) in keys.enumerated() {
+      layoutStore.cardLayouts[key] = CanvasCardLayout(
+        position: gridPosition(index: index, columns: columns)
+      )
+    }
+  }
+
+  /// Adjust scale and offset so all cards fit within the viewport.
+  private func fitToView(canvasSize: CGSize) {
+    guard canvasSize.width > 0, canvasSize.height > 0 else { return }
+
+    let keys = collectCardKeys(from: terminalManager.activeWorktreeStates)
+    guard !keys.isEmpty else { return }
+
+    // Bounding box of all cards in canvas coordinates
+    var minX = CGFloat.infinity, minY = CGFloat.infinity
+    var maxX = -CGFloat.infinity, maxY = -CGFloat.infinity
+
+    for key in keys {
+      guard let layout = layoutStore.cardLayouts[key] else { continue }
+      let halfW = layout.size.width / 2
+      let halfH = (layout.size.height + titleBarHeight) / 2
+      minX = min(minX, layout.position.x - halfW)
+      minY = min(minY, layout.position.y - halfH)
+      maxX = max(maxX, layout.position.x + halfW)
+      maxY = max(maxY, layout.position.y + halfH)
+    }
+
+    guard minX.isFinite else { return }
+
+    let padding: CGFloat = 40
+    let bboxW = maxX - minX + padding * 2
+    let bboxH = maxY - minY + padding * 2
+    let bboxCenterX = (minX + maxX) / 2
+    let bboxCenterY = (minY + maxY) / 2
+
+    let newScale = max(0.25, min(1.0, min(canvasSize.width / bboxW, canvasSize.height / bboxH)))
+
+    canvasOffset = CGSize(
+      width: canvasSize.width / 2 - bboxCenterX * newScale,
+      height: canvasSize.height / 2 - bboxCenterY * newScale
+    )
+    canvasScale = newScale
+    lastCanvasScale = newScale
+    lastCanvasOffset = canvasOffset
+  }
+
+  /// Remove stored layouts for tabs that no longer exist.
+  private func cleanStaleLayouts() {
+    let visibleKeys = Set(collectCardKeys(from: terminalManager.activeWorktreeStates))
+    let staleKeys = layoutStore.cardLayouts.keys.filter { !visibleKeys.contains($0) }
+    for key in staleKeys {
+      layoutStore.cardLayouts.removeValue(forKey: key)
+    }
+  }
+
+  private var organizeButton: some View {
+    Button {
+      organizeCards()
+      fitToView(canvasSize: viewportSize)
+    } label: {
+      Image(systemName: "square.grid.2x2")
+        .font(.body)
+    }
+    .buttonStyle(.bordered)
+    .padding()
+    .help("Organize cards in a grid")
+  }
+
   // MARK: - Drag
 
   private func commitDrag(for cardKey: String, translation: CGSize) {
@@ -275,6 +390,7 @@ struct CanvasView: View {
   // MARK: - Occlusion
 
   private func activateCanvas() {
+    cleanStaleLayouts()
     for state in terminalManager.activeWorktreeStates {
       state.setAllSurfacesOccluded()
     }
