@@ -469,7 +469,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Prowl;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -525,7 +525,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Prowl;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
