@@ -23,7 +23,7 @@ struct CanvasCardLayout: Codable, Equatable, Hashable, Sendable {
     }
   }
 
-  static let defaultSize = CGSize(width: 600, height: 400)
+  static let defaultSize = CGSize(width: 800, height: 550)
 
   init(position: CGPoint, size: CGSize = Self.defaultSize) {
     self.positionX = position.x

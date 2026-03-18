@@ -16,8 +16,8 @@ struct CanvasView: View {
 
   private let minCardWidth: CGFloat = 300
   private let minCardHeight: CGFloat = 200
-  private let maxCardWidth: CGFloat = 1200
-  private let maxCardHeight: CGFloat = 900
+  private let maxCardWidth: CGFloat = 2400
+  private let maxCardHeight: CGFloat = 1600
   private let titleBarHeight: CGFloat = 28
   private let cardSpacing: CGFloat = 20
 
