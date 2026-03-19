@@ -456,7 +456,7 @@ struct GitClient {
     do {
       return try await runGit(
         operation: .diffNameStatus,
-        arguments: ["-C", path, "diff", "HEAD", "--name-status"]
+        arguments: ["-C", path, "-c", "core.quotePath=false", "diff", "HEAD", "--name-status"]
       )
     } catch {
       return ""
@@ -468,7 +468,7 @@ struct GitClient {
     do {
       let output = try await runGit(
         operation: .untrackedFilePaths,
-        arguments: ["-C", path, "ls-files", "--others", "--exclude-standard"]
+        arguments: ["-C", path, "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard"]
       )
       return
         output
