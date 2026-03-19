@@ -294,6 +294,8 @@ struct RepositoriesFeature {
     case worktreeCreated(Worktree)
   }
 
+  private let startupLogger = SupaLogger("Startup")
+
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(GitClientDependency.self) private var gitClient
@@ -308,12 +310,14 @@ struct RepositoriesFeature {
       switch action {
       case .task:
         return .run { send in
+          let t = ContinuousClock.now
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
           let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
           let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
           let worktreeOrderByRepository =
             await repositoryPersistence.loadWorktreeOrderByRepository()
+          startupLogger.info("[Benchmark] persistence load: \(t.duration(to: .now))")
           await send(.pinnedWorktreeIDsLoaded(pinned))
           await send(.archivedWorktreeIDsLoaded(archived))
           await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
@@ -350,10 +354,49 @@ struct RepositoriesFeature {
       case .loadPersistedRepositories:
         state.alert = nil
         state.isRefreshingWorktrees = false
+        let lastFocused = state.lastFocusedWorktreeID
         return .run { send in
           let loadedPaths = await repositoryPersistence.loadRoots()
           let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
           let roots = rootPaths.map { URL(fileURLWithPath: $0) }
+
+          if let lastFocused {
+            var priorityRoot: URL?
+            var remainingRoots: [URL] = []
+            for root in roots {
+              if priorityRoot == nil,
+                lastFocused.hasPrefix(root.path(percentEncoded: false))
+              {
+                priorityRoot = root
+              } else {
+                remainingRoots.append(root)
+              }
+            }
+            if let priorityRoot {
+              let (priorityRepos, priorityFailures) = await loadRepositoriesData([priorityRoot])
+              await send(
+                .repositoriesLoaded(
+                  priorityRepos,
+                  failures: priorityFailures,
+                  roots: roots,
+                  animated: false
+                )
+              )
+              if !remainingRoots.isEmpty {
+                let (remainingRepos, remainingFailures) = await loadRepositoriesData(remainingRoots)
+                await send(
+                  .repositoriesLoaded(
+                    priorityRepos + remainingRepos,
+                    failures: priorityFailures + remainingFailures,
+                    roots: roots,
+                    animated: false
+                  )
+                )
+              }
+              return
+            }
+          }
+
           let (repositories, failures) = await loadRepositoriesData(roots)
           await send(
             .repositoriesLoaded(
@@ -380,6 +423,11 @@ struct RepositoriesFeature {
         return loadRepositories(roots, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
+        if !state.isInitialLoadComplete {
+          startupLogger.info(
+            "[Benchmark] initial load complete (end-to-end since AppFeature init): \(AppFeature.appLaunchTime.duration(to: .now))"
+          )
+        }
         state.isRefreshingWorktrees = false
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
@@ -2603,26 +2651,62 @@ struct RepositoriesFeature {
     .cancellable(id: CancelID.load, cancelInFlight: true)
   }
 
+  private struct WorktreesFetchResult: Sendable {
+    let root: URL
+    let worktrees: [Worktree]?
+    let errorMessage: String?
+  }
+
   private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
+    let total = ContinuousClock.now
+    let gitClient = self.gitClient
+    let startupLogger = self.startupLogger
+    let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
+      for root in roots {
+        group.addTask {
+          let t = ContinuousClock.now
+          let normalizedRoot = root.standardizedFileURL
+          let rootID = normalizedRoot.path(percentEncoded: false)
+          do {
+            let worktrees = try await gitClient.worktrees(root)
+            startupLogger.info(
+              "[Benchmark] worktrees(\(rootID)): \(t.duration(to: .now)) (\(worktrees.count) worktrees)"
+            )
+            return WorktreesFetchResult(root: root, worktrees: worktrees, errorMessage: nil)
+          } catch {
+            startupLogger.warning("[Benchmark] worktrees(\(rootID)) failed: \(t.duration(to: .now))")
+            return WorktreesFetchResult(root: root, worktrees: nil, errorMessage: error.localizedDescription)
+          }
+        }
+      }
+      var collected: [WorktreesFetchResult] = []
+      for await result in group {
+        collected.append(result)
+      }
+      return collected
+    }
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
-    for root in roots {
-      let normalizedRoot = root.standardizedFileURL
+    for result in fetchResults {
+      let normalizedRoot = result.root.standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
-      do {
-        let worktrees = try await gitClient.worktrees(root)
+      if let worktrees = result.worktrees {
         let name = Repository.name(for: normalizedRoot)
-        let repository = Repository(
-          id: rootID,
-          rootURL: normalizedRoot,
-          name: name,
-          worktrees: IdentifiedArray(uniqueElements: worktrees)
+        loaded.append(
+          Repository(
+            id: rootID,
+            rootURL: normalizedRoot,
+            name: name,
+            worktrees: IdentifiedArray(uniqueElements: worktrees),
+          )
         )
-        loaded.append(repository)
-      } catch {
-        failures.append(LoadFailure(rootID: rootID, message: error.localizedDescription))
+      } else {
+        failures.append(LoadFailure(rootID: rootID, message: result.errorMessage ?? "Unknown error"))
       }
     }
+    startupLogger.info(
+      "[Benchmark] loadRepositoriesData total: \(total.duration(to: .now)) (\(roots.count) repos)"
+    )
     return (loaded, failures)
   }
 
