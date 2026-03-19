@@ -46,15 +46,14 @@ struct CanvasCardPackerTests {
     let cards = (0..<3).map { card("card\($0)") }
     let result = packer.pack(cards: cards, targetRatio: 16.0 / 9.0)
 
-    let c0 = try #require(result.layouts["card0"])
-    let c1 = try #require(result.layouts["card1"])
-    let c2 = try #require(result.layouts["card2"])
+    let card0 = try #require(result.layouts["card0"])
+    let card1 = try #require(result.layouts["card1"])
+    let card2 = try #require(result.layouts["card2"])
 
     // Waterfall: card0 → col0, card1 → col1, card2 → col0 (shortest).
-    // So card0 and card1 start at the same Y, card2 is below card0.
-    #expect(c0.position.y == c1.position.y)
-    #expect(c0.position.x != c1.position.x)
-    #expect(c2.position.y > c0.position.y)
+    #expect(card0.position.y == card1.position.y)
+    #expect(card0.position.x != card1.position.x)
+    #expect(card2.position.y > card0.position.y)
   }
 
   @Test func fourUniformCardsFormTwoByTwo() throws {
@@ -62,16 +61,16 @@ struct CanvasCardPackerTests {
     let cards = (0..<4).map { card("card\($0)", width: 400, height: 400) }
     let result = packer.pack(cards: cards, targetRatio: 1.0)
 
-    let c0 = try #require(result.layouts["card0"])
-    let c1 = try #require(result.layouts["card1"])
-    let c2 = try #require(result.layouts["card2"])
-    let c3 = try #require(result.layouts["card3"])
+    let card0 = try #require(result.layouts["card0"])
+    let card1 = try #require(result.layouts["card1"])
+    let card2 = try #require(result.layouts["card2"])
+    let card3 = try #require(result.layouts["card3"])
 
-    // Waterfall: c0→col0, c1→col1, c2→col0, c3→col1
-    #expect(c0.position.x == c2.position.x)
-    #expect(c1.position.x == c3.position.x)
-    #expect(c0.position.y < c2.position.y)
-    #expect(c1.position.y < c3.position.y)
+    // Waterfall: card0→col0, card1→col1, card2→col0, card3→col1
+    #expect(card0.position.x == card2.position.x)
+    #expect(card1.position.x == card3.position.x)
+    #expect(card0.position.y < card2.position.y)
+    #expect(card1.position.y < card3.position.y)
   }
 
   // MARK: - Waterfall gap filling
@@ -87,11 +86,10 @@ struct CanvasCardPackerTests {
     let result = packer.pack(cards: cards, targetRatio: 16.0 / 9.0)
 
     let tall = try #require(result.layouts["tall"])
-    let short1 = try #require(result.layouts["short1"])
     let short2 = try #require(result.layouts["short2"])
 
     // With 2 columns: tall→col0, short1→col1, short2→col1 (stacks in col1).
-    // short2 should start within the tall card's height range, not below it.
+    // short2 should end within the tall card's height range, not below it.
     let tallBottom = tall.position.y + (tall.size.height + 28) / 2
     let short2Bottom = short2.position.y + (short2.size.height + 28) / 2
     #expect(short2Bottom <= tallBottom + 1, "short2 should fill gap beside tall card")
@@ -101,8 +99,8 @@ struct CanvasCardPackerTests {
 
   @Test func wideAndNarrowCardsUseRowBreak() throws {
     // 1 wide + 2 narrow cards with enough total width that single-row is
-    // too wide. Row-break [wide][n1+n2] gives best scale (0.000822) by
-    // using the narrow cards' actual width instead of max-width columns.
+    // too wide. Row-break [wide][n1+n2] gives best scale by using the
+    // narrow cards' actual width instead of max-width columns.
     let cards = [
       card("wide", width: 1000, height: 550),
       card("narrow1", width: 600, height: 550),
@@ -140,11 +138,11 @@ struct CanvasCardPackerTests {
       )
     }
 
-    for i in 0..<rects.count {
-      for j in (i + 1)..<rects.count {
-        let insetA = rects[i].insetBy(dx: 1, dy: 1)
-        let insetB = rects[j].insetBy(dx: 1, dy: 1)
-        #expect(!insetA.intersects(insetB), "Cards \(i) and \(j) overlap")
+    for outer in 0..<rects.count {
+      for inner in (outer + 1)..<rects.count {
+        let insetA = rects[outer].insetBy(dx: 1, dy: 1)
+        let insetB = rects[inner].insetBy(dx: 1, dy: 1)
+        #expect(!insetA.intersects(insetB), "Cards \(outer) and \(inner) overlap")
       }
     }
   }
@@ -167,14 +165,14 @@ struct CanvasCardPackerTests {
     // Wide target → 2 columns.
     let result = packer.pack(cards: cards, targetRatio: 3.0)
 
-    let a = try #require(result.layouts["a"])
-    let b = try #require(result.layouts["b"])
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
 
     // Cards in different columns should have spacing between column edges.
-    #expect(a.position.x != b.position.x)
+    #expect(layoutA.position.x != layoutB.position.x)
     let colWidth: CGFloat = 600
-    let aRight = a.position.x + colWidth / 2
-    let bLeft = b.position.x - colWidth / 2
+    let aRight = layoutA.position.x + colWidth / 2
+    let bLeft = layoutB.position.x - colWidth / 2
     #expect(bLeft - aRight >= 20 - 1, "Column gap too small: \(bLeft - aRight)")
   }
 
@@ -186,11 +184,11 @@ struct CanvasCardPackerTests {
     // Narrow target → 1 column, stacked.
     let result = packer.pack(cards: cards, targetRatio: 0.5)
 
-    let a = try #require(result.layouts["a"])
-    let b = try #require(result.layouts["b"])
+    let layoutA = try #require(result.layouts["a"])
+    let layoutB = try #require(result.layouts["b"])
 
-    let aBottom = a.position.y + (a.size.height + 28) / 2
-    let bTop = b.position.y - (b.size.height + 28) / 2
+    let aBottom = layoutA.position.y + (layoutA.size.height + 28) / 2
+    let bTop = layoutB.position.y - (layoutB.size.height + 28) / 2
     #expect(bTop - aBottom >= 20 - 1, "Vertical gap too small: \(bTop - aBottom)")
   }
 }
