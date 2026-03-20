@@ -59,17 +59,18 @@ struct GitClient {
   nonisolated func repoRoot(for path: URL) async throws -> URL {
     let normalizedPath = Self.directoryURL(for: path)
     let wtURL = try wtScriptURL()
-    let output = try await runLoginShellProcess(
+    let output = try await runBundledWtProcess(
       operation: .repoRoot,
       executableURL: wtURL,
       arguments: ["root"],
       currentDirectoryURL: normalizedPath
     )
-    if output.isEmpty {
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
       let command = "\(wtURL.lastPathComponent) root"
       throw GitClientError.commandFailed(command: command, message: "Empty output")
     }
-    return URL(fileURLWithPath: output).standardizedFileURL
+    return URL(fileURLWithPath: trimmed).standardizedFileURL
   }
 
   nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
@@ -689,7 +690,7 @@ struct GitClient {
   nonisolated private func runWtList(repoRoot: URL) async throws -> String {
     let wtURL = try wtScriptURL()
     let arguments = ["ls", "--json"]
-    return try await runLoginShellProcess(
+    return try await runBundledWtProcess(
       operation: .worktreeList,
       executableURL: wtURL,
       arguments: arguments,
@@ -702,6 +703,28 @@ struct GitClient {
       fatalError("Bundled wt script not found")
     }
     return url
+  }
+
+  nonisolated private func runBundledWtProcess(
+    operation: GitOperation,
+    executableURL: URL,
+    arguments: [String],
+    currentDirectoryURL: URL?
+  ) async throws -> String {
+    let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
+    do {
+      return try await shell.run(executableURL, arguments, currentDirectoryURL).stdout
+    } catch {
+      guard shouldFallbackToLoginShell(error) else {
+        throw wrapShellError(error, operation: operation, command: command)
+      }
+      gitLogger.info("Falling back to login shell for \(operation.rawValue)")
+      do {
+        return try await shell.runLogin(executableURL, arguments, currentDirectoryURL).stdout
+      } catch {
+        throw wrapShellError(error, operation: operation, command: command)
+      }
+    }
   }
 
   nonisolated private func runLoginShellProcess(
@@ -845,6 +868,17 @@ struct GitClient {
 }
 
 private nonisolated let gitLogger = SupaLogger("Git")
+
+nonisolated private func shouldFallbackToLoginShell(_ error: Error) -> Bool {
+  guard let shellError = error as? ShellClientError else {
+    return false
+  }
+  if shellError.exitCode == 127 {
+    return true
+  }
+  let output = "\(shellError.stderr)\n\(shellError.stdout)".lowercased()
+  return output.contains("command not found")
+}
 
 nonisolated private func wrapShellError(
   _ error: Error,
