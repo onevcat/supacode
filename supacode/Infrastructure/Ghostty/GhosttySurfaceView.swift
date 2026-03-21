@@ -68,6 +68,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
   private var prevPressureStage: Int = 0
+  private var isBackgroundOpaqueOverride = false
   private lazy var cachedScreenContents = CachedValue<String>(duration: .milliseconds(500)) {
     [weak self] in
     self?.readScreenContents() ?? ""
@@ -353,10 +354,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
     addCursorRect(bounds, cursor: currentCursor)
   }
 
+  func toggleBackgroundOpacity() {
+    guard runtime.backgroundOpacity() < 1 else { return }
+    isBackgroundOpaqueOverride.toggle()
+    applyWindowBackgroundAppearance()
+  }
+
   private func applyWindowBackgroundAppearance() {
     guard let window, window.isVisible else { return }
     let opacity = runtime.backgroundOpacity()
-    if !window.styleMask.contains(.fullScreen), opacity < 1 {
+    if !isBackgroundOpaqueOverride, !window.styleMask.contains(.fullScreen), opacity < 1 {
       window.isOpaque = false
       window.titlebarAppearsTransparent = true
       window.backgroundColor = .white.withAlphaComponent(0.001)
