@@ -125,7 +125,7 @@ struct SettingsView: View {
     .alert(store: store.scope(state: \.$alert, action: \.alert))
     .frame(minWidth: 750, minHeight: 500)
     .background {
-      WindowAppearanceSetter(colorScheme: settingsStore.appearanceMode.colorScheme)
+      WindowAppearanceSetter(appearanceMode: settingsStore.appearanceMode)
       WindowLevelSetter(level: .normal)
     }
     .ignoresSafeArea(.container, edges: .top)

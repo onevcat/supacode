@@ -1,26 +1,38 @@
 import AppKit
+import Combine
 import SwiftUI
 
+/// Syncs the NSWindow appearance with the app's appearance mode.
+///
+/// SwiftUI's `preferredColorScheme` only affects the SwiftUI layer.
+/// This representable explicitly sets `NSWindow.appearance` so that
+/// AppKit-level chrome (toolbar, NSColor resolution) also follows.
+///
+/// For System mode, it observes `NSApp.effectiveAppearance` via KVO
+/// so the window tracks macOS appearance changes automatically.
 struct WindowAppearanceSetter: NSViewRepresentable {
-  let colorScheme: ColorScheme?
+  let appearanceMode: AppearanceMode
 
   func makeNSView(context: Context) -> WindowAppearanceView {
     let view = WindowAppearanceView()
-    view.colorScheme = colorScheme
+    view.appearanceMode = appearanceMode
     return view
   }
 
   func updateNSView(_ nsView: WindowAppearanceView, context: Context) {
-    nsView.colorScheme = colorScheme
+    nsView.appearanceMode = appearanceMode
   }
 }
 
 final class WindowAppearanceView: NSView {
-  var colorScheme: ColorScheme? {
+  var appearanceMode: AppearanceMode = .system {
     didSet {
+      guard appearanceMode != oldValue else { return }
       applyAppearance()
     }
   }
+
+  private var appearanceObservation: NSKeyValueObservation?
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -28,20 +40,27 @@ final class WindowAppearanceView: NSView {
   }
 
   private func applyAppearance() {
-    guard let window else {
-      return
+    guard let window else { return }
+    appearanceObservation = nil
+
+    let name: NSAppearance.Name = appearanceMode.colorScheme == .light ? .aqua : .darkAqua
+    if window.appearance?.name != name {
+      window.appearance = NSAppearance(named: name)
     }
-    switch colorScheme {
-    case .none:
-      window.appearance = nil
-    case .some(let scheme):
-      switch scheme {
-      case .light:
-        window.appearance = NSAppearance(named: .aqua)
-      case .dark:
-        window.appearance = NSAppearance(named: .darkAqua)
-      @unknown default:
-        window.appearance = nil
+
+    if appearanceMode == .system {
+      appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) {
+        [weak self, weak window] _, _ in
+        MainActor.assumeIsolated {
+          guard let window else { return }
+          let systemName: NSAppearance.Name =
+            NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .darkAqua : .aqua
+          if window.appearance?.name != systemName {
+            window.appearance = NSAppearance(named: systemName)
+          }
+          _ = self  // prevent unused warning while retaining weak ref for lifetime
+        }
       }
     }
   }
