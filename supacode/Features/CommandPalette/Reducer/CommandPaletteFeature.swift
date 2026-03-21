@@ -589,15 +589,25 @@ private func pullRequestDelegateAction(
   }
 }
 
-/// Ghostty actions that Prowl handles natively and should not appear as
-/// duplicates from the Ghostty command palette entries.
-private let filteredGhosttyActions: Set<String> = [
+/// Ghostty action keys that should be hidden from Prowl's command palette.
+///
+/// Includes:
+/// - actions Prowl already exposes natively (`check_for_updates`)
+/// - Ghostty actions intentionally unsupported by Prowl's architecture/platform
+private let filteredGhosttyActionKeys: Set<String> = [
   "check_for_updates",
+  "new_window",
+  "close_all_windows",
+  "goto_window",
+  "toggle_tab_overview",
+  "inspector",
+  "show_gtk_inspector",
+  "show_on_screen_keyboard",
 ]
 
 private func ghosttyCommandItems(_ commands: [GhosttyCommand]) -> [CommandPaletteItem] {
   commands.compactMap { command in
-    guard !filteredGhosttyActions.contains(command.action) else { return nil }
+    guard !filteredGhosttyActionKeys.contains(command.actionKey) else { return nil }
     let subtitle = command.description.trimmingCharacters(in: .whitespacesAndNewlines)
     return CommandPaletteItem(
       id: CommandPaletteItemID.ghosttyCommand(command),

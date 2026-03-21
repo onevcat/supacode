@@ -88,6 +88,56 @@ struct CommandPaletteFeatureTests {
     #expect(ghosttyItem?.subtitle == "Focus the split to the right.")
   }
 
+  @Test func commandPaletteItems_filtersUnsupportedGhosttyCommands() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(
+      from: state,
+      ghosttyCommands: [
+        GhosttyCommand(
+          title: "New Window",
+          description: "Create a new window",
+          action: "new_window",
+          actionKey: "new_window"
+        ),
+        GhosttyCommand(
+          title: "Next Window",
+          description: "Go to next window",
+          action: "goto_window:next",
+          actionKey: "goto_window"
+        ),
+        GhosttyCommand(
+          title: "Inspector",
+          description: "Open inspector",
+          action: "inspector",
+          actionKey: "inspector"
+        ),
+        GhosttyCommand(
+          title: "Focus Split Right",
+          description: "Focus the split to the right.",
+          action: "goto_split:right",
+          actionKey: "goto_split"
+        ),
+      ]
+    )
+
+    let ghosttyActions = items.compactMap { item -> String? in
+      if case .ghosttyCommand(let action) = item.kind {
+        return action
+      }
+      return nil
+    }
+
+    #expect(ghosttyActions.contains("new_window") == false)
+    #expect(ghosttyActions.contains("goto_window:next") == false)
+    #expect(ghosttyActions.contains("inspector") == false)
+    #expect(ghosttyActions.contains("goto_split:right"))
+  }
+
   @Test func commandPaletteItems_omitGhosttyCommandsWithoutSelectedWorktree() {
     let items = CommandPaletteFeature.commandPaletteItems(
       from: RepositoriesFeature.State(),
