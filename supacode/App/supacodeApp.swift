@@ -169,6 +169,9 @@ struct SupacodeApp: App {
           .environment(commandKeyObserver)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
+      .background {
+        WindowAppearanceSetter(colorScheme: store.settings.appearanceMode.colorScheme)
+      }
     }
     .environment(ghosttyShortcuts)
     .environment(commandKeyObserver)
