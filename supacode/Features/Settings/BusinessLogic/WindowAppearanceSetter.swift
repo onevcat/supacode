@@ -18,6 +18,7 @@ struct WindowAppearanceSetter: NSViewRepresentable {
 final class WindowAppearanceView: NSView {
   var colorScheme: ColorScheme? {
     didSet {
+      guard colorScheme != oldValue else { return }
       applyAppearance()
     }
   }
@@ -28,21 +29,13 @@ final class WindowAppearanceView: NSView {
   }
 
   private func applyAppearance() {
-    guard let window else {
-      return
+    guard let window else { return }
+    let desiredName: NSAppearance.Name? = switch colorScheme {
+    case .light: .aqua
+    case .dark: .darkAqua
+    default: nil
     }
-    switch colorScheme {
-    case .none:
-      window.appearance = nil
-    case .some(let scheme):
-      switch scheme {
-      case .light:
-        window.appearance = NSAppearance(named: .aqua)
-      case .dark:
-        window.appearance = NSAppearance(named: .darkAqua)
-      @unknown default:
-        window.appearance = nil
-      }
-    }
+    guard window.appearance?.name != desiredName else { return }
+    window.appearance = desiredName.flatMap { NSAppearance(named: $0) }
   }
 }

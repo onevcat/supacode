@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 enum TerminalTabBarColors {
@@ -19,11 +18,11 @@ enum TerminalTabBarColors {
   }
 
   static var activeText: Color {
-    Color(nsColor: .labelColor)
+    .primary
   }
 
   static var inactiveText: Color {
-    Color(nsColor: .secondaryLabelColor)
+    .secondary
   }
 
   static var separator: Color {

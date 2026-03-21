@@ -7,6 +7,8 @@ struct TerminalTabsOverflowShadow: View {
 
   @Environment(\.controlActiveState)
   private var activeState
+  @Environment(\.colorScheme)
+  private var colorScheme
   @Environment(\.surfaceTopChromeBackgroundOpacity)
   private var surfaceTopChromeBackgroundOpacity
 
@@ -27,9 +29,18 @@ struct TerminalTabsOverflowShadow: View {
 
   private var gradientColors: [Color] {
     [
-      TerminalTabBarColors.barBackground.opacity(chromeBackgroundOpacity),
-      TerminalTabBarColors.barBackground.opacity(0),
+      barBackground.opacity(chromeBackgroundOpacity),
+      barBackground.opacity(0),
     ]
+  }
+
+  private var barBackground: Color {
+    let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+    var resolved: NSColor = .windowBackgroundColor
+    appearance?.performAsCurrentDrawingAppearance {
+      resolved = NSColor.windowBackgroundColor.usingColorSpace(.sRGB) ?? .windowBackgroundColor
+    }
+    return Color(nsColor: resolved)
   }
 
   private var chromeBackgroundOpacity: Double {
