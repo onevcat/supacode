@@ -15,6 +15,8 @@ struct SettingsFeature {
     var notificationSoundEnabled: Bool
     var systemNotificationsEnabled: Bool
     var moveNotifiedWorktreeToTop: Bool
+    var commandFinishedNotificationEnabled: Bool
+    var commandFinishedNotificationThreshold: Int
     var analyticsEnabled: Bool
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
@@ -38,6 +40,8 @@ struct SettingsFeature {
       notificationSoundEnabled = settings.notificationSoundEnabled
       systemNotificationsEnabled = settings.systemNotificationsEnabled
       moveNotifiedWorktreeToTop = settings.moveNotifiedWorktreeToTop
+      commandFinishedNotificationEnabled = settings.commandFinishedNotificationEnabled
+      commandFinishedNotificationThreshold = settings.commandFinishedNotificationThreshold
       analyticsEnabled = settings.analyticsEnabled
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
@@ -60,6 +64,8 @@ struct SettingsFeature {
         notificationSoundEnabled: notificationSoundEnabled,
         systemNotificationsEnabled: systemNotificationsEnabled,
         moveNotifiedWorktreeToTop: moveNotifiedWorktreeToTop,
+        commandFinishedNotificationEnabled: commandFinishedNotificationEnabled,
+        commandFinishedNotificationThreshold: commandFinishedNotificationThreshold,
         analyticsEnabled: analyticsEnabled,
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
@@ -78,6 +84,7 @@ struct SettingsFeature {
     case settingsLoaded(GlobalSettings)
     case setSelection(SettingsSection?)
     case setSystemNotificationsEnabled(Bool)
+    case setCommandFinishedNotificationThreshold(String)
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
@@ -133,6 +140,8 @@ struct SettingsFeature {
         state.notificationSoundEnabled = normalizedSettings.notificationSoundEnabled
         state.systemNotificationsEnabled = normalizedSettings.systemNotificationsEnabled
         state.moveNotifiedWorktreeToTop = normalizedSettings.moveNotifiedWorktreeToTop
+        state.commandFinishedNotificationEnabled = normalizedSettings.commandFinishedNotificationEnabled
+        state.commandFinishedNotificationThreshold = normalizedSettings.commandFinishedNotificationThreshold
         state.analyticsEnabled = normalizedSettings.analyticsEnabled
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
@@ -145,9 +154,18 @@ struct SettingsFeature {
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 
       case .binding:
+        state.commandFinishedNotificationThreshold = min(max(state.commandFinishedNotificationThreshold, 0), 600)
         let defaultWorktreeBaseDirectoryPath = state.globalSettings.defaultWorktreeBaseDirectoryPath
         state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
           defaultWorktreeBaseDirectoryPath
+        return persist(state)
+
+      case .setCommandFinishedNotificationThreshold(let text):
+        if let parsed = Int(text) {
+          state.commandFinishedNotificationThreshold = min(max(parsed, 0), 600)
+        } else {
+          state.commandFinishedNotificationThreshold = 10
+        }
         return persist(state)
 
       case .setSystemNotificationsEnabled(let isEnabled):
