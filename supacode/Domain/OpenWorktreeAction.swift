@@ -26,6 +26,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
   case terminal
   case vscode
   case vscodeInsiders
+  case vscodium
   case warp
   case webstorm
   case wezterm
@@ -56,6 +57,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .terminal: "Terminal"
     case .vscode: "VS Code"
     case .vscodeInsiders: "VS Code Insiders"
+    case .vscodium: "VSCodium"
     case .warp: "Warp"
     case .wezterm: "WezTerm"
     case .webstorm: "WebStorm"
@@ -72,7 +74,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .editor: "$EDITOR"
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
       .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       title
     }
   }
@@ -94,7 +96,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
       return true
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
       .intellij, .kitty, .pycharm, .rustrover, .smartgit, .sourcetree, .sublimeMerge, .terminal,
-      .vscode, .vscodeInsiders, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
+      .vscode, .vscodeInsiders, .vscodium, .warp, .webstorm, .wezterm, .windsurf, .xcode, .zed:
       return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
     }
   }
@@ -121,6 +123,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .terminal: "terminal"
     case .vscode: "vscode"
     case .vscodeInsiders: "vscode-insiders"
+    case .vscodium: "vscodium"
     case .warp: "warp"
     case .webstorm: "webstorm"
     case .wezterm: "wezterm"
@@ -152,6 +155,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     case .terminal: "com.apple.Terminal"
     case .vscode: "com.microsoft.VSCode"
     case .vscodeInsiders: "com.microsoft.VSCodeInsiders"
+    case .vscodium: "com.vscodium"
     case .warp: "dev.warp.Warp-Stable"
     case .webstorm: "com.jetbrains.WebStorm"
     case .wezterm: "com.github.wez.wezterm"
@@ -169,6 +173,7 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
     .vscode,
     .windsurf,
     .vscodeInsiders,
+    .vscodium,
     .intellij,
     .webstorm,
     .pycharm,
@@ -279,8 +284,8 @@ enum OpenWorktreeAction: CaseIterable, Identifiable {
         }
       }
     case .alacritty, .antigravity, .cursor, .fork, .githubDesktop, .gitkraken, .gitup, .ghostty,
-      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .warp,
-      .wezterm, .windsurf, .xcode, .zed:
+      .kitty, .smartgit, .sourcetree, .sublimeMerge, .terminal, .vscode, .vscodeInsiders, .vscodium,
+      .warp, .wezterm, .windsurf, .xcode, .zed:
       guard
         let appURL = NSWorkspace.shared.urlForApplication(
           withBundleIdentifier: bundleIdentifier
