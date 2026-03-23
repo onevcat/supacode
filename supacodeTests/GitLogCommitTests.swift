@@ -4,12 +4,16 @@ import Testing
 @testable import supacode
 
 struct GitLogCommitTests {
+  private let fieldSep = GitLogCommit.fieldSeparator
+  private let recordSep = GitLogCommit.recordSeparator
+
   @Test
   func parsesSingleCommit() {
-    let fs = GitLogCommit.fieldSeparator
-    let rs = GitLogCommit.recordSeparator
     let output =
-      "abc1234567890\(fs)abc1234\(fs)Alice\(fs)2026-03-20T10:00:00+00:00\(fs)feat: add feature\(fs)feat: add feature\n\nSome body text\(rs)"
+      [
+        "abc1234567890", "abc1234", "Alice", "2026-03-20T10:00:00+00:00",
+        "feat: add feature", "feat: add feature\n\nSome body text",
+      ].joined(separator: fieldSep) + recordSep
 
     let commits = GitLogCommit.parse(output)
 
@@ -23,14 +27,14 @@ struct GitLogCommitTests {
 
   @Test
   func parsesMultipleCommits() {
-    let fs = GitLogCommit.fieldSeparator
-    let rs = GitLogCommit.recordSeparator
-    let output = [
-      "hash1\(fs)h1\(fs)Alice\(fs)2026-03-20T10:00:00+00:00\(fs)first\(fs)first\(rs)",
-      "hash2\(fs)h2\(fs)Bob\(fs)2026-03-19T09:00:00+00:00\(fs)second\(fs)second\(rs)",
-    ].joined()
+    let first =
+      ["hash1", "h1", "Alice", "2026-03-20T10:00:00+00:00", "first", "first"]
+      .joined(separator: fieldSep) + recordSep
+    let second =
+      ["hash2", "h2", "Bob", "2026-03-19T09:00:00+00:00", "second", "second"]
+      .joined(separator: fieldSep) + recordSep
 
-    let commits = GitLogCommit.parse(output)
+    let commits = GitLogCommit.parse(first + second)
 
     #expect(commits.count == 2)
     #expect(commits[0].shortHash == "h1")
@@ -51,10 +55,10 @@ struct GitLogCommitTests {
 
   @Test
   func parsesCommitWithNewlinesInBody() {
-    let fs = GitLogCommit.fieldSeparator
-    let rs = GitLogCommit.recordSeparator
     let body = "subject line\n\nLine 1\nLine 2\nLine 3"
-    let output = "hash1\(fs)h1\(fs)Alice\(fs)2026-03-20T10:00:00+00:00\(fs)subject line\(fs)\(body)\(rs)"
+    let output =
+      ["hash1", "h1", "Alice", "2026-03-20T10:00:00+00:00", "subject line", body]
+      .joined(separator: fieldSep) + recordSep
 
     let commits = GitLogCommit.parse(output)
 
@@ -64,11 +68,12 @@ struct GitLogCommitTests {
 
   @Test
   func skipsIncompleteRecords() {
-    let fs = GitLogCommit.fieldSeparator
-    let rs = GitLogCommit.recordSeparator
-    let output = "onlyOneField\(rs)hash1\(fs)h1\(fs)Alice\(fs)2026-03-20T10:00:00+00:00\(fs)ok\(fs)ok\(rs)"
+    let incomplete = "onlyOneField" + recordSep
+    let valid =
+      ["hash1", "h1", "Alice", "2026-03-20T10:00:00+00:00", "ok", "ok"]
+      .joined(separator: fieldSep) + recordSep
 
-    let commits = GitLogCommit.parse(output)
+    let commits = GitLogCommit.parse(incomplete + valid)
 
     #expect(commits.count == 1)
     #expect(commits[0].subject == "ok")
@@ -76,9 +81,9 @@ struct GitLogCommitTests {
 
   @Test
   func parsesDateCorrectly() {
-    let fs = GitLogCommit.fieldSeparator
-    let rs = GitLogCommit.recordSeparator
-    let output = "hash1\(fs)h1\(fs)Alice\(fs)2026-03-20T10:30:00+00:00\(fs)test\(fs)test\(rs)"
+    let output =
+      ["hash1", "h1", "Alice", "2026-03-20T10:30:00+00:00", "test", "test"]
+      .joined(separator: fieldSep) + recordSep
 
     let commits = GitLogCommit.parse(output)
 
