@@ -11,6 +11,7 @@ struct CanvasView: View {
   @State private var canvasScale: CGFloat = 1.0
   @State private var lastCanvasScale: CGFloat = 1.0
   @State private var focusedTabID: TerminalTabID?
+  @State private var lastTitleBarTapDate: Date = .distantPast
   @State private var activeResize: [TerminalTabID: ActiveResize] = [:]
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
@@ -82,11 +83,18 @@ struct CanvasView: View {
                 onSplitOperation: { operation in
                   state.performSplitOperation(operation, in: tab.id)
                 },
-                onTitleBarDoubleClick: {
+                onTitleBarTap: {
+                  let wasAlreadyFocused = focusedTabID == tab.id
                   if let activeSurface = state.surfaceView(for: tab.id) {
                     focusCard(tab.id, surfaceView: activeSurface, states: activeStates)
                   }
-                  onExitToTab()
+                  let now = Date()
+                  if wasAlreadyFocused,
+                    now.timeIntervalSince(lastTitleBarTapDate) <= NSEvent.doubleClickInterval
+                  {
+                    onExitToTab()
+                  }
+                  lastTitleBarTapDate = now
                 }
               )
               .scaleEffect(canvasScale, anchor: .center)

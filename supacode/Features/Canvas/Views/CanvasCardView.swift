@@ -14,7 +14,7 @@ struct CanvasCardView: View {
   let onResize: (CardResizeEdge, CGSize) -> Void
   let onResizeEnd: () -> Void
   let onSplitOperation: (TerminalSplitTreeView.Operation) -> Void
-  let onTitleBarDoubleClick: () -> Void
+  let onTitleBarTap: () -> Void
 
   enum CardResizeEdge {
     case leading, trailing, top, bottom
@@ -84,7 +84,8 @@ struct CanvasCardView: View {
       }
     }
     .background(.bar)
-    .onTapGesture(count: 2) { onTitleBarDoubleClick() }
+    .accessibilityAddTraits(.isButton)
+    .onTapGesture { onTitleBarTap() }
     .gesture(
       DragGesture(coordinateSpace: .global)
         .updating($dragTranslation) { value, state, _ in
