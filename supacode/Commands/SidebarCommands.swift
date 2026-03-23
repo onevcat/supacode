@@ -40,6 +40,22 @@ struct SidebarCommands: Commands {
       )
       .help("Show Diff (\(AppShortcuts.showDiff.display))")
       .disabled(store.repositories.selectedWorktreeID == nil)
+      Button("Git Log") {
+        let repos = store.repositories
+        guard let worktreeID = repos.selectedWorktreeID,
+          let worktree = repos.worktree(for: worktreeID)
+        else { return }
+        GitLogWindowManager.shared.show(
+          worktreeURL: worktree.workingDirectory,
+          branchName: worktree.name,
+        )
+      }
+      .keyboardShortcut(
+        AppShortcuts.showGitLog.keyEquivalent,
+        modifiers: AppShortcuts.showGitLog.modifiers
+      )
+      .help("Git Log (\(AppShortcuts.showGitLog.display))")
+      .disabled(store.repositories.selectedWorktreeID == nil)
     }
   }
 }
