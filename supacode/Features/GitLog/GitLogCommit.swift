@@ -13,9 +13,10 @@ nonisolated struct GitLogCommit: Identifiable, Hashable, Sendable {
   static let fieldSeparator = "\u{1F}"
   static let recordSeparator = "\u{1E}"
 
-  static let logFormat: String = [
-    "%H", "%h", "%an", "%aI", "%s", "%B",
-  ].joined(separator: fieldSeparator) + recordSeparator
+  static let logFormat: String =
+    [
+      "%H", "%h", "%an", "%aI", "%s", "%B",
+    ].joined(separator: fieldSeparator) + recordSeparator
 
   static func parse(_ output: String) -> [GitLogCommit] {
     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)

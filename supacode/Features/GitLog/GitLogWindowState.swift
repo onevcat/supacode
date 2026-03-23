@@ -1,6 +1,8 @@
 import Foundation
 import YiTong
 
+private let gitLogLogger = SupaLogger("GitLog")
+
 @Observable
 @MainActor
 final class GitLogWindowState {
@@ -48,14 +50,23 @@ final class GitLogWindowState {
   }
 
   func selectCommit(_ commit: GitLogCommit) {
-    guard selectedCommit != commit else { return }
+    guard selectedCommit != commit else {
+      gitLogLogger.info("selectCommit: skipped (same commit \(commit.shortHash))")
+      return
+    }
+    gitLogLogger.info("selectCommit: \(commit.shortHash) worktreeURL=\(worktreeURL?.path ?? "nil")")
     selectedCommit = commit
     commitFiles = []
     selectedFile = nil
     diffDocument = nil
     documentCache = [:]
+    isLoadingDetail = true
     detailTask?.cancel()
-    guard let worktreeURL else { return }
+    guard let worktreeURL else {
+      gitLogLogger.warning("selectCommit: worktreeURL is nil, aborting")
+      isLoadingDetail = false
+      return
+    }
     detailTask = Task { await loadCommitDetail(commit: commit, worktreeURL: worktreeURL) }
   }
 
@@ -75,7 +86,10 @@ final class GitLogWindowState {
         skip: skip,
         count: Self.pageSize
       )
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled else {
+        isLoadingCommits = false
+        return
+      }
       let newCommits = GitLogCommit.parse(output)
       commits.append(contentsOf: newCommits)
       loadedCount = commits.count
@@ -91,13 +105,15 @@ final class GitLogWindowState {
   }
 
   private func loadCommitDetail(commit: GitLogCommit, worktreeURL: URL) async {
-    isLoadingDetail = true
     let output = await GitClient().commitDiffNameStatus(
       commit: commit.hash,
       at: worktreeURL
     )
     guard !Task.isCancelled else { return }
     let files = DiffChangedFile.parseNameStatus(output)
+    gitLogLogger.info(
+      "commit \(commit.shortHash) diff-tree returned \(files.count) files"
+    )
     commitFiles = files
 
     let documents = await Self.loadAllDocuments(
@@ -152,29 +168,35 @@ final class GitLogWindowState {
     switch file.status {
     case .added:
       oldContents = ""
-      newContents = await gitClient.showFileAtCommit(
-        file.displayPath, commit: commit, in: worktreeURL
-      ) ?? ""
+      newContents =
+        await gitClient.showFileAtCommit(
+          file.displayPath, commit: commit, in: worktreeURL
+        ) ?? ""
     case .deleted:
-      oldContents = await gitClient.showFileAtCommit(
-        file.oldPath ?? "", commit: "\(commit)~1", in: worktreeURL
-      ) ?? ""
+      oldContents =
+        await gitClient.showFileAtCommit(
+          file.oldPath ?? "", commit: "\(commit)~1", in: worktreeURL
+        ) ?? ""
       newContents = ""
     case .renamed:
-      oldContents = await gitClient.showFileAtCommit(
-        file.oldPath ?? "", commit: "\(commit)~1", in: worktreeURL
-      ) ?? ""
-      newContents = await gitClient.showFileAtCommit(
-        file.newPath ?? "", commit: commit, in: worktreeURL
-      ) ?? ""
+      oldContents =
+        await gitClient.showFileAtCommit(
+          file.oldPath ?? "", commit: "\(commit)~1", in: worktreeURL
+        ) ?? ""
+      newContents =
+        await gitClient.showFileAtCommit(
+          file.newPath ?? "", commit: commit, in: worktreeURL
+        ) ?? ""
     default:
       let path = file.displayPath
-      oldContents = await gitClient.showFileAtCommit(
-        path, commit: "\(commit)~1", in: worktreeURL
-      ) ?? ""
-      newContents = await gitClient.showFileAtCommit(
-        path, commit: commit, in: worktreeURL
-      ) ?? ""
+      oldContents =
+        await gitClient.showFileAtCommit(
+          path, commit: "\(commit)~1", in: worktreeURL
+        ) ?? ""
+      newContents =
+        await gitClient.showFileAtCommit(
+          path, commit: commit, in: worktreeURL
+        ) ?? ""
     }
 
     let diffFile = DiffFile(

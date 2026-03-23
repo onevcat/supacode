@@ -142,7 +142,8 @@ struct GitLogWindowContentView: View {
           .foregroundStyle(.tertiary)
       }
       if !commit.body.isEmpty, commit.body != commit.subject {
-        let bodyWithoutSubject = commit.body.hasPrefix(commit.subject)
+        let bodyWithoutSubject =
+          commit.body.hasPrefix(commit.subject)
           ? String(commit.body.dropFirst(commit.subject.count)).trimmingCharacters(
             in: .whitespacesAndNewlines
           )
