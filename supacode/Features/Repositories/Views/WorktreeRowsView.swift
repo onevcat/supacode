@@ -270,6 +270,12 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
+    Button("Git Log") {
+      GitLogWindowManager.shared.show(
+        worktreeURL: worktree.workingDirectory,
+        branchName: worktree.name,
+      )
+    }
     Button(archiveTitle) {
       archiveWorktrees(archiveTargets)
     }

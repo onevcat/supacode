@@ -22,6 +22,9 @@ enum GitOperation: String {
   case untrackedFilePaths = "untracked_file_paths"
   case showFile = "show_file"
   case remoteInfo = "remote_info"
+  case commitLog = "commit_log"
+  case commitShow = "commit_show"
+  case commitDiffNameStatus = "commit_diff_name_status"
 }
 
 enum GitClientError: LocalizedError {
@@ -528,6 +531,60 @@ struct GitClient {
       }
     }
     return nil
+  }
+
+  nonisolated func commitLog(
+    at worktreeURL: URL,
+    skip: Int = 0,
+    count: Int = 50
+  ) async throws -> String {
+    let path = worktreeURL.path(percentEncoded: false)
+    return try await runGit(
+      operation: .commitLog,
+      arguments: [
+        "-C", path,
+        "log",
+        "--format=\(GitLogCommit.logFormat)",
+        "--skip=\(skip)",
+        "-n", "\(count)",
+      ]
+    )
+  }
+
+  nonisolated func showFileAtCommit(
+    _ relativePath: String,
+    commit: String,
+    in worktreeURL: URL
+  ) async -> String? {
+    let path = worktreeURL.path(percentEncoded: false)
+    do {
+      return try await runGit(
+        operation: .commitShow,
+        arguments: ["-C", path, "show", "\(commit):\(relativePath)"]
+      )
+    } catch {
+      return nil
+    }
+  }
+
+  nonisolated func commitDiffNameStatus(
+    commit: String,
+    at worktreeURL: URL
+  ) async -> String {
+    let path = worktreeURL.path(percentEncoded: false)
+    do {
+      return try await runGit(
+        operation: .commitDiffNameStatus,
+        arguments: [
+          "-C", path,
+          "-c", "core.quotePath=false",
+          "diff-tree", "--no-commit-id", "-r", "-m", "--first-parent",
+          "--name-status", commit,
+        ]
+      )
+    } catch {
+      return ""
+    }
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {
