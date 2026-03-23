@@ -358,8 +358,10 @@ struct CanvasView: View {
   private var canvasToolbar: some View {
     HStack(spacing: 8) {
       Button {
-        arrangeCards()
-        fitToView(canvasSize: viewportSize)
+        withAnimation(.easeInOut(duration: 0.2)) {
+          arrangeCards()
+          fitToView(canvasSize: viewportSize)
+        }
       } label: {
         Image(systemName: "rectangle.3.group")
           .font(.body)
@@ -369,8 +371,10 @@ struct CanvasView: View {
       .help("Arrange cards preserving sizes")
 
       Button {
-        organizeCards()
-        fitToView(canvasSize: viewportSize)
+        withAnimation(.easeInOut(duration: 0.2)) {
+          organizeCards()
+          fitToView(canvasSize: viewportSize)
+        }
       } label: {
         Image(systemName: "square.grid.2x2")
           .font(.body)
