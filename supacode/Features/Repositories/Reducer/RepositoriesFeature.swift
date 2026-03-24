@@ -653,7 +653,7 @@ struct RepositoriesFeature {
         guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
         state.selection = .repository(repositoryID)
         state.sidebarSelectedWorktreeIDs = []
-        return .send(.delegate(.selectedWorktreeChanged(nil)))
+        return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
       case .selectWorktree(let worktreeID, let focusTerminal):
         setSingleWorktreeSelection(worktreeID, state: &state)
@@ -2959,6 +2959,39 @@ extension RepositoriesFeature.State {
   var selectedRepository: Repository? {
     guard let selectedRepositoryID else { return nil }
     return repositories[id: selectedRepositoryID]
+  }
+
+  var selectedTerminalWorktree: Worktree? {
+    if let selectedWorktreeID {
+      return worktree(for: selectedWorktreeID)
+    }
+    guard let selectedRepository,
+      selectedRepository.capabilities.supportsRunnableFolderActions,
+      !selectedRepository.capabilities.supportsWorktrees
+    else {
+      return nil
+    }
+    return Worktree(
+      id: selectedRepository.id,
+      name: selectedRepository.name,
+      detail: selectedRepository.rootURL.path(percentEncoded: false),
+      workingDirectory: selectedRepository.rootURL,
+      repositoryRootURL: selectedRepository.rootURL
+    )
+  }
+
+  var terminalStateIDs: Set<Worktree.ID> {
+    Set(
+      repositories.flatMap { repository -> [Worktree.ID] in
+        if repository.capabilities.supportsWorktrees {
+          repository.worktrees.map(\.id)
+        } else if repository.capabilities.supportsRunnableFolderActions {
+          [repository.id]
+        } else {
+          []
+        }
+      }
+    )
   }
 
   var expandedRepositoryIDs: Set<Repository.ID> {

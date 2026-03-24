@@ -367,6 +367,34 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func selectPlainRepositorySendsPlainFolderTerminalTargetDelegate() async {
+    let repository = makeRepository(
+      id: "/tmp/folder",
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repository.id)) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    #expect(
+      store.state.selectedTerminalWorktree
+        == Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+    )
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
   @Test func selectRepositoryIgnoresUnknownRepository() async {
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()

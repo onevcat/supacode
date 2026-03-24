@@ -15,6 +15,7 @@ struct WorktreeDetailView: View {
     let repositories = state.repositories
     let selectedRow = repositories.selectedRow(for: repositories.selectedWorktreeID)
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
+    let selectedTerminalWorktree = repositories.selectedTerminalWorktree
     let selectedWorktreeSummaries = selectedWorktreeSummaries(from: repositories)
     let showsMultiSelectionSummary = shouldShowMultiSelectionSummary(
       repositories: repositories,
@@ -25,13 +26,13 @@ struct WorktreeDetailView: View {
       selectedWorktreeID: repositories.selectedWorktreeID,
       repositories: repositories
     )
-    let hasActiveWorktree =
-      selectedWorktree != nil
+    let hasActiveTerminalTarget =
+      selectedTerminalWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
-    let runScriptEnabled = hasActiveWorktree
-    let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let runScriptEnabled = hasActiveTerminalTarget
+    let runScriptIsRunning = selectedTerminalWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let customCommands = state.selectedCustomCommands
     let notificationGroups = repositories.toolbarNotificationGroups(terminalManager: terminalManager)
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
@@ -41,6 +42,7 @@ struct WorktreeDetailView: View {
       repositories: repositories,
       loadingInfo: loadingInfo,
       selectedWorktree: selectedWorktree,
+      selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
     .navigationTitle(repositories.isShowingCanvas ? "Canvas" : "")
@@ -55,7 +57,7 @@ struct WorktreeDetailView: View {
             onDismissAll: { dismissAllToolbarNotifications(in: notificationGroups) }
           )
         }
-      } else if hasActiveWorktree, let selectedWorktree {
+      } else if selectedWorktree != nil && hasActiveTerminalTarget, let selectedWorktree {
         let pullRequest = repositories.worktreeInfo(for: selectedWorktree.id)?.pullRequest
         let matchesBranch =
           if let pullRequest {
@@ -101,7 +103,7 @@ struct WorktreeDetailView: View {
       }
     }
     let actions = makeFocusedActions(
-      hasActiveWorktree: hasActiveWorktree,
+      hasActiveWorktree: hasActiveTerminalTarget,
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
     )
@@ -145,6 +147,7 @@ struct WorktreeDetailView: View {
     repositories: RepositoriesFeature.State,
     loadingInfo: WorktreeLoadingInfo?,
     selectedWorktree: Worktree?,
+    selectedTerminalWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
@@ -160,27 +163,27 @@ struct WorktreeDetailView: View {
       selectedWorktreeSummaries: selectedWorktreeSummaries
     ) {
       MultiSelectedWorktreesDetailView(rows: selectedWorktreeSummaries)
-    } else if let selectedRepository = repositories.selectedRepository {
-      RepositoryDetailView(repository: selectedRepository)
     } else if let loadingInfo {
       WorktreeLoadingView(info: loadingInfo)
-    } else if let selectedWorktree {
-      let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedWorktree.id)
-      let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedWorktree.id)
+    } else if let selectedTerminalWorktree {
+      let shouldRunSetupScript = repositories.pendingSetupScriptWorktreeIDs.contains(selectedTerminalWorktree.id)
+      let shouldFocusTerminal = repositories.shouldFocusTerminal(for: selectedTerminalWorktree.id)
       WorktreeTerminalTabsView(
-        worktree: selectedWorktree,
+        worktree: selectedTerminalWorktree,
         manager: terminalManager,
         shouldRunSetupScript: shouldRunSetupScript,
         forceAutoFocus: shouldFocusTerminal,
         createTab: { store.send(.newTerminal) }
       )
-      .id(selectedWorktree.id)
+      .id(selectedTerminalWorktree.id)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .onAppear {
         if shouldFocusTerminal {
-          store.send(.repositories(.consumeTerminalFocus(selectedWorktree.id)))
+          store.send(.repositories(.consumeTerminalFocus(selectedTerminalWorktree.id)))
         }
       }
+    } else if let selectedRepository = repositories.selectedRepository {
+      RepositoryDetailView(repository: selectedRepository)
     } else {
       EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
     }

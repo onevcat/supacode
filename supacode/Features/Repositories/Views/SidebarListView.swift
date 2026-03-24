@@ -23,8 +23,8 @@ struct SidebarListView: View {
         } else {
           nextSelections.remove(.archivedWorktrees)
           nextSelections.remove(.canvas)
-          if let selectedRepositoryID = state.selectedRepositoryID {
-            nextSelections = [.repository(selectedRepositoryID)]
+          if let selectedRepository = state.selectedRepository, selectedRepository.kind == .plain {
+            nextSelections = [.repository(selectedRepository.id)]
           } else if let selectedWorktreeID = state.selectedWorktreeID {
             nextSelections.insert(.worktree(selectedWorktreeID))
           }
@@ -51,8 +51,22 @@ struct SidebarListView: View {
         }
 
         if let repositoryID = repositorySelections.first {
-          sidebarSelections = [.repository(repositoryID)]
-          store.send(.selectRepository(repositoryID))
+          guard let repository = state.repositories[id: repositoryID] else {
+            return
+          }
+          if repository.capabilities.supportsWorktrees {
+            withAnimation(.easeOut(duration: 0.2)) {
+              if expandedRepoIDs.contains(repositoryID) {
+                expandedRepoIDs.remove(repositoryID)
+              } else {
+                expandedRepoIDs.insert(repositoryID)
+              }
+            }
+            sidebarSelections = []
+          } else {
+            sidebarSelections = [.repository(repositoryID)]
+            store.send(.selectRepository(repositoryID))
+          }
           return
         }
 

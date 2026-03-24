@@ -205,7 +205,7 @@ struct CommandPaletteFeature {
         kind: .refreshWorktrees
       )
     )
-    if repositories.selectedWorktreeID != nil {
+    if repositories.selectedTerminalWorktree != nil {
       items.append(contentsOf: ghosttyCommandItems(ghosttyCommands))
     }
     if let selectedWorktreeID = repositories.selectedWorktreeID,

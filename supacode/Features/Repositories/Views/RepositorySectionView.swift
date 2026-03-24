@@ -30,54 +30,71 @@ struct RepositorySectionView: View {
         }
       }
     }
+    let activateHeader = {
+      if repository.capabilities.supportsWorktrees {
+        toggleExpanded()
+      } else {
+        store.send(.selectRepository(repository.id))
+      }
+    }
     let isDragging = isDragActive
 
-    Group {
-      HStack {
+    let header = HStack {
+      Button(action: activateHeader) {
         RepoHeaderRow(
           name: repository.name,
           isRemoving: isRemovingRepository
         )
         .frame(maxWidth: .infinity, alignment: .leading)
-        if isRemovingRepository && !isDragging {
-          ProgressView()
-            .controlSize(.small)
+        .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .disabled(isRemovingRepository)
+      .help(
+        repository.capabilities.supportsWorktrees
+          ? (isExpanded ? "Collapse" : "Expand")
+          : "Open folder terminal"
+      )
+      if isRemovingRepository && !isDragging {
+        ProgressView()
+          .controlSize(.small)
+      }
+      if isHovering && !isDragging {
+        Menu {
+          Button("Repo Settings") {
+            openRepoSettings()
+          }
+          .help("Repo Settings ")
+          Button("Remove Repository") {
+            store.send(.requestRemoveRepository(repository.id))
+          }
+          .help("Remove repository ")
+          .disabled(isRemovingRepository)
+        } label: {
+          Label("Repository options", systemImage: "ellipsis")
+            .labelStyle(.iconOnly)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
-        if isHovering && !isDragging {
-          Menu {
-            Button("Repo Settings") {
-              openRepoSettings()
-            }
-            .help("Repo Settings ")
-            Button("Remove Repository") {
-              store.send(.requestRemoveRepository(repository.id))
-            }
-            .help("Remove repository ")
-            .disabled(isRemovingRepository)
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("Repository options ")
+        .disabled(isRemovingRepository)
+        if repository.capabilities.supportsWorktrees {
+          Button {
+            store.send(.createRandomWorktreeInRepository(repository.id))
           } label: {
-            Label("Repository options", systemImage: "ellipsis")
+            Label("New Worktree", systemImage: "plus")
               .labelStyle(.iconOnly)
               .frame(maxHeight: .infinity)
               .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
-          .help("Repository options ")
+          .help("New Worktree (\(AppShortcuts.newWorktree.display))")
           .disabled(isRemovingRepository)
-          if repository.capabilities.supportsWorktrees {
-            Button {
-              store.send(.createRandomWorktreeInRepository(repository.id))
-            } label: {
-              Label("New Worktree", systemImage: "plus")
-                .labelStyle(.iconOnly)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("New Worktree (\(AppShortcuts.newWorktree.display))")
-            .disabled(isRemovingRepository)
-          }
+        }
+        if repository.capabilities.supportsWorktrees {
           Button {
             toggleExpanded()
           } label: {
@@ -92,36 +109,43 @@ struct RepositorySectionView: View {
           .help(isExpanded ? "Collapse" : "Expand")
         }
       }
-      .frame(maxWidth: .infinity)
-      .frame(height: headerCellHeight, alignment: .center)
-      .overlay(alignment: .top) {
-        if showsTopSeparator {
-          Rectangle()
-            .fill(.secondary)
-            .frame(height: 1)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-        }
+    }
+    .frame(maxWidth: .infinity)
+    .frame(height: headerCellHeight, alignment: .center)
+    .overlay(alignment: .top) {
+      if showsTopSeparator {
+        Rectangle()
+          .fill(.secondary)
+          .frame(height: 1)
+          .frame(maxWidth: .infinity)
+          .accessibilityHidden(true)
       }
-      .onHover { isHovering = $0 }
-      .contentShape(.rect)
-      .contextMenu {
-        Button("Repo Settings") {
-          openRepoSettings()
-        }
-        .help("Repo Settings ")
-        Button("Remove Repository") {
-          store.send(.requestRemoveRepository(repository.id))
-        }
-        .help("Remove repository ")
-        .disabled(isRemovingRepository)
+    }
+    .onHover { isHovering = $0 }
+    .contentShape(.rect)
+    .contextMenu {
+      Button("Repo Settings") {
+        openRepoSettings()
       }
-      .contentShape(.dragPreview, .rect)
-      .tag(SidebarSelection.repository(repository.id))
-      .listRowBackground(Color.clear)
-      .environment(\.colorScheme, colorScheme)
-      .preferredColorScheme(colorScheme)
+      .help("Repo Settings ")
+      Button("Remove Repository") {
+        store.send(.requestRemoveRepository(repository.id))
+      }
+      .help("Remove repository ")
+      .disabled(isRemovingRepository)
+    }
+    .contentShape(.dragPreview, .rect)
+    .listRowBackground(Color.clear)
+    .environment(\.colorScheme, colorScheme)
+    .preferredColorScheme(colorScheme)
 
+    Group {
+      if repository.capabilities.supportsWorktrees {
+        header
+      } else {
+        header
+          .tag(SidebarSelection.repository(repository.id))
+      }
       if isExpanded {
         WorktreeRowsView(
           repository: repository,

@@ -129,8 +129,11 @@ struct AppFeature {
         }
 
       case .repositories(.delegate(.selectedWorktreeChanged(let worktree))):
-        let lastFocusedWorktreeID = worktree?.id
+        let lastFocusedWorktreeID = state.repositories.selectedWorktreeID
         let repositoryPersistence = repositoryPersistence
+        let isPlainFolderSelection =
+          state.repositories.selectedRepository?.capabilities.supportsRunnableFolderActions == true
+          && state.repositories.selectedRepository?.capabilities.supportsWorktrees == false
         guard let worktree else {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
@@ -171,26 +174,38 @@ struct AppFeature {
         @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
         let settings = repositorySettings
         let onevcatSettings = onevcatRepositorySettings
-        return .merge(
-          .run { _ in
-            await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
-          },
+        var effects: [Effect<Action>] = []
+        if !isPlainFolderSelection {
+          effects.append(
+            .run { _ in
+              await repositoryPersistence.saveLastFocusedWorktreeID(lastFocusedWorktreeID)
+            }
+          )
+        }
+        effects.append(
           .run { _ in
             await terminalClient.send(.setSelectedWorktreeID(worktree.id))
-          },
+          }
+        )
+        effects.append(
           .run { _ in
-            await worktreeInfoWatcher.send(.setSelectedWorktreeID(worktree.id))
-          },
+            await worktreeInfoWatcher.send(.setSelectedWorktreeID(isPlainFolderSelection ? nil : worktree.id))
+          }
+        )
+        effects.append(
           .run { _ in
             await MainActor.run {
               OnevcatCustomShortcutRegistry.shared.setShortcuts([])
             }
-          },
+          }
+        )
+        effects.append(
           .concatenate(
             .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID)),
             .send(.worktreeOnevcatSettingsLoaded(onevcatSettings, worktreeID: worktreeID))
           )
         )
+        return .merge(effects)
 
       case .repositories(.delegate(.worktreeCreated(let worktree))):
         let shouldRunSetupScript =
@@ -207,9 +222,7 @@ struct AppFeature {
 
       case .repositories(.delegate(.repositoriesChanged(let repositories))):
         let archivedIDs = state.repositories.archivedWorktreeIDSet
-        let ids = Set(
-          repositories.flatMap { $0.worktrees.map(\.id) }.filter { !archivedIDs.contains($0) }
-        )
+        let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
@@ -274,7 +287,7 @@ struct AppFeature {
         let shouldCheckSystemNotificationPermission =
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
-        if let selectedWorktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) {
+        if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
           state.openActionSelection = OpenWorktreeAction.fromSettingsID(
@@ -344,7 +357,7 @@ struct AppFeature {
 
       case .openActionSelectionChanged(let action):
         state.openActionSelection = action
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         let rootURL = worktree.repositoryRootURL
@@ -357,7 +370,7 @@ struct AppFeature {
         return .send(.openWorktree(OpenWorktreeAction.availableSelection(state.openActionSelection)))
 
       case .openWorktree(let action):
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         analyticsClient.capture("worktree_opened", ["action": action.settingsID])
@@ -420,7 +433,7 @@ struct AppFeature {
         #endif
 
       case .newTerminal:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         analyticsClient.capture("terminal_tab_created", nil)
@@ -430,7 +443,7 @@ struct AppFeature {
         }
 
       case .runScript:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         let trimmed = state.selectedRunScript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -449,7 +462,7 @@ struct AppFeature {
         }
 
       case .runCustomCommand(let index):
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         guard state.selectedCustomCommands.indices.contains(index) else {
@@ -489,7 +502,7 @@ struct AppFeature {
         return .none
 
       case .saveRunScriptAndRun:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           state.isRunScriptPromptPresented = false
           state.runScriptDraft = ""
           return .none
@@ -511,7 +524,7 @@ struct AppFeature {
         return .send(.runScript)
 
       case .stopRunScript:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -519,7 +532,7 @@ struct AppFeature {
         }
 
       case .closeTab:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         analyticsClient.capture("terminal_tab_closed", nil)
@@ -528,7 +541,7 @@ struct AppFeature {
         }
 
       case .closeSurface:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -536,7 +549,7 @@ struct AppFeature {
         }
 
       case .startSearch:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -544,7 +557,7 @@ struct AppFeature {
         }
 
       case .searchSelection:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -552,7 +565,7 @@ struct AppFeature {
         }
 
       case .navigateSearchNext:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -560,7 +573,7 @@ struct AppFeature {
         }
 
       case .navigateSearchPrevious:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -568,7 +581,7 @@ struct AppFeature {
         }
 
       case .endSearch:
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -576,7 +589,7 @@ struct AppFeature {
         }
 
       case .settings(.repositorySettings(.delegate(.settingsChanged(let rootURL)))):
-        guard let selectedWorktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID),
+        guard let selectedWorktree = state.repositories.selectedTerminalWorktree,
           selectedWorktree.repositoryRootURL == rootURL
         else {
           return .none
@@ -590,7 +603,7 @@ struct AppFeature {
         )
 
       case .worktreeSettingsLoaded(let settings, let worktreeID):
-        guard state.repositories.selectedWorktreeID == worktreeID else {
+        guard state.repositories.selectedTerminalWorktree?.id == worktreeID else {
           return .none
         }
         @Shared(.settingsFile) var settingsFile
@@ -605,7 +618,7 @@ struct AppFeature {
         return .none
 
       case .worktreeOnevcatSettingsLoaded(let settings, let worktreeID):
-        guard state.repositories.selectedWorktreeID == worktreeID else {
+        guard state.repositories.selectedTerminalWorktree?.id == worktreeID else {
           return .none
         }
         state.selectedCustomCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
@@ -679,7 +692,7 @@ struct AppFeature {
         return .send(.repositories(.refreshWorktrees))
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
-        guard let worktree = state.repositories.worktree(for: state.repositories.selectedWorktreeID) else {
+        guard let worktree = state.repositories.selectedTerminalWorktree else {
           return .none
         }
         return .run { _ in
@@ -758,10 +771,19 @@ struct AppFeature {
         if state.commandPalette.isPresented {
           return .send(.commandPalette(.setPresented(false)))
         }
-        return .merge(
-          .send(.repositories(.selectWorktree(worktreeID))),
-          .send(.commandPalette(.setPresented(true)))
-        )
+        if state.repositories.worktree(for: worktreeID) != nil {
+          return .merge(
+            .send(.repositories(.selectWorktree(worktreeID))),
+            .send(.commandPalette(.setPresented(true)))
+          )
+        }
+        if state.repositories.repositories[id: worktreeID]?.kind == .plain {
+          return .merge(
+            .send(.repositories(.selectRepository(worktreeID))),
+            .send(.commandPalette(.setPresented(true)))
+          )
+        }
+        return .send(.commandPalette(.setPresented(true)))
       case .terminalEvent(.setupScriptConsumed(let worktreeID)):
         return .send(.repositories(.consumeSetupScript(worktreeID)))
 

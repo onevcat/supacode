@@ -1,0 +1,189 @@
+import ComposableArchitecture
+import DependenciesTestSupport
+import Foundation
+import Testing
+
+@testable import supacode
+
+@MainActor
+struct AppFeaturePlainFolderTerminalTests {
+  @Test(.dependencies) func selectingPlainRepositoryLoadsSettingsAndSelectsTerminalTarget() async throws {
+    let repository = makePlainRepository()
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(
+      fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json"
+    )
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+
+    var settingsFile = SettingsFile.default
+    var repositorySettings = RepositorySettings.default
+    repositorySettings.openActionID = OpenWorktreeAction.terminal.settingsID
+    repositorySettings.runScript = "pnpm dev"
+    settingsFile.repositories[repository.id] = repositorySettings
+    try settingsStorage.storage.save(
+      JSONEncoder().encode(settingsFile),
+      settingsFileURL
+    )
+
+    let onevcatSettings = OnevcatRepositorySettings(
+      customCommands: [
+        OnevcatCustomCommand(
+          title: "Watch",
+          systemImage: "terminal",
+          command: "pnpm test --watch",
+          execution: .terminalInput,
+          shortcut: nil
+        )
+      ]
+    )
+    try localStorage.save(
+      JSONEncoder().encode(onevcatSettings),
+      at: SupacodePaths.onevcatRepositorySettingsURL(for: repository.rootURL)
+    )
+
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(repository: repository),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveLastFocusedWorktreeID = { _ in }
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { command in
+        watcherCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.repositories(.selectRepository(repository.id))) {
+      $0.repositories.selection = .repository(repository.id)
+    }
+    await store.receive(\.repositories.delegate.selectedWorktreeChanged)
+    await store.receive(\.worktreeSettingsLoaded) {
+      $0.openActionSelection = .terminal
+      $0.selectedRunScript = "pnpm dev"
+    }
+    await store.receive(\.worktreeOnevcatSettingsLoaded) {
+      $0.selectedCustomCommands = onevcatSettings.customCommands
+    }
+    await store.finish()
+
+    #expect(
+      sentTerminalCommands.value == [
+        .setSelectedWorktreeID(repository.id)
+      ]
+    )
+    #expect(
+      watcherCommands.value == [
+        .setSelectedWorktreeID(nil)
+      ]
+    )
+  }
+
+  @Test(.dependencies) func newTerminalUsesPlainRepositoryTerminalTarget() async {
+    let repository = makePlainRepository()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    let store = TestStore(
+      initialState: AppFeature.State(
+        repositories: makeRepositoriesState(repository: repository, selected: true),
+        settings: SettingsFeature.State()
+      )
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.newTerminal)
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .createTab(
+          makePlainTerminalTarget(repository: repository),
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func customCommandUsesPlainRepositoryTerminalTarget() async {
+    let repository = makePlainRepository()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(repository: repository, selected: true),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      OnevcatCustomCommand(
+        title: "Watch",
+        systemImage: "terminal",
+        command: "pnpm test --watch",
+        execution: .terminalInput,
+        shortcut: nil
+      )
+    ]
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.runCustomCommand(0))
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .insertText(
+          makePlainTerminalTarget(repository: repository),
+          text: "pnpm test --watch"
+        )
+      ]
+    )
+  }
+
+  private func makePlainRepository() -> Repository {
+    Repository(
+      id: "/tmp/folder",
+      rootURL: URL(fileURLWithPath: "/tmp/folder"),
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+  }
+
+  private func makeRepositoriesState(
+    repository: Repository,
+    selected: Bool = false
+  ) -> RepositoriesFeature.State {
+    var repositoriesState = RepositoriesFeature.State()
+    repositoriesState.repositories = [repository]
+    repositoriesState.repositoryRoots = [repository.rootURL]
+    if selected {
+      repositoriesState.selection = .repository(repository.id)
+    }
+    return repositoriesState
+  }
+
+  private func makePlainTerminalTarget(repository: Repository) -> Worktree {
+    Worktree(
+      id: repository.id,
+      name: repository.name,
+      detail: repository.rootURL.path(percentEncoded: false),
+      workingDirectory: repository.rootURL,
+      repositoryRootURL: repository.rootURL
+    )
+  }
+}
