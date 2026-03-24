@@ -2686,19 +2686,62 @@ struct RepositoriesFeature {
     fallbackRoots: [URL] = []
   ) async -> [PersistedRepositoryEntry] {
     let entries = await repositoryPersistence.loadRepositoryEntries()
+    let resolvedEntries: [PersistedRepositoryEntry]
     if !entries.isEmpty {
-      return entries
+      resolvedEntries = entries
+    } else {
+      let loadedPaths = await repositoryPersistence.loadRoots()
+      let pathSource =
+        if !loadedPaths.isEmpty {
+          loadedPaths
+        } else {
+          fallbackRoots.map { $0.path(percentEncoded: false) }
+        }
+      resolvedEntries = RepositoryEntryNormalizer.normalize(
+        pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
+      )
     }
-    let loadedPaths = await repositoryPersistence.loadRoots()
-    let pathSource =
-      if !loadedPaths.isEmpty {
-        loadedPaths
-      } else {
-        fallbackRoots.map { $0.path(percentEncoded: false) }
+    return await upgradedRepositoryEntriesIfNeeded(resolvedEntries)
+  }
+
+  private func upgradedRepositoryEntriesIfNeeded(
+    _ entries: [PersistedRepositoryEntry]
+  ) async -> [PersistedRepositoryEntry] {
+    let upgradedEntries = await withTaskGroup(of: (Int, PersistedRepositoryEntry).self) { group in
+      for (index, entry) in entries.enumerated() {
+        let gitClient = self.gitClient
+        group.addTask {
+          let normalizedPath = URL(fileURLWithPath: entry.path)
+            .standardizedFileURL
+            .path(percentEncoded: false)
+          guard entry.kind == .plain else {
+            return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
+          }
+          do {
+            let repoRoot = try await gitClient.repoRoot(URL(fileURLWithPath: normalizedPath))
+            let normalizedRepoRoot = repoRoot.standardizedFileURL.path(percentEncoded: false)
+            if normalizedRepoRoot == normalizedPath {
+              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+            }
+          } catch {
+            // Keep plain folders unchanged when Git root discovery fails.
+          }
+          return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+        }
       }
-    return RepositoryEntryNormalizer.normalize(
-      pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
-    )
+
+      var results = Array<PersistedRepositoryEntry?>(repeating: nil, count: entries.count)
+      for await (index, entry) in group {
+        results[index] = entry
+      }
+      return results.compactMap { $0 }
+    }
+
+    let normalizedEntries = RepositoryEntryNormalizer.normalize(upgradedEntries)
+    if normalizedEntries != entries {
+      await repositoryPersistence.saveRepositoryEntries(normalizedEntries)
+    }
+    return normalizedEntries
   }
 
   private func loadRepositories(
