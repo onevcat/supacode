@@ -5,6 +5,28 @@ import GhosttyKit
 import QuartzCore
 
 final class GhosttySurfaceView: NSView, Identifiable {
+  struct OcclusionState {
+    private(set) var desired: Bool?
+    private var applied: Bool?
+
+    mutating func prepareToApply(_ visible: Bool) -> Bool {
+      desired = visible
+      guard applied != visible else { return false }
+      applied = visible
+      return true
+    }
+
+    mutating func invalidateForAttachmentChange() -> Bool? {
+      applied = nil
+      return desired
+    }
+
+    mutating func reset() {
+      desired = nil
+      applied = nil
+    }
+  }
+
   private struct ScrollbarState {
     let total: UInt64
     let offset: UInt64
@@ -63,7 +85,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
-  private var lastOcclusion: Bool?
+  private var occlusionState = OcclusionState()
   private var lastSurfaceFocus: Bool?
   private var eventMonitor: Any?
   private var notificationObservers: [NSObjectProtocol] = []
@@ -223,7 +245,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
       ghostty_surface_free(surface)
       self.surface = nil
       bridge.surface = nil
-      lastOcclusion = nil
+      occlusionState.reset()
       lastSurfaceFocus = nil
     }
   }
@@ -318,6 +340,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
     updateContentScale()
     updateSurfaceSize()
     applyWindowBackgroundAppearance()
+    handleAttachmentChange()
+  }
+
+  override func viewDidMoveToSuperview() {
+    super.viewDidMoveToSuperview()
+    handleAttachmentChange()
   }
 
   override func viewDidChangeBackingProperties() {
@@ -665,11 +693,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func otherMouseDown(with event: NSEvent) {
-    sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: Self.ghosttyMouseButton(from: event.buttonNumber))
+    sendMouseButton(
+      event, state: GHOSTTY_MOUSE_PRESS, button: Self.ghosttyMouseButton(from: event.buttonNumber))
   }
 
   override func otherMouseUp(with event: NSEvent) {
-    sendMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: Self.ghosttyMouseButton(from: event.buttonNumber))
+    sendMouseButton(
+      event, state: GHOSTTY_MOUSE_RELEASE, button: Self.ghosttyMouseButton(from: event.buttonNumber)
+    )
   }
 
   private static func ghosttyMouseButton(from buttonNumber: Int) -> ghostty_input_mouse_button_e {
@@ -725,7 +756,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
   override func quickLook(with event: NSEvent) {
     guard let surface else { return super.quickLook(with: event) }
     var text = ghostty_text_s()
-    guard ghostty_surface_quicklook_word(surface, &text) else { return super.quickLook(with: event) }
+    guard ghostty_surface_quicklook_word(surface, &text) else {
+      return super.quickLook(with: event)
+    }
     defer { ghostty_surface_free_text(surface, &text) }
     guard text.text_len > 0 else { return super.quickLook(with: event) }
 
@@ -861,7 +894,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.context = context
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
-    lastOcclusion = nil
+    occlusionState.reset()
     lastSurfaceFocus = nil
     updateSurfaceSize()
   }
@@ -884,11 +917,24 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else { return }
-    if lastOcclusion == visible {
-      return
-    }
-    lastOcclusion = visible
+    guard occlusionState.prepareToApply(visible) else { return }
     ghostty_surface_set_occlusion(surface, visible)
+  }
+
+  private func handleAttachmentChange() {
+    // Re-parenting can temporarily detach the Metal layer from the visible
+    // tree and pause Ghostty's renderer. Invalidate the applied cache so the
+    // currently desired occlusion value is sent again after reattachment.
+    _ = occlusionState.invalidateForAttachmentChange()
+    guard superview != nil else { return }
+    DispatchQueue.main.async { [weak self] in
+      self?.reapplyOcclusionIfNeeded()
+    }
+  }
+
+  private func reapplyOcclusionIfNeeded() {
+    guard superview != nil, let desired = occlusionState.desired else { return }
+    setOcclusion(desired)
   }
 
   private func setSurfaceFocus(_ focused: Bool) {

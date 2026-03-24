@@ -5,6 +5,33 @@ import Testing
 
 @MainActor
 struct GhosttySurfaceViewTests {
+  @Test func occlusionStateResendsDesiredValueAfterAttachmentChange() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    let firstApply = state.prepareToApply(true)
+    let secondApply = state.prepareToApply(true)
+
+    #expect(firstApply)
+    #expect(!secondApply)
+    let desired = state.invalidateForAttachmentChange()
+    let reapply = state.prepareToApply(true)
+
+    #expect(desired == true)
+    #expect(reapply)
+  }
+
+  @Test func occlusionStateDoesNotResendBeforeAnyDesiredValueExists() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    let desired = state.invalidateForAttachmentChange()
+    let firstApply = state.prepareToApply(false)
+    let secondApply = state.prepareToApply(false)
+
+    #expect(desired == nil)
+    #expect(firstApply)
+    #expect(!secondApply)
+  }
+
   @Test func normalizedWorkingDirectoryPathRemovesTrailingSlashForNonRootPath() {
     #expect(
       GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/supacode/")

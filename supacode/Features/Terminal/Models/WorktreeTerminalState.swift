@@ -470,7 +470,8 @@ final class WorktreeTerminalState {
     }
   }
 
-  func performSplitOperation(_ operation: TerminalSplitTreeView.Operation, in tabId: TerminalTabID) {
+  func performSplitOperation(_ operation: TerminalSplitTreeView.Operation, in tabId: TerminalTabID)
+  {
     guard var tree = trees[tabId] else { return }
 
     switch operation {
