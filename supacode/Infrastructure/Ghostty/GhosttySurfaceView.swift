@@ -1626,6 +1626,7 @@ final class GhosttySurfaceScrollView: NSView {
   private let surfaceView: GhosttySurfaceView
   private var observers: [NSObjectProtocol] = []
   private var isLiveScrolling = false
+  private var isUserScrolledBack = false
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
 
@@ -1682,6 +1683,7 @@ final class GhosttySurfaceScrollView: NSView {
       ) { [weak self] _ in
         MainActor.assumeIsolated {
           self?.isLiveScrolling = false
+          self?.updateScrollBackState()
         }
       })
 
@@ -1771,7 +1773,7 @@ final class GhosttySurfaceScrollView: NSView {
 
   private func synchronizeScrollView() {
     documentView.frame.size.height = documentHeight()
-    if !isLiveScrolling {
+    if !isLiveScrolling && !isUserScrolledBack {
       let cellHeight = surfaceView.currentCellSize().height
       if cellHeight > 0, let scrollbar {
         let offsetY =
@@ -1781,6 +1783,19 @@ final class GhosttySurfaceScrollView: NSView {
       }
     }
     scrollView.reflectScrolledClipView(scrollView.contentView)
+  }
+
+  /// Checks whether the user has scrolled away from the bottom of the terminal
+  /// output and updates `isUserScrolledBack` accordingly. When the user is scrolled
+  /// back, `synchronizeScrollView` will skip auto-scrolling so new output does not
+  /// yank the viewport away from what the user is reading.
+  private func updateScrollBackState() {
+    let cellHeight = surfaceView.currentCellSize().height
+    guard cellHeight > 0 else { return }
+    let visibleRect = scrollView.contentView.documentVisibleRect
+    let docHeight = documentView.frame.height
+    let distanceFromBottom = docHeight - visibleRect.maxY
+    isUserScrolledBack = distanceFromBottom > cellHeight / 2
   }
 
   private func handleLiveScroll() {
