@@ -2,6 +2,7 @@ import ComposableArchitecture
 import SwiftUI
 
 struct RepositorySectionView: View {
+  private static let debugHeaderLayers = false
   let repository: Repository
   let showsTopSeparator: Bool
   let isDragActive: Bool
@@ -30,13 +31,6 @@ struct RepositorySectionView: View {
         }
       }
     }
-    let activateHeader = {
-      if repository.capabilities.supportsWorktrees {
-        toggleExpanded()
-      } else {
-        store.send(.selectRepository(repository.id))
-      }
-    }
     let isDragging = isDragActive
 
     let header = HStack {
@@ -45,19 +39,29 @@ struct RepositorySectionView: View {
         isRemoving: isRemovingRepository
       )
       .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(.rect)
-      .onTapGesture {
-        guard !isRemovingRepository else { return }
-        activateHeader()
+      .background {
+        if Self.debugHeaderLayers {
+          Rectangle()
+            .fill(.green.opacity(0.18))
+            .overlay {
+              Rectangle()
+                .stroke(.green, lineWidth: 1)
+            }
+        }
       }
-      .help(
-        repository.capabilities.supportsWorktrees
-          ? (isExpanded ? "Collapse" : "Expand")
-          : "Open folder terminal"
-      )
       if isRemovingRepository && !isDragging {
         ProgressView()
           .controlSize(.small)
+          .background {
+            if Self.debugHeaderLayers {
+              Rectangle()
+                .fill(.yellow.opacity(0.18))
+                .overlay {
+                  Rectangle()
+                    .stroke(.yellow, lineWidth: 1)
+                }
+            }
+          }
       }
       if isHovering && !isDragging {
         Menu {
@@ -75,6 +79,16 @@ struct RepositorySectionView: View {
             .labelStyle(.iconOnly)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
+            .background {
+              if Self.debugHeaderLayers {
+                Rectangle()
+                  .fill(.purple.opacity(0.18))
+                  .overlay {
+                    Rectangle()
+                      .stroke(.purple, lineWidth: 1)
+                  }
+              }
+            }
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
@@ -88,6 +102,16 @@ struct RepositorySectionView: View {
               .labelStyle(.iconOnly)
               .frame(maxHeight: .infinity)
               .contentShape(Rectangle())
+              .background {
+                if Self.debugHeaderLayers {
+                  Rectangle()
+                    .fill(.mint.opacity(0.18))
+                    .overlay {
+                      Rectangle()
+                        .stroke(.mint, lineWidth: 1)
+                    }
+                }
+              }
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
@@ -103,6 +127,16 @@ struct RepositorySectionView: View {
               .frame(maxHeight: .infinity)
               .contentShape(Rectangle())
               .accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+              .background {
+                if Self.debugHeaderLayers {
+                  Rectangle()
+                    .fill(.orange.opacity(0.18))
+                    .overlay {
+                      Rectangle()
+                        .stroke(.orange, lineWidth: 1)
+                    }
+                }
+              }
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
@@ -112,10 +146,21 @@ struct RepositorySectionView: View {
     }
     .frame(maxWidth: .infinity)
     .frame(height: headerCellHeight, alignment: .center)
+    .contentShape(.interaction, .rect)
+    .background {
+      if Self.debugHeaderLayers {
+        Rectangle()
+          .fill(.red.opacity(0.12))
+          .overlay {
+            Rectangle()
+              .stroke(.red, lineWidth: 1)
+          }
+      }
+    }
     .overlay(alignment: .top) {
       if showsTopSeparator {
         Rectangle()
-          .fill(.secondary)
+          .fill(Self.debugHeaderLayers ? .blue : .secondary)
           .frame(height: 1)
           .frame(maxWidth: .infinity)
           .accessibilityHidden(true)
@@ -123,6 +168,11 @@ struct RepositorySectionView: View {
     }
     .onHover { isHovering = $0 }
     .contentShape(.rect)
+    .help(
+      repository.capabilities.supportsWorktrees
+        ? (isExpanded ? "Collapse" : "Expand")
+        : "Open folder terminal"
+    )
     .contextMenu {
       Button("Repo Settings") {
         openRepoSettings()
@@ -140,12 +190,8 @@ struct RepositorySectionView: View {
     .preferredColorScheme(colorScheme)
 
     Group {
-      if repository.capabilities.supportsWorktrees {
-        header
-      } else {
-        header
-          .tag(SidebarSelection.repository(repository.id))
-      }
+      header
+        .tag(SidebarSelection.repository(repository.id))
       if isExpanded {
         WorktreeRowsView(
           repository: repository,
