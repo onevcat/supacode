@@ -145,6 +145,113 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func loadPersistedRepositoriesLoadsMixedGitAndPlainEntries() async {
+    let repoRoot = "/tmp/repo"
+    let plainRoot = "/tmp/folder"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let gitRepository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let plainRepository = makeRepository(
+      id: plainRoot,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [
+          PersistedRepositoryEntry(path: repoRoot, kind: .git),
+          PersistedRepositoryEntry(path: plainRoot, kind: .plain),
+        ]
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { root in
+        let path = root.path(percentEncoded: false)
+        if path == repoRoot {
+          return [worktree]
+        }
+        Issue.record("worktrees should not load for plain repository: \(path)")
+        return []
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [gitRepository, plainRepository]
+      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test func openRepositoriesAddsPlainFoldersInsteadOfRejectingThem() async {
+    let repoSelection = "/tmp/repo/subdir"
+    let repoRoot = "/tmp/repo"
+    let plainRoot = "/tmp/plain"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let gitRepository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let plainRepository = makeRepository(
+      id: plainRoot,
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.repoRoot = { url in
+        let path = url.path(percentEncoded: false)
+        if path == repoSelection {
+          return URL(fileURLWithPath: repoRoot)
+        }
+        if path == plainRoot {
+          throw GitClientError.commandFailed(command: "wt root", message: "not a git repository")
+        }
+        Issue.record("Unexpected repoRoot lookup: \(path)")
+        return URL(fileURLWithPath: repoRoot)
+      }
+      $0.gitClient.worktrees = { root in
+        let path = root.path(percentEncoded: false)
+        if path == repoRoot {
+          return [worktree]
+        }
+        Issue.record("worktrees should not load for plain repository: \(path)")
+        return []
+      }
+    }
+
+    await store.send(
+      .openRepositories([
+        URL(fileURLWithPath: repoSelection),
+        URL(fileURLWithPath: plainRoot),
+      ])
+    )
+    await store.receive(\.openRepositoriesFinished) {
+      $0.repositories = [gitRepository, plainRepository]
+      $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(
+      savedEntries.value == [[
+        PersistedRepositoryEntry(path: repoRoot, kind: .git),
+        PersistedRepositoryEntry(path: plainRoot, kind: .plain),
+      ]]
+    )
+  }
+
   @Test func repositoriesLoadedPersistsRepositorySnapshotOnSuccess() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
@@ -241,6 +348,31 @@ struct RepositoriesFeatureTests {
       $0.sidebarSelectedWorktreeIDs = [wt2.id]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectRepositoryClearsWorktreeSelectionAndSendsNilDelegate() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository(repository.id)) {
+      $0.selection = .repository(repository.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func selectRepositoryIgnoresUnknownRepository() async {
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectRepository("/tmp/missing"))
   }
 
   @Test func setSidebarSelectedWorktreeIDsKeepsSelectedAndPrunesUnknown() async {
@@ -2595,12 +2727,14 @@ struct RepositoriesFeatureTests {
   private func makeRepository(
     id: String,
     name: String = "repo",
+    kind: Repository.Kind = .git,
     worktrees: [Worktree]
   ) -> Repository {
     Repository(
       id: id,
       rootURL: URL(fileURLWithPath: id),
       name: name,
+      kind: kind,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }

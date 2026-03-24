@@ -390,10 +390,9 @@ struct RepositoriesFeature {
         state.alert = nil
         state.isRefreshingWorktrees = false
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          let rootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
-          let roots = rootPaths.map { URL(fileURLWithPath: $0) }
-          let (repositories, failures) = await loadRepositoriesData(roots)
+          let entries = await loadPersistedRepositoryEntries()
+          let roots = entries.map { URL(fileURLWithPath: $0.path) }
+          let (repositories, failures) = await loadRepositoriesData(entries)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -416,7 +415,7 @@ struct RepositoriesFeature {
           state.isRefreshingWorktrees = false
           return .none
         }
-        return loadRepositories(roots, animated: animated)
+        return loadRepositories(fallbackRoots: roots, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
@@ -493,25 +492,36 @@ struct RepositoriesFeature {
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          let existingRootPaths = RepositoryPathNormalizer.normalize(loadedPaths)
-          var resolvedRoots: [URL] = []
+          let existingEntries = await loadPersistedRepositoryEntries()
+          var resolvedEntries: [PersistedRepositoryEntry] = []
           var invalidRoots: [String] = []
           for url in urls {
             do {
               let root = try await gitClient.repoRoot(url)
-              resolvedRoots.append(root)
+              resolvedEntries.append(
+                PersistedRepositoryEntry(
+                  path: root.path(percentEncoded: false),
+                  kind: .git
+                )
+              )
             } catch {
-              invalidRoots.append(url.path(percentEncoded: false))
+              let normalizedPath = url.standardizedFileURL.path(percentEncoded: false)
+              if normalizedPath.isEmpty {
+                invalidRoots.append(url.path(percentEncoded: false))
+              } else {
+                resolvedEntries.append(
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .plain
+                  )
+                )
+              }
             }
           }
-          let resolvedRootPaths = RepositoryPathNormalizer.normalize(
-            resolvedRoots.map { $0.path(percentEncoded: false) }
-          )
-          let mergedPaths = RepositoryPathNormalizer.normalize(existingRootPaths + resolvedRootPaths)
-          let mergedRoots = mergedPaths.map { URL(fileURLWithPath: $0) }
-          await repositoryPersistence.saveRoots(mergedPaths)
-          let (repositories, failures) = await loadRepositoriesData(mergedRoots)
+          let mergedEntries = RepositoryEntryNormalizer.normalize(existingEntries + resolvedEntries)
+          let mergedRoots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+          await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+          let (repositories, failures) = await loadRepositoriesData(mergedEntries)
           await send(
             .openRepositoriesFinished(
               repositories,
@@ -1792,14 +1802,13 @@ struct RepositoriesFeature {
         state.repositoryRoots.removeAll {
           $0.standardizedFileURL.path(percentEncoded: false) == repositoryID
         }
+        let remainingRoots = state.repositoryRoots
         return .run { send in
-          let loadedPaths = await repositoryPersistence.loadRoots()
-          var seen: Set<String> = []
-          let rootPaths = loadedPaths.filter { seen.insert($0).inserted }
-          let remaining = rootPaths.filter { $0 != repositoryID }
-          await repositoryPersistence.saveRoots(remaining)
-          let roots = remaining.map { URL(fileURLWithPath: $0) }
-          let (repositories, failures) = await loadRepositoriesData(roots)
+          let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+          let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+          await repositoryPersistence.saveRepositoryEntries(remainingEntries)
+          let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+          let (repositories, failures) = await loadRepositoriesData(remainingEntries)
           await send(
             .repositoriesLoaded(
               repositories,
@@ -1834,16 +1843,15 @@ struct RepositoriesFeature {
           state.shouldSelectFirstAfterReload = true
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
+        let remainingRoots = state.repositoryRoots
         return .merge(
           .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
           .run { send in
-            let loadedPaths = await repositoryPersistence.loadRoots()
-            var seen: Set<String> = []
-            let rootPaths = loadedPaths.filter { seen.insert($0).inserted }
-            let remaining = rootPaths.filter { $0 != repositoryID }
-            await repositoryPersistence.saveRoots(remaining)
-            let roots = remaining.map { URL(fileURLWithPath: $0) }
-            let (repositories, failures) = await loadRepositoriesData(roots)
+            let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+            let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+            await repositoryPersistence.saveRepositoryEntries(remainingEntries)
+            let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
+            let (repositories, failures) = await loadRepositoriesData(remainingEntries)
             await send(
               .repositoriesLoaded(
                 repositories,
@@ -2641,13 +2649,37 @@ struct RepositoriesFeature {
     }
   }
 
-  private func loadRepositories(_ roots: [URL], animated: Bool = false) -> Effect<Action> {
-    let gitClient = gitClient
-    return .run { [animated, roots] send in
-      for root in roots {
-        _ = try? await gitClient.pruneWorktrees(root)
+  private func loadPersistedRepositoryEntries(
+    fallbackRoots: [URL] = []
+  ) async -> [PersistedRepositoryEntry] {
+    let entries = await repositoryPersistence.loadRepositoryEntries()
+    if !entries.isEmpty {
+      return entries
+    }
+    let loadedPaths = await repositoryPersistence.loadRoots()
+    let pathSource =
+      if !loadedPaths.isEmpty {
+        loadedPaths
+      } else {
+        fallbackRoots.map { $0.path(percentEncoded: false) }
       }
-      let (repositories, failures) = await loadRepositoriesData(roots)
+    return RepositoryEntryNormalizer.normalize(
+      pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
+    )
+  }
+
+  private func loadRepositories(
+    fallbackRoots: [URL] = [],
+    animated: Bool = false
+  ) -> Effect<Action> {
+    let gitClient = gitClient
+    return .run { [animated, fallbackRoots] send in
+      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+      let roots = entries.map { URL(fileURLWithPath: $0.path) }
+      for entry in entries where entry.kind == .git {
+        _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
+      }
+      let (repositories, failures) = await loadRepositoriesData(entries)
       await send(
         .repositoriesLoaded(
           repositories,
@@ -2661,32 +2693,58 @@ struct RepositoriesFeature {
   }
 
   private struct WorktreesFetchResult: Sendable {
-    let root: URL
-    let worktrees: [Worktree]?
+    let entry: PersistedRepositoryEntry
+    let repository: Repository?
     let errorMessage: String?
   }
 
-  private func loadRepositoriesData(_ roots: [URL]) async -> ([Repository], [LoadFailure]) {
+  private func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
-      for root in roots {
+      for entry in entries {
         let gitClient = self.gitClient
         group.addTask {
-          do {
-            let worktrees = try await gitClient.worktrees(root)
-            return WorktreesFetchResult(root: root, worktrees: worktrees, errorMessage: nil)
-          } catch {
+          let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
+          switch entry.kind {
+          case .git:
+            do {
+              let worktrees = try await gitClient.worktrees(rootURL)
+              return WorktreesFetchResult(
+                entry: entry,
+                repository: Repository(
+                  id: rootURL.path(percentEncoded: false),
+                  rootURL: rootURL,
+                  name: Repository.name(for: rootURL),
+                  kind: .git,
+                  worktrees: IdentifiedArray(uniqueElements: worktrees)
+                ),
+                errorMessage: nil
+              )
+            } catch {
+              return WorktreesFetchResult(
+                entry: entry,
+                repository: nil,
+                errorMessage: error.localizedDescription
+              )
+            }
+          case .plain:
             return WorktreesFetchResult(
-              root: root,
-              worktrees: nil,
-              errorMessage: error.localizedDescription
-            )
+              entry: entry,
+              repository: Repository(
+                  id: rootURL.path(percentEncoded: false),
+                  rootURL: rootURL,
+                  name: Repository.name(for: rootURL),
+                  kind: .plain,
+                  worktrees: IdentifiedArray()
+                ),
+                errorMessage: nil
+              )
           }
         }
       }
 
       var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
       for await result in group {
-        let rootID = result.root.standardizedFileURL.path(percentEncoded: false)
+        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
         resultsByRootID[rootID] = result
       }
       return resultsByRootID
@@ -2694,18 +2752,11 @@ struct RepositoriesFeature {
 
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
-    for root in roots {
-      let normalizedRoot = root.standardizedFileURL
+    for entry in entries {
+      let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
       guard let result = fetchResults[rootID] else { continue }
-      if let worktrees = result.worktrees {
-        let name = Repository.name(for: normalizedRoot)
-        let repository = Repository(
-          id: rootID,
-          rootURL: normalizedRoot,
-          name: name,
-          worktrees: IdentifiedArray(uniqueElements: worktrees)
-        )
+      if let repository = result.repository {
         loaded.append(repository)
       } else {
         failures.append(

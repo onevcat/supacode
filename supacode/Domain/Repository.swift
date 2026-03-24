@@ -1,7 +1,7 @@
 import Foundation
 import IdentifiedCollections
 
-struct Repository: Identifiable, Hashable, Sendable {
+nonisolated struct Repository: Identifiable, Hashable, Sendable {
   enum Kind: String, Codable, Hashable, Sendable {
     case git
     case plain
