@@ -1625,6 +1625,8 @@ final class GhosttySurfaceScrollView: NSView {
   private let documentView: NSView
   private let surfaceView: GhosttySurfaceView
   private var observers: [NSObjectProtocol] = []
+  private static let logger = SupaLogger("ScrollView")
+
   private var isLiveScrolling = false
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
@@ -1774,9 +1776,22 @@ final class GhosttySurfaceScrollView: NSView {
     if !isLiveScrolling {
       let cellHeight = surfaceView.currentCellSize().height
       if cellHeight > 0, let scrollbar {
-        let offsetY =
+        // Log when a scrollbar update would jump the viewport significantly,
+        // which is the suspected auto-scroll-to-bottom symptom.
+        let visibleRect = scrollView.contentView.documentVisibleRect
+        let currentY = visibleRect.origin.y
+        let targetY =
           CGFloat(scrollbar.total - scrollbar.offset - scrollbar.length) * cellHeight
-        scrollView.contentView.scroll(to: CGPoint(x: 0, y: offsetY))
+        let jump = abs(targetY - currentY)
+        if jump > cellHeight * 2 {
+          Self.logger.warning(
+            "Scroll jump detected: currentY=\(currentY) targetY=\(targetY) "
+              + "jump=\(jump) scrollbar=(total:\(scrollbar.total) offset:\(scrollbar.offset) "
+              + "length:\(scrollbar.length))"
+          )
+        }
+
+        scrollView.contentView.scroll(to: CGPoint(x: 0, y: targetY))
         lastSentRow = Int(scrollbar.offset)
       }
     }
