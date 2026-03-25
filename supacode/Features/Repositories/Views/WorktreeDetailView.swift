@@ -112,6 +112,7 @@ struct WorktreeDetailView: View {
       }
     }
     let actions = makeFocusedActions(
+      repositories: repositories,
       hasActiveWorktree: hasActiveTerminalTarget,
       runScriptEnabled: runScriptEnabled,
       runScriptIsRunning: runScriptIsRunning
@@ -245,6 +246,7 @@ struct WorktreeDetailView: View {
   }
 
   private func makeFocusedActions(
+    repositories: RepositoriesFeature.State,
     hasActiveWorktree: Bool,
     runScriptEnabled: Bool,
     runScriptIsRunning: Bool
@@ -252,11 +254,24 @@ struct WorktreeDetailView: View {
     func action(_ appAction: AppFeature.Action) -> (() -> Void)? {
       hasActiveWorktree ? { store.send(appAction) } : nil
     }
+
+    func canvasAction(_ perform: @escaping (WorktreeTerminalState) -> Bool) -> (() -> Void)? {
+      guard repositories.isShowingCanvas else { return nil }
+      return {
+        guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
+          let state = terminalManager.stateIfExists(for: worktreeID)
+        else {
+          return
+        }
+        _ = perform(state)
+      }
+    }
+
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
       newTerminal: action(.newTerminal),
-      closeTab: action(.closeTab),
-      closeSurface: action(.closeSurface),
+      closeTab: canvasAction { $0.closeFocusedTab() } ?? action(.closeTab),
+      closeSurface: canvasAction { $0.closeFocusedSurface() } ?? action(.closeSurface),
       startSearch: action(.startSearch),
       searchSelection: action(.searchSelection),
       navigateSearchNext: action(.navigateSearchNext),
