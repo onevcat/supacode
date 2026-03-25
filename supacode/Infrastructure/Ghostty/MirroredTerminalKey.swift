@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 
-struct MirroredTerminalKey: Equatable {
-  enum Kind: Equatable {
+struct MirroredTerminalKey: Equatable, Sendable {
+  enum Kind: Equatable, Sendable {
     case enter
     case backspace
     case deleteForward
@@ -19,8 +19,13 @@ struct MirroredTerminalKey: Equatable {
   let keyCode: UInt16
   let characters: String
   let charactersIgnoringModifiers: String
-  let modifiers: NSEvent.ModifierFlags
+  /// Raw value of `NSEvent.ModifierFlags` (device-independent only) to satisfy `Sendable`.
+  let modifierFlagsRawValue: UInt
   let isRepeat: Bool
+
+  var modifiers: NSEvent.ModifierFlags {
+    NSEvent.ModifierFlags(rawValue: modifierFlagsRawValue)
+  }
 
   init?(
     kind: Kind,
@@ -35,7 +40,7 @@ struct MirroredTerminalKey: Equatable {
     self.keyCode = keyCode
     self.characters = characters
     self.charactersIgnoringModifiers = charactersIgnoringModifiers
-    self.modifiers = modifiers.intersection(.deviceIndependentFlagsMask)
+    modifierFlagsRawValue = modifiers.intersection(.deviceIndependentFlagsMask).rawValue
     self.isRepeat = isRepeat
   }
 
@@ -48,7 +53,7 @@ struct MirroredTerminalKey: Equatable {
     keyCode = event.keyCode
     characters = event.characters ?? ""
     charactersIgnoringModifiers = event.charactersIgnoringModifiers ?? event.characters ?? ""
-    self.modifiers = modifiers
+    modifierFlagsRawValue = modifiers.rawValue
     isRepeat = event.isARepeat
   }
 

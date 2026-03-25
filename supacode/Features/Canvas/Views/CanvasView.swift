@@ -96,6 +96,9 @@ struct CanvasView: View {
                 onResizeEnd: { commitResize(for: tab.id, cardKey: cardKey, surfaces: tree.leaves()) },
                 onSplitOperation: { operation in
                   state.performSplitOperation(operation, in: tab.id)
+                  if selectionState.isBroadcasting {
+                    syncBroadcastCallbacks(states: activeStates)
+                  }
                 },
                 onTitleBarTap: {
                   let wasAlreadyFocused =
@@ -139,6 +142,11 @@ struct CanvasView: View {
     }
     .overlay(alignment: .bottomTrailing) {
       canvasToolbar
+    }
+    .onKeyPress(.escape) {
+      guard selectionState.isBroadcasting else { return .ignored }
+      clearSelection(states: terminalManager.activeWorktreeStates)
+      return .handled
     }
     .task { activateCanvas() }
     .onDisappear { deactivateCanvas() }
@@ -548,16 +556,18 @@ struct CanvasView: View {
     }
 
     let selectedTabIDs = selectionState.selectedTabIDs
+    let beginBroadcast = { selectionState.beginBroadcastInteractionIfNeeded() }
     for primarySurface in primaryState.splitTree(for: primaryTabID).leaves() {
-      primarySurface.onCommittedText = { [terminalManager, selectedTabIDs, primaryTabID] text in
+      primarySurface.onCommittedText = { [terminalManager, selectedTabIDs, primaryTabID, beginBroadcast] text in
         Task { @MainActor in
-          selectionState.beginBroadcastInteractionIfNeeded()
+          beginBroadcast()
           terminalManager.broadcastCommittedText(text, from: primaryTabID, to: selectedTabIDs)
         }
       }
-      primarySurface.onMirroredKey = { [terminalManager, selectedTabIDs, primaryTabID] mirroredKey in
+      primarySurface.onMirroredKey = {
+        [terminalManager, selectedTabIDs, primaryTabID, beginBroadcast] mirroredKey in
         Task { @MainActor in
-          selectionState.beginBroadcastInteractionIfNeeded()
+          beginBroadcast()
           terminalManager.broadcastMirroredKey(mirroredKey, from: primaryTabID, to: selectedTabIDs)
         }
       }
@@ -682,7 +692,7 @@ private class CanvasScrollContainerView: NSView {
 
   override func scrollWheel(with event: NSEvent) {
     if event.phase == .began || event.phase == .changed || event.phase == .mayBegin || event.momentumPhase != [] {
-      scrollCoordinator?.handleScroll(deltaX: -event.scrollingDeltaX, deltaY: -event.scrollingDeltaY)
+      scrollCoordinator?.handleScroll(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
       return
     }
     super.scrollWheel(with: event)

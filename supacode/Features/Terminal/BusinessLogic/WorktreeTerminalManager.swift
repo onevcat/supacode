@@ -269,6 +269,8 @@ final class WorktreeTerminalManager {
     for tabId in selectedTabIDs where tabId != primaryTabID {
       if stateContaining(tabId: tabId)?.insertCommittedText(text, in: tabId) == true {
         mirrored += 1
+      } else {
+        terminalLogger.debug("Broadcast text failed for tab \(tabId)")
       }
     }
     return mirrored
@@ -284,6 +286,8 @@ final class WorktreeTerminalManager {
     for tabId in selectedTabIDs where tabId != primaryTabID {
       if stateContaining(tabId: tabId)?.applyMirroredKey(key, in: tabId) == true {
         mirrored += 1
+      } else {
+        terminalLogger.debug("Broadcast key failed for tab \(tabId)")
       }
     }
     return mirrored
