@@ -1671,9 +1671,10 @@ final class GhosttySurfaceScrollView: NSView {
   private let documentView: NSView
   private let surfaceView: GhosttySurfaceView
   private var observers: [NSObjectProtocol] = []
-  private static let logger = SupaLogger("ScrollView")
 
   private var isLiveScrolling = false
+  private var isProgrammaticScrollChange = false
+  private var isUserScrolledBack = false
   private var lastSentRow: Int?
   private var scrollbar: ScrollbarState?
 
@@ -1730,6 +1731,7 @@ final class GhosttySurfaceScrollView: NSView {
       ) { [weak self] _ in
         MainActor.assumeIsolated {
           self?.isLiveScrolling = false
+          self?.updateScrollBackState()
         }
       })
 
@@ -1805,6 +1807,10 @@ final class GhosttySurfaceScrollView: NSView {
 
   private func handleScrollChange() {
     synchronizeSurfaceView()
+    guard !isProgrammaticScrollChange else {
+      return
+    }
+    updateScrollBackState()
   }
 
   private func handleScrollerStyleChange() {
@@ -1819,29 +1825,33 @@ final class GhosttySurfaceScrollView: NSView {
 
   private func synchronizeScrollView() {
     documentView.frame.size.height = documentHeight()
-    if !isLiveScrolling {
+    if !isLiveScrolling && !isUserScrolledBack {
       let cellHeight = surfaceView.currentCellSize().height
       if cellHeight > 0, let scrollbar {
-        // Log when a scrollbar update would jump the viewport significantly,
-        // which is the suspected auto-scroll-to-bottom symptom.
-        let visibleRect = scrollView.contentView.documentVisibleRect
-        let currentY = visibleRect.origin.y
         let targetY =
           CGFloat(scrollbar.total - scrollbar.offset - scrollbar.length) * cellHeight
-        let jump = abs(targetY - currentY)
-        if jump > cellHeight * 2 {
-          Self.logger.warning(
-            "Scroll jump detected: currentY=\(currentY) targetY=\(targetY) "
-              + "jump=\(jump) scrollbar=(total:\(scrollbar.total) offset:\(scrollbar.offset) "
-              + "length:\(scrollbar.length))"
-          )
-        }
-
+        isProgrammaticScrollChange = true
+        defer { isProgrammaticScrollChange = false }
         scrollView.contentView.scroll(to: CGPoint(x: 0, y: targetY))
         lastSentRow = Int(scrollbar.offset)
       }
     }
     scrollView.reflectScrolledClipView(scrollView.contentView)
+  }
+
+  /// Tracks whether the user intentionally moved away from the live bottom of
+  /// the terminal. While this is true we keep the viewport fixed so incoming
+  /// output cannot yank scrollback out from under the user.
+  private func updateScrollBackState() {
+    let cellHeight = surfaceView.currentCellSize().height
+    guard cellHeight > 0 else {
+      isUserScrolledBack = false
+      return
+    }
+
+    let visibleRect = scrollView.contentView.documentVisibleRect
+    let distanceFromBottom = max(0, documentView.frame.height - visibleRect.maxY)
+    isUserScrolledBack = distanceFromBottom > cellHeight / 2
   }
 
   private func handleLiveScroll() {
