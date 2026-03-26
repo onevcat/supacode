@@ -94,9 +94,9 @@ jobs:
             print("Created tap/Casks/prowl.rb")
           else:
             text = path.read_text()
-            text = re.sub(r'^\s*desc\s+\".*\"\s*$', '  desc "Coding agent orchestrator"', text, flags=re.M)
-            text = re.sub(r'^\s*version\s+\".*\"\s*$', f'  version \"{version}\"', text, flags=re.M)
-            text = re.sub(r'^\s*sha256\s+\".*\"\s*$', f'  sha256 \"{sha}\"', text, flags=re.M)
+            text = re.sub(r'^[ \t]*desc[ \t]+\".*\"[ \t]*$', '  desc "Coding agent orchestrator"', text, flags=re.M)
+            text = re.sub(r'^[ \t]*version[ \t]+\".*\"[ \t]*$', f'  version "{version}"', text, flags=re.M)
+            text = re.sub(r'^[ \t]*sha256[ \t]+\".*\"[ \t]*$', f'  sha256 "{sha}"', text, flags=re.M)
             path.write_text(text)
             print("Updated tap/Casks/prowl.rb")
           PY
