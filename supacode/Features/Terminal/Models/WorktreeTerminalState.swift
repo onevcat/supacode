@@ -651,11 +651,16 @@ final class WorktreeTerminalState {
     context: ghostty_surface_context_e
   ) -> GhosttySurfaceView {
     let inherited = inheritedSurfaceConfig(fromSurfaceId: inheritingFromSurfaceId, context: context)
+    let resolvedFontSize = Self.resolvedFontSizeForNewSurface(
+      defaultFontSize: defaultFontSize,
+      inheritedFontSize: inherited.fontSize,
+      context: context
+    )
     let view = GhosttySurfaceView(
       runtime: runtime,
       workingDirectory: inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
-      fontSize: inherited.fontSize ?? defaultFontSize,
+      fontSize: resolvedFontSize,
       context: context
     )
     view.bridge.onTitleChange = { [weak self, weak view] title in
@@ -694,6 +699,10 @@ final class WorktreeTerminalState {
       guard let self, let view else { return }
       self.handleCellSizeChange(forSurfaceID: view.id)
     }
+    view.bridge.onConfigChange = { [weak self, weak view] in
+      guard let self, let view else { return }
+      self.handleCellSizeChange(forSurfaceID: view.id)
+    }
     view.bridge.onDesktopNotification = { [weak self, weak view] title, body in
       guard let self, let view else { return }
       self.appendNotification(title: title, body: body, surfaceId: view.id)
@@ -723,8 +732,23 @@ final class WorktreeTerminalState {
       self.recordKeyInput(forSurfaceID: view.id)
       self.markNotificationsRead(forSurfaceID: view.id)
     }
+    view.onResetFontSizeShortcut = { [weak self] in
+      guard let self else { return }
+      self.onFontSizeChanged?(nil)
+    }
     surfaces[view.id] = view
     return view
+  }
+
+  static func resolvedFontSizeForNewSurface(
+    defaultFontSize: Float32?,
+    inheritedFontSize: Float32?,
+    context: ghostty_surface_context_e
+  ) -> Float32? {
+    if context == GHOSTTY_SURFACE_CONTEXT_SPLIT {
+      return inheritedFontSize ?? defaultFontSize
+    }
+    return defaultFontSize
   }
 
   private struct InheritedSurfaceConfig: Equatable {

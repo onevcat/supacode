@@ -3,6 +3,7 @@ import Carbon
 import CoreText
 import GhosttyKit
 import QuartzCore
+import SwiftUI
 
 final class GhosttySurfaceView: NSView, Identifiable {
   struct OcclusionState {
@@ -121,6 +122,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var onKeyInput: (() -> Void)?
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
+  var onResetFontSizeShortcut: (() -> Void)?
 
   private var accessibilityPaneIndexHelp: String?
 
@@ -981,6 +983,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     guard event.type == .keyDown else { return false }
+    let isResetFontSizeShortcut = matchesBindingShortcut(event: event, action: "reset_font_size")
     guard let surface else { return false }
     guard focused else { return false }
 
@@ -999,6 +1002,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
         return true
       }
       keyDown(with: event)
+      if isResetFontSizeShortcut {
+        onResetFontSizeShortcut?()
+      }
       // Ghostty handled paste internally; broadcast the pasted text to followers.
       if onCommittedText != nil,
         event.modifierFlags.contains(.command),
@@ -1030,7 +1036,28 @@ final class GhosttySurfaceView: NSView, Identifiable {
       return false
     }
     keyDown(with: finalEvent)
+    if isResetFontSizeShortcut {
+      onResetFontSizeShortcut?()
+    }
     return true
+  }
+
+  private func matchesBindingShortcut(event: NSEvent, action: String) -> Bool {
+    guard let shortcut = runtime.keyboardShortcut(for: action) else { return false }
+    let normalizedEventModifiers = normalizedModifiers(from: event.modifierFlags)
+    guard normalizedEventModifiers == shortcut.modifiers else { return false }
+    let eventKey = (event.charactersIgnoringModifiers ?? "").lowercased()
+    let shortcutKey = String(shortcut.key.character).lowercased()
+    return !eventKey.isEmpty && eventKey == shortcutKey
+  }
+
+  private func normalizedModifiers(from flags: NSEvent.ModifierFlags) -> SwiftUI.EventModifiers {
+    var normalized: SwiftUI.EventModifiers = []
+    if flags.contains(.command) { normalized.insert(.command) }
+    if flags.contains(.shift) { normalized.insert(.shift) }
+    if flags.contains(.option) { normalized.insert(.option) }
+    if flags.contains(.control) { normalized.insert(.control) }
+    return normalized
   }
 
   private func bindingFlags(
