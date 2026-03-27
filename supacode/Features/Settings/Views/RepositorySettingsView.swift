@@ -111,6 +111,23 @@ struct RepositorySettingsView: View {
         }
       }
       Section {
+        ScriptEnvironmentRow(
+          name: "SUPACODE_WORKTREE_PATH",
+          description: "Path to the active worktree."
+        )
+        ScriptEnvironmentRow(
+          name: "SUPACODE_ROOT_PATH",
+          value: store.rootURL.path(percentEncoded: false),
+          description: "Path to the repository root."
+        )
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Environment Variables")
+          Text("Exported in all scripts below")
+            .foregroundStyle(.secondary)
+        }
+      }
+      Section {
         ZStack(alignment: .topLeading) {
           PlainTextEditor(
             text: settings.setupScript
@@ -242,5 +259,25 @@ private struct BranchPickerPopover: View {
     }
     .frame(width: 300, height: 350)
     .onAppear { isSearchFocused = true }
+  }
+}
+
+private struct ScriptEnvironmentRow: View {
+  let name: String
+  var value: String?
+  let description: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(name)
+        .monospaced()
+      if let value {
+        Text(value)
+          .foregroundStyle(.secondary)
+          .monospaced()
+      }
+      Text(description)
+        .foregroundStyle(.tertiary)
+    }
   }
 }
