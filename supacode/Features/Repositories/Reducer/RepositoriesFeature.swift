@@ -2967,6 +2967,7 @@ struct RepositoriesFeature {
   }
 
   private struct WorktreesFetchResult: Sendable {
+    let index: Int
     let entry: PersistedRepositoryEntry
     let repository: Repository?
     let errorMessage: String?
@@ -2976,7 +2977,7 @@ struct RepositoriesFeature {
     @Shared(.settingsFile) var settingsFile
     let sshHostProfilesByID = Dictionary(uniqueKeysWithValues: settingsFile.sshHostProfiles.map { ($0.id, $0) })
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
-      for entry in entries {
+      for (index, entry) in entries.enumerated() {
         let gitClient = self.gitClient
         let hostProfile: SSHHostProfile? =
           if case .remote(let hostProfileID, _) = entry.endpoint {
@@ -3001,6 +3002,7 @@ struct RepositoriesFeature {
                 )
               }
               return WorktreesFetchResult(
+                index: index,
                 entry: entry,
                 repository: Repository(
                   id: rootURL.path(percentEncoded: false),
@@ -3014,6 +3016,7 @@ struct RepositoriesFeature {
               )
             } catch {
               return WorktreesFetchResult(
+                index: index,
                 entry: entry,
                 repository: nil,
                 errorMessage: error.localizedDescription
@@ -3021,6 +3024,7 @@ struct RepositoriesFeature {
             }
           case .plain:
             return WorktreesFetchResult(
+              index: index,
               entry: entry,
               repository: Repository(
                 id: rootURL.path(percentEncoded: false),
@@ -3036,22 +3040,31 @@ struct RepositoriesFeature {
         }
       }
 
-      var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
+      var resultsByIndex = Array<WorktreesFetchResult?>(repeating: nil, count: entries.count)
       for await result in group {
-        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
-        resultsByRootID[rootID] = result
+        resultsByIndex[result.index] = result
       }
-      return resultsByRootID
+      return resultsByIndex
     }
 
     var loaded: [Repository] = []
     var failures: [LoadFailure] = []
-    for entry in entries {
+    var loadedRepositoryIDs = Set<Repository.ID>()
+    for (index, entry) in entries.enumerated() {
       let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
-      guard let result = fetchResults[rootID] else { continue }
+      guard let result = fetchResults[index] else { continue }
       if let repository = result.repository {
-        loaded.append(repository)
+        if loadedRepositoryIDs.insert(repository.id).inserted {
+          loaded.append(repository)
+        } else {
+          failures.append(
+            LoadFailure(
+              rootID: repository.id,
+              message: "Duplicate repository identity/path conflict for \(rootID)"
+            )
+          )
+        }
       } else {
         failures.append(
           LoadFailure(

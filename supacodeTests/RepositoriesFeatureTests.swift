@@ -249,6 +249,93 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func loadPersistedRepositoriesHandlesDuplicateRemoteEndpointPathsSafely() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1-\(testID)", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2-\(testID)", remotePath: repoRoot)
+    let profileA = SSHHostProfile(
+      id: "h1-\(testID)",
+      displayName: "Server A",
+      host: "a.example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let profileB = SSHHostProfile(
+      id: "h2-\(testID)",
+      displayName: "Server B",
+      host: "b.example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktreeA = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpointA
+    )
+    let worktreeB = makeWorktree(
+      id: repoRoot,
+      name: "main-b",
+      repoRoot: repoRoot,
+      endpoint: endpointB
+    )
+    let expectedRepository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpointA,
+      worktrees: [worktreeA]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profileA, profileB] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = {
+          [
+            PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+            PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+          ]
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected duplicate remote repository load not to use local git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, requestedEndpoint, _ in
+          switch requestedEndpoint {
+          case endpointA:
+            return [worktreeA]
+          case endpointB:
+            return [worktreeB]
+          default:
+            Issue.record("Unexpected endpoint requested: \(requestedEndpoint)")
+            return []
+          }
+        }
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [expectedRepository]
+      $0.repositoryRoots = [
+        URL(fileURLWithPath: repoRoot),
+        URL(fileURLWithPath: repoRoot),
+      ]
+      $0.loadFailuresByID = [repoRoot: "Duplicate repository identity/path conflict for \(repoRoot)"]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
