@@ -275,6 +275,7 @@ struct AppFeature {
           state.settings.repositorySettings = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
             repositoryKind: repository.kind,
+            endpoint: repository.endpoint,
             settings: repositorySettings,
             onevcatSettings: onevcatRepositorySettings
           )
