@@ -6,6 +6,7 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
   let detail: String
   let workingDirectory: URL
   let repositoryRootURL: URL
+  let endpoint: RepositoryEndpoint
   let createdAt: Date?
 
   nonisolated init(
@@ -14,6 +15,7 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
     detail: String,
     workingDirectory: URL,
     repositoryRootURL: URL,
+    endpoint: RepositoryEndpoint = .local,
     createdAt: Date? = nil
   ) {
     self.id = id
@@ -21,6 +23,7 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
     self.detail = detail
     self.workingDirectory = workingDirectory
     self.repositoryRootURL = repositoryRootURL
+    self.endpoint = endpoint
     self.createdAt = createdAt
   }
 }

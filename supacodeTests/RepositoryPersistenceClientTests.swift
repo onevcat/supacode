@@ -8,6 +8,12 @@ import Testing
 @testable import supacode
 
 struct RepositoryPersistenceClientTests {
+  @Test func persistedRepositoryEntryDecodesLegacyLocalFormat() throws {
+    let legacy = #"{"path":"/tmp/repo","kind":"git"}"#
+    let decoded = try JSONDecoder().decode(PersistedRepositoryEntry.self, from: Data(legacy.utf8))
+    #expect(decoded.endpoint == .local)
+  }
+
   @Test(.dependencies) func savesAndLoadsRootsAndPins() async throws {
     let storage = SettingsTestStorage()
 
