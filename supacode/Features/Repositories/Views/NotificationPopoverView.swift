@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NotificationPopoverView: View {
   let notifications: [WorktreeTerminalNotification]
-  let onFocusNotification: (WorktreeTerminalNotification) -> Void
+  @Environment(\.focusNotificationAction) private var focusNotificationAction: (WorktreeTerminalNotification) -> Void
 
   var body: some View {
     let count = notifications.count
@@ -17,7 +17,7 @@ struct NotificationPopoverView: View {
         Divider()
         ForEach(notifications) { notification in
           Button {
-            onFocusNotification(notification)
+            focusNotificationAction(notification)
           } label: {
             HStack(alignment: .top) {
               Image(systemName: "bell")

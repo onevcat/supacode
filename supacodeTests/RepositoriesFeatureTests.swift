@@ -135,6 +135,373 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func sidebarSelectionChangedChoosesFirstVisibleWorktreeAndFocusesTerminal() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let wt3 = makeWorktree(id: "/tmp/repo/wt3", name: "wt3", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2, wt3])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .selectionChanged(
+        [.worktree(wt3.id), .worktree(wt2.id)],
+        focusTerminal: true
+      )
+    ) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id, wt3.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func sidebarSelectionChangedClearsSelectionWhenEmpty() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectionChanged([])) {
+      $0.selection = nil
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func sidebarSelectionChangedArchivesAndClearsSidebarSelection() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree1, worktree2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id, worktree2.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectionChanged([.archivedWorktrees])) {
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func sidebarRepositoryExpansionChangedUpdatesCollapsedRepositoryIDs() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositoryExpansionChanged(repository.id, isExpanded: false)) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repository.id] }
+    }
+
+    await store.send(.repositoryExpansionChanged(repository.id, isExpanded: true)) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [] }
+    }
+  }
+
+  @Test func repositoryExpansionChangedIsIdempotent() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositoryExpansionChanged(repository.id, isExpanded: false)) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repository.id] }
+    }
+
+    // Collapsing again should be a no-op.
+    await store.send(.repositoryExpansionChanged(repository.id, isExpanded: false))
+  }
+
+  @Test func sidebarSelectionChangedWithoutFocusTerminalDoesNotInsertPendingFocus() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectionChanged([.worktree(wt2.id)])) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.isEmpty)
+  }
+
+  @Test func sidebarSelectionChangedKeepsCurrentSelectionDuringMultiSelect() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    initialState.sidebarSelectedWorktreeIDs = [wt1.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .selectionChanged([.worktree(wt1.id), .worktree(wt2.id)], focusTerminal: true)
+    ) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id, wt2.id]
+    }
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.isEmpty)
+  }
+
+  @Test func repositoriesLoadedPrunesCollapsedRepositoryIDs() async {
+    let repoAID = "/tmp/repo-a"
+    let repoBID = "/tmp/repo-b"
+    let repoA = makeRepository(
+      id: repoAID,
+      worktrees: [makeWorktree(id: "\(repoAID)/wt1", name: "wt1", repoRoot: repoAID)]
+    )
+    let repoB = makeRepository(
+      id: repoBID,
+      worktrees: [makeWorktree(id: "\(repoBID)/wt1", name: "wt1", repoRoot: repoBID)]
+    )
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.$collapsedRepositoryIDs.withLock { $0 = [repoA.id, repoB.id, "/tmp/missing"] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repoA],
+        failures: [],
+        roots: [repoA.rootURL],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repoA]
+      $0.repositoryRoots = [repoA.rootURL]
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repoA.id] }
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+  }
+
+  @Test func sidebarSelectionChangedWithAllUnknownWorktreeIDsClearsSelection() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectionChanged([.worktree("/tmp/unknown")])) {
+      $0.selection = nil
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func sidebarSelectionChangedWithMixedArchivedAndWorktreeSelectsArchived() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectionChanged([.archivedWorktrees, .worktree(worktree.id)])) {
+      $0.selection = .archivedWorktrees
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func repositoryExpansionChangedMultipleRepositoriesKeepsSortedOrder() async {
+    let repoA = makeRepository(
+      id: "/tmp/repo-a",
+      worktrees: [makeWorktree(id: "/tmp/repo-a/wt1", name: "wt1", repoRoot: "/tmp/repo-a")],
+    )
+    let repoB = makeRepository(
+      id: "/tmp/repo-b",
+      worktrees: [makeWorktree(id: "/tmp/repo-b/wt1", name: "wt1", repoRoot: "/tmp/repo-b")],
+    )
+    let store = TestStore(initialState: makeState(repositories: [repoA, repoB])) {
+      RepositoriesFeature()
+    }
+
+    // Collapse B first, then A.
+    await store.send(.repositoryExpansionChanged(repoB.id, isExpanded: false)) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repoB.id] }
+    }
+    await store.send(.repositoryExpansionChanged(repoA.id, isExpanded: false)) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repoA.id, repoB.id] }
+    }
+  }
+
+  @Test func sidebarSelectionChangedSameWorktreeSuppressesDelegateAndFocus() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    initialState.sidebarSelectedWorktreeIDs = [wt1.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Re-selecting the same worktree should not fire delegate or insert pending focus.
+    await store.send(.selectionChanged([.worktree(wt1.id)], focusTerminal: true))
+    #expect(store.state.pendingTerminalFocusWorktreeIDs.isEmpty)
+  }
+
+  @Test func repositoriesLoadedFiresDelegateWhenWorktreePropertiesChange() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Same worktree ID but different workingDirectory triggers delegate.
+    let movedWorktree = Worktree(
+      id: worktree.id,
+      name: worktree.name,
+      detail: "detail",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/moved-wt1"),
+      repositoryRootURL: worktree.repositoryRootURL,
+    )
+    let updatedRepository = makeRepository(id: repoRoot, worktrees: [movedWorktree])
+    await store.send(
+      .repositoriesLoaded(
+        [updatedRepository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false,
+      )
+    ) {
+      $0.repositories = [updatedRepository]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+  }
+
+  @Test func sidebarSelectionChangedWithMixedValidAndInvalidIDsKeepsValidOnly() async {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(wt1.id)
+    initialState.sidebarSelectedWorktreeIDs = [wt1.id]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Valid ID kept, unknown ID silently dropped.
+    await store.send(.selectionChanged([.worktree(wt1.id), .worktree("/tmp/unknown")]))
+    #expect(store.state.sidebarSelectedWorktreeIDs == [wt1.id])
+  }
+
+  @Test func sidebarSelectionsComputedPropertyReflectsState() {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+
+    // No selection.
+    #expect(state.sidebarSelections.isEmpty)
+
+    // Single selection.
+    state.selection = .worktree(wt1.id)
+    #expect(state.sidebarSelections == [.worktree(wt1.id)])
+
+    // Multi-selection includes selectedWorktreeID.
+    state.sidebarSelectedWorktreeIDs = [wt2.id]
+    #expect(state.sidebarSelections == [.worktree(wt1.id), .worktree(wt2.id)])
+
+    // Archived overrides everything.
+    state.selection = .archivedWorktrees
+    #expect(state.sidebarSelections == [.archivedWorktrees])
+  }
+
+  @Test func effectiveSidebarSelectedRowsFallsBackToSelectedWorktreeID() {
+    let wt1 = makeWorktree(id: "/tmp/repo/wt1", name: "wt1", repoRoot: "/tmp/repo")
+    let wt2 = makeWorktree(id: "/tmp/repo/wt2", name: "wt2", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [wt1, wt2])
+    var state = makeState(repositories: [repository])
+    state.selection = .worktree(wt1.id)
+    state.sidebarSelectedWorktreeIDs = []
+
+    // Falls back to selectedWorktreeID.
+    let fallbackRows = state.effectiveSidebarSelectedRows
+    #expect(fallbackRows.count == 1)
+    #expect(fallbackRows.first?.id == wt1.id)
+
+    // Primary path: sidebarSelectedWorktreeIDs non-empty.
+    state.sidebarSelectedWorktreeIDs = [wt1.id, wt2.id]
+    let primaryRows = state.effectiveSidebarSelectedRows
+    #expect(primaryRows.count == 2)
+  }
+
+  @Test func revealInSidebarExpandsCollapsedRepository() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    initialState.$collapsedRepositoryIDs.withLock { $0 = [repository.id] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [] }
+    }
+  }
+
+  @Test func revealInSidebarWithNoSelectionIsNoOp() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let initialState = makeState(repositories: [repository])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar)
+  }
+
+  @Test func revealInSidebarKeepsOtherRepositoriesCollapsed() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo-a/wt", name: "wt", repoRoot: "/tmp/repo-a")
+    let worktree2 = makeWorktree(id: "/tmp/repo-b/wt", name: "wt", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktree1])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktree2])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id]
+    initialState.$collapsedRepositoryIDs.withLock { $0 = [repoA.id, repoB.id] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repoB.id] }
+    }
+  }
+
   @Test func createRandomWorktreeWithoutRepositoriesShowsAlert() async {
     let store = TestStore(initialState: RepositoriesFeature.State()) {
       RepositoriesFeature()

@@ -67,3 +67,4 @@ Resources/ghostty
 Resources/terminfo
 *.profraw
 .env
+.DS_Store

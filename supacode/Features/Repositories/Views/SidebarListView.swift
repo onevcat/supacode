@@ -3,150 +3,49 @@ import SwiftUI
 
 struct SidebarListView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
-  @Binding var expandedRepoIDs: Set<Repository.ID>
-  @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
-  @State private var isDragActive = false
-
   var body: some View {
     let state = store.state
+    let expandedRepoIDs = state.expandedRepositoryIDs
     let hotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
     let orderedRoots = state.orderedRepositoryRoots()
-    let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
+    let selectedWorktreeIDs = state.sidebarSelectedWorktreeIDs
+    let currentSelections = state.sidebarSelections
     let selection = Binding<Set<SidebarSelection>>(
-      get: {
-        var nextSelections = sidebarSelections
-        if state.isShowingArchivedWorktrees {
-          nextSelections = [.archivedWorktrees]
-        } else {
-          nextSelections.remove(.archivedWorktrees)
-          if let selectedWorktreeID = state.selectedWorktreeID {
-            nextSelections.insert(.worktree(selectedWorktreeID))
-          }
-        }
-        return nextSelections
-      },
+      get: { currentSelections },
       set: { newValue in
-        var nextSelections = newValue
-        let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
-          guard case .repository(let repositoryID) = selection else { return nil }
-          return repositoryID
-        }
-        if !repositorySelections.isEmpty {
-          withAnimation(.easeOut(duration: 0.2)) {
-            for repositoryID in repositorySelections {
-              guard let repository = store.state.repositories[id: repositoryID],
-                !store.state.isRemovingRepository(repository)
-              else {
-                continue
-              }
-              if expandedRepoIDs.contains(repositoryID) {
-                expandedRepoIDs.remove(repositoryID)
-              } else {
-                expandedRepoIDs.insert(repositoryID)
-              }
-            }
-          }
-          nextSelections = Set(
-            nextSelections.filter {
-              if case .repository = $0 {
-                return false
-              }
-              return true
-            })
-        }
-
-        if nextSelections.contains(.archivedWorktrees) {
-          sidebarSelections = [.archivedWorktrees]
-          store.send(.selectArchivedWorktrees)
-          return
-        }
-
-        let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
-        guard !worktreeIDs.isEmpty else {
-          if !repositorySelections.isEmpty {
-            return
-          }
-          sidebarSelections = []
-          store.send(.selectWorktree(nil))
-          return
-        }
-        sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
-        if let selectedWorktreeID = state.selectedWorktreeID, worktreeIDs.contains(selectedWorktreeID) {
-          return
-        }
-        let nextPrimarySelection =
-          hotkeyRows.map(\.id).first(where: worktreeIDs.contains)
-          ?? worktreeIDs.first
-        store.send(.selectWorktree(nextPrimarySelection, focusTerminal: true))
+        guard newValue != currentSelections else { return }
+        store.send(.selectionChanged(newValue))
       }
     )
     let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
     List(selection: selection) {
       if orderedRoots.isEmpty {
-        let repositories = store.repositories
-        ForEach(Array(repositories.enumerated()), id: \.element.id) { index, repository in
-          RepositorySectionView(
+        ForEach(store.repositories) { repository in
+          SidebarRepositorySectionView(
             repository: repository,
-            showsTopSeparator: index > 0,
-            isDragActive: isDragActive,
             hotkeyRows: hotkeyRows,
             selectedWorktreeIDs: selectedWorktreeIDs,
-            expandedRepoIDs: $expandedRepoIDs,
             store: store,
             terminalManager: terminalManager
           )
-          .listRowInsets(EdgeInsets())
         }
       } else {
-        let orderedRows = Array(orderedRoots.enumerated()).map { index, rootURL in
-          (
-            index: index,
-            rootURL: rootURL,
-            repositoryID: rootURL.standardizedFileURL.path(percentEncoded: false)
-          )
-        }
-        ForEach(orderedRows, id: \.repositoryID) { row in
-          let index = row.index
-          let rootURL = row.rootURL
-          let repositoryID = row.repositoryID
-          if let failureMessage = state.loadFailuresByID[repositoryID] {
-            let name = Repository.name(for: rootURL.standardizedFileURL)
-            let path = rootURL.standardizedFileURL.path(percentEncoded: false)
-            FailedRepositoryRow(
-              name: name,
-              path: path,
-              showFailure: {
-                let message = "\(path)\n\n\(failureMessage)"
-                store.send(.presentAlert(title: "Unable to load \(name)", message: message))
-              },
-              removeRepository: {
-                store.send(.removeFailedRepository(repositoryID))
-              }
+        ForEach(sidebarRootRows(from: orderedRoots), id: \.repositoryID) { row in
+          if let failureMessage = state.loadFailuresByID[row.repositoryID] {
+            SidebarFailedRepositoryRow(
+              rootURL: row.rootURL,
+              failureMessage: failureMessage,
+              store: store
             )
-            .padding(.horizontal, 12)
-            .overlay(alignment: .top) {
-              if index > 0 {
-                Rectangle()
-                  .fill(.secondary)
-                  .frame(height: 1)
-                  .frame(maxWidth: .infinity)
-                  .accessibilityHidden(true)
-              }
-            }
-            .listRowInsets(EdgeInsets())
-          } else if let repository = repositoriesByID[repositoryID] {
-            RepositorySectionView(
+          } else if let repository = repositoriesByID[row.repositoryID] {
+            SidebarRepositorySectionView(
               repository: repository,
-              showsTopSeparator: index > 0,
-              isDragActive: isDragActive,
               hotkeyRows: hotkeyRows,
               selectedWorktreeIDs: selectedWorktreeIDs,
-              expandedRepoIDs: $expandedRepoIDs,
               store: store,
               terminalManager: terminalManager
             )
-            .listRowInsets(EdgeInsets())
           }
         }
         .onMove { offsets, destination in
@@ -157,26 +56,6 @@ struct SidebarListView: View {
     .listStyle(.sidebar)
     .scrollIndicators(.never)
     .frame(minWidth: 220)
-    .onDragSessionUpdated { session in
-      if case .ended = session.phase {
-        if isDragActive {
-          isDragActive = false
-        }
-        return
-      }
-      if case .dataTransferCompleted = session.phase {
-        if isDragActive {
-          isDragActive = false
-        }
-        return
-      }
-      if !isDragActive {
-        isDragActive = true
-      }
-    }
-    .safeAreaInset(edge: .bottom) {
-      SidebarFooterView(store: store)
-    }
     .dropDestination(for: URL.self) { urls, _ in
       let fileURLs = urls.filter(\.isFileURL)
       guard !fileURLs.isEmpty else { return false }
@@ -205,5 +84,126 @@ struct SidebarListView: View {
       terminalState.focusAndInsertText(keyPress.characters)
       return .handled
     }
+  }
+
+  private func sidebarRootRows(
+    from orderedRoots: [URL]
+  ) -> [(rootURL: URL, repositoryID: Repository.ID)] {
+    orderedRoots.map { rootURL in
+      (
+        rootURL: rootURL,
+        repositoryID: rootURL.standardizedFileURL.path(percentEncoded: false)
+      )
+    }
+  }
+}
+
+private struct SidebarRepositorySectionView: View {
+  let repository: Repository
+  let hotkeyRows: [WorktreeRowModel]
+  let selectedWorktreeIDs: Set<Worktree.ID>
+  @Bindable var store: StoreOf<RepositoriesFeature>
+  let terminalManager: WorktreeTerminalManager
+  var body: some View {
+    let isRemovingRepository = store.state.isRemovingRepository(repository)
+    Section(isExpanded: repositoryExpansionBinding) {
+      WorktreeRowsView(
+        repository: repository,
+        hotkeyRows: hotkeyRows,
+        selectedWorktreeIDs: selectedWorktreeIDs,
+        store: store,
+        terminalManager: terminalManager
+      )
+    } header: {
+      RepoSectionHeaderView(
+        name: repository.name,
+        isRemoving: isRemovingRepository
+      )
+    }
+    .sectionActions {
+      SidebarRepositorySectionActionsView(
+        repositoryID: repository.id,
+        isRemovingRepository: isRemovingRepository,
+        store: store
+      )
+    }
+  }
+
+  private var repositoryExpansionBinding: Binding<Bool> {
+    Binding(
+      get: { store.state.isRepositoryExpanded(repository.id) },
+      set: { isExpanded in
+        store.send(.repositoryExpansionChanged(repository.id, isExpanded: isExpanded))
+      }
+    )
+  }
+}
+
+private struct SidebarRepositorySectionActionsView: View {
+  let repositoryID: Repository.ID
+  let isRemovingRepository: Bool
+  let store: StoreOf<RepositoriesFeature>
+
+  var body: some View {
+    Menu {
+      Button("Repository Settings…", systemImage: "gear") {
+        store.send(.openRepositorySettings(repositoryID))
+      }
+      .help("Repository Settings")
+      Divider()
+      Button("Remove Repository…", systemImage: "folder.badge.minus", role: .destructive) {
+        store.send(.requestRemoveRepository(repositoryID))
+      }
+      .help("Remove Repository")
+      .disabled(isRemovingRepository)
+    } label: {
+      Image(systemName: "ellipsis")
+        .accessibilityLabel("Options")
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+    .menuStyle(.button)
+    .menuIndicator(.hidden)
+    .buttonStyle(.plain)
+    .foregroundStyle(.secondary)
+
+    Button {
+      store.send(.createRandomWorktreeInRepository(repositoryID))
+    } label: {
+      Image(systemName: "plus")
+        .accessibilityLabel("New Worktree")
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(isRemovingRepository)
+    .foregroundStyle(.secondary)
+    .help("New Worktree")
+    .padding(.trailing, 4)
+  }
+}
+
+private struct SidebarFailedRepositoryRow: View {
+  let rootURL: URL
+  let failureMessage: String
+  let store: StoreOf<RepositoriesFeature>
+
+  var body: some View {
+    let standardizedRootURL = rootURL.standardizedFileURL
+    let name = Repository.name(for: standardizedRootURL)
+    let path = standardizedRootURL.path(percentEncoded: false)
+
+    FailedRepositoryRow(
+      name: name,
+      path: path,
+      showFailure: {
+        let message = "\(path)\n\n\(failureMessage)"
+        store.send(.presentAlert(title: "Unable to load \(name)", message: message))
+      },
+      removeRepository: {
+        store.send(.removeFailedRepository(path))
+      }
+    )
+    .padding(.horizontal, 12)
   }
 }

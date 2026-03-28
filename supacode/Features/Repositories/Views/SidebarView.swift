@@ -5,72 +5,37 @@ import SwiftUI
 struct SidebarView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
-  @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) private var collapsedRepositoryIDs: [Repository.ID] = []
-  @State private var sidebarSelections: Set<SidebarSelection> = []
+  @Shared(.settingsFile) private var settingsFile
 
   var body: some View {
     let state = store.state
-    let repositoryIDs = Set(state.repositories.map(\.id))
-    let expandedRepoIDs = state.expandedRepositoryIDs
-    let expandedRepoIDsBinding = expandedRepoIDsBinding(
-      repositoryIDs: repositoryIDs,
-      expandedRepoIDs: expandedRepoIDs
-    )
-    let visibleHotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
-    let visibleWorktreeIDs = Set(visibleHotkeyRows.map(\.id))
-    let effectiveSelectedRows = selectedRows(state: state)
+    let visibleHotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: state.expandedRepositoryIDs)
+    let effectiveSelectedRows = state.effectiveSidebarSelectedRows
     let confirmWorktreeAction = makeConfirmWorktreeAction(state: state)
     let archiveWorktreeAction = makeArchiveWorktreeAction(rows: effectiveSelectedRows)
     let deleteWorktreeAction = makeDeleteWorktreeAction(rows: effectiveSelectedRows)
+    let openRepo = AppShortcuts.openRepository.effective(from: settingsFile.global.shortcutOverrides)
 
     return SidebarListView(
       store: store,
-      expandedRepoIDs: expandedRepoIDsBinding,
-      sidebarSelections: $sidebarSelections,
       terminalManager: terminalManager
     )
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          store.send(.setOpenPanelPresented(true))
+        } label: {
+          Image(systemName: "folder.badge.plus")
+            .offset(y: -1)
+            .accessibilityLabel("Add Repository")
+        }
+        .help("Add Repository (\(openRepo?.display ?? "none"))")
+      }
+    }
     .focusedSceneValue(\.confirmWorktreeAction, confirmWorktreeAction)
     .focusedValue(\.archiveWorktreeAction, archiveWorktreeAction)
     .focusedValue(\.deleteWorktreeAction, deleteWorktreeAction)
     .focusedSceneValue(\.visibleHotkeyWorktreeRows, visibleHotkeyRows)
-    .onAppear { syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs) }
-    .onChange(of: state.selection) { _, _ in
-      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
-    }
-    .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
-      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
-    }
-    .onChange(of: sidebarSelections) { _, newValue in
-      store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
-    }
-    .onChange(of: repositoryIDs) { _, newValue in
-      let collapsed = Set(collapsedRepositoryIDs).intersection(newValue)
-      $collapsedRepositoryIDs.withLock {
-        $0 = Array(collapsed).sorted()
-      }
-    }
-  }
-
-  private func expandedRepoIDsBinding(
-    repositoryIDs: Set<Repository.ID>,
-    expandedRepoIDs: Set<Repository.ID>
-  ) -> Binding<Set<Repository.ID>> {
-    Binding<Set<Repository.ID>>(
-      get: { expandedRepoIDs },
-      set: { newValue in
-        let collapsed = repositoryIDs.subtracting(newValue)
-        $collapsedRepositoryIDs.withLock {
-          $0 = Array(collapsed).sorted()
-        }
-      }
-    )
-  }
-
-  private func selectedRows(state: RepositoriesFeature.State) -> [WorktreeRowModel] {
-    let selectedRow = state.selectedRow(for: state.selectedWorktreeID)
-    let selectedWorktreeIDs = state.sidebarSelectedWorktreeIDs
-    let selectedRows = state.orderedWorktreeRows().filter { selectedWorktreeIDs.contains($0.id) }
-    return selectedRows.isEmpty ? (selectedRow.map { [$0] } ?? []) : selectedRows
   }
 
   private func makeConfirmWorktreeAction(
@@ -124,38 +89,5 @@ struct SidebarView: View {
         store.send(.requestDeleteWorktrees(targets))
       }
     }
-  }
-
-  private func syncSidebarSelections(
-    state: RepositoriesFeature.State,
-    visibleWorktreeIDs: Set<Worktree.ID>
-  ) {
-    sidebarSelections = normalizedSidebarSelections(
-      state: state,
-      visibleWorktreeIDs: visibleWorktreeIDs
-    )
-    store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: sidebarSelections)))
-  }
-
-  private func normalizedSidebarSelections(
-    state: RepositoriesFeature.State,
-    visibleWorktreeIDs: Set<Worktree.ID>
-  ) -> Set<SidebarSelection> {
-    if state.isShowingArchivedWorktrees {
-      return [.archivedWorktrees]
-    }
-    var normalized = Set(
-      state.sidebarSelectedWorktreeIDs
-        .intersection(visibleWorktreeIDs)
-        .map(SidebarSelection.worktree)
-    )
-    if let selectedWorktreeID = state.selectedWorktreeID {
-      normalized.insert(.worktree(selectedWorktreeID))
-    }
-    return normalized
-  }
-
-  private func selectedWorktreeIDs(from selections: Set<SidebarSelection>) -> Set<Worktree.ID> {
-    Set(selections.compactMap(\.worktreeID))
   }
 }

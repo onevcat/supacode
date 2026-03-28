@@ -216,6 +216,13 @@ struct SupacodeApp: App {
         }
         .appKeyboardShortcut(settings)
       }
+      CommandGroup(replacing: .help) {
+        Button("Submit GitHub Issue") {
+          guard let url = URL(string: "https://github.com/supabitapp/supacode/issues/new") else { return }
+          NSWorkspace.shared.open(url)
+        }
+        .help("Submit GitHub Issue")
+      }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Supacode") {
           store.send(.requestQuit)

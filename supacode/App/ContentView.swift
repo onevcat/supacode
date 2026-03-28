@@ -5,6 +5,7 @@
 //  Created by khoi on 20/1/26.
 //
 
+import AppKit
 import ComposableArchitecture
 import SwiftUI
 import UniformTypeIdentifiers
@@ -88,6 +89,7 @@ struct ContentView: View {
       )
     }
     .focusedSceneValue(\.toggleLeftSidebarAction, toggleLeftSidebar)
+    .focusedSceneValue(\.revealInSidebarAction, revealInSidebarAction)
     .overlay {
       CommandPaletteOverlayView(
         store: store.scope(state: \.commandPalette, action: \.commandPalette),
@@ -104,6 +106,60 @@ struct ContentView: View {
     withAnimation(.easeOut(duration: 0.2)) {
       leftSidebarVisibility = leftSidebarVisibility == .detailOnly ? .all : .detailOnly
     }
+  }
+
+  private var revealInSidebarAction: (() -> Void)? {
+    guard store.repositories.selectedWorktreeID != nil else { return nil }
+    return { revealInSidebar() }
+  }
+
+  private func revealInSidebar() {
+    withAnimation(.easeOut(duration: 0.2)) {
+      leftSidebarVisibility = .all
+    }
+    store.send(.repositories(.revealSelectedWorktreeInSidebar))
+    Task { @MainActor in
+      await Self.focusSidebarOutlineViewWhenReady()
+    }
+  }
+
+  private static func focusSidebarOutlineViewWhenReady(maxAttempts: Int = 8) async {
+    for attempt in 0..<maxAttempts {
+      guard !focusSidebarOutlineViewIfReady(),
+        attempt < maxAttempts - 1
+      else {
+        return
+      }
+      await Task.yield()
+    }
+  }
+
+  private static func focusSidebarOutlineViewIfReady() -> Bool {
+    guard let window = NSApp.keyWindow,
+      let outlineView = firstOutlineView(in: window.contentView)
+    else { return false }
+    outlineView.layoutSubtreeIfNeeded()
+    outlineView.enclosingScrollView?.layoutSubtreeIfNeeded()
+    window.makeFirstResponder(outlineView)
+    let selectedRow = outlineView.selectedRow
+    guard selectedRow >= 0 else { return false }
+    let rowRect = outlineView.rect(ofRow: selectedRow)
+    if let clipView = outlineView.enclosingScrollView?.contentView {
+      let centeredY = rowRect.midY - clipView.bounds.height / 2
+      let clampedY = max(0, min(centeredY, outlineView.bounds.height - clipView.bounds.height))
+      clipView.setBoundsOrigin(NSPoint(x: 0, y: clampedY))
+    }
+    return true
+  }
+
+  private static func firstOutlineView(in view: NSView?) -> NSOutlineView? {
+    guard let view else { return nil }
+    if let outlineView = view as? NSOutlineView { return outlineView }
+    for subview in view.subviews {
+      guard let found = firstOutlineView(in: subview) else { continue }
+      return found
+    }
+    return nil
   }
 
 }

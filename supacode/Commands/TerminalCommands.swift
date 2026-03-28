@@ -13,7 +13,8 @@ struct TerminalCommands: Commands {
 
   var body: some Commands {
     CommandGroup(after: .newItem) {
-      Button("New Terminal") {
+      Divider()
+      Button("New Terminal", systemImage: "apple.terminal") {
         newTerminalAction?()
       }
       .modifier(KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "new_tab")))
