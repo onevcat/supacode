@@ -169,4 +169,93 @@ struct AppShortcutsTests {
       #expect(arguments.contains(argument) == false)
     }
   }
+
+  @Test func resolverOverridePropagatesToMenuPaletteAndGhosttyArgs() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    expectNoDifference(
+      AppShortcuts.resolvedShortcut(for: AppShortcuts.CommandID.openSettings, in: resolved)?.display,
+      "⌘;"
+    )
+
+    let paletteItem = CommandPaletteItem(
+      id: "settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    expectNoDifference(paletteItem.appShortcutLabel(in: resolved), "⌘;")
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+;=unbind"))
+    #expect(arguments.contains("--keybind=super+,=unbind") == false)
+  }
+
+  @Test func disabledOverrideRemovesShortcutFromMenuPaletteAndGhosttyArgs() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true)),
+          isEnabled: false
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    #expect(AppShortcuts.resolvedShortcut(for: AppShortcuts.CommandID.openSettings, in: resolved) == nil)
+    #expect(resolved.display(for: AppShortcuts.CommandID.openSettings) == nil)
+
+    let paletteItem = CommandPaletteItem(
+      id: "settings",
+      title: "Open Settings",
+      subtitle: nil,
+      kind: .openSettings
+    )
+    #expect(paletteItem.appShortcutLabel(in: resolved) == nil)
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+,=unbind") == false)
+    #expect(arguments.contains("--keybind=super+;=unbind") == false)
+  }
+
+  @Test func resolvedShortcutFallsBackToDefaultWhenCommandMissingInResolvedMap() {
+    let resolved = ResolvedKeybindingMap(bindingsByCommandID: [:])
+
+    expectNoDifference(
+      AppShortcuts.resolvedShortcut(for: AppShortcuts.CommandID.openSettings, in: resolved)?.display,
+      AppShortcuts.openSettings.display
+    )
+  }
+
+  @Test func unsupportedResolvedBindingDoesNotFallbackToDefaultShortcut() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: "space", modifiers: .init(command: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    #expect(AppShortcuts.resolvedShortcut(for: AppShortcuts.CommandID.openSettings, in: resolved) == nil)
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+,=unbind") == false)
+  }
 }

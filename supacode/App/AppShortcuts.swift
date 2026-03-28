@@ -34,6 +34,15 @@ struct AppShortcut: Equatable {
     "--keybind=\(ghosttyKeybind)=unbind"
   }
 
+  func ghosttyBindArguments(action: String) -> [String] {
+    var arguments = ["--keybind=\(ghosttyKeybind)=\(action)"]
+    if let physicalKeyAlias {
+      let parts = ghosttyModifierParts + [physicalKeyAlias]
+      arguments.append("--keybind=\(parts.joined(separator: "+"))=\(action)")
+    }
+    return arguments
+  }
+
   var display: String {
     let parts = displayModifierParts + [keyEquivalent.display]
     return parts.joined()
@@ -65,9 +74,48 @@ struct AppShortcut: Equatable {
     if modifiers.contains(.control) { parts.append("⌃") }
     return parts
   }
+
+  private var physicalKeyAlias: String? {
+    let value = String(keyEquivalent.character).lowercased()
+    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
+    return "digit_\(value)"
+  }
 }
 
 enum AppShortcuts {
+  enum CommandID {
+    static let newWorktree = "new_worktree"
+    static let commandPalette = "command_palette"
+    static let quitApplication = "quit_application"
+    static let openSettings = "open_settings"
+    static let openWorktree = "open_worktree"
+    static let copyPath = "copy_path"
+    static let openRepository = "open_repository"
+    static let openPullRequest = "open_pull_request"
+    static let toggleLeftSidebar = "toggle_left_sidebar"
+    static let refreshWorktrees = "refresh_worktrees"
+    static let runScript = "run_script"
+    static let stopScript = "stop_script"
+    static let checkForUpdates = "check_for_updates"
+    static let showDiff = "show_diff"
+    static let toggleCanvas = "toggle_canvas"
+    static let archivedWorktrees = "archived_worktrees"
+    static let selectNextWorktree = "select_next_worktree"
+    static let selectPreviousWorktree = "select_previous_worktree"
+    static let selectWorktree1 = "select_worktree_1"
+    static let selectWorktree2 = "select_worktree_2"
+    static let selectWorktree3 = "select_worktree_3"
+    static let selectWorktree4 = "select_worktree_4"
+    static let selectWorktree5 = "select_worktree_5"
+    static let selectWorktree6 = "select_worktree_6"
+    static let selectWorktree7 = "select_worktree_7"
+    static let selectWorktree8 = "select_worktree_8"
+    static let selectWorktree9 = "select_worktree_9"
+    static let selectWorktree0 = "select_worktree_0"
+    static let renameBranch = "rename_branch"
+    static let selectAllCanvasCards = "select_all_canvas_cards"
+  }
+
   enum Scope: String {
     case configurableAppAction
     case systemFixedAppAction
@@ -159,6 +207,19 @@ enum AppShortcuts {
     selectWorktree8,
     selectWorktree9,
     selectWorktree0,
+  ]
+
+  static let worktreeSelectionCommandIDs: [String] = [
+    CommandID.selectWorktree1,
+    CommandID.selectWorktree2,
+    CommandID.selectWorktree3,
+    CommandID.selectWorktree4,
+    CommandID.selectWorktree5,
+    CommandID.selectWorktree6,
+    CommandID.selectWorktree7,
+    CommandID.selectWorktree8,
+    CommandID.selectWorktree9,
+    CommandID.selectWorktree0,
   ]
 
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
@@ -386,15 +447,49 @@ enum AppShortcuts {
     }
   }
 
-  static let tabSelectionGhosttyKeybindArguments: [String] = tabSelectionBindings.flatMap { binding in
-    [
-      "--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)",
-      "--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)",
-    ]
+  static func binding(for id: String) -> Binding? {
+    bindings.first { $0.id == id }
+  }
+
+  static func defaultShortcut(for id: String) -> AppShortcut? {
+    binding(for: id)?.shortcut
+  }
+
+  static func resolvedShortcut(for id: String, in resolvedKeybindings: ResolvedKeybindingMap) -> AppShortcut? {
+    guard let resolvedBinding = resolvedKeybindings.binding(for: id) else {
+      return defaultShortcut(for: id)
+    }
+    return resolvedBinding.binding?.appShortcut
+  }
+
+  static var tabSelectionGhosttyKeybindArguments: [String] {
+    var result: [String] = []
+    for binding in tabSelectionBindings {
+      result.append("--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)")
+      result.append("--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)")
+    }
+    return result
+  }
+
+  static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
+    var unbindArguments: [String] = []
+    for binding in bindings where binding.scope == .configurableAppAction {
+      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+        unbindArguments.append(argument)
+      }
+    }
+
+    var tabArguments: [String] = []
+    for (commandID, binding) in zip(worktreeSelectionCommandIDs, tabSelectionBindings) {
+      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
+      tabArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: "goto_tab:\(binding.tabIndex)"))
+    }
+
+    return unbindArguments + tabArguments
   }
 
   static var ghosttyCLIKeybindArguments: [String] {
-    all.map(\.ghosttyUnbindArgument) + tabSelectionGhosttyKeybindArguments
+    ghosttyCLIKeybindArguments(from: .appDefaults)
   }
 
   static let all: [AppShortcut] = [

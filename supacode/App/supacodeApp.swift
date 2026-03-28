@@ -19,7 +19,7 @@ private enum GhosttyCLI {
     var args: [UnsafeMutablePointer<CChar>?] = []
     let executable = CommandLine.arguments.first ?? "supacode"
     args.append(strdup(executable))
-    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments {
+    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments(from: .appDefaults) {
       args.append(strdup(keybindArgument))
     }
     args.append(nil)
@@ -177,6 +177,7 @@ struct SupacodeApp: App {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
+          .environment(\.resolvedKeybindings, store.resolvedKeybindings)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }
@@ -191,32 +192,49 @@ struct SupacodeApp: App {
         Button("Command Palette") {
           store.send(.commandPalette(.togglePresented))
         }
-        .keyboardShortcut(
-          AppShortcuts.commandPalette.keyEquivalent,
-          modifiers: AppShortcuts.commandPalette.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(
+              for: AppShortcuts.CommandID.commandPalette
+            )
+          )
         )
-        .help("Command Palette (\(AppShortcuts.commandPalette.display))")
+        .help(helpText(title: "Command Palette", commandID: AppShortcuts.CommandID.commandPalette))
       }
-      UpdateCommands(store: store.scope(state: \.updates, action: \.updates))
+      UpdateCommands(
+        store: store.scope(state: \.updates, action: \.updates),
+        resolvedKeybindings: store.resolvedKeybindings
+      )
       CommandGroup(replacing: .appSettings) {
         Button("Settings...") {
           SettingsWindowManager.shared.show()
         }
-        .keyboardShortcut(
-          AppShortcuts.openSettings.keyEquivalent,
-          modifiers: AppShortcuts.openSettings.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openSettings)
+          )
         )
       }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Prowl") {
           store.send(.requestQuit)
         }
-        .keyboardShortcut(
-          AppShortcuts.quitApplication.keyEquivalent,
-          modifiers: AppShortcuts.quitApplication.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(
+              for: AppShortcuts.CommandID.quitApplication
+            )
+          )
         )
-        .help("Quit Prowl (\(AppShortcuts.quitApplication.display))")
+        .help(helpText(title: "Quit Prowl", commandID: AppShortcuts.CommandID.quitApplication))
       }
     }
+  }
+
+  private func helpText(title: String, commandID: String) -> String {
+    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
   }
 }

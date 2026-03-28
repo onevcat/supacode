@@ -133,24 +133,6 @@ nonisolated struct KeybindingCommandSchema: Codable, Equatable, Sendable {
   var allowUserOverride: Bool
   var conflictPolicy: KeybindingConflictPolicy
   var defaultBinding: Keybinding?
-
-  init(
-    id: String,
-    title: String,
-    scope: KeybindingScope,
-    platform: KeybindingPlatform,
-    allowUserOverride: Bool,
-    conflictPolicy: KeybindingConflictPolicy,
-    defaultBinding: Keybinding?
-  ) {
-    self.id = id
-    self.title = title
-    self.scope = scope
-    self.platform = platform
-    self.allowUserOverride = allowUserOverride
-    self.conflictPolicy = conflictPolicy
-    self.defaultBinding = defaultBinding
-  }
 }
 
 nonisolated struct KeybindingUserOverrideStore: Codable, Equatable, Sendable {
@@ -186,6 +168,26 @@ nonisolated struct ResolvedKeybindingMap: Equatable, Sendable {
 
   func binding(for commandID: String) -> ResolvedKeybinding? {
     bindingsByCommandID[commandID]
+  }
+}
+
+extension ResolvedKeybindingMap {
+  static let appDefaults = KeybindingResolver.resolve(schema: .appResolverSchema())
+
+  func keybinding(for commandID: String) -> Keybinding? {
+    binding(for: commandID)?.binding
+  }
+
+  func appShortcut(for commandID: String) -> AppShortcut? {
+    keybinding(for: commandID)?.appShortcut
+  }
+
+  func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
+    keybinding(for: commandID)?.keyboardShortcut
+  }
+
+  func display(for commandID: String) -> String? {
+    keybinding(for: commandID)?.display
   }
 }
 
@@ -370,6 +372,13 @@ extension KeybindingSchemaDocument {
       }
     )
   }
+
+  static func appResolverSchema(customCommands: [UserCustomCommand] = []) -> KeybindingSchemaDocument {
+    KeybindingSchemaDocument(
+      version: currentVersion,
+      commands: appDefaultsV1.commands + customCommands.map(\.keybindingCommandSchema)
+    )
+  }
 }
 
 extension AppShortcuts.Scope {
@@ -388,5 +397,75 @@ extension AppShortcuts.Scope {
 extension AppShortcut {
   fileprivate var keybinding: Keybinding {
     Keybinding(key: keyToken, modifiers: .init(modifiers))
+  }
+}
+
+extension UserCustomCommand {
+  fileprivate var keybindingCommandSchema: KeybindingCommandSchema {
+    KeybindingCommandSchema(
+      id: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: id),
+      title: resolvedTitle,
+      scope: .customCommand,
+      platform: .macOS,
+      allowUserOverride: true,
+      conflictPolicy: .warnAndPreferUserOverride,
+      defaultBinding: nil
+    )
+  }
+}
+
+extension Keybinding {
+  var keyEquivalent: KeyEquivalent? {
+    switch key {
+    case "return":
+      return .return
+    case "arrow_up":
+      return .upArrow
+    case "arrow_down":
+      return .downArrow
+    case "arrow_left":
+      return .leftArrow
+    case "arrow_right":
+      return .rightArrow
+    default:
+      guard key.count == 1, let character = key.first else { return nil }
+      return KeyEquivalent(character)
+    }
+  }
+
+  var keyboardShortcut: KeyboardShortcut? {
+    guard let keyEquivalent else { return nil }
+    return KeyboardShortcut(keyEquivalent, modifiers: modifiers.eventModifiers)
+  }
+
+  var appShortcut: AppShortcut? {
+    guard let keyEquivalent else { return nil }
+    switch key {
+    case "return", "arrow_up", "arrow_down", "arrow_left", "arrow_right":
+      return AppShortcut(
+        keyEquivalent: keyEquivalent,
+        ghosttyKeyName: key,
+        modifiers: modifiers.eventModifiers
+      )
+    default:
+      guard let character = key.first else { return nil }
+      return AppShortcut(key: character, modifiers: modifiers.eventModifiers)
+    }
+  }
+
+  var userCustomShortcut: UserCustomShortcut? {
+    guard key.count == 1 else { return nil }
+    return UserCustomShortcut(key: key, modifiers: .init(modifiers))
+  }
+}
+
+extension UserCustomShortcutModifiers {
+  nonisolated init(_ modifiers: KeybindingModifiers) {
+    self.init(
+      command: modifiers.command,
+      shift: modifiers.shift,
+      option: modifiers.option,
+      control: modifiers.control
+    )
   }
 }

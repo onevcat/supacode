@@ -19,6 +19,7 @@ struct AppFeature {
     var openActionSelection: OpenWorktreeAction = .finder
     var selectedRunScript: String = ""
     var selectedCustomCommands: [UserCustomCommand] = []
+    var resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
@@ -139,6 +140,7 @@ struct AppFeature {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           state.selectedCustomCommands = []
+          state.resolvedKeybindings = .appDefaults
           state.runScriptDraft = ""
           state.isRunScriptPromptPresented = false
           var effects: [Effect<Action>] = [
@@ -167,6 +169,7 @@ struct AppFeature {
         let rootURL = worktree.repositoryRootURL
         let worktreeID = worktree.id
         state.selectedCustomCommands = []
+        state.resolvedKeybindings = .appDefaults
         state.runScriptDraft = ""
         state.isRunScriptPromptPresented = false
         @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -623,10 +626,15 @@ struct AppFeature {
         }
         state.selectedCustomCommands = UserRepositorySettings.normalizedCommands(settings.customCommands)
           .filter(\.hasRunnableCommand)
+        let migration = LegacyCustomCommandShortcutMigration.migrate(commands: state.selectedCustomCommands)
+        state.resolvedKeybindings = KeybindingResolver.resolve(
+          schema: .appResolverSchema(customCommands: state.selectedCustomCommands),
+          migratedOverrides: migration.overrides
+        )
         let userOverrideConflicts = AppShortcuts.userOverrideConflicts(in: state.selectedCustomCommands)
         let shortcuts: [UserCustomShortcut] = state.selectedCustomCommands.compactMap { command in
-          guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
-          return shortcut.normalized()
+          let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
+          return state.resolvedKeybindings.keybinding(for: commandID)?.userCustomShortcut
         }
         return .run { _ in
           let logger = SupaLogger("Shortcuts")
