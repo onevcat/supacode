@@ -69,3 +69,4 @@ Resources/terminfo
 .env
 build/
 .DS_Store
+.worktrees/
