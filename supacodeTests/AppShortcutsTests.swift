@@ -169,4 +169,32 @@ struct AppShortcutsTests {
       #expect(arguments.contains(argument) == false)
     }
   }
+
+  @Test func resolvedShortcutAndGhosttyArgumentsFollowResolverOutput() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.ID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true))
+        ),
+        AppShortcuts.ID.selectWorktree1: KeybindingUserOverride(
+          binding: Keybinding(key: "z", modifiers: .init(control: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    expectNoDifference(
+      AppShortcuts.resolvedShortcut(for: AppShortcuts.ID.openSettings, in: resolved)?.display,
+      "⌘;"
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+;=unbind"))
+    #expect(arguments.contains("--keybind=super+,=unbind") == false)
+    #expect(arguments.contains("--keybind=ctrl+z=goto_tab:1"))
+    #expect(arguments.contains("--keybind=ctrl+1=goto_tab:1") == false)
+  }
 }

@@ -19,7 +19,7 @@ private enum GhosttyCLI {
     var args: [UnsafeMutablePointer<CChar>?] = []
     let executable = CommandLine.arguments.first ?? "supacode"
     args.append(strdup(executable))
-    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments {
+    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments(from: .appDefaults) {
       args.append(strdup(keybindArgument))
     }
     args.append(nil)
@@ -191,31 +191,42 @@ struct SupacodeApp: App {
         Button("Command Palette") {
           store.send(.commandPalette(.togglePresented))
         }
-        .keyboardShortcut(
-          AppShortcuts.commandPalette.keyEquivalent,
-          modifiers: AppShortcuts.commandPalette.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.commandPalette)
+          )
         )
-        .help("Command Palette (\(AppShortcuts.commandPalette.display))")
+        .help(
+          "Command Palette (\(store.resolvedKeybindings.display(for: AppShortcuts.ID.commandPalette) ?? AppShortcuts.commandPalette.display))"
+        )
       }
-      UpdateCommands(store: store.scope(state: \.updates, action: \.updates))
+      UpdateCommands(
+        store: store.scope(state: \.updates, action: \.updates),
+        resolvedKeybindings: store.resolvedKeybindings
+      )
       CommandGroup(replacing: .appSettings) {
         Button("Settings...") {
           SettingsWindowManager.shared.show()
         }
-        .keyboardShortcut(
-          AppShortcuts.openSettings.keyEquivalent,
-          modifiers: AppShortcuts.openSettings.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.openSettings)
+              ?? AppShortcuts.openSettings.keyboardShortcut
+          )
         )
       }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Prowl") {
           store.send(.requestQuit)
         }
-        .keyboardShortcut(
-          AppShortcuts.quitApplication.keyEquivalent,
-          modifiers: AppShortcuts.quitApplication.modifiers
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.quitApplication)
+          )
         )
-        .help("Quit Prowl (\(AppShortcuts.quitApplication.display))")
+        .help(
+          "Quit Prowl (\(store.resolvedKeybindings.display(for: AppShortcuts.ID.quitApplication) ?? AppShortcuts.quitApplication.display))"
+        )
       }
     }
   }

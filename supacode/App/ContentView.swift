@@ -94,7 +94,8 @@ struct ContentView: View {
         items: CommandPaletteFeature.commandPaletteItems(
           from: store.repositories,
           ghosttyCommands: ghosttyShortcuts.commandPaletteEntries
-        )
+        ),
+        resolvedKeybindings: store.resolvedKeybindings
       )
     }
     .background(WindowTabbingDisabler())
