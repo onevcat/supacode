@@ -133,24 +133,6 @@ nonisolated struct KeybindingCommandSchema: Codable, Equatable, Sendable {
   var allowUserOverride: Bool
   var conflictPolicy: KeybindingConflictPolicy
   var defaultBinding: Keybinding?
-
-  init(
-    id: String,
-    title: String,
-    scope: KeybindingScope,
-    platform: KeybindingPlatform,
-    allowUserOverride: Bool,
-    conflictPolicy: KeybindingConflictPolicy,
-    defaultBinding: Keybinding?
-  ) {
-    self.id = id
-    self.title = title
-    self.scope = scope
-    self.platform = platform
-    self.allowUserOverride = allowUserOverride
-    self.conflictPolicy = conflictPolicy
-    self.defaultBinding = defaultBinding
-  }
 }
 
 nonisolated struct KeybindingUserOverrideStore: Codable, Equatable, Sendable {

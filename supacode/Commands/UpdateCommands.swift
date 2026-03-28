@@ -10,19 +10,19 @@ struct UpdateCommands: Commands {
       Button("Check for Updates...") {
         store.send(.checkForUpdates)
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.checkForUpdates)))
-      .help("Check for Updates (\(shortcutDisplay(for: AppShortcuts.ID.checkForUpdates)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.checkForUpdates)))
+      .help(helpText(title: "Check for Updates", commandID: AppShortcuts.CommandID.checkForUpdates))
     }
   }
 
   private func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
     resolvedKeybindings.keyboardShortcut(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.keyboardShortcut
   }
 
-  private func shortcutDisplay(for commandID: String) -> String {
-    resolvedKeybindings.display(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.display
-      ?? ""
+  private func helpText(title: String, commandID: String) -> String {
+    if let shortcut = resolvedKeybindings.display(for: commandID) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
   }
 }

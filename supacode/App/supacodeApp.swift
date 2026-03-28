@@ -177,6 +177,7 @@ struct SupacodeApp: App {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
+          .environment(\.resolvedKeybindings, store.resolvedKeybindings)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }
@@ -193,12 +194,12 @@ struct SupacodeApp: App {
         }
         .modifier(
           KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.commandPalette)
+            shortcut: store.resolvedKeybindings.keyboardShortcut(
+              for: AppShortcuts.CommandID.commandPalette
+            )
           )
         )
-        .help(
-          "Command Palette (\(store.resolvedKeybindings.display(for: AppShortcuts.ID.commandPalette) ?? AppShortcuts.commandPalette.display))"
-        )
+        .help(helpText(title: "Command Palette", commandID: AppShortcuts.CommandID.commandPalette))
       }
       UpdateCommands(
         store: store.scope(state: \.updates, action: \.updates),
@@ -210,8 +211,7 @@ struct SupacodeApp: App {
         }
         .modifier(
           KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.openSettings)
-              ?? AppShortcuts.openSettings.keyboardShortcut
+            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openSettings)
           )
         )
       }
@@ -221,13 +221,20 @@ struct SupacodeApp: App {
         }
         .modifier(
           KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.ID.quitApplication)
+            shortcut: store.resolvedKeybindings.keyboardShortcut(
+              for: AppShortcuts.CommandID.quitApplication
+            )
           )
         )
-        .help(
-          "Quit Prowl (\(store.resolvedKeybindings.display(for: AppShortcuts.ID.quitApplication) ?? AppShortcuts.quitApplication.display))"
-        )
+        .help(helpText(title: "Quit Prowl", commandID: AppShortcuts.CommandID.quitApplication))
       }
     }
+  }
+
+  private func helpText(title: String, commandID: String) -> String {
+    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
   }
 }

@@ -83,7 +83,7 @@ struct AppShortcut: Equatable {
 }
 
 enum AppShortcuts {
-  enum ID {
+  enum CommandID {
     static let newWorktree = "new_worktree"
     static let commandPalette = "command_palette"
     static let quitApplication = "quit_application"
@@ -210,16 +210,16 @@ enum AppShortcuts {
   ]
 
   static let worktreeSelectionCommandIDs: [String] = [
-    ID.selectWorktree1,
-    ID.selectWorktree2,
-    ID.selectWorktree3,
-    ID.selectWorktree4,
-    ID.selectWorktree5,
-    ID.selectWorktree6,
-    ID.selectWorktree7,
-    ID.selectWorktree8,
-    ID.selectWorktree9,
-    ID.selectWorktree0,
+    CommandID.selectWorktree1,
+    CommandID.selectWorktree2,
+    CommandID.selectWorktree3,
+    CommandID.selectWorktree4,
+    CommandID.selectWorktree5,
+    CommandID.selectWorktree6,
+    CommandID.selectWorktree7,
+    CommandID.selectWorktree8,
+    CommandID.selectWorktree9,
+    CommandID.selectWorktree0,
   ]
 
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
@@ -456,7 +456,10 @@ enum AppShortcuts {
   }
 
   static func resolvedShortcut(for id: String, in resolvedKeybindings: ResolvedKeybindingMap) -> AppShortcut? {
-    resolvedKeybindings.appShortcut(for: id) ?? defaultShortcut(for: id)
+    guard let resolvedBinding = resolvedKeybindings.binding(for: id) else {
+      return defaultShortcut(for: id)
+    }
+    return resolvedBinding.binding?.appShortcut
   }
 
   static var tabSelectionGhosttyKeybindArguments: [String] {

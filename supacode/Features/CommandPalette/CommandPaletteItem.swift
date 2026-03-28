@@ -96,17 +96,17 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var appShortcutCommandID: String? {
     switch kind {
     case .checkForUpdates:
-      return AppShortcuts.ID.checkForUpdates
+      return AppShortcuts.CommandID.checkForUpdates
     case .openRepository:
-      return AppShortcuts.ID.openRepository
+      return AppShortcuts.CommandID.openRepository
     case .openSettings:
-      return AppShortcuts.ID.openSettings
+      return AppShortcuts.CommandID.openSettings
     case .newWorktree:
-      return AppShortcuts.ID.newWorktree
+      return AppShortcuts.CommandID.newWorktree
     case .refreshWorktrees:
-      return AppShortcuts.ID.refreshWorktrees
+      return AppShortcuts.CommandID.refreshWorktrees
     case .openPullRequest:
-      return AppShortcuts.ID.openPullRequest
+      return AppShortcuts.CommandID.openPullRequest
     case .ghosttyCommand,
       .markPullRequestReady,
       .mergePullRequest,

@@ -10,15 +10,15 @@ struct SidebarCommands: Commands {
       Button("Toggle Left Sidebar") {
         toggleLeftSidebarAction?()
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.toggleLeftSidebar)))
-      .help("Toggle Left Sidebar (\(shortcutDisplay(for: AppShortcuts.ID.toggleLeftSidebar)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleLeftSidebar)))
+      .help(helpText(title: "Toggle Left Sidebar", commandID: AppShortcuts.CommandID.toggleLeftSidebar))
       .disabled(toggleLeftSidebarAction == nil)
       Divider()
       Button("Canvas") {
         store.send(.repositories(.toggleCanvas))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.toggleCanvas)))
-      .help("Canvas (\(shortcutDisplay(for: AppShortcuts.ID.toggleCanvas)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
+      .help(helpText(title: "Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
       Button("Show Diff") {
         let repos = store.repositories
         guard let worktreeID = repos.selectedWorktreeID,
@@ -29,21 +29,21 @@ struct SidebarCommands: Commands {
           branchName: worktree.name,
         )
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.showDiff)))
-      .help("Show Diff (\(shortcutDisplay(for: AppShortcuts.ID.showDiff)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.showDiff)))
+      .help(helpText(title: "Show Diff", commandID: AppShortcuts.CommandID.showDiff))
       .disabled(store.repositories.selectedWorktreeID == nil)
     }
   }
 
   private func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
     store.resolvedKeybindings.keyboardShortcut(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.keyboardShortcut
   }
 
-  private func shortcutDisplay(for commandID: String) -> String {
-    store.resolvedKeybindings.display(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.display
-      ?? ""
+  private func helpText(title: String, commandID: String) -> String {
+    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
   }
 }
 

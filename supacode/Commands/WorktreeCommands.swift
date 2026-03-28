@@ -28,14 +28,18 @@ struct WorktreeCommands: Commands {
       Button("Select Next Worktree") {
         store.send(.repositories(.selectNextWorktree))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.selectNextWorktree)))
-      .help("Select Next Worktree (\(shortcutDisplay(for: AppShortcuts.ID.selectNextWorktree)))")
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.selectNextWorktree))
+      )
+      .help(helpText(title: "Select Next Worktree", commandID: AppShortcuts.CommandID.selectNextWorktree))
       .disabled(orderedRows.isEmpty)
       Button("Select Previous Worktree") {
         store.send(.repositories(.selectPreviousWorktree))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.selectPreviousWorktree)))
-      .help("Select Previous Worktree (\(shortcutDisplay(for: AppShortcuts.ID.selectPreviousWorktree)))")
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.selectPreviousWorktree))
+      )
+      .help(helpText(title: "Select Previous Worktree", commandID: AppShortcuts.CommandID.selectPreviousWorktree))
       .disabled(orderedRows.isEmpty)
       Divider()
       ForEach(worktreeShortcutCommandIDs.indices, id: \.self) { index in
@@ -57,33 +61,33 @@ struct WorktreeCommands: Commands {
       Button("Open Repository...", systemImage: "folder") {
         store.send(.repositories(.setOpenPanelPresented(true)))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.openRepository)))
-      .help("Open Repository (\(shortcutDisplay(for: AppShortcuts.ID.openRepository)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openRepository)))
+      .help(helpText(title: "Open Repository", commandID: AppShortcuts.CommandID.openRepository))
       Button("Open Worktree") {
         openSelectedWorktreeAction?()
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.openWorktree)))
-      .help("Open Worktree (\(shortcutDisplay(for: AppShortcuts.ID.openWorktree)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openWorktree)))
+      .help(helpText(title: "Open Worktree", commandID: AppShortcuts.CommandID.openWorktree))
       .disabled(openSelectedWorktreeAction == nil)
       Button("Open Pull Request on GitHub") {
         if let pullRequestURL {
           NSWorkspace.shared.open(pullRequestURL)
         }
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.openPullRequest)))
-      .help("Open Pull Request on GitHub (\(shortcutDisplay(for: AppShortcuts.ID.openPullRequest)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openPullRequest)))
+      .help(helpText(title: "Open Pull Request on GitHub", commandID: AppShortcuts.CommandID.openPullRequest))
       .disabled(pullRequestURL == nil || !githubIntegrationEnabled)
       Button("New Worktree", systemImage: "plus") {
         store.send(.repositories(.createRandomWorktree))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.newWorktree)))
-      .help("New Worktree (\(shortcutDisplay(for: AppShortcuts.ID.newWorktree)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.newWorktree)))
+      .help(helpText(title: "New Worktree", commandID: AppShortcuts.CommandID.newWorktree))
       .disabled(!repositories.canCreateWorktree)
       Button("Archived Worktrees") {
         store.send(.repositories(.selectArchivedWorktrees))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.archivedWorktrees)))
-      .help("Archived Worktrees (\(shortcutDisplay(for: AppShortcuts.ID.archivedWorktrees)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.archivedWorktrees)))
+      .help(helpText(title: "Archived Worktrees", commandID: AppShortcuts.CommandID.archivedWorktrees))
       Button("Archive Worktree") {
         archiveWorktreeAction?()
       }
@@ -104,20 +108,20 @@ struct WorktreeCommands: Commands {
       Button("Refresh Worktrees") {
         store.send(.repositories(.refreshWorktrees))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.refreshWorktrees)))
-      .help("Refresh Worktrees (\(shortcutDisplay(for: AppShortcuts.ID.refreshWorktrees)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.refreshWorktrees)))
+      .help(helpText(title: "Refresh Worktrees", commandID: AppShortcuts.CommandID.refreshWorktrees))
       Divider()
       Button("Run Script") {
         runScriptAction?()
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.runScript)))
-      .help("Run Script (\(shortcutDisplay(for: AppShortcuts.ID.runScript)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.runScript)))
+      .help(helpText(title: "Run Script", commandID: AppShortcuts.CommandID.runScript))
       .disabled(runScriptAction == nil)
       Button("Stop Script") {
         stopRunScriptAction?()
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.ID.stopScript)))
-      .help("Stop Script (\(shortcutDisplay(for: AppShortcuts.ID.stopScript)))")
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.stopScript)))
+      .help(helpText(title: "Stop Script", commandID: AppShortcuts.CommandID.stopScript))
       .disabled(stopRunScriptAction == nil)
     }
   }
@@ -135,13 +139,17 @@ struct WorktreeCommands: Commands {
 
   private func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
     store.resolvedKeybindings.keyboardShortcut(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.keyboardShortcut
   }
 
-  private func shortcutDisplay(for commandID: String) -> String {
+  private func shortcutDisplay(for commandID: String) -> String? {
     store.resolvedKeybindings.display(for: commandID)
-      ?? AppShortcuts.defaultShortcut(for: commandID)?.display
-      ?? ""
+  }
+
+  private func helpText(title: String, commandID: String) -> String {
+    if let shortcut = shortcutDisplay(for: commandID) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
   }
 
   private func customCommandShortcut(for command: UserCustomCommand) -> KeyboardShortcut? {
@@ -166,7 +174,12 @@ struct WorktreeCommands: Commands {
       store.send(.repositories(.selectWorktree(row.id)))
     }
     .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: commandID)))
-    .help("Switch to \(title) (\(shortcutDisplay(for: commandID)))")
+    .help({
+      if let shortcut = shortcutDisplay(for: commandID) {
+        return "Switch to \(title) (\(shortcut))"
+      }
+      return "Switch to \(title)"
+    }())
     .disabled(row == nil)
   }
 
