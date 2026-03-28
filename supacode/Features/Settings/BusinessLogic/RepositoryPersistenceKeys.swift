@@ -194,8 +194,8 @@ nonisolated enum RepositoryPathNormalizer {
 
 nonisolated enum RepositoryEntryNormalizer {
   static func normalize(_ entries: [PersistedRepositoryEntry]) -> [PersistedRepositoryEntry] {
-    var order: [String] = []
-    var entryByPath: [String: PersistedRepositoryEntry] = [:]
+    var order: [EntryKey] = []
+    var entryByKey: [EntryKey: PersistedRepositoryEntry] = [:]
 
     for entry in entries {
       guard let normalizedPath = normalizePath(entry.path) else { continue }
@@ -204,16 +204,17 @@ nonisolated enum RepositoryEntryNormalizer {
         kind: entry.kind,
         endpoint: entry.endpoint
       )
-      if let existing = entryByPath[normalizedPath] {
-        entryByPath[normalizedPath] = resolvedEntry(existing: existing, incoming: normalizedEntry)
+      let key = EntryKey(path: normalizedPath, endpoint: entry.endpoint)
+      if let existing = entryByKey[key] {
+        entryByKey[key] = resolvedEntry(existing: existing, incoming: normalizedEntry)
         continue
       }
-      order.append(normalizedPath)
-      entryByPath[normalizedPath] = normalizedEntry
+      order.append(key)
+      entryByKey[key] = normalizedEntry
     }
 
-    return order.compactMap { path in
-      entryByPath[path]
+    return order.compactMap { key in
+      entryByKey[key]
     }
   }
 
@@ -245,5 +246,10 @@ nonisolated enum RepositoryEntryNormalizer {
 
   private static func normalizePath(_ path: String) -> String? {
     RepositoryPathNormalizer.normalize([path]).first
+  }
+
+  private struct EntryKey: Hashable {
+    let path: String
+    let endpoint: RepositoryEndpoint
   }
 }

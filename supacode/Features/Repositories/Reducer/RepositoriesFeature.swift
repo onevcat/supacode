@@ -994,6 +994,11 @@ struct RepositoriesFeature {
         let endpoint = repository.endpoint
         let hostProfile = sshHostProfile(for: endpoint)
         let isValidBranchName = gitClient.isValidBranchName
+        let localBranchNames = gitClient.localBranchNames
+        let isBareRepository = gitClient.isBareRepository
+        let automaticWorktreeBaseRef = gitClient.automaticWorktreeBaseRef
+        let ignoredFileCount = gitClient.ignoredFileCount
+        let untrackedFileCount = gitClient.untrackedFileCount
         return .run { send in
           var newWorktreeName: String?
           var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
@@ -1007,7 +1012,13 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let branchNames = try await gitClient.localBranchNames(repository.rootURL)
+            let branchNames: Set<String>
+            switch endpoint {
+            case .local:
+              branchNames = try await localBranchNames(repository.rootURL)
+            case .remote:
+              branchNames = []
+            }
             let existing = existingNames.union(branchNames)
             let name: String
             switch nameSource {
@@ -1070,19 +1081,21 @@ struct RepositoriesFeature {
                 )
                 return
               }
-              guard await isValidBranchName(trimmed, repository.rootURL) else {
-                await send(
-                  .createRandomWorktreeFailed(
-                    title: "Branch name invalid",
-                    message: "Enter a valid git branch name and try again.",
-                    pendingID: pendingID,
-                    previousSelection: previousSelection,
-                    repositoryID: repository.id,
-                    name: nil,
-                    baseDirectory: worktreeBaseDirectory
+              if case .local = endpoint {
+                guard await isValidBranchName(trimmed, repository.rootURL) else {
+                  await send(
+                    .createRandomWorktreeFailed(
+                      title: "Branch name invalid",
+                      message: "Enter a valid git branch name and try again.",
+                      pendingID: pendingID,
+                      previousSelection: previousSelection,
+                      repositoryID: repository.id,
+                      name: nil,
+                      baseDirectory: worktreeBaseDirectory
+                    )
                   )
-                )
-                return
+                  return
+                }
               }
               guard !existing.contains(trimmed.lowercased()) else {
                 await send(
@@ -1109,9 +1122,17 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let isBareRepository = (try? await gitClient.isBareRepository(repository.rootURL)) ?? false
-            let copyIgnored = isBareRepository ? false : copyIgnoredOnWorktreeCreate
-            let copyUntracked = isBareRepository ? false : copyUntrackedOnWorktreeCreate
+            let copyIgnored: Bool
+            let copyUntracked: Bool
+            switch endpoint {
+            case .local:
+              let repositoryIsBare = (try? await isBareRepository(repository.rootURL)) ?? false
+              copyIgnored = repositoryIsBare ? false : copyIgnoredOnWorktreeCreate
+              copyUntracked = repositoryIsBare ? false : copyUntrackedOnWorktreeCreate
+            case .remote:
+              copyIgnored = false
+              copyUntracked = false
+            }
             progress.stage = .resolvingBaseReference
             await send(
               .pendingWorktreeProgressUpdated(
@@ -1123,7 +1144,12 @@ struct RepositoriesFeature {
             switch baseRefSource {
             case .repositorySetting:
               if (selectedBaseRef ?? "").isEmpty {
-                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                switch endpoint {
+                case .local:
+                  resolvedBaseRef = await automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                case .remote:
+                  resolvedBaseRef = ""
+                }
               } else {
                 resolvedBaseRef = selectedBaseRef ?? ""
               }
@@ -1131,16 +1157,21 @@ struct RepositoriesFeature {
               if let explicitBaseRef, !explicitBaseRef.isEmpty {
                 resolvedBaseRef = explicitBaseRef
               } else {
-                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                switch endpoint {
+                case .local:
+                  resolvedBaseRef = await automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                case .remote:
+                  resolvedBaseRef = ""
+                }
               }
             }
             progress.baseRef = resolvedBaseRef
             progress.copyIgnored = copyIgnored
             progress.copyUntracked = copyUntracked
             progress.ignoredFilesToCopyCount =
-              copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+              copyIgnored ? ((try? await ignoredFileCount(repository.rootURL)) ?? 0) : 0
             progress.untrackedFilesToCopyCount =
-              copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+              copyUntracked ? ((try? await untrackedFileCount(repository.rootURL)) ?? 0) : 0
             progress.stage = .creatingWorktree
             progress.commandText = worktreeCreateCommand(
               baseDirectoryURL: worktreeBaseDirectory,

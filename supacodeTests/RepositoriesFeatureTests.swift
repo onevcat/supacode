@@ -1201,11 +1201,26 @@ struct RepositoriesFeatureTests {
         RepositoriesFeature()
       } withDependencies: {
         $0.uuid = .incrementing
-        $0.gitClient.localBranchNames = { _ in [] }
-        $0.gitClient.isBareRepository = { _ in false }
-        $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
-        $0.gitClient.ignoredFileCount = { _ in 0 }
-        $0.gitClient.untrackedFileCount = { _ in 0 }
+        $0.gitClient.localBranchNames = { _ in
+          struct UnexpectedLocalBranchRequest: Error {}
+          throw UnexpectedLocalBranchRequest()
+        }
+        $0.gitClient.isBareRepository = { _ in
+          struct UnexpectedBareRepositoryRequest: Error {}
+          throw UnexpectedBareRepositoryRequest()
+        }
+        $0.gitClient.automaticWorktreeBaseRef = { _ in
+          Issue.record("Expected remote repository create not to resolve local automatic base refs")
+          return nil
+        }
+        $0.gitClient.ignoredFileCount = { _ in
+          struct UnexpectedIgnoredFileRequest: Error {}
+          throw UnexpectedIgnoredFileRequest()
+        }
+        $0.gitClient.untrackedFileCount = { _ in
+          struct UnexpectedUntrackedFileRequest: Error {}
+          throw UnexpectedUntrackedFileRequest()
+        }
         $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
           Issue.record("Expected remote repository create to use endpoint-aware stream")
           return AsyncThrowingStream { continuation in
@@ -1213,7 +1228,10 @@ struct RepositoriesFeatureTests {
           }
         }
         $0.gitClient.createWorktreeStreamForEndpoint = {
-          _, _, _, _, _, _, endpointValue, hostProfile in
+          _, _, _, copyIgnored, copyUntracked, baseRef, endpointValue, hostProfile in
+          #expect(copyIgnored == false)
+          #expect(copyUntracked == false)
+          #expect(baseRef.isEmpty)
           requestedEndpoint.withValue { $0 = endpointValue }
           requestedHostProfile.withValue { $0 = hostProfile }
           return AsyncThrowingStream { continuation in
