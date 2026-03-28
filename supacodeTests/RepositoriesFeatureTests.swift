@@ -187,6 +187,68 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func loadPersistedRepositoriesUsesEndpointAwareGitClientForRemoteEntries() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = {
+          [PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpoint)]
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository load to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { rootURL, requestedEndpoint, hostProfile in
+          #expect(rootURL.path(percentEncoded: false) == repoRoot)
+          #expect(requestedEndpoint == endpoint)
+          #expect(hostProfile == profile)
+          return [worktree]
+        }
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
@@ -1092,6 +1154,94 @@ struct RepositoriesFeatureTests {
     #expect(store.state.alert == nil)
   }
 
+  @Test(.dependencies) func createRandomWorktreeInRemoteRepositoryUsesEndpointAwareStream() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let mainWorktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [mainWorktree]
+    )
+    let createdWorktree = makeWorktree(
+      id: "/srv/worktrees/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let requestedEndpoint = LockIsolated<RepositoryEndpoint?>(nil)
+    let requestedHostProfile = LockIsolated<SSHHostProfile?>(nil)
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.global.promptForWorktreeCreation = false
+        $0.sshHostProfiles = [profile]
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.uuid = .incrementing
+        $0.gitClient.localBranchNames = { _ in [] }
+        $0.gitClient.isBareRepository = { _ in false }
+        $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+        $0.gitClient.ignoredFileCount = { _ in 0 }
+        $0.gitClient.untrackedFileCount = { _ in 0 }
+        $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+          Issue.record("Expected remote repository create to use endpoint-aware stream")
+          return AsyncThrowingStream { continuation in
+            continuation.finish()
+          }
+        }
+        $0.gitClient.createWorktreeStreamForEndpoint = {
+          _, _, _, _, _, _, endpointValue, hostProfile in
+          requestedEndpoint.withValue { $0 = endpointValue }
+          requestedHostProfile.withValue { $0 = hostProfile }
+          return AsyncThrowingStream { continuation in
+            continuation.yield(.finished(createdWorktree))
+            continuation.finish()
+          }
+        }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository reload to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, endpointValue, hostProfile in
+          requestedEndpoint.withValue { $0 = endpointValue }
+          requestedHostProfile.withValue { $0 = hostProfile }
+          return [createdWorktree, mainWorktree]
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(requestedEndpoint.value == endpoint)
+    #expect(requestedHostProfile.value == profile)
+  }
+
   @Test(.dependencies) func createRandomWorktreeUsesRepositoryWorktreeBaseDirectoryOverride() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -1449,6 +1599,81 @@ struct RepositoriesFeatureTests {
       $0.alert = expectedAlert
     }
   }
+
+  @Test(.dependencies) func deleteWorktreeConfirmedUsesEndpointAwareRemovalForRemoteRepository() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let mainWorktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let featureWorktree = makeWorktree(
+      id: "/srv/worktrees/feature",
+      name: "feature",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [mainWorktree, featureWorktree]
+    )
+    let removedEndpoint = LockIsolated<RepositoryEndpoint?>(nil)
+    let removedHostProfile = LockIsolated<SSHHostProfile?>(nil)
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.global.deleteBranchOnDeleteWorktree = true
+        $0.sshHostProfiles = [profile]
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.gitClient.removeWorktree = { _, _ in
+          Issue.record("Expected remote repository delete to use endpoint-aware git client")
+          return URL(fileURLWithPath: "/tmp/unexpected")
+        }
+        $0.gitClient.removeWorktreeForEndpoint = { _, _, endpointValue, hostProfile in
+          removedEndpoint.withValue { $0 = endpointValue }
+          removedHostProfile.withValue { $0 = hostProfile }
+          return featureWorktree.workingDirectory
+        }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository reload to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, _, _ in [mainWorktree] }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.deleteWorktreeConfirmed(featureWorktree.id, repository.id)) {
+      $0.deletingWorktreeIDs = [featureWorktree.id]
+    }
+    await store.receive(\.worktreeDeleted)
+    await store.finish()
+
+    #expect(removedEndpoint.value == endpoint)
+    #expect(removedHostProfile.value == profile)
+  }
+
   @Test func requestDeleteWorktreesShowsBatchConfirmation() async {
     let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "owl", repoRoot: "/tmp/repo")
     let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "hawk", repoRoot: "/tmp/repo")
@@ -3034,6 +3259,7 @@ struct RepositoriesFeatureTests {
     id: String,
     name: String,
     repoRoot: String = "/tmp/repo",
+    endpoint: RepositoryEndpoint = .local,
     createdAt: Date? = nil
   ) -> Worktree {
     Worktree(
@@ -3042,6 +3268,7 @@ struct RepositoriesFeatureTests {
       detail: "detail",
       workingDirectory: URL(fileURLWithPath: id),
       repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      endpoint: endpoint,
       createdAt: createdAt
     )
   }
@@ -3075,6 +3302,7 @@ struct RepositoriesFeatureTests {
     id: String,
     name: String = "repo",
     kind: Repository.Kind = .git,
+    endpoint: RepositoryEndpoint = .local,
     worktrees: [Worktree]
   ) -> Repository {
     Repository(
@@ -3082,6 +3310,7 @@ struct RepositoriesFeatureTests {
       rootURL: URL(fileURLWithPath: id),
       name: name,
       kind: kind,
+      endpoint: endpoint,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }

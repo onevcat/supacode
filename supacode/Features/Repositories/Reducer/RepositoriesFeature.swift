@@ -418,7 +418,19 @@ struct RepositoriesFeature {
           state.isRefreshingWorktrees = false
           return .none
         }
-        return loadRepositories(fallbackRoots: roots, animated: animated)
+        let fallbackEntries =
+          if state.repositories.isEmpty {
+            roots.map { PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git) }
+          } else {
+            state.repositories.map { repository in
+              PersistedRepositoryEntry(
+                path: repository.rootURL.path(percentEncoded: false),
+                kind: repository.kind,
+                endpoint: repository.endpoint
+              )
+            }
+          }
+        return loadRepositories(fallbackEntries: fallbackEntries, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
@@ -978,6 +990,9 @@ struct RepositoriesFeature {
         setSingleWorktreeSelection(pendingID, state: &state)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         let createWorktreeStream = gitClient.createWorktreeStream
+        let createWorktreeStreamForEndpoint = gitClient.createWorktreeStreamForEndpoint
+        let endpoint = repository.endpoint
+        let hostProfile = sshHostProfile(for: endpoint)
         let isValidBranchName = gitClient.isValidBranchName
         return .run { send in
           var newWorktreeName: String?
@@ -1140,14 +1155,29 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let stream = createWorktreeStream(
-              name,
-              repository.rootURL,
-              worktreeBaseDirectory,
-              copyIgnored,
-              copyUntracked,
-              resolvedBaseRef
-            )
+            let stream: AsyncThrowingStream<GitWorktreeCreateEvent, Error>
+            switch endpoint {
+            case .local:
+              stream = createWorktreeStream(
+                name,
+                repository.rootURL,
+                worktreeBaseDirectory,
+                copyIgnored,
+                copyUntracked,
+                resolvedBaseRef
+              )
+            case .remote:
+              stream = createWorktreeStreamForEndpoint(
+                name,
+                repository.rootURL,
+                worktreeBaseDirectory,
+                copyIgnored,
+                copyUntracked,
+                resolvedBaseRef,
+                endpoint,
+                hostProfile
+              )
+            }
             for try await event in stream {
               switch event {
               case .outputLine(let outputLine):
@@ -1294,11 +1324,23 @@ struct RepositoriesFeature {
           )
         }
         if let cleanupWorktree = cleanup.worktree {
+          let endpoint = state.repositories[id: repositoryID]?.endpoint ?? cleanupWorktree.endpoint
+          let hostProfile = sshHostProfile(for: endpoint)
           let repositoryRootURL = cleanupWorktree.repositoryRootURL
           effects.append(
             .run { send in
-              _ = try? await gitClient.removeWorktree(cleanupWorktree, true)
-              _ = try? await gitClient.pruneWorktrees(repositoryRootURL)
+              switch endpoint {
+              case .local:
+                _ = try? await gitClient.removeWorktree(cleanupWorktree, true)
+                _ = try? await gitClient.pruneWorktrees(repositoryRootURL)
+              case .remote:
+                _ = try? await gitClient.removeWorktreeForEndpoint(
+                  cleanupWorktree,
+                  true,
+                  endpoint,
+                  hostProfile
+                )
+              }
               await send(.reloadRepositories(animated: true))
             }
           )
@@ -1690,12 +1732,24 @@ struct RepositoriesFeature {
           : nil
         @Shared(.settingsFile) var settingsFile
         let deleteBranchOnDeleteWorktree = settingsFile.global.deleteBranchOnDeleteWorktree
+        let endpoint = repository.endpoint
+        let hostProfile = sshHostProfile(for: endpoint)
         return .run { send in
           do {
-            _ = try await gitClient.removeWorktree(
-              worktree,
-              deleteBranchOnDeleteWorktree
-            )
+            switch endpoint {
+            case .local:
+              _ = try await gitClient.removeWorktree(
+                worktree,
+                deleteBranchOnDeleteWorktree
+              )
+            case .remote:
+              _ = try await gitClient.removeWorktreeForEndpoint(
+                worktree,
+                deleteBranchOnDeleteWorktree,
+                endpoint,
+                hostProfile
+              )
+            }
             await send(
               .worktreeDeleted(
                 worktree.id,
@@ -1853,7 +1907,11 @@ struct RepositoriesFeature {
         }
         let remainingRoots = state.repositoryRoots
         return .run { send in
-          let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+          let loadedEntries = await loadPersistedRepositoryEntries(
+            fallbackEntries: remainingRoots.map {
+              PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git)
+            }
+          )
           let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
           let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
@@ -1896,7 +1954,11 @@ struct RepositoriesFeature {
         return .merge(
           .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
           .run { send in
-            let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
+            let loadedEntries = await loadPersistedRepositoryEntries(
+              fallbackEntries: remainingRoots.map {
+                PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git)
+              }
+            )
             let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
             await repositoryPersistence.saveRepositoryEntries(remainingEntries)
             let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
@@ -2699,7 +2761,7 @@ struct RepositoriesFeature {
   }
 
   private func loadPersistedRepositoryEntries(
-    fallbackRoots: [URL] = []
+    fallbackEntries: [PersistedRepositoryEntry] = []
   ) async -> [PersistedRepositoryEntry] {
     let entries = await repositoryPersistence.loadRepositoryEntries()
     let resolvedEntries: [PersistedRepositoryEntry]
@@ -2707,15 +2769,13 @@ struct RepositoriesFeature {
       resolvedEntries = entries
     } else {
       let loadedPaths = await repositoryPersistence.loadRoots()
-      let pathSource =
+      let fallback =
         if !loadedPaths.isEmpty {
-          loadedPaths
+          loadedPaths.map { PersistedRepositoryEntry(path: $0, kind: .git) }
         } else {
-          fallbackRoots.map { $0.path(percentEncoded: false) }
+          fallbackEntries
         }
-      resolvedEntries = RepositoryEntryNormalizer.normalize(
-        pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
-      )
+      resolvedEntries = RepositoryEntryNormalizer.normalize(fallback)
     }
     return await upgradedRepositoryEntriesIfNeeded(resolvedEntries)
   }
@@ -2725,6 +2785,22 @@ struct RepositoriesFeature {
   ) async -> [PersistedRepositoryEntry] {
     let upgradedEntries = await withTaskGroup(of: (Int, PersistedRepositoryEntry).self) { group in
       for (index, entry) in entries.enumerated() {
+        if entry.endpoint.isRemote {
+          let normalizedPath = URL(fileURLWithPath: entry.path)
+            .standardizedFileURL
+            .path(percentEncoded: false)
+          group.addTask {
+            (
+              index,
+              PersistedRepositoryEntry(
+                path: normalizedPath,
+                kind: entry.kind,
+                endpoint: entry.endpoint
+              )
+            )
+          }
+          continue
+        }
         let gitClient = self.gitClient
         group.addTask {
           let normalizedPath = URL(fileURLWithPath: entry.path)
@@ -2736,24 +2812,66 @@ struct RepositoriesFeature {
             switch entry.kind {
             case .plain:
               if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+                return (
+                  index,
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .git,
+                    endpoint: entry.endpoint
+                  )
+                )
               }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             case .git:
               if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+                return (
+                  index,
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .git,
+                    endpoint: entry.endpoint
+                  )
+                )
               }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             }
           } catch {
             if entry.kind == .git,
               Self.isNotGitRepositoryError(error),
               FileManager.default.fileExists(atPath: normalizedPath)
             {
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             }
           }
-          return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
+          return (
+            index,
+            PersistedRepositoryEntry(
+              path: normalizedPath,
+              kind: entry.kind,
+              endpoint: entry.endpoint
+            )
+          )
         }
       }
 
@@ -2791,14 +2909,17 @@ struct RepositoriesFeature {
   }
 
   private func loadRepositories(
-    fallbackRoots: [URL] = [],
+    fallbackEntries: [PersistedRepositoryEntry] = [],
     animated: Bool = false
   ) -> Effect<Action> {
     let gitClient = gitClient
-    return .run { [animated, fallbackRoots] send in
-      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+    return .run { [animated, fallbackEntries] send in
+      let entries = await loadPersistedRepositoryEntries(fallbackEntries: fallbackEntries)
       let roots = entries.map { URL(fileURLWithPath: $0.path) }
       for entry in entries where entry.kind == .git {
+        guard case .local = entry.endpoint else {
+          continue
+        }
         _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
       }
       let (repositories, failures) = await loadRepositoriesData(entries)
@@ -2821,15 +2942,33 @@ struct RepositoriesFeature {
   }
 
   private func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
+    @Shared(.settingsFile) var settingsFile
+    let sshHostProfilesByID = Dictionary(uniqueKeysWithValues: settingsFile.sshHostProfiles.map { ($0.id, $0) })
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
       for entry in entries {
         let gitClient = self.gitClient
+        let hostProfile: SSHHostProfile? =
+          if case .remote(let hostProfileID, _) = entry.endpoint {
+            sshHostProfilesByID[hostProfileID]
+          } else {
+            nil
+          }
         group.addTask {
           let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
           switch entry.kind {
           case .git:
             do {
-              let worktrees = try await gitClient.worktrees(rootURL)
+              let worktrees: [Worktree]
+              switch entry.endpoint {
+              case .local:
+                worktrees = try await gitClient.worktrees(rootURL)
+              case .remote:
+                worktrees = try await gitClient.worktreesForEndpoint(
+                  rootURL,
+                  entry.endpoint,
+                  hostProfile
+                )
+              }
               return WorktreesFetchResult(
                 entry: entry,
                 repository: Repository(
@@ -2837,6 +2976,7 @@ struct RepositoriesFeature {
                   rootURL: rootURL,
                   name: Repository.name(for: rootURL),
                   kind: .git,
+                  endpoint: entry.endpoint,
                   worktrees: IdentifiedArray(uniqueElements: worktrees)
                 ),
                 errorMessage: nil
@@ -2852,14 +2992,15 @@ struct RepositoriesFeature {
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
-                  name: Repository.name(for: rootURL),
-                  kind: .plain,
-                  worktrees: IdentifiedArray()
-                ),
-                errorMessage: nil
-              )
+                id: rootURL.path(percentEncoded: false),
+                rootURL: rootURL,
+                name: Repository.name(for: rootURL),
+                kind: .plain,
+                endpoint: entry.endpoint,
+                worktrees: IdentifiedArray()
+              ),
+              errorMessage: nil
+            )
           }
         }
       }
@@ -3000,6 +3141,14 @@ struct RepositoriesFeature {
     } message: {
       TextState(message)
     }
+  }
+
+  private func sshHostProfile(for endpoint: RepositoryEndpoint) -> SSHHostProfile? {
+    guard case .remote(let hostProfileID, _) = endpoint else {
+      return nil
+    }
+    @Shared(.settingsFile) var settingsFile
+    return settingsFile.sshHostProfiles.first { $0.id == hostProfileID }
   }
 
   private func confirmationAlertForRepositoryRemoval(
@@ -3529,6 +3678,8 @@ private func insertWorktree(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
+    kind: repository.kind,
+    endpoint: repository.endpoint,
     worktrees: worktrees
   )
 }
@@ -3548,6 +3699,8 @@ private func removeWorktree(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
+    kind: repository.kind,
+    endpoint: repository.endpoint,
     worktrees: worktrees
   )
   return true
@@ -3589,7 +3742,8 @@ private func cleanupFailedWorktree(
       name: name,
       detail: "",
       workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL
+      repositoryRootURL: repositoryRootURL,
+      endpoint: state.repositories[id: repositoryID]?.endpoint ?? .local
     )
   let cleanup = cleanupWorktreeState(
     worktreeID,
@@ -3718,12 +3872,15 @@ private func updateWorktreeName(
       detail: worktree.detail,
       workingDirectory: worktree.workingDirectory,
       repositoryRootURL: worktree.repositoryRootURL,
+      endpoint: worktree.endpoint,
       createdAt: worktree.createdAt
     )
     repository = Repository(
       id: repository.id,
       rootURL: repository.rootURL,
       name: repository.name,
+      kind: repository.kind,
+      endpoint: repository.endpoint,
       worktrees: worktrees
     )
     state.repositories[index] = repository

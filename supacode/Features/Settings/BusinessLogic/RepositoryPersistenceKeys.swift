@@ -195,32 +195,52 @@ nonisolated enum RepositoryPathNormalizer {
 nonisolated enum RepositoryEntryNormalizer {
   static func normalize(_ entries: [PersistedRepositoryEntry]) -> [PersistedRepositoryEntry] {
     var order: [String] = []
-    var kindByPath: [String: Repository.Kind] = [:]
+    var entryByPath: [String: PersistedRepositoryEntry] = [:]
 
     for entry in entries {
       guard let normalizedPath = normalizePath(entry.path) else { continue }
-      if let existing = kindByPath[normalizedPath] {
-        kindByPath[normalizedPath] = resolvedKind(existing: existing, incoming: entry.kind)
+      let normalizedEntry = PersistedRepositoryEntry(
+        path: normalizedPath,
+        kind: entry.kind,
+        endpoint: entry.endpoint
+      )
+      if let existing = entryByPath[normalizedPath] {
+        entryByPath[normalizedPath] = resolvedEntry(existing: existing, incoming: normalizedEntry)
         continue
       }
       order.append(normalizedPath)
-      kindByPath[normalizedPath] = entry.kind
+      entryByPath[normalizedPath] = normalizedEntry
     }
 
     return order.compactMap { path in
-      guard let kind = kindByPath[path] else { return nil }
-      return PersistedRepositoryEntry(path: path, kind: kind)
+      entryByPath[path]
     }
   }
 
-  private static func resolvedKind(
-    existing: Repository.Kind,
-    incoming: Repository.Kind
-  ) -> Repository.Kind {
-    if existing == .git || incoming == .git {
-      return .git
-    }
-    return .plain
+  private static func resolvedEntry(
+    existing: PersistedRepositoryEntry,
+    incoming: PersistedRepositoryEntry
+  ) -> PersistedRepositoryEntry {
+    let kind: Repository.Kind =
+      if existing.kind == .git || incoming.kind == .git {
+        .git
+      } else {
+        .plain
+      }
+    let endpoint: RepositoryEndpoint =
+      switch (existing.endpoint, incoming.endpoint) {
+      case (.remote, _):
+        existing.endpoint
+      case (_, .remote):
+        incoming.endpoint
+      default:
+        existing.endpoint
+      }
+    return PersistedRepositoryEntry(
+      path: existing.path,
+      kind: kind,
+      endpoint: endpoint
+    )
   }
 
   private static func normalizePath(_ path: String) -> String? {
