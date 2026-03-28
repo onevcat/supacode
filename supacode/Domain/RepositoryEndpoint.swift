@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated enum RepositoryEndpoint: Equatable, Sendable {
+nonisolated enum RepositoryEndpoint: Equatable, Hashable, Sendable {
   case local
   case remote(hostProfileID: String, remotePath: String)
 
