@@ -18,7 +18,7 @@ struct AppFeature {
     var commandPalette = CommandPaletteFeature.State()
     var openActionSelection: OpenWorktreeAction = .finder
     var selectedRunScript: String = ""
-    var selectedCustomCommands: [OnevcatCustomCommand] = []
+    var selectedCustomCommands: [UserCustomCommand] = []
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
@@ -45,7 +45,7 @@ struct AppFeature {
     case commandPalette(CommandPaletteFeature.Action)
     case openActionSelectionChanged(OpenWorktreeAction)
     case worktreeSettingsLoaded(RepositorySettings, worktreeID: Worktree.ID)
-    case worktreeOnevcatSettingsLoaded(OnevcatRepositorySettings, worktreeID: Worktree.ID)
+    case worktreeUserSettingsLoaded(UserRepositorySettings, worktreeID: Worktree.ID)
     case openSelectedWorktree
     case openWorktree(OpenWorktreeAction)
     case openWorktreeFailed(OpenActionError)
@@ -82,6 +82,7 @@ struct AppFeature {
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
+  @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
 
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
@@ -159,9 +160,7 @@ struct AppFeature {
           return .merge(
             .merge(effects),
             .run { _ in
-              await MainActor.run {
-                OnevcatCustomShortcutRegistry.shared.setShortcuts([])
-              }
+              await customShortcutRegistryClient.setShortcuts([])
             }
           )
         }
@@ -171,9 +170,9 @@ struct AppFeature {
         state.runScriptDraft = ""
         state.isRunScriptPromptPresented = false
         @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
+        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         let settings = repositorySettings
-        let onevcatSettings = onevcatRepositorySettings
+        let userSettings = userRepositorySettings
         var effects: [Effect<Action>] = []
         if !isPlainFolderSelection {
           effects.append(
@@ -194,15 +193,13 @@ struct AppFeature {
         )
         effects.append(
           .run { _ in
-            await MainActor.run {
-              OnevcatCustomShortcutRegistry.shared.setShortcuts([])
-            }
+            await customShortcutRegistryClient.setShortcuts([])
           }
         )
         effects.append(
           .concatenate(
             .send(.worktreeSettingsLoaded(settings, worktreeID: worktreeID)),
-            .send(.worktreeOnevcatSettingsLoaded(onevcatSettings, worktreeID: worktreeID))
+            .send(.worktreeUserSettingsLoaded(userSettings, worktreeID: worktreeID))
           )
         )
         return .merge(effects)
@@ -271,12 +268,12 @@ struct AppFeature {
             return .none
           }
           @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
-          @Shared(.onevcatRepositorySettings(repository.rootURL)) var onevcatRepositorySettings
+          @Shared(.userRepositorySettings(repository.rootURL)) var userRepositorySettings
           state.settings.repositorySettings = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
             repositoryKind: repository.kind,
             settings: repositorySettings,
-            onevcatSettings: onevcatRepositorySettings
+            userSettings: userRepositorySettings
           )
         case .general, .notifications, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
@@ -354,6 +351,9 @@ struct AppFeature {
             }
           }
         )
+
+      case .settings(.delegate(.terminalFontSizeChanged)):
+        return .none
 
       case .openActionSelectionChanged(let action):
         state.openActionSelection = action
@@ -596,10 +596,10 @@ struct AppFeature {
         }
         let worktreeID = selectedWorktree.id
         @Shared(.repositorySettings(rootURL)) var repositorySettings
-        @Shared(.onevcatRepositorySettings(rootURL)) var onevcatRepositorySettings
+        @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         return .concatenate(
           .send(.worktreeSettingsLoaded(repositorySettings, worktreeID: worktreeID)),
-          .send(.worktreeOnevcatSettingsLoaded(onevcatRepositorySettings, worktreeID: worktreeID))
+          .send(.worktreeUserSettingsLoaded(userRepositorySettings, worktreeID: worktreeID))
         )
 
       case .worktreeSettingsLoaded(let settings, let worktreeID):
@@ -617,20 +617,27 @@ struct AppFeature {
         state.selectedRunScript = settings.runScript
         return .none
 
-      case .worktreeOnevcatSettingsLoaded(let settings, let worktreeID):
+      case .worktreeUserSettingsLoaded(let settings, let worktreeID):
         guard state.repositories.selectedTerminalWorktree?.id == worktreeID else {
           return .none
         }
-        state.selectedCustomCommands = OnevcatRepositorySettings.normalizedCommands(settings.customCommands)
+        state.selectedCustomCommands = UserRepositorySettings.normalizedCommands(settings.customCommands)
           .filter(\.hasRunnableCommand)
-        let shortcuts: [OnevcatCustomShortcut] = state.selectedCustomCommands.compactMap { command in
+        let userOverrideConflicts = AppShortcuts.userOverrideConflicts(in: state.selectedCustomCommands)
+        let shortcuts: [UserCustomShortcut] = state.selectedCustomCommands.compactMap { command in
           guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
           return shortcut.normalized()
         }
         return .run { _ in
-          await MainActor.run {
-            OnevcatCustomShortcutRegistry.shared.setShortcuts(shortcuts)
+          let logger = SupaLogger("Shortcuts")
+          for conflict in userOverrideConflicts {
+            logger.warning(
+              "shortcut_conflict reason=userOverride app_action=\"\(conflict.appActionTitle)\" "
+                + "app_shortcut=\(conflict.appShortcutDisplay) custom_command=\"\(conflict.commandTitle)\" "
+                + "custom_shortcut=\(conflict.commandShortcutDisplay) result=customOverride"
+            )
           }
+          await customShortcutRegistryClient.setShortcuts(shortcuts)
         }
 
       case .systemNotificationsPermissionFailed(let errorMessage):
@@ -786,6 +793,9 @@ struct AppFeature {
         return .send(.commandPalette(.setPresented(true)))
       case .terminalEvent(.setupScriptConsumed(let worktreeID)):
         return .send(.repositories(.consumeSetupScript(worktreeID)))
+
+      case .terminalEvent(.fontSizeChanged(let fontSize)):
+        return .send(.settings(.setTerminalFontSize(fontSize)))
 
       case .terminalEvent:
         return .none

@@ -2,11 +2,11 @@ import Dependencies
 import Foundation
 import Sharing
 
-nonisolated struct OnevcatRepositorySettingsKeyID: Hashable, Sendable {
+nonisolated struct UserRepositorySettingsKeyID: Hashable, Sendable {
   let repositoryID: String
 }
 
-nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
+nonisolated struct UserRepositorySettingsKey: SharedKey {
   let repositoryID: String
   let rootURL: URL
 
@@ -15,31 +15,31 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
     repositoryID = self.rootURL.path(percentEncoded: false)
   }
 
-  var id: OnevcatRepositorySettingsKeyID {
-    OnevcatRepositorySettingsKeyID(repositoryID: repositoryID)
+  var id: UserRepositorySettingsKeyID {
+    UserRepositorySettingsKeyID(repositoryID: repositoryID)
   }
 
   func load(
-    context: LoadContext<OnevcatRepositorySettings>,
-    continuation: LoadContinuation<OnevcatRepositorySettings>
+    context: LoadContext<UserRepositorySettings>,
+    continuation: LoadContinuation<UserRepositorySettings>
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+    let settingsURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
     let decoder = JSONDecoder()
     if let localData = try? repositoryLocalSettingsStorage.load(settingsURL) {
-      if let settings = try? decoder.decode(OnevcatRepositorySettings.self, from: localData) {
+      if let settings = try? decoder.decode(UserRepositorySettings.self, from: localData) {
         continuation.resume(returning: settings.normalized())
         return
       }
       let path = settingsURL.path(percentEncoded: false)
       SupaLogger("Settings").warning(
-        "Unable to decode onevcat repository settings at \(path); trying legacy settings."
+        "Unable to decode user repository settings at \(path); trying legacy settings."
       )
     }
 
-    let legacySettingsURL = SupacodePaths.legacyOnevcatRepositorySettingsURL(for: rootURL)
+    let legacySettingsURL = SupacodePaths.legacyUserRepositorySettingsURL(for: rootURL)
     if let legacyData = try? repositoryLocalSettingsStorage.load(legacySettingsURL) {
-      if let legacySettings = try? decoder.decode(OnevcatRepositorySettings.self, from: legacyData) {
+      if let legacySettings = try? decoder.decode(UserRepositorySettings.self, from: legacyData) {
         let normalized = legacySettings.normalized()
         do {
           let encoder = JSONEncoder()
@@ -49,7 +49,7 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
         } catch {
           let path = settingsURL.path(percentEncoded: false)
           SupaLogger("Settings").warning(
-            "Unable to write onevcat repository settings to \(path): \(error.localizedDescription)"
+            "Unable to write user repository settings to \(path): \(error.localizedDescription)"
           )
         }
         continuation.resume(returning: normalized)
@@ -57,7 +57,7 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
       }
       let path = legacySettingsURL.path(percentEncoded: false)
       SupaLogger("Settings").warning(
-        "Unable to decode legacy onevcat repository settings at \(path); using defaults."
+        "Unable to decode legacy user repository settings at \(path); using defaults."
       )
     }
 
@@ -70,7 +70,7 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
     } catch {
       let path = settingsURL.path(percentEncoded: false)
       SupaLogger("Settings").warning(
-        "Unable to write onevcat repository settings to \(path): \(error.localizedDescription)"
+        "Unable to write user repository settings to \(path): \(error.localizedDescription)"
       )
     }
 
@@ -78,19 +78,19 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
   }
 
   func subscribe(
-    context _: LoadContext<OnevcatRepositorySettings>,
-    subscriber _: SharedSubscriber<OnevcatRepositorySettings>
+    context _: LoadContext<UserRepositorySettings>,
+    subscriber _: SharedSubscriber<UserRepositorySettings>
   ) -> SharedSubscription {
     SharedSubscription {}
   }
 
   func save(
-    _ value: OnevcatRepositorySettings,
+    _ value: UserRepositorySettings,
     context _: SaveContext,
     continuation: SaveContinuation
   ) {
     @Dependency(\.repositoryLocalSettingsStorage) var repositoryLocalSettingsStorage
-    let settingsURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+    let settingsURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
     do {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -103,8 +103,8 @@ nonisolated struct OnevcatRepositorySettingsKey: SharedKey {
   }
 }
 
-nonisolated extension SharedReaderKey where Self == OnevcatRepositorySettingsKey.Default {
-  static func onevcatRepositorySettings(_ rootURL: URL) -> Self {
-    Self[OnevcatRepositorySettingsKey(rootURL: rootURL), default: .default]
+nonisolated extension SharedReaderKey where Self == UserRepositorySettingsKey.Default {
+  static func userRepositorySettings(_ rootURL: URL) -> Self {
+    Self[UserRepositorySettingsKey(rootURL: rootURL), default: .default]
   }
 }

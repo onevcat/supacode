@@ -5,6 +5,9 @@ struct TerminalCommands: Commands {
   @FocusedValue(\.newTerminalAction) private var newTerminalAction
   @FocusedValue(\.closeSurfaceAction) private var closeSurfaceAction
   @FocusedValue(\.closeTabAction) private var closeTabAction
+  @FocusedValue(\.resetFontSizeAction) private var resetFontSizeAction
+  @FocusedValue(\.increaseFontSizeAction) private var increaseFontSizeAction
+  @FocusedValue(\.decreaseFontSizeAction) private var decreaseFontSizeAction
   @FocusedValue(\.startSearchAction) private var startSearchAction
   @FocusedValue(\.searchSelectionAction) private var searchSelectionAction
   @FocusedValue(\.navigateSearchNextAction) private var navigateSearchNextAction
@@ -34,6 +37,32 @@ struct TerminalCommands: Commands {
         KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "close_tab"))
       )
       .disabled(closeTabAction == nil)
+    }
+    CommandGroup(after: .toolbar) {
+      Divider()
+      Button("Reset Font Size", systemImage: "textformat.size") {
+        resetFontSizeAction?()
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "reset_font_size"))
+      )
+      .disabled(resetFontSizeAction == nil)
+
+      Button("Increase Font Size", systemImage: "textformat.size.larger") {
+        increaseFontSizeAction?()
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "increase_font_size:1"))
+      )
+      .disabled(increaseFontSizeAction == nil)
+
+      Button("Decrease Font Size", systemImage: "textformat.size.smaller") {
+        decreaseFontSizeAction?()
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "decrease_font_size:1"))
+      )
+      .disabled(decreaseFontSizeAction == nil)
     }
     CommandGroup(after: .textEditing) {
       Button("Find...") {
@@ -113,6 +142,39 @@ extension FocusedValues {
   var closeTabAction: (() -> Void)? {
     get { self[CloseTabActionKey.self] }
     set { self[CloseTabActionKey.self] = newValue }
+  }
+}
+
+private struct ResetFontSizeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var resetFontSizeAction: (() -> Void)? {
+    get { self[ResetFontSizeActionKey.self] }
+    set { self[ResetFontSizeActionKey.self] = newValue }
+  }
+}
+
+private struct IncreaseFontSizeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var increaseFontSizeAction: (() -> Void)? {
+    get { self[IncreaseFontSizeActionKey.self] }
+    set { self[IncreaseFontSizeActionKey.self] = newValue }
+  }
+}
+
+private struct DecreaseFontSizeActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+extension FocusedValues {
+  var decreaseFontSizeAction: (() -> Void)? {
+    get { self[DecreaseFontSizeActionKey.self] }
+    set { self[DecreaseFontSizeActionKey.self] = newValue }
   }
 }
 

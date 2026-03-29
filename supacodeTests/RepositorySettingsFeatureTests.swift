@@ -24,7 +24,7 @@ struct RepositorySettingsFeatureTests {
       copyUntrackedOnWorktreeCreate: true,
       pullRequestMergeStrategy: .squash
     )
-    let storedOnevcatSettings = OnevcatRepositorySettings(
+    let storedOnevcatSettings = UserRepositorySettings(
       customCommands: [.default(index: 0)]
     )
     let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
@@ -37,11 +37,11 @@ struct RepositorySettingsFeatureTests {
     let settingsData = try #require(try? JSONEncoder().encode(settingsFile))
     try #require(try? settingsStorage.storage.save(settingsData, settingsFileURL))
 
-    let onevcatSettingsData = try #require(try? JSONEncoder().encode(storedOnevcatSettings))
+    let userSettingsData = try #require(try? JSONEncoder().encode(storedOnevcatSettings))
     try #require(
       try? localStorage.save(
-        onevcatSettingsData,
-        at: SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+        userSettingsData,
+        at: SupacodePaths.userRepositorySettingsURL(for: rootURL)
       )
     )
 
@@ -50,7 +50,7 @@ struct RepositorySettingsFeatureTests {
         rootURL: rootURL,
         repositoryKind: .plain,
         settings: .default,
-        onevcatSettings: .default
+        userSettings: .default
       )
     ) {
       RepositorySettingsFeature()
@@ -75,7 +75,7 @@ struct RepositorySettingsFeatureTests {
     await store.send(.task)
     await store.receive(\.settingsLoaded, timeout: .seconds(5)) {
       $0.settings = storedSettings
-      $0.onevcatSettings = storedOnevcatSettings
+      $0.userSettings = storedOnevcatSettings
       $0.globalDefaultWorktreeBaseDirectoryPath = expectedDefaultWorktreeBaseDirectoryPath
     }
     await store.finish(timeout: .seconds(5))
@@ -92,7 +92,7 @@ struct RepositorySettingsFeatureTests {
       rootURL: URL(fileURLWithPath: "/tmp/folder"),
       repositoryKind: .plain,
       settings: .default,
-      onevcatSettings: .default
+      userSettings: .default
     )
 
     #expect(state.showsWorktreeSettings == false)
@@ -101,5 +101,51 @@ struct RepositorySettingsFeatureTests {
     #expect(state.showsArchiveScriptSettings == false)
     #expect(state.showsRunScriptSettings == true)
     #expect(state.showsCustomCommandsSettings == true)
+  }
+
+  @Test(.dependencies) func conflictingCustomShortcutPersistsAsUserOverride() async throws {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo-\(UUID().uuidString)")
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
+
+    let store = TestStore(
+      initialState: RepositorySettingsFeature.State(
+        rootURL: rootURL,
+        repositoryKind: .plain,
+        settings: .default,
+        userSettings: .default
+      )
+    ) {
+      RepositorySettingsFeature()
+    } withDependencies: {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    }
+
+    let conflicted = UserRepositorySettings(
+      customCommands: [
+        UserCustomCommand(
+          title: "Run tests",
+          systemImage: "terminal",
+          command: "swift test",
+          execution: .shellScript,
+          shortcut: UserCustomShortcut(
+            key: "b",
+            modifiers: UserCustomShortcutModifiers(command: true)
+          )
+        ),
+      ]
+    )
+
+    await store.send(.binding(.set(\.userSettings, conflicted))) {
+      $0.userSettings = conflicted
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    let savedData = try #require(localStorage.data(at: SupacodePaths.userRepositorySettingsURL(for: rootURL)))
+    let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: savedData)
+    #expect(decoded.customCommands.first?.shortcut == conflicted.customCommands.first?.shortcut)
   }
 }

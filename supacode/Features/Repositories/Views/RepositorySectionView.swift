@@ -40,9 +40,10 @@ struct RepositorySectionView: View {
       RepoHeaderRow(
         name: repository.name,
         isRemoving: isRemovingRepository,
-        tabCount: repository.worktrees.reduce(0) { count, worktree in
-          count + (terminalManager.stateIfExists(for: worktree.id)?.tabManager.tabs.count ?? 0)
-        }
+        tabCount: Self.openTabCount(
+          for: repository,
+          terminalManager: terminalManager
+        )
       )
       .frame(maxWidth: .infinity, alignment: .leading)
       .background {
@@ -213,5 +214,17 @@ struct RepositorySectionView: View {
 
   private var headerCellHeight: CGFloat {
     34
+  }
+
+  static func openTabCount(
+    for repository: Repository,
+    terminalManager: WorktreeTerminalManager
+  ) -> Int {
+    if repository.capabilities.supportsWorktrees {
+      return repository.worktrees.reduce(0) { count, worktree in
+        count + (terminalManager.stateIfExists(for: worktree.id)?.tabManager.tabs.count ?? 0)
+      }
+    }
+    return terminalManager.stateIfExists(for: repository.id)?.tabManager.tabs.count ?? 0
   }
 }

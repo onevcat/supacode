@@ -11,6 +11,8 @@ final class WorktreeTerminalManager {
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
+  private var preferredFontSize: Float32?
+  private let baselineFontSize: Float32
   private var lastNotificationIndicatorCount: Int?
   private var eventContinuation: AsyncStream<TerminalClient.Event>.Continuation?
   private var pendingEvents: [TerminalClient.Event] = []
@@ -19,8 +21,10 @@ final class WorktreeTerminalManager {
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
 
-  init(runtime: GhosttyRuntime) {
+  init(runtime: GhosttyRuntime, preferredFontSize: Float32? = nil) {
     self.runtime = runtime
+    self.preferredFontSize = preferredFontSize
+    baselineFontSize = runtime.defaultFontSize()
   }
 
   func handleCommand(_ command: TerminalClient.Command) {
@@ -152,6 +156,7 @@ final class WorktreeTerminalManager {
     runSetupScriptIfNew: () -> Bool = { false }
   ) -> WorktreeTerminalState {
     if let existing = states[worktree.id] {
+      existing.setDefaultFontSize(preferredFontSize)
       if runSetupScriptIfNew() {
         existing.enableSetupScriptIfNeeded()
       }
@@ -161,7 +166,8 @@ final class WorktreeTerminalManager {
     let state = WorktreeTerminalState(
       runtime: runtime,
       worktree: worktree,
-      runSetupScript: runSetupScript
+      runSetupScript: runSetupScript,
+      defaultFontSize: preferredFontSize
     )
     state.setNotificationsEnabled(notificationsEnabled)
     state.setCommandFinishedNotification(
@@ -197,6 +203,9 @@ final class WorktreeTerminalManager {
     }
     state.onSetupScriptConsumed = { [weak self] in
       self?.emit(.setupScriptConsumed(worktreeID: worktree.id))
+    }
+    state.onFontSizeChanged = { [weak self] fontSize in
+      self?.applyFontSize(fontSize)
     }
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
@@ -323,6 +332,37 @@ final class WorktreeTerminalManager {
 
   func surfaceBackgroundOpacity() -> Double {
     runtime.backgroundOpacity()
+  }
+
+  func resetFontSizeAcrossStates() {
+    let shouldEmit = preferredFontSize != nil
+    preferredFontSize = nil
+    for state in states.values {
+      state.setDefaultFontSize(nil)
+      _ = state.performBindingActionOnFocusedSurface("reset_font_size")
+    }
+    if shouldEmit {
+      emit(.fontSizeChanged(nil))
+    }
+  }
+
+  private func applyFontSize(_ fontSize: Float32?) {
+    let normalized = normalizedFontSize(fontSize)
+    guard preferredFontSize != normalized else { return }
+    preferredFontSize = normalized
+    for state in states.values {
+      state.setDefaultFontSize(normalized)
+    }
+    emit(.fontSizeChanged(normalized))
+  }
+
+  private func normalizedFontSize(_ fontSize: Float32?) -> Float32? {
+    guard let fontSize else { return nil }
+    let epsilon: Float32 = 0.01
+    if abs(fontSize - baselineFontSize) <= epsilon {
+      return nil
+    }
+    return fontSize
   }
 
   private func emit(_ event: TerminalClient.Event) {

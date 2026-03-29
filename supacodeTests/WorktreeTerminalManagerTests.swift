@@ -44,6 +44,123 @@ struct WorktreeTerminalManagerTests {
     #expect(event == .setupScriptConsumed(worktreeID: worktree.id))
   }
 
+  @Test func fontSizeResetToBaselineEmitsNilOverride() async {
+    let runtime = GhosttyRuntime()
+    let baseline = runtime.defaultFontSize()
+    let manager = WorktreeTerminalManager(runtime: runtime, preferredFontSize: baseline + 1)
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let stream = manager.eventStream()
+    var iterator = stream.makeAsyncIterator()
+
+    state.onFontSizeChanged?(baseline)
+
+    var event: TerminalClient.Event?
+    while let next = await iterator.next() {
+      if case .fontSizeChanged = next {
+        event = next
+        break
+      }
+    }
+
+    #expect(event == .fontSizeChanged(nil))
+  }
+
+  @Test func duplicateFontSizeChangeIsDeduplicated() async {
+    let runtime = GhosttyRuntime()
+    let baseline = runtime.defaultFontSize()
+    let firstSize = baseline + 2
+    let secondSize = baseline + 3
+    let manager = WorktreeTerminalManager(runtime: runtime)
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+    let stream = manager.eventStream()
+    var iterator = stream.makeAsyncIterator()
+
+    state.onFontSizeChanged?(firstSize)
+    state.onFontSizeChanged?(firstSize)
+    state.onFontSizeChanged?(secondSize)
+
+    var fontSizeEvents: [TerminalClient.Event] = []
+    while let next = await iterator.next() {
+      if case .fontSizeChanged = next {
+        fontSizeEvents.append(next)
+      }
+      if fontSizeEvents.count == 2 {
+        break
+      }
+    }
+
+    #expect(fontSizeEvents == [.fontSizeChanged(firstSize), .fontSizeChanged(secondSize)])
+  }
+
+  @Test func explicitResetAcrossStatesEmitsNilOverride() async {
+    let runtime = GhosttyRuntime()
+    let baseline = runtime.defaultFontSize()
+    let manager = WorktreeTerminalManager(runtime: runtime, preferredFontSize: baseline + 2)
+    let worktreeA = Worktree(
+      id: "/tmp/repo-a/wt-a",
+      name: "wt-a",
+      detail: "detail",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo-a/wt-a"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo-a")
+    )
+    let worktreeB = Worktree(
+      id: "/tmp/repo-b/wt-b",
+      name: "wt-b",
+      detail: "detail",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo-b/wt-b"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo-b")
+    )
+    _ = manager.state(for: worktreeA)
+    _ = manager.state(for: worktreeB)
+
+    let stream = manager.eventStream()
+    var iterator = stream.makeAsyncIterator()
+
+    manager.resetFontSizeAcrossStates()
+
+    var event: TerminalClient.Event?
+    while let next = await iterator.next() {
+      if case .fontSizeChanged = next {
+        event = next
+        break
+      }
+    }
+
+    #expect(event == .fontSizeChanged(nil))
+  }
+
+  @Test func explicitResetWhenAlreadyDefaultDoesNotEmitEvent() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime(), preferredFontSize: nil)
+    _ = manager.state(for: makeWorktree())
+    let stream = manager.eventStream()
+    var iterator = stream.makeAsyncIterator()
+
+    manager.resetFontSizeAcrossStates()
+
+    let first = await iterator.next()
+    #expect(first == .notificationIndicatorChanged(count: 0))
+  }
+
+  @Test func cellSizeChangeSkipsFirstEventPerSurface() {
+    let state = WorktreeTerminalState(runtime: GhosttyRuntime(), worktree: makeWorktree())
+    var captured: [Float32?] = []
+    let firstSurface = UUID()
+    let secondSurface = UUID()
+
+    state.onFontSizeChanged = { fontSize in
+      captured.append(fontSize)
+    }
+
+    state.handleCellSizeChange(forSurfaceID: firstSurface, fontSize: 13)
+    state.handleCellSizeChange(forSurfaceID: firstSurface, fontSize: 14)
+    state.handleCellSizeChange(forSurfaceID: secondSurface, fontSize: 15)
+    state.handleCellSizeChange(forSurfaceID: secondSurface, fontSize: 16)
+
+    #expect(captured == [14, 16])
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

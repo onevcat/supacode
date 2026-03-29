@@ -18,6 +18,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var automaticallyArchiveMergedWorktrees: Bool
   var promptForWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
+  var terminalFontSize: Float32?
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -38,7 +39,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: true,
     automaticallyArchiveMergedWorktrees: false,
     promptForWorktreeCreation: true,
-    defaultWorktreeBaseDirectoryPath: nil
+    defaultWorktreeBaseDirectoryPath: nil,
+    terminalFontSize: nil
   )
 
   init(
@@ -60,7 +62,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: Bool,
     automaticallyArchiveMergedWorktrees: Bool,
     promptForWorktreeCreation: Bool,
-    defaultWorktreeBaseDirectoryPath: String? = nil
+    defaultWorktreeBaseDirectoryPath: String? = nil,
+    terminalFontSize: Float32? = nil
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -81,6 +84,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
+    self.terminalFontSize = terminalFontSize
   }
 
   init(from decoder: any Decoder) throws {
@@ -136,5 +140,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     defaultWorktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .defaultWorktreeBaseDirectoryPath)
       ?? Self.default.defaultWorktreeBaseDirectoryPath
+    terminalFontSize =
+      try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
+      ?? Self.default.terminalFontSize
   }
 }

@@ -28,7 +28,7 @@ struct AppFeatureSettingsSelectionTests {
         rootURL: repository.rootURL,
         repositoryKind: repository.kind,
         settings: .default,
-        onevcatSettings: .default
+        userSettings: .default
       )
     }
   }
@@ -72,7 +72,7 @@ struct AppFeatureSettingsSelectionTests {
         rootURL: repository.rootURL,
         repositoryKind: .plain,
         settings: .default,
-        onevcatSettings: .default
+        userSettings: .default
       )
     }
   }
@@ -93,7 +93,7 @@ struct AppFeatureSettingsSelectionTests {
       rootURL: repository.rootURL,
       repositoryKind: repository.kind,
       settings: .default,
-      onevcatSettings: .default
+      userSettings: .default
     )
     let store = TestStore(initialState: state) {
       AppFeature()

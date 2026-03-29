@@ -1,50 +1,50 @@
 import Foundation
 
-nonisolated struct OnevcatRepositorySettings: Codable, Equatable, Sendable {
+nonisolated struct UserRepositorySettings: Codable, Equatable, Sendable {
   static let maxCustomCommands = 3
 
-  var customCommands: [OnevcatCustomCommand]
+  var customCommands: [UserCustomCommand]
 
-  static let `default` = OnevcatRepositorySettings(customCommands: [])
+  static let `default` = UserRepositorySettings(customCommands: [])
 
   private enum CodingKeys: String, CodingKey {
     case customCommands
   }
 
-  init(customCommands: [OnevcatCustomCommand]) {
+  init(customCommands: [UserCustomCommand]) {
     self.customCommands = Self.normalizedCommands(customCommands)
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    let commands = try container.decodeIfPresent([OnevcatCustomCommand].self, forKey: .customCommands) ?? []
+    let commands = try container.decodeIfPresent([UserCustomCommand].self, forKey: .customCommands) ?? []
     customCommands = Self.normalizedCommands(commands)
   }
 
-  func normalized() -> OnevcatRepositorySettings {
-    OnevcatRepositorySettings(customCommands: customCommands)
+  func normalized() -> UserRepositorySettings {
+    UserRepositorySettings(customCommands: customCommands)
   }
 
-  static func normalizedCommands(_ commands: [OnevcatCustomCommand]) -> [OnevcatCustomCommand] {
+  static func normalizedCommands(_ commands: [UserCustomCommand]) -> [UserCustomCommand] {
     Array(commands.prefix(maxCustomCommands)).map { $0.normalized() }
   }
 }
 
-nonisolated struct OnevcatCustomCommand: Codable, Equatable, Sendable, Identifiable {
+nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable {
   var id: String
   var title: String
   var systemImage: String
   var command: String
-  var execution: OnevcatCustomCommandExecution
-  var shortcut: OnevcatCustomShortcut?
+  var execution: UserCustomCommandExecution
+  var shortcut: UserCustomShortcut?
 
   init(
     id: String = UUID().uuidString,
     title: String,
     systemImage: String,
     command: String,
-    execution: OnevcatCustomCommandExecution,
-    shortcut: OnevcatCustomShortcut?
+    execution: UserCustomCommandExecution,
+    shortcut: UserCustomShortcut?
   ) {
     self.id = id
     self.title = title
@@ -54,8 +54,8 @@ nonisolated struct OnevcatCustomCommand: Codable, Equatable, Sendable, Identifia
     self.shortcut = shortcut?.normalized()
   }
 
-  static func `default`(index: Int) -> OnevcatCustomCommand {
-    OnevcatCustomCommand(
+  static func `default`(index: Int) -> UserCustomCommand {
+    UserCustomCommand(
       title: "Command \(index + 1)",
       systemImage: "terminal",
       command: "",
@@ -64,8 +64,8 @@ nonisolated struct OnevcatCustomCommand: Codable, Equatable, Sendable, Identifia
     )
   }
 
-  func normalized() -> OnevcatCustomCommand {
-    OnevcatCustomCommand(
+  func normalized() -> UserCustomCommand {
+    UserCustomCommand(
       id: id,
       title: title,
       systemImage: systemImage,
@@ -96,7 +96,7 @@ nonisolated struct OnevcatCustomCommand: Codable, Equatable, Sendable, Identifia
   }
 }
 
-nonisolated enum OnevcatCustomCommandExecution: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum UserCustomCommandExecution: String, Codable, CaseIterable, Identifiable, Sendable {
   case shellScript
   case terminalInput
 
@@ -112,18 +112,18 @@ nonisolated enum OnevcatCustomCommandExecution: String, Codable, CaseIterable, I
   }
 }
 
-nonisolated struct OnevcatCustomShortcut: Codable, Equatable, Sendable {
+nonisolated struct UserCustomShortcut: Codable, Equatable, Sendable {
   var key: String
-  var modifiers: OnevcatCustomShortcutModifiers
+  var modifiers: UserCustomShortcutModifiers
 
-  init(key: String, modifiers: OnevcatCustomShortcutModifiers) {
+  init(key: String, modifiers: UserCustomShortcutModifiers) {
     self.key = key
     self.modifiers = modifiers
   }
 
-  func normalized() -> OnevcatCustomShortcut {
+  func normalized() -> UserCustomShortcut {
     let scalar = key.trimmingCharacters(in: .whitespacesAndNewlines).first
-    return OnevcatCustomShortcut(
+    return UserCustomShortcut(
       key: scalar.map { String($0).lowercased() } ?? "",
       modifiers: modifiers
     )
@@ -145,7 +145,7 @@ nonisolated struct OnevcatCustomShortcut: Codable, Equatable, Sendable {
   }
 }
 
-nonisolated struct OnevcatCustomShortcutModifiers: Codable, Equatable, Sendable {
+nonisolated struct UserCustomShortcutModifiers: Codable, Equatable, Sendable {
   var command: Bool
   var shift: Bool
   var option: Bool

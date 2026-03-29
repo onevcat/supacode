@@ -492,6 +492,16 @@ final class GhosttyRuntime {
     return Self.keyboardShortcut(for: trigger)
   }
 
+  func defaultFontSize() -> Float32 {
+    guard let config else { return 0 }
+    var value: Double = 0
+    let key = "font-size"
+    guard ghostty_config_get(config, &value, key, UInt(key.lengthOfBytes(using: .utf8))) else {
+      return 0
+    }
+    return Float32(value)
+  }
+
   func commandPaletteEntries() -> [GhosttyCommand] {
     guard let config else { return [] }
     var value = ghostty_config_command_list_s()

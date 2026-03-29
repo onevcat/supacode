@@ -27,9 +27,9 @@ struct AppFeaturePlainFolderTerminalTests {
       settingsFileURL
     )
 
-    let onevcatSettings = OnevcatRepositorySettings(
+    let userSettings = UserRepositorySettings(
       customCommands: [
-        OnevcatCustomCommand(
+        UserCustomCommand(
           title: "Watch",
           systemImage: "terminal",
           command: "pnpm test --watch",
@@ -39,8 +39,8 @@ struct AppFeaturePlainFolderTerminalTests {
       ]
     )
     try localStorage.save(
-      JSONEncoder().encode(onevcatSettings),
-      at: SupacodePaths.onevcatRepositorySettingsURL(for: repository.rootURL)
+      JSONEncoder().encode(userSettings),
+      at: SupacodePaths.userRepositorySettingsURL(for: repository.rootURL)
     )
 
     let store = TestStore(
@@ -71,8 +71,8 @@ struct AppFeaturePlainFolderTerminalTests {
       $0.openActionSelection = .terminal
       $0.selectedRunScript = "pnpm dev"
     }
-    await store.receive(\.worktreeOnevcatSettingsLoaded) {
-      $0.selectedCustomCommands = onevcatSettings.customCommands
+    await store.receive(\.worktreeUserSettingsLoaded) {
+      $0.selectedCustomCommands = userSettings.customCommands
     }
     await store.finish()
 
@@ -117,6 +117,47 @@ struct AppFeaturePlainFolderTerminalTests {
     )
   }
 
+  @Test(.dependencies) func loadingConflictingShortcutKeepsRegistration() async {
+    let repository = makePlainRepository()
+    let registeredShortcuts = LockIsolated<[UserCustomShortcut]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(repository: repository, selected: true),
+      settings: SettingsFeature.State()
+    )
+    state.repositories.selection = .repository(repository.id)
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.customShortcutRegistryClient.setShortcuts = { shortcuts in
+        registeredShortcuts.setValue(shortcuts)
+      }
+    }
+
+    let conflicted = UserRepositorySettings(
+      customCommands: [
+        UserCustomCommand(
+          title: "Build",
+          systemImage: "hammer",
+          command: "swift build",
+          execution: .shellScript,
+          shortcut: UserCustomShortcut(
+            key: "b",
+            modifiers: UserCustomShortcutModifiers(command: true)
+          )
+        ),
+      ]
+    )
+
+    await store.send(.worktreeUserSettingsLoaded(conflicted, worktreeID: repository.id)) {
+      $0.selectedCustomCommands = conflicted.customCommands
+    }
+    await store.finish()
+
+    let expectedShortcut = conflicted.customCommands[0].shortcut?.normalized()
+    #expect(registeredShortcuts.value == [expectedShortcut].compactMap { $0 })
+  }
+
   @Test(.dependencies) func customCommandUsesPlainRepositoryTerminalTarget() async {
     let repository = makePlainRepository()
     let sent = LockIsolated<[TerminalClient.Command]>([])
@@ -125,7 +166,7 @@ struct AppFeaturePlainFolderTerminalTests {
       settings: SettingsFeature.State()
     )
     state.selectedCustomCommands = [
-      OnevcatCustomCommand(
+      UserCustomCommand(
         title: "Watch",
         systemImage: "terminal",
         command: "pnpm test --watch",

@@ -15,7 +15,7 @@ struct AppFeatureCustomCommandTests {
       settings: SettingsFeature.State()
     )
     state.selectedCustomCommands = [
-      OnevcatCustomCommand(
+      UserCustomCommand(
         title: "Test",
         systemImage: "checkmark.circle",
         command: "swift test",
@@ -50,7 +50,7 @@ struct AppFeatureCustomCommandTests {
       settings: SettingsFeature.State()
     )
     state.selectedCustomCommands = [
-      OnevcatCustomCommand(
+      UserCustomCommand(
         title: "Watch",
         systemImage: "terminal",
         command: "pnpm test --watch",

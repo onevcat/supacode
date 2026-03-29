@@ -21,7 +21,7 @@ struct DetailToolbarTitleTests {
 
     #expect(title?.kind == .branch(name: "feature/title-bar"))
     #expect(title?.systemImage == "arrow.trianglehead.branch")
-    #expect(title?.helpText == "Rename branch (⌘M)")
+    #expect(title?.helpText == "Rename branch (⌘⇧M)")
     #expect(title?.supportsRename == true)
   }
 

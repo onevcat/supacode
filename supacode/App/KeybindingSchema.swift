@@ -1,0 +1,392 @@
+import Foundation
+import SwiftUI
+
+nonisolated enum KeybindingPlatform: String, Codable, Equatable, Sendable {
+  case macOS
+}
+
+nonisolated enum KeybindingScope: String, Codable, Equatable, Sendable {
+  case configurableAppAction
+  case systemFixedAppAction
+  case localInteraction
+  case customCommand
+}
+
+nonisolated enum KeybindingConflictPolicy: String, Codable, Equatable, Sendable {
+  case warnAndPreferUserOverride
+  case disallowUserOverride
+  case localOnly
+}
+
+nonisolated enum KeybindingSource: String, Equatable, Sendable {
+  case appDefault
+  case migratedLegacy
+  case userOverride
+}
+
+nonisolated struct KeybindingModifiers: Codable, Equatable, Sendable {
+  var command: Bool
+  var shift: Bool
+  var option: Bool
+  var control: Bool
+
+  init(command: Bool = false, shift: Bool = false, option: Bool = false, control: Bool = false) {
+    self.command = command
+    self.shift = shift
+    self.option = option
+    self.control = control
+  }
+
+  var eventModifiers: EventModifiers {
+    var value: EventModifiers = []
+    if command {
+      value.insert(.command)
+    }
+    if shift {
+      value.insert(.shift)
+    }
+    if option {
+      value.insert(.option)
+    }
+    if control {
+      value.insert(.control)
+    }
+    return value
+  }
+}
+
+nonisolated struct Keybinding: Codable, Equatable, Sendable {
+  var key: String
+  var modifiers: KeybindingModifiers
+
+  init(key: String, modifiers: KeybindingModifiers) {
+    self.key = Self.normalizeKey(key)
+    self.modifiers = modifiers
+  }
+
+  var isValid: Bool {
+    !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  var display: String {
+    var symbols: [String] = []
+    if modifiers.command {
+      symbols.append("⌘")
+    }
+    if modifiers.shift {
+      symbols.append("⇧")
+    }
+    if modifiers.option {
+      symbols.append("⌥")
+    }
+    if modifiers.control {
+      symbols.append("⌃")
+    }
+
+    symbols.append(Self.displayKey(for: key))
+    return symbols.joined()
+  }
+
+  private static func normalizeKey(_ raw: String) -> String {
+    raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+
+  private static func displayKey(for key: String) -> String {
+    switch key {
+    case "return":
+      return "↩"
+    case "arrow_up":
+      return "↑"
+    case "arrow_down":
+      return "↓"
+    case "arrow_left":
+      return "←"
+    case "arrow_right":
+      return "→"
+    default:
+      return key.uppercased()
+    }
+  }
+}
+
+/// Versioned command schema for keybinding definitions.
+///
+/// `version` only tracks schema structure/versioning of this data model,
+/// not the release version of the app.
+nonisolated struct KeybindingSchemaDocument: Codable, Equatable, Sendable {
+  static let currentVersion = 1
+
+  var version: Int
+  var commands: [KeybindingCommandSchema]
+
+  init(version: Int = currentVersion, commands: [KeybindingCommandSchema]) {
+    self.version = version
+    self.commands = commands
+  }
+}
+
+nonisolated struct KeybindingCommandSchema: Codable, Equatable, Sendable {
+  var id: String
+  var title: String
+  var scope: KeybindingScope
+  var platform: KeybindingPlatform
+  var allowUserOverride: Bool
+  var conflictPolicy: KeybindingConflictPolicy
+  var defaultBinding: Keybinding?
+
+  init(
+    id: String,
+    title: String,
+    scope: KeybindingScope,
+    platform: KeybindingPlatform,
+    allowUserOverride: Bool,
+    conflictPolicy: KeybindingConflictPolicy,
+    defaultBinding: Keybinding?
+  ) {
+    self.id = id
+    self.title = title
+    self.scope = scope
+    self.platform = platform
+    self.allowUserOverride = allowUserOverride
+    self.conflictPolicy = conflictPolicy
+    self.defaultBinding = defaultBinding
+  }
+}
+
+nonisolated struct KeybindingUserOverrideStore: Codable, Equatable, Sendable {
+  static let empty = KeybindingUserOverrideStore(version: KeybindingSchemaDocument.currentVersion, overrides: [:])
+
+  var version: Int
+  var overrides: [String: KeybindingUserOverride]
+
+  init(version: Int = KeybindingSchemaDocument.currentVersion, overrides: [String: KeybindingUserOverride]) {
+    self.version = version
+    self.overrides = overrides
+  }
+}
+
+nonisolated struct KeybindingUserOverride: Codable, Equatable, Sendable {
+  var binding: Keybinding?
+  var isEnabled: Bool
+
+  init(binding: Keybinding?, isEnabled: Bool = true) {
+    self.binding = binding
+    self.isEnabled = isEnabled
+  }
+}
+
+nonisolated struct ResolvedKeybinding: Equatable, Sendable {
+  var command: KeybindingCommandSchema
+  var binding: Keybinding?
+  var source: KeybindingSource
+}
+
+nonisolated struct ResolvedKeybindingMap: Equatable, Sendable {
+  var bindingsByCommandID: [String: ResolvedKeybinding]
+
+  func binding(for commandID: String) -> ResolvedKeybinding? {
+    bindingsByCommandID[commandID]
+  }
+}
+
+nonisolated enum KeybindingResolver {
+  static func resolve(
+    schema: KeybindingSchemaDocument,
+    userOverrides: KeybindingUserOverrideStore = .empty,
+    migratedOverrides: [String: KeybindingUserOverride] = [:]
+  ) -> ResolvedKeybindingMap {
+    var result: [String: ResolvedKeybinding] = [:]
+
+    for command in schema.commands {
+      var resolvedBinding = command.defaultBinding
+      var source: KeybindingSource = .appDefault
+
+      if command.allowUserOverride {
+        if let migrated = migratedOverrides[command.id] {
+          let applied = apply(override: migrated, currentBinding: resolvedBinding)
+          resolvedBinding = applied.binding
+          if applied.didChange {
+            source = .migratedLegacy
+          }
+        }
+
+        if let user = userOverrides.overrides[command.id] {
+          let applied = apply(override: user, currentBinding: resolvedBinding)
+          resolvedBinding = applied.binding
+          if applied.didChange {
+            source = .userOverride
+          }
+        }
+      }
+
+      result[command.id] = ResolvedKeybinding(
+        command: command,
+        binding: resolvedBinding,
+        source: source
+      )
+    }
+
+    return ResolvedKeybindingMap(bindingsByCommandID: result)
+  }
+
+  private static func apply(
+    override: KeybindingUserOverride,
+    currentBinding: Keybinding?
+  ) -> (binding: Keybinding?, didChange: Bool) {
+    if !override.isEnabled {
+      return (nil, currentBinding != nil)
+    }
+
+    guard let binding = override.binding else {
+      return (currentBinding, false)
+    }
+
+    return (binding, currentBinding != binding)
+  }
+}
+
+nonisolated struct KeybindingMigrationIssue: Equatable, Sendable {
+  nonisolated enum Reason: Equatable, Sendable {
+    case missingCommandID
+    case invalidShortcut
+  }
+
+  var commandTitle: String
+  var reason: Reason
+  var debugDescription: String
+}
+
+nonisolated struct KeybindingMigrationResult: Equatable, Sendable {
+  var overrides: [String: KeybindingUserOverride]
+  var issues: [KeybindingMigrationIssue]
+
+  var migratedCount: Int {
+    overrides.count
+  }
+}
+
+nonisolated enum LegacyCustomCommandShortcutMigration {
+  private static let logger = SupaLogger("Shortcuts")
+
+  static func migrate(commands: [UserCustomCommand]) -> KeybindingMigrationResult {
+    var overrides: [String: KeybindingUserOverride] = [:]
+    var issues: [KeybindingMigrationIssue] = []
+
+    for command in commands {
+      let commandID = command.id.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !commandID.isEmpty else {
+        let issue = KeybindingMigrationIssue(
+          commandTitle: command.resolvedTitle,
+          reason: .missingCommandID,
+          debugDescription: "Custom command has an empty id."
+        )
+        issues.append(issue)
+        logger.warning(
+          "shortcut_migration status=unmapped reason=missingCommandID title=\(command.resolvedTitle)"
+        )
+        continue
+      }
+
+      guard let rawShortcut = command.shortcut else {
+        continue
+      }
+
+      guard rawShortcut.isValid else {
+        let issue = KeybindingMigrationIssue(
+          commandTitle: command.resolvedTitle,
+          reason: .invalidShortcut,
+          debugDescription: "Shortcut key must be exactly one character."
+        )
+        issues.append(issue)
+        logger.warning(
+          "shortcut_migration status=unmapped reason=invalidShortcut title=\(command.resolvedTitle)"
+        )
+        continue
+      }
+
+      let shortcut = rawShortcut.normalized()
+      let binding = Keybinding(
+        key: shortcut.key,
+        modifiers: .init(shortcut.modifiers)
+      )
+      overrides[customCommandBindingID(for: commandID)] = KeybindingUserOverride(binding: binding)
+    }
+
+    return KeybindingMigrationResult(overrides: overrides, issues: issues)
+  }
+
+  static func customCommandBindingID(for commandID: String) -> String {
+    "custom_command.\(commandID)"
+  }
+}
+
+extension KeybindingModifiers {
+  nonisolated init(_ userModifiers: UserCustomShortcutModifiers) {
+    self.init(
+      command: userModifiers.command,
+      shift: userModifiers.shift,
+      option: userModifiers.option,
+      control: userModifiers.control
+    )
+  }
+
+  nonisolated init(_ eventModifiers: EventModifiers) {
+    self.init(
+      command: eventModifiers.contains(.command),
+      shift: eventModifiers.contains(.shift),
+      option: eventModifiers.contains(.option),
+      control: eventModifiers.contains(.control)
+    )
+  }
+}
+
+extension KeybindingScope {
+  init(_ scope: AppShortcuts.Scope) {
+    switch scope {
+    case .configurableAppAction:
+      self = .configurableAppAction
+    case .systemFixedAppAction:
+      self = .systemFixedAppAction
+    case .localInteraction:
+      self = .localInteraction
+    }
+  }
+}
+
+extension KeybindingSchemaDocument {
+  static var appDefaultsV1: KeybindingSchemaDocument {
+    KeybindingSchemaDocument(
+      version: currentVersion,
+      commands: AppShortcuts.bindings.map { binding in
+        KeybindingCommandSchema(
+          id: binding.id,
+          title: binding.title,
+          scope: .init(binding.scope),
+          platform: .macOS,
+          allowUserOverride: binding.scope == .configurableAppAction,
+          conflictPolicy: binding.scope.conflictPolicy,
+          defaultBinding: binding.shortcut.keybinding
+        )
+      }
+    )
+  }
+}
+
+extension AppShortcuts.Scope {
+  fileprivate var conflictPolicy: KeybindingConflictPolicy {
+    switch self {
+    case .configurableAppAction:
+      return .warnAndPreferUserOverride
+    case .systemFixedAppAction:
+      return .disallowUserOverride
+    case .localInteraction:
+      return .localOnly
+    }
+  }
+}
+
+extension AppShortcut {
+  fileprivate var keybinding: Keybinding {
+    Keybinding(key: keyToken, modifiers: .init(modifiers))
+  }
+}

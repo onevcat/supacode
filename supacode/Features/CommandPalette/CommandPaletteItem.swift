@@ -96,7 +96,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
   var appShortcut: AppShortcut? {
     switch kind {
     case .checkForUpdates:
-      return nil
+      return AppShortcuts.checkForUpdates
     case .openRepository:
       return AppShortcuts.openRepository
     case .openSettings:

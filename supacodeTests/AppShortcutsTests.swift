@@ -29,6 +29,58 @@ struct AppShortcutsTests {
     }
   }
 
+  @Test func defaultGlobalShortcutTableMatchesPlan() {
+    expectNoDifference(
+      [
+        "openSettings=\(AppShortcuts.openSettings.display)",
+        "toggleLeftSidebar=\(AppShortcuts.toggleLeftSidebar.display)",
+        "runScript=\(AppShortcuts.runScript.display)",
+        "stopRunScript=\(AppShortcuts.stopRunScript.display)",
+        "checkForUpdates=\(AppShortcuts.checkForUpdates.display)",
+        "showDiff=\(AppShortcuts.showDiff.display)",
+        "openFinder=\(AppShortcuts.openFinder.display)",
+        "openRepository=\(AppShortcuts.openRepository.display)",
+      ],
+      [
+        "openSettings=⌘,",
+        "toggleLeftSidebar=⌘⌃S",
+        "runScript=⌘R",
+        "stopRunScript=⌘.",
+        "checkForUpdates=⌘⇧U",
+        "showDiff=⌘⇧Y",
+        "openFinder=⌘O",
+        "openRepository=⌘⇧O",
+      ]
+    )
+  }
+
+  @Test func systemFixedAndLocalInteractionShortcutsAreDefinedInRegistry() {
+    let idToDisplay = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.shortcut.display) })
+    let idToScope = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.scope) })
+
+    expectNoDifference(
+      idToDisplay["command_palette"],
+      AppShortcuts.commandPalette.display
+    )
+    expectNoDifference(
+      idToDisplay["quit_application"],
+      AppShortcuts.quitApplication.display
+    )
+    expectNoDifference(
+      idToDisplay["rename_branch"],
+      AppShortcuts.renameBranch.display
+    )
+    expectNoDifference(
+      idToDisplay["select_all_canvas_cards"],
+      AppShortcuts.selectAllCanvasCards.display
+    )
+
+    #expect(idToScope["command_palette"] == .systemFixedAppAction)
+    #expect(idToScope["quit_application"] == .systemFixedAppAction)
+    #expect(idToScope["rename_branch"] == .localInteraction)
+    #expect(idToScope["select_all_canvas_cards"] == .localInteraction)
+  }
+
   @Test func tabSelectionGhosttyKeybindArgumentsMatchExpected() {
     expectNoDifference(
       AppShortcuts.tabSelectionGhosttyKeybindArguments,
@@ -57,6 +109,40 @@ struct AppShortcutsTests {
     )
   }
 
+  @Test func userOverrideConflictsDetectsReservedAppShortcuts() {
+    let commands = [
+      UserCustomCommand(
+        title: "Build",
+        systemImage: "hammer",
+        command: "swift build",
+        execution: .shellScript,
+        shortcut: UserCustomShortcut(
+          key: "s",
+          modifiers: UserCustomShortcutModifiers(command: true, control: true)
+        )
+      ),
+      UserCustomCommand(
+        title: "Deploy",
+        systemImage: "rocket",
+        command: "make release",
+        execution: .shellScript,
+        shortcut: UserCustomShortcut(
+          key: "k",
+          modifiers: UserCustomShortcutModifiers(command: true)
+        )
+      ),
+    ]
+
+    expectNoDifference(
+      AppShortcuts.userOverrideConflicts(in: commands).map {
+        "\($0.commandTitle)|\($0.commandShortcutDisplay)|\($0.appActionTitle)|\($0.appShortcutDisplay)"
+      },
+      [
+        "Build|⌘⌃S|Toggle Left Sidebar|⌘⌃S"
+      ]
+    )
+  }
+
   @Test func ghosttyCLIArgumentsKeepWorktreeUnbindsAndTabBinds() {
     let arguments = AppShortcuts.ghosttyCLIKeybindArguments
 
@@ -69,6 +155,17 @@ struct AppShortcutsTests {
     }
 
     for argument in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map({ "--keybind=ctrl+digit_\($0)=unbind" }) {
+      #expect(arguments.contains(argument) == false)
+    }
+
+    for argument in [
+      "--keybind=super+[=unbind",
+      "--keybind=super+]=unbind",
+      "--keybind=super+shift+[=unbind",
+      "--keybind=super+shift+]=unbind",
+      "--keybind=super+d=unbind",
+      "--keybind=super+shift+d=unbind",
+    ] {
       #expect(arguments.contains(argument) == false)
     }
   }

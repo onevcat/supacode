@@ -30,4 +30,29 @@ struct AppFeatureSettingsChangedTests {
     }
     await store.finish()
   }
+
+  @Test(.dependencies) func terminalFontSizeEventDoesNotFanOutGlobalSettingsEffects() async {
+    let sentTerminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let watcherCommands = LockIsolated<[WorktreeInfoWatcherClient.Command]>([])
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentTerminalCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { command in
+        watcherCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.terminalEvent(.fontSizeChanged(18)))
+    await store.receive(\.settings.setTerminalFontSize) {
+      $0.settings.terminalFontSize = 18
+    }
+    await store.receive(\.settings.delegate.terminalFontSizeChanged)
+    await store.finish()
+
+    #expect(sentTerminalCommands.value.isEmpty)
+    #expect(watcherCommands.value.isEmpty)
+  }
 }

@@ -10,7 +10,7 @@ struct RepositorySettingsView: View {
     let baseRefOptions =
       store.branchOptions.isEmpty ? [store.defaultWorktreeBaseRef] : store.branchOptions
     let settings = $store.settings
-    let onevcatSettings = $store.onevcatSettings
+    let userSettings = $store.userSettings
     let worktreeBaseDirectoryPath = Binding(
       get: { settings.worktreeBaseDirectoryPath.wrappedValue ?? "" },
       set: { settings.worktreeBaseDirectoryPath.wrappedValue = $0 },
@@ -186,15 +186,15 @@ struct RepositorySettingsView: View {
       }
       if store.showsCustomCommandsSettings {
         Section {
-          ForEach(onevcatSettings.customCommands) { $command in
-            OnevcatCustomCommandCard(
+          ForEach(userSettings.customCommands) { $command in
+            UserCustomCommandCard(
               command: $command,
               onRemove: {
                 removeCustomCommand(id: command.id)
               }
             )
           }
-          if store.onevcatSettings.customCommands.count < OnevcatRepositorySettings.maxCustomCommands {
+          if store.userSettings.customCommands.count < UserRepositorySettings.maxCustomCommands {
             Button {
               addCustomCommand()
             } label: {
@@ -219,13 +219,13 @@ struct RepositorySettingsView: View {
   }
 
   private func addCustomCommand() {
-    let current = store.onevcatSettings.customCommands
+    let current = store.userSettings.customCommands
     let next = current + [.default(index: current.count)]
-    store.onevcatSettings.customCommands = OnevcatRepositorySettings.normalizedCommands(next)
+    store.userSettings.customCommands = UserRepositorySettings.normalizedCommands(next)
   }
 
-  private func removeCustomCommand(id: OnevcatCustomCommand.ID) {
-    store.onevcatSettings.customCommands.removeAll { $0.id == id }
+  private func removeCustomCommand(id: UserCustomCommand.ID) {
+    store.userSettings.customCommands.removeAll { $0.id == id }
   }
 }
 
@@ -292,8 +292,8 @@ private struct BranchPickerPopover: View {
   }
 }
 
-private struct OnevcatCustomCommandCard: View {
-  @Binding var command: OnevcatCustomCommand
+private struct UserCustomCommandCard: View {
+  @Binding var command: UserCustomCommand
   let onRemove: () -> Void
 
   var body: some View {
@@ -304,7 +304,7 @@ private struct OnevcatCustomCommandCard: View {
         TextField("SF Symbol", text: $command.systemImage)
           .textFieldStyle(.roundedBorder)
         Picker("Type", selection: $command.execution) {
-          ForEach(OnevcatCustomCommandExecution.allCases) { execution in
+          ForEach(UserCustomCommandExecution.allCases) { execution in
             Text(execution.title)
               .tag(execution)
           }
@@ -371,9 +371,9 @@ private struct OnevcatCustomCommandCard: View {
         if enabled {
           command.shortcut =
             command.shortcut
-            ?? OnevcatCustomShortcut(
+            ?? UserCustomShortcut(
               key: "",
-              modifiers: OnevcatCustomShortcutModifiers()
+              modifiers: UserCustomShortcutModifiers()
             )
         } else {
           command.shortcut = nil
@@ -382,7 +382,7 @@ private struct OnevcatCustomCommandCard: View {
     )
   }
 
-  private func shortcutKeyBinding(_ shortcut: Binding<OnevcatCustomShortcut>) -> Binding<String> {
+  private func shortcutKeyBinding(_ shortcut: Binding<UserCustomShortcut>) -> Binding<String> {
     Binding(
       get: { shortcut.wrappedValue.key },
       set: { value in

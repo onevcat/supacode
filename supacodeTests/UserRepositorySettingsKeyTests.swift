@@ -6,41 +6,41 @@ import Testing
 
 @testable import supacode
 
-struct OnevcatRepositorySettingsKeyTests {
+struct UserRepositorySettingsKeyTests {
   @Test(.dependencies) func loadMissingFileReturnsDefaultAndCreatesLocalFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
 
     let loaded = withDependencies {
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.onevcatRepositorySettings(rootURL)) var settings: OnevcatRepositorySettings
+      @Shared(.userRepositorySettings(rootURL)) var settings: UserRepositorySettings
       return settings
     }
 
     #expect(loaded == .default)
 
     let localData = try #require(localStorage.data(at: localURL))
-    let decoded = try JSONDecoder().decode(OnevcatRepositorySettings.self, from: localData)
+    let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: localData)
     #expect(decoded == .default)
   }
 
-  @Test(.dependencies) func savePersistsCustomCommandsToOnevcatFile() throws {
+  @Test(.dependencies) func savePersistsCustomCommandsToUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
+    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
 
-    let customSettings = OnevcatRepositorySettings(
+    let customSettings = UserRepositorySettings(
       customCommands: [
-        OnevcatCustomCommand(
+        UserCustomCommand(
           title: "Test",
           systemImage: "checkmark.circle",
           command: "swift test",
           execution: .shellScript,
-          shortcut: OnevcatCustomShortcut(
+          shortcut: UserCustomShortcut(
             key: "u",
-            modifiers: OnevcatCustomShortcutModifiers(command: true)
+            modifiers: UserCustomShortcutModifiers(command: true)
           )
         ),
       ]
@@ -49,33 +49,33 @@ struct OnevcatRepositorySettingsKeyTests {
     withDependencies {
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.onevcatRepositorySettings(rootURL)) var settings: OnevcatRepositorySettings
+      @Shared(.userRepositorySettings(rootURL)) var settings: UserRepositorySettings
       $settings.withLock {
         $0 = customSettings
       }
     }
 
     let localData = try #require(localStorage.data(at: localURL))
-    let decoded = try JSONDecoder().decode(OnevcatRepositorySettings.self, from: localData)
+    let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: localData)
     #expect(decoded == customSettings)
   }
 
-  @Test(.dependencies) func loadMigratesLegacyRepositoryRootOnevcatFile() throws {
+  @Test(.dependencies) func loadMigratesLegacyRepositoryRootUserFile() throws {
     let localStorage = RepositoryLocalSettingsTestStorage()
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let localURL = SupacodePaths.onevcatRepositorySettingsURL(for: rootURL)
-    let legacyURL = SupacodePaths.legacyOnevcatRepositorySettingsURL(for: rootURL)
+    let localURL = SupacodePaths.userRepositorySettingsURL(for: rootURL)
+    let legacyURL = SupacodePaths.legacyUserRepositorySettingsURL(for: rootURL)
 
-    let customSettings = OnevcatRepositorySettings(
+    let customSettings = UserRepositorySettings(
       customCommands: [
-        OnevcatCustomCommand(
+        UserCustomCommand(
           title: "Legacy",
           systemImage: "terminal",
           command: "echo legacy",
           execution: .shellScript,
-          shortcut: OnevcatCustomShortcut(
+          shortcut: UserCustomShortcut(
             key: "u",
-            modifiers: OnevcatCustomShortcutModifiers(command: true)
+            modifiers: UserCustomShortcutModifiers(command: true)
           )
         ),
       ]
@@ -87,14 +87,14 @@ struct OnevcatRepositorySettingsKeyTests {
     let loaded = withDependencies {
       $0.repositoryLocalSettingsStorage = localStorage.storage
     } operation: {
-      @Shared(.onevcatRepositorySettings(rootURL)) var settings: OnevcatRepositorySettings
+      @Shared(.userRepositorySettings(rootURL)) var settings: UserRepositorySettings
       return settings
     }
 
     #expect(loaded == customSettings)
 
     let localData = try #require(localStorage.data(at: localURL))
-    let decoded = try JSONDecoder().decode(OnevcatRepositorySettings.self, from: localData)
+    let decoded = try JSONDecoder().decode(UserRepositorySettings.self, from: localData)
     #expect(decoded == customSettings)
   }
 }

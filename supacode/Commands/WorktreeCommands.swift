@@ -187,7 +187,7 @@ struct WorktreeCommands: Commands {
   @ViewBuilder
   private func customCommandButton(
     index: Int,
-    command: OnevcatCustomCommand,
+    command: UserCustomCommand,
     hasActiveWorktree: Bool
   ) -> some View {
     let title = command.resolvedTitle

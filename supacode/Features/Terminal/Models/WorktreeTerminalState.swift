@@ -24,6 +24,8 @@ final class WorktreeTerminalState {
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
   private var runScriptTabId: TerminalTabID?
   private var pendingSetupScript: Bool
+  private var defaultFontSize: Float32?
+  private var hasInitializedCellSizeSurfaceIDs: Set<UUID> = []
   private var isEnsuringInitialTab = false
   private var lastReportedTaskStatus: WorktreeTaskStatus?
   private var lastEmittedFocusSurfaceId: UUID?
@@ -50,11 +52,18 @@ final class WorktreeTerminalState {
   var onRunScriptStatusChanged: ((Bool) -> Void)?
   var onCommandPaletteToggle: (() -> Void)?
   var onSetupScriptConsumed: (() -> Void)?
+  var onFontSizeChanged: ((Float32?) -> Void)?
 
-  init(runtime: GhosttyRuntime, worktree: Worktree, runSetupScript: Bool = false) {
+  init(
+    runtime: GhosttyRuntime,
+    worktree: Worktree,
+    runSetupScript: Bool = false,
+    defaultFontSize: Float32? = nil
+  ) {
     self.runtime = runtime
     self.worktree = worktree
     self.pendingSetupScript = runSetupScript
+    self.defaultFontSize = defaultFontSize
     self.tabManager = TerminalTabManager()
     _repositorySettings = SharedReader(
       wrappedValue: RepositorySettings.default,
@@ -99,6 +108,10 @@ final class WorktreeTerminalState {
 
   var isRunScriptRunning: Bool {
     runScriptTabId != nil
+  }
+
+  func setDefaultFontSize(_ fontSize: Float32?) {
+    defaultFontSize = fontSize
   }
 
   func ensureInitialTab(focusing: Bool) {
@@ -441,6 +454,7 @@ final class WorktreeTerminalState {
       } catch {
         newSurface.closeSurface()
         surfaces.removeValue(forKey: newSurface.id)
+        hasInitializedCellSizeSurfaceIDs.remove(newSurface.id)
         return false
       }
 
@@ -483,8 +497,7 @@ final class WorktreeTerminalState {
     }
   }
 
-  func performSplitOperation(_ operation: TerminalSplitTreeView.Operation, in tabId: TerminalTabID)
-  {
+  func performSplitOperation(_ operation: TerminalSplitTreeView.Operation, in tabId: TerminalTabID) {
     guard var tree = trees[tabId] else { return }
 
     switch operation {
@@ -533,6 +546,7 @@ final class WorktreeTerminalState {
       surface.closeSurface()
     }
     surfaces.removeAll()
+    hasInitializedCellSizeSurfaceIDs.removeAll()
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     tabIsRunningById.removeAll()
@@ -636,13 +650,25 @@ final class WorktreeTerminalState {
     context: ghostty_surface_context_e
   ) -> GhosttySurfaceView {
     let inherited = inheritedSurfaceConfig(fromSurfaceId: inheritingFromSurfaceId, context: context)
+    let resolvedFontSize = Self.resolvedFontSizeForNewSurface(
+      defaultFontSize: defaultFontSize,
+      inheritedFontSize: inherited.fontSize,
+      context: context
+    )
     let view = GhosttySurfaceView(
       runtime: runtime,
       workingDirectory: inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
-      fontSize: inherited.fontSize,
+      fontSize: resolvedFontSize,
       context: context
     )
+    configureBridgeCallbacks(for: view, tabId: tabId)
+    configureSurfaceCallbacks(for: view, tabId: tabId)
+    surfaces[view.id] = view
+    return view
+  }
+
+  private func configureBridgeCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.bridge.onTitleChange = { [weak self, weak view] title in
       guard let self, let view else { return }
       if self.focusedSurfaceIdByTab[tabId] == view.id {
@@ -675,6 +701,14 @@ final class WorktreeTerminalState {
       guard let self else { return }
       self.updateRunningState(for: tabId)
     }
+    view.bridge.onCellSizeChange = { [weak self, weak view] in
+      guard let self, let view else { return }
+      self.handleCellSizeChange(forSurfaceID: view.id)
+    }
+    view.bridge.onConfigChange = { [weak self, weak view] in
+      guard let self, let view else { return }
+      self.handleCellSizeChange(forSurfaceID: view.id)
+    }
     view.bridge.onDesktopNotification = { [weak self, weak view] title, body in
       guard let self, let view else { return }
       self.appendNotification(title: title, body: body, surfaceId: view.id)
@@ -691,6 +725,9 @@ final class WorktreeTerminalState {
       guard let self else { return }
       self.handlePromptTitle(promptType, tabId: tabId)
     }
+  }
+
+  private func configureSurfaceCallbacks(for view: GhosttySurfaceView, tabId: TerminalTabID) {
     view.onFocusChange = { [weak self, weak view] focused in
       guard let self, let view, focused else { return }
       self.focusedSurfaceIdByTab[tabId] = view.id
@@ -704,8 +741,21 @@ final class WorktreeTerminalState {
       self.recordKeyInput(forSurfaceID: view.id)
       self.markNotificationsRead(forSurfaceID: view.id)
     }
-    surfaces[view.id] = view
-    return view
+    view.onResetFontSizeShortcut = { [weak self] in
+      guard let self else { return }
+      self.onFontSizeChanged?(nil)
+    }
+  }
+
+  static func resolvedFontSizeForNewSurface(
+    defaultFontSize: Float32?,
+    inheritedFontSize: Float32?,
+    context: ghostty_surface_context_e
+  ) -> Float32? {
+    if context == GHOSTTY_SURFACE_CONTEXT_SPLIT {
+      return inheritedFontSize ?? defaultFontSize
+    }
+    return defaultFontSize
   }
 
   private struct InheritedSurfaceConfig: Equatable {
@@ -739,6 +789,20 @@ final class WorktreeTerminalState {
   private func currentFocusedSurfaceId() -> UUID? {
     guard let selectedTabId = tabManager.selectedTabId else { return nil }
     return focusedSurfaceIdByTab[selectedTabId]
+  }
+
+  private func handleCellSizeChange(forSurfaceID surfaceID: UUID) {
+    handleCellSizeChange(forSurfaceID: surfaceID, fontSize: fontSize(forSurfaceID: surfaceID))
+  }
+
+  func handleCellSizeChange(forSurfaceID surfaceID: UUID, fontSize: Float32?) {
+    let inserted = hasInitializedCellSizeSurfaceIDs.insert(surfaceID).inserted
+    guard !inserted else { return }
+    onFontSizeChanged?(fontSize)
+  }
+
+  private func fontSize(forSurfaceID surfaceID: UUID) -> Float32? {
+    inheritedSurfaceConfig(fromSurfaceId: surfaceID, context: GHOSTTY_SURFACE_CONTEXT_TAB).fontSize
   }
 
   private func handlePromptTitle(
@@ -891,6 +955,7 @@ final class WorktreeTerminalState {
     for surface in tree.leaves() {
       surface.closeSurface()
       surfaces.removeValue(forKey: surface.id)
+      hasInitializedCellSizeSurfaceIDs.remove(surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1006,11 +1071,13 @@ final class WorktreeTerminalState {
     guard let tabId = tabId(containing: view.id), let tree = trees[tabId] else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      hasInitializedCellSizeSurfaceIDs.remove(view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      hasInitializedCellSizeSurfaceIDs.remove(view.id)
       return
     }
     let nextSurface =
@@ -1020,6 +1087,7 @@ final class WorktreeTerminalState {
     let newTree = tree.removing(node)
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
+    hasInitializedCellSizeSurfaceIDs.remove(view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)

@@ -29,4 +29,21 @@ struct GhosttySurfaceBridgeTests {
     #expect(received?.0 == "Title")
     #expect(received?.1 == "Body")
   }
+
+  @Test func configChangeEmitsCallback() {
+    let bridge = GhosttySurfaceBridge()
+    var callbackCount = 0
+    bridge.onConfigChange = {
+      callbackCount += 1
+    }
+
+    var action = ghostty_action_s()
+    action.tag = GHOSTTY_ACTION_CONFIG_CHANGE
+    let target = ghostty_target_s()
+
+    _ = bridge.handleAction(target: target, action: action)
+
+    #expect(callbackCount == 1)
+    #expect(bridge.state.configChangeCount == 1)
+  }
 }

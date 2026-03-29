@@ -12,7 +12,7 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [OnevcatCustomCommand]
+    let customCommands: [UserCustomCommand]
   }
 
   @Bindable var store: StoreOf<AppFeature>
@@ -236,11 +236,22 @@ struct WorktreeDetailView: View {
       .focusedSceneValue(\.newTerminalAction, actions.newTerminal)
       .focusedValue(\.closeTabAction, actions.closeTab)
       .focusedValue(\.closeSurfaceAction, actions.closeSurface)
+      .focusedSceneValue(\.resetFontSizeAction, actions.resetFontSize)
+      .focusedSceneValue(\.increaseFontSizeAction, actions.increaseFontSize)
+      .focusedSceneValue(\.decreaseFontSizeAction, actions.decreaseFontSize)
       .focusedSceneValue(\.startSearchAction, actions.startSearch)
       .focusedSceneValue(\.searchSelectionAction, actions.searchSelection)
       .focusedSceneValue(\.navigateSearchNextAction, actions.navigateSearchNext)
       .focusedSceneValue(\.navigateSearchPreviousAction, actions.navigateSearchPrevious)
       .focusedSceneValue(\.endSearchAction, actions.endSearch)
+      .focusedSceneValue(\.selectPreviousTerminalTabAction, actions.selectPreviousTerminalTab)
+      .focusedSceneValue(\.selectNextTerminalTabAction, actions.selectNextTerminalTab)
+      .focusedSceneValue(\.selectPreviousTerminalPaneAction, actions.selectPreviousTerminalPane)
+      .focusedSceneValue(\.selectNextTerminalPaneAction, actions.selectNextTerminalPane)
+      .focusedSceneValue(\.selectTerminalPaneAboveAction, actions.selectTerminalPaneAbove)
+      .focusedSceneValue(\.selectTerminalPaneBelowAction, actions.selectTerminalPaneBelow)
+      .focusedSceneValue(\.selectTerminalPaneLeftAction, actions.selectTerminalPaneLeft)
+      .focusedSceneValue(\.selectTerminalPaneRightAction, actions.selectTerminalPaneRight)
       .focusedSceneValue(\.runScriptAction, actions.runScript)
       .focusedSceneValue(\.stopRunScriptAction, actions.stopRunScript)
   }
@@ -267,16 +278,55 @@ struct WorktreeDetailView: View {
       }
     }
 
+    func fontSizeAction(_ bindingAction: String) -> (() -> Void)? {
+      if bindingAction == "reset_font_size" {
+        guard hasActiveWorktree else { return nil }
+        return {
+          terminalManager.resetFontSizeAcrossStates()
+        }
+      }
+      if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
+        return action
+      }
+      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      return {
+        guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
+        _ = state.performBindingActionOnFocusedSurface(bindingAction)
+      }
+    }
+
+    func terminalBindingAction(_ bindingAction: String) -> (() -> Void)? {
+      if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
+        return action
+      }
+      guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
+      return {
+        guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
+        _ = state.performBindingActionOnFocusedSurface(bindingAction)
+      }
+    }
+
     return FocusedActions(
       openSelectedWorktree: action(.openSelectedWorktree),
       newTerminal: action(.newTerminal),
       closeTab: canvasAction { $0.closeFocusedTab() } ?? action(.closeTab),
       closeSurface: canvasAction { $0.closeFocusedSurface() } ?? action(.closeSurface),
+      resetFontSize: fontSizeAction("reset_font_size"),
+      increaseFontSize: fontSizeAction("increase_font_size:1"),
+      decreaseFontSize: fontSizeAction("decrease_font_size:1"),
       startSearch: action(.startSearch),
       searchSelection: action(.searchSelection),
       navigateSearchNext: action(.navigateSearchNext),
       navigateSearchPrevious: action(.navigateSearchPrevious),
       endSearch: action(.endSearch),
+      selectPreviousTerminalTab: terminalBindingAction("previous_tab"),
+      selectNextTerminalTab: terminalBindingAction("next_tab"),
+      selectPreviousTerminalPane: terminalBindingAction("goto_split:previous"),
+      selectNextTerminalPane: terminalBindingAction("goto_split:next"),
+      selectTerminalPaneAbove: terminalBindingAction("goto_split:up"),
+      selectTerminalPaneBelow: terminalBindingAction("goto_split:down"),
+      selectTerminalPaneLeft: terminalBindingAction("goto_split:left"),
+      selectTerminalPaneRight: terminalBindingAction("goto_split:right"),
       runScript: runScriptEnabled ? { store.send(.runScript) } : nil,
       stopRunScript: runScriptIsRunning ? { store.send(.stopRunScript) } : nil
     )
@@ -305,11 +355,22 @@ struct WorktreeDetailView: View {
     let newTerminal: (() -> Void)?
     let closeTab: (() -> Void)?
     let closeSurface: (() -> Void)?
+    let resetFontSize: (() -> Void)?
+    let increaseFontSize: (() -> Void)?
+    let decreaseFontSize: (() -> Void)?
     let startSearch: (() -> Void)?
     let searchSelection: (() -> Void)?
     let navigateSearchNext: (() -> Void)?
     let navigateSearchPrevious: (() -> Void)?
     let endSearch: (() -> Void)?
+    let selectPreviousTerminalTab: (() -> Void)?
+    let selectNextTerminalTab: (() -> Void)?
+    let selectPreviousTerminalPane: (() -> Void)?
+    let selectNextTerminalPane: (() -> Void)?
+    let selectTerminalPaneAbove: (() -> Void)?
+    let selectTerminalPaneBelow: (() -> Void)?
+    let selectTerminalPaneLeft: (() -> Void)?
+    let selectTerminalPaneRight: (() -> Void)?
     let runScript: (() -> Void)?
     let stopRunScript: (() -> Void)?
   }
@@ -324,7 +385,7 @@ struct WorktreeDetailView: View {
     let showExtras: Bool
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
-    let customCommands: [OnevcatCustomCommand]
+    let customCommands: [UserCustomCommand]
 
     var runScriptHelpText: String {
       "Run Script (\(AppShortcuts.runScript.display))"
@@ -471,15 +532,15 @@ struct WorktreeDetailView: View {
       }
     }
 
-    private func customCommand(at index: Int) -> OnevcatCustomCommand? {
+    private func customCommand(at index: Int) -> UserCustomCommand? {
       guard toolbarState.customCommands.indices.contains(index) else {
         return nil
       }
       return toolbarState.customCommands[index]
     }
 
-    private func customCommandButton(_ command: OnevcatCustomCommand, index: Int) -> some View {
-      OnevcatCustomCommandToolbarButton(
+    private func customCommandButton(_ command: UserCustomCommand, index: Int) -> some View {
+      UserCustomCommandToolbarButton(
         title: command.resolvedTitle,
         systemImage: command.resolvedSystemImage,
         shortcut: command.shortcut?.isValid == true ? command.shortcut?.display : nil,
@@ -657,7 +718,7 @@ private struct RunScriptToolbarButton: View {
   }
 }
 
-private struct OnevcatCustomCommandToolbarButton: View {
+private struct UserCustomCommandToolbarButton: View {
   let title: String
   let systemImage: String
   let shortcut: String?
@@ -708,14 +769,14 @@ private struct WorktreeToolbarPreview: View {
       runScriptEnabled: true,
       runScriptIsRunning: false,
       customCommands: [
-        OnevcatCustomCommand(
+        UserCustomCommand(
           title: "Test",
           systemImage: "checkmark.circle.fill",
           command: "swift test",
           execution: .shellScript,
-          shortcut: OnevcatCustomShortcut(
+          shortcut: UserCustomShortcut(
             key: "u",
-            modifiers: OnevcatCustomShortcutModifiers()
+            modifiers: UserCustomShortcutModifiers()
           )
         ),
       ]

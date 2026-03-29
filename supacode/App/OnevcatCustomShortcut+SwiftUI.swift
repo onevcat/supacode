@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-extension OnevcatCustomShortcut {
+extension UserCustomShortcut {
   var keyboardShortcut: KeyboardShortcut? {
     guard let keyEquivalent else { return nil }
     return KeyboardShortcut(keyEquivalent, modifiers: modifiers.eventModifiers)
@@ -30,7 +30,7 @@ extension OnevcatCustomShortcut {
   }
 }
 
-extension OnevcatCustomShortcutModifiers {
+extension UserCustomShortcutModifiers {
   var eventModifiers: EventModifiers {
     var modifiers: EventModifiers = []
     if command {
