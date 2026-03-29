@@ -6,6 +6,7 @@ nonisolated enum SSHCommandSupport {
   static let serverAliveIntervalSeconds = 5
   static let serverAliveCountMax = 3
   static let bootstrapTimeoutSeconds = 20
+  static let controlSocketHashLength = 20
 
   static func connectivityOptions(includeBatchMode: Bool = true) -> [String] {
     var options = [
@@ -25,19 +26,11 @@ nonisolated enum SSHCommandSupport {
 
   static func controlSocketPath(
     endpointKey: String,
-    temporaryDirectory: String = NSTemporaryDirectory()
+    temporaryDirectory _: String = NSTemporaryDirectory()
   ) -> String {
     let hashData = SHA256.hash(data: Data(endpointKey.utf8))
     let hash = hashData.map { String(format: "%02x", $0) }.joined()
-    let preferredPath = "\(NSHomeDirectory())/.prowl/ssh/\(hash)"
-    if preferredPath.utf8.count <= 96 {
-      return preferredPath
-    }
-
-    let tempPath = URL(fileURLWithPath: temporaryDirectory, isDirectory: true)
-      .standardizedFileURL
-      .path(percentEncoded: false)
-    return "\(tempPath)/prowl-ssh-\(String(hash.prefix(16)))"
+    return "/tmp/prowl-ssh-\(String(hash.prefix(controlSocketHashLength))).sock"
   }
 
   static func ensureControlSocketDirectory(for controlPath: String) throws {
