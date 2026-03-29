@@ -88,6 +88,7 @@ struct RemoteConnectFeatureTests {
 
     await store.send(.continueButtonTapped) {
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000123"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
     }
     await store.receive(.hostValidationFailed("Password required.")) {
       $0.validationMessage = "Password required."
@@ -120,6 +121,7 @@ struct RemoteConnectFeatureTests {
 
     await store.send(.continueButtonTapped) {
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000123"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
     }
     await store.receive(.hostValidationSucceeded) {
       $0.step = .repository
@@ -127,6 +129,53 @@ struct RemoteConnectFeatureTests {
     }
 
     #expect(savedPasswords.snapshot()["00000000-0000-0000-0000-000000000123"] == "secret")
+  }
+
+  @Test func editingSavedHostFieldsUsesNewPasswordKeychainID() async {
+    let selectedProfile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Build Box",
+      host: "example.com",
+      user: "deploy",
+      port: 2222,
+      authMethod: .password,
+      createdAt: Date(timeIntervalSince1970: 10),
+      updatedAt: Date(timeIntervalSince1970: 10)
+    )
+    let keychainLookups = StringArrayRecorder()
+    var state = RemoteConnectFeature.State(savedHostProfiles: [selectedProfile])
+    state.step = .host
+    state.selectedHostProfileID = selectedProfile.id
+    state.displayName = selectedProfile.displayName
+    state.host = "staging.example.com"
+    state.user = selectedProfile.user
+    state.port = "2222"
+    state.authMethod = .password
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 11))
+      $0.uuid = .constant(UUID(uuidString: "00000000-0000-0000-0000-000000000321")!)
+      $0.keychainClient = KeychainClient(
+        savePassword: { _, _ in },
+        loadPassword: { key in
+          keychainLookups.append(key)
+          return nil
+        },
+        deletePassword: { _ in }
+      )
+    }
+
+    await store.send(.continueButtonTapped) {
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000321"
+      $0.connectionHostProfileEndpointKey = "staging.example.com|deploy|2222"
+    }
+    await store.receive(.hostValidationFailed("Password required.")) {
+      $0.validationMessage = "Password required."
+    }
+
+    #expect(keychainLookups.snapshot() == ["00000000-0000-0000-0000-000000000321"])
   }
 
   @Test func selectingSavedHostAdvancesToRepositoryStep() async {
@@ -194,6 +243,7 @@ struct RemoteConnectFeatureTests {
 
     await store.send(.browseRemoteFoldersButtonTapped) {
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
       $0.activeBrowseRequestID = rootRequestID
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
@@ -280,6 +330,7 @@ struct RemoteConnectFeatureTests {
 
     await store.send(.browseRemoteFoldersButtonTapped) {
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
       $0.activeBrowseRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
@@ -389,6 +440,7 @@ struct RemoteConnectFeatureTests {
       $0.isSubmitting = true
       $0.validationMessage = nil
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
     }
     await store.send(.connectButtonTapped)
 
@@ -507,6 +559,7 @@ struct RemoteConnectFeatureTests {
 
     await store.send(.browseRemoteFoldersButtonTapped) {
       $0.connectionHostProfileID = connectionProfileID
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
       $0.activeBrowseRequestID = requestID
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
@@ -552,6 +605,7 @@ struct RemoteConnectFeatureTests {
       $0.isSubmitting = true
       $0.validationMessage = nil
       $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
+      $0.connectionHostProfileEndpointKey = "example.com|deploy|"
     }
     await store.receive(
       .remoteRepositoryValidationFailed("The selected folder is not a Git repository.")

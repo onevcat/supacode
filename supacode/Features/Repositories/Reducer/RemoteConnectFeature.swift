@@ -34,6 +34,7 @@ struct RemoteConnectFeature {
     var savedHostProfiles: [SSHHostProfile]
     var selectedHostProfileID: SSHHostProfile.ID?
     var connectionHostProfileID: SSHHostProfile.ID?
+    var connectionHostProfileEndpointKey: String?
     var step: Step = .host
     var displayName = ""
     var host = ""
@@ -112,6 +113,7 @@ struct RemoteConnectFeature {
       case .savedHostProfileSelected(let profileID):
         state.selectedHostProfileID = profileID
         state.connectionHostProfileID = nil
+        state.connectionHostProfileEndpointKey = nil
         state.password = ""
         state.validationMessage = nil
         guard let profile = state.savedHostProfiles.first(where: { $0.id == profileID }) else {
@@ -133,12 +135,13 @@ struct RemoteConnectFeature {
         guard let hostFields = validateHostFields(in: &state) else {
           return .none
         }
-        let profileID = resolvedHostProfileID(in: &state)
+        let profileID = resolvedHostProfileID(in: &state, hostFields: hostFields)
+        let existingProfile = matchingSavedHostProfile(in: state, hostFields: hostFields)
         let keychain = keychainClient
         if state.authMethod == .password {
           let hostProfile = makeConnectionProfile(
             from: hostFields,
-            existingProfile: state.selectedHostProfile,
+            existingProfile: existingProfile,
             profileID: profileID,
             now: now
           )
@@ -191,10 +194,11 @@ struct RemoteConnectFeature {
           return .none
         }
 
-        let profileID = resolvedHostProfileID(in: &state)
+        let profileID = resolvedHostProfileID(in: &state, hostFields: hostFields)
+        let existingProfile = matchingSavedHostProfile(in: state, hostFields: hostFields)
         let profile = makeConnectionProfile(
           from: hostFields,
-          existingProfile: state.selectedHostProfile,
+          existingProfile: existingProfile,
           profileID: profileID,
           now: now
         )
@@ -252,10 +256,11 @@ struct RemoteConnectFeature {
           state.directoryBrowser = directoryBrowser
           return .none
         }
-        let profileID = resolvedHostProfileID(in: &state)
+        let profileID = resolvedHostProfileID(in: &state, hostFields: hostFields)
+        let existingProfile = matchingSavedHostProfile(in: state, hostFields: hostFields)
         let profile = makeConnectionProfile(
           from: hostFields,
-          existingProfile: state.selectedHostProfile,
+          existingProfile: existingProfile,
           profileID: profileID,
           now: now
         )
@@ -310,10 +315,11 @@ struct RemoteConnectFeature {
           return .none
         }
 
-        let profileID = resolvedHostProfileID(in: &state)
+        let profileID = resolvedHostProfileID(in: &state, hostFields: hostFields)
+        let existingProfile = matchingSavedHostProfile(in: state, hostFields: hostFields)
         let submissionProfile = makeSubmissionProfile(
           from: hostFields,
-          existingProfile: state.selectedHostProfile,
+          existingProfile: existingProfile,
           profileID: profileID,
           now: now
         )
@@ -501,16 +507,52 @@ struct RemoteConnectFeature {
     )
   }
 
-  private func resolvedHostProfileID(in state: inout State) -> SSHHostProfile.ID {
-    if let selectedHostProfileID = state.selectedHostProfileID {
-      return selectedHostProfileID
+  private func resolvedHostProfileID(
+    in state: inout State,
+    hostFields: HostFields
+  ) -> SSHHostProfile.ID {
+    if let selectedHostProfile = matchingSavedHostProfile(in: state, hostFields: hostFields) {
+      state.connectionHostProfileID = nil
+      state.connectionHostProfileEndpointKey = nil
+      return selectedHostProfile.id
     }
-    if let connectionHostProfileID = state.connectionHostProfileID {
+
+    let endpointKey = connectionHostProfileEndpointKey(for: hostFields)
+    if state.connectionHostProfileEndpointKey == endpointKey,
+      let connectionHostProfileID = state.connectionHostProfileID
+    {
       return connectionHostProfileID
     }
+
     let connectionHostProfileID = uuid().uuidString
     state.connectionHostProfileID = connectionHostProfileID
+    state.connectionHostProfileEndpointKey = endpointKey
     return connectionHostProfileID
+  }
+
+  private func matchingSavedHostProfile(
+    in state: State,
+    hostFields: HostFields
+  ) -> SSHHostProfile? {
+    guard let selectedHostProfile = state.selectedHostProfile else {
+      return nil
+    }
+    guard selectedHostProfile.host == hostFields.host,
+      selectedHostProfile.user == hostFields.user,
+      selectedHostProfile.port == hostFields.port
+    else {
+      return nil
+    }
+    return selectedHostProfile
+  }
+
+  private func connectionHostProfileEndpointKey(for hostFields: HostFields) -> String {
+    [
+      hostFields.host,
+      hostFields.user,
+      hostFields.port.map(String.init) ?? "",
+    ]
+    .joined(separator: "|")
   }
 
   private func makeConnectionProfile(

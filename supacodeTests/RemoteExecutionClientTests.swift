@@ -166,6 +166,20 @@ struct RemoteExecutionClientTests {
     #expect(environment?["SSH_ASKPASS"] != nil)
     #expect(environment?["SSH_ASKPASS_REQUIRE"] == "force")
     #expect(environment?["DISPLAY"] == ":0")
-    #expect(environment?["PROWL_REMOTE_SSH_PASSWORD"] == "secret")
+    #expect(environment?["PROWL_REMOTE_SSH_PASSWORD"] == nil)
+  }
+
+  @Test func askpassHelperWritesPasswordToScriptNotEnvironment() throws {
+    let support = try SSHCommandSupport.makeAskpassSupport(password: "secret")
+    defer {
+      try? FileManager.default.removeItem(at: support.helperURL)
+    }
+
+    let scriptContents = try String(contentsOf: support.helperURL)
+    #expect(scriptContents.contains("secret"))
+    #expect(support.environment["DISPLAY"] == ":0")
+    #expect(support.environment["SSH_ASKPASS"] == support.helperURL.path(percentEncoded: false))
+    #expect(support.environment["SSH_ASKPASS_REQUIRE"] == "force")
+    #expect(support.environment["PROWL_REMOTE_SSH_PASSWORD"] == nil)
   }
 }

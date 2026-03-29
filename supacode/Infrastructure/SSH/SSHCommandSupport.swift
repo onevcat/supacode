@@ -67,7 +67,7 @@ nonisolated enum SSHCommandSupport {
       .appending(path: scriptName)
     let script = """
       #!/bin/sh
-      printf '%s\\n' "$PROWL_REMOTE_SSH_PASSWORD"
+      printf '%s\\n' \(shellEscape(password))
       """
     let wrote = FileManager.default.createFile(
       atPath: scriptURL.path(percentEncoded: false),
@@ -83,7 +83,6 @@ nonisolated enum SSHCommandSupport {
         "DISPLAY": ":0",
         "SSH_ASKPASS": scriptURL.path(percentEncoded: false),
         "SSH_ASKPASS_REQUIRE": "force",
-        "PROWL_REMOTE_SSH_PASSWORD": password,
       ],
       helperURL: scriptURL
     )
