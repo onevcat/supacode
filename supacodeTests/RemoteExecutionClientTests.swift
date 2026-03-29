@@ -11,25 +11,30 @@ nonisolated final class RemoteExecutionCallRecorder: @unchecked Sendable {
   }
 
   private let lock = NSLock()
-  private var executableURLValue: URL?
-  private var argumentsValue: [String] = []
-  private var timeoutSecondsValue = 0
+  private var snapshots: [Snapshot] = []
 
   func record(executableURL: URL, arguments: [String], timeoutSeconds: Int) {
     lock.lock()
-    executableURLValue = executableURL
-    argumentsValue = arguments
-    timeoutSecondsValue = timeoutSeconds
+    snapshots.append(
+      Snapshot(
+        executableURL: executableURL,
+        arguments: arguments,
+        timeoutSeconds: timeoutSeconds
+      )
+    )
     lock.unlock()
   }
 
   func snapshot() -> Snapshot {
     lock.lock()
-    let snapshot = Snapshot(
-      executableURL: executableURLValue,
-      arguments: argumentsValue,
-      timeoutSeconds: timeoutSecondsValue
-    )
+    let snapshot = snapshots.last ?? Snapshot(executableURL: nil, arguments: [], timeoutSeconds: 0)
+    lock.unlock()
+    return snapshot
+  }
+
+  func allSnapshots() -> [Snapshot] {
+    lock.lock()
+    let snapshot = snapshots
     lock.unlock()
     return snapshot
   }
@@ -55,17 +60,24 @@ nonisolated final class StringRecorder: @unchecked Sendable {
 
 nonisolated final class EnvironmentRecorder: @unchecked Sendable {
   private let lock = NSLock()
-  private var value: [String: String]?
+  private var values: [[String: String]] = []
 
   func store(_ environment: [String: String]) {
     lock.lock()
-    value = environment
+    values.append(environment)
     lock.unlock()
   }
 
   func snapshot() -> [String: String]? {
     lock.lock()
-    let snapshot = value
+    let snapshot = values.last
+    lock.unlock()
+    return snapshot
+  }
+
+  func allSnapshots() -> [[String: String]] {
+    lock.lock()
+    let snapshot = values
     lock.unlock()
     return snapshot
   }
@@ -160,13 +172,35 @@ struct RemoteExecutionClientTests {
     #expect(snapshot.arguments.contains("dev@example.com"))
     #expect(snapshot.arguments.contains("-p"))
     #expect(snapshot.arguments.contains("2222"))
-    #expect(!snapshot.arguments.contains("BatchMode=yes"))
+    #expect(snapshot.arguments.contains("BatchMode=yes"))
 
-    let environment = envRecorder.snapshot()
-    #expect(environment?["SSH_ASKPASS"] != nil)
-    #expect(environment?["SSH_ASKPASS_REQUIRE"] == "force")
-    #expect(environment?["DISPLAY"] == ":0")
-    #expect(environment?["PROWL_REMOTE_SSH_PASSWORD"] == nil)
+    let allCalls = recorder.allSnapshots()
+    #expect(allCalls.count == 2)
+    if allCalls.count == 2 {
+      let bootstrapCall = allCalls[0]
+      #expect(bootstrapCall.arguments.contains("PreferredAuthentications=password,keyboard-interactive"))
+      #expect(bootstrapCall.arguments.contains("PubkeyAuthentication=no"))
+      #expect(bootstrapCall.arguments.contains("NumberOfPasswordPrompts=1"))
+      #expect(bootstrapCall.arguments.last == "exit")
+      #expect(bootstrapCall.timeoutSeconds == SSHCommandSupport.bootstrapTimeoutSeconds)
+
+      let commandCall = allCalls[1]
+      #expect(commandCall.arguments.last == "tmux list-sessions")
+      #expect(commandCall.timeoutSeconds == 8)
+    }
+
+    let environments = envRecorder.allSnapshots()
+    #expect(environments.count == 2)
+    if environments.count == 2 {
+      let bootstrapEnvironment = environments[0]
+      #expect(bootstrapEnvironment["SSH_ASKPASS"] != nil)
+      #expect(bootstrapEnvironment["SSH_ASKPASS_REQUIRE"] == "force")
+      #expect(bootstrapEnvironment["DISPLAY"] == ":0")
+      #expect(bootstrapEnvironment["PROWL_REMOTE_SSH_PASSWORD"] == nil)
+
+      let commandEnvironment = environments[1]
+      #expect(commandEnvironment.isEmpty)
+    }
   }
 
   @Test func askpassHelperWritesPasswordToScriptNotEnvironment() throws {

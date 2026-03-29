@@ -5,6 +5,7 @@ nonisolated enum SSHCommandSupport {
   static let connectTimeoutSeconds = 8
   static let serverAliveIntervalSeconds = 5
   static let serverAliveCountMax = 3
+  static let bootstrapTimeoutSeconds = 20
 
   static func connectivityOptions(includeBatchMode: Bool = true) -> [String] {
     var options = [
@@ -37,6 +38,19 @@ nonisolated enum SSHCommandSupport {
       .standardizedFileURL
       .path(percentEncoded: false)
     return "\(tempPath)/prowl-ssh-\(String(hash.prefix(16)))"
+  }
+
+  static func ensureControlSocketDirectory(for controlPath: String) throws {
+    let directory = URL(fileURLWithPath: controlPath).deletingLastPathComponent()
+    let directoryPath = directory.path(percentEncoded: false)
+    if directoryPath.isEmpty || directoryPath == "/" {
+      return
+    }
+    try FileManager.default.createDirectory(
+      atPath: directoryPath,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
   }
 
   static func removingBatchMode(from options: [String]) -> [String] {

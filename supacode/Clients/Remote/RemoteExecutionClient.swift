@@ -23,8 +23,9 @@ extension RemoteExecutionClient: DependencyKey {
         let endpointKey = [profile.host, profile.user, profile.port.map(String.init) ?? "22"]
           .joined(separator: "|")
         let controlPath = SSHCommandSupport.controlSocketPath(endpointKey: endpointKey)
+        try SSHCommandSupport.ensureControlSocketDirectory(for: controlPath)
 
-        var options = SSHCommandSupport.connectivityOptions(includeBatchMode: profile.authMethod != .password)
+        var options = SSHCommandSupport.connectivityOptions(includeBatchMode: true)
         options += ["-o", "ControlPath=\(controlPath)"]
 
         if let port = profile.port {
@@ -34,26 +35,22 @@ extension RemoteExecutionClient: DependencyKey {
         let target = profile.user.isEmpty ? profile.host : "\(profile.user)@\(profile.host)"
         let arguments = options + [target, command]
         do {
-          var askpassHelperURL: URL?
-          var environment: [String: String] = [:]
           if profile.authMethod == .password {
             guard let password = try await keychainClient.loadPassword(profile.id) else {
               throw RemoteExecutionClientError.passwordMissing(profile.id)
             }
-            let askpassSupport = try SSHCommandSupport.makeAskpassSupport(password: password)
-            askpassHelperURL = askpassSupport.helperURL
-            environment = askpassSupport.environment
-          }
-          defer {
-            if let askpassHelperURL {
-              try? FileManager.default.removeItem(at: askpassHelperURL)
-            }
+            try await bootstrapPasswordControlMaster(
+              shellClient: shellClient,
+              profile: profile,
+              target: target,
+              controlPath: controlPath,
+              password: password
+            )
           }
           let output = try await shellClient.runWithTimeout(
             URL(fileURLWithPath: "/usr/bin/ssh"),
             arguments,
             nil,
-            environment: environment,
             timeoutSeconds: timeoutSeconds
           )
           return Output(stdout: output.stdout, stderr: output.stderr, exitCode: output.exitCode)
@@ -65,6 +62,44 @@ extension RemoteExecutionClient: DependencyKey {
           )
         }
       }
+    )
+  }
+
+  private static func bootstrapPasswordControlMaster(
+    shellClient: ShellClient,
+    profile: SSHHostProfile,
+    target: String,
+    controlPath: String,
+    password: String
+  ) async throws {
+    let askpassSupport = try SSHCommandSupport.makeAskpassSupport(password: password)
+    defer {
+      try? FileManager.default.removeItem(at: askpassSupport.helperURL)
+    }
+
+    var arguments = SSHCommandSupport.connectivityOptions(includeBatchMode: false)
+    arguments += [
+      "-o", "ControlMaster=auto",
+      "-o", "ControlPersist=600",
+      "-o", "ControlPath=\(controlPath)",
+      "-o", "PreferredAuthentications=password,keyboard-interactive",
+      "-o", "PubkeyAuthentication=no",
+      "-o", "NumberOfPasswordPrompts=1",
+      "-o", "BatchMode=no",
+    ]
+
+    if let port = profile.port {
+      arguments += ["-p", "\(port)"]
+    }
+
+    arguments += [target, "exit"]
+
+    _ = try await shellClient.runWithTimeout(
+      URL(fileURLWithPath: "/usr/bin/ssh"),
+      arguments,
+      nil,
+      environment: askpassSupport.environment,
+      timeoutSeconds: SSHCommandSupport.bootstrapTimeoutSeconds
     )
   }
 
