@@ -11,6 +11,26 @@ final class GhosttySurfaceView: NSView, Identifiable {
     let length: UInt64
   }
 
+  struct KeyboardLayoutChangeKeyUpSuppression: Equatable {
+    static let lifetime: TimeInterval = 1
+
+    let keyCode: UInt16
+    let expiresAt: TimeInterval
+
+    init(keyCode: UInt16, timestamp: TimeInterval) {
+      self.keyCode = keyCode
+      expiresAt = timestamp + Self.lifetime
+    }
+
+    func suppresses(keyCode: UInt16, timestamp: TimeInterval) -> Bool {
+      timestamp <= expiresAt && self.keyCode == keyCode
+    }
+
+    func isExpired(at timestamp: TimeInterval) -> Bool {
+      timestamp > expiresAt
+    }
+  }
+
   private final class CachedValue<T> {
     private var value: T?
     private let fetch: () -> T
@@ -60,6 +80,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var currentCursor: NSCursor = .iBeam
   private var focused = false
   private var markedText = NSMutableAttributedString()
+  private var keyboardLayoutChangeKeyUpSuppression: KeyboardLayoutChangeKeyUpSuppression?
   private var keyTextAccumulator: [String]?
   private var cellSize: CGSize = .zero
   private var lastScrollbar: ScrollbarState?
@@ -534,6 +555,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     lastPerformKeyEvent = nil
     interpretKeyEvents([translationEvent])
     if !markedTextBefore, keyboardIdBefore != keyboardLayoutId() {
+      keyboardLayoutChangeKeyUpSuppression = KeyboardLayoutChangeKeyUpSuppression(
+        keyCode: event.keyCode,
+        timestamp: event.timestamp
+      )
       return
     }
     syncPreedit(clearIfNeeded: markedTextBefore)
@@ -561,6 +586,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   override func keyUp(with event: NSEvent) {
+    if suppressKeyboardLayoutChangeKeyUp(event) { return }
     sendKey(action: GHOSTTY_ACTION_RELEASE, event: event)
   }
 
@@ -1237,6 +1263,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
       }
     }
     return keyEvent
+  }
+
+  private func suppressKeyboardLayoutChangeKeyUp(_ event: NSEvent) -> Bool {
+    guard let suppression = keyboardLayoutChangeKeyUpSuppression else { return false }
+    if suppression.isExpired(at: event.timestamp) {
+      keyboardLayoutChangeKeyUpSuppression = nil
+      return false
+    }
+    if suppression.suppresses(keyCode: event.keyCode, timestamp: event.timestamp) {
+      keyboardLayoutChangeKeyUpSuppression = nil
+      return true
+    }
+    return false
   }
 
   private func ghosttyCharacters(_ event: NSEvent) -> String? {

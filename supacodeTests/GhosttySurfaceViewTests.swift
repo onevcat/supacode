@@ -45,4 +45,35 @@ struct GhosttySurfaceViewTests {
       ) == nil
     )
   }
+
+  @Test func keyboardLayoutChangeKeyUpSuppressionSuppressesMatchingKeyUp() {
+    let suppression = GhosttySurfaceView.KeyboardLayoutChangeKeyUpSuppression(
+      keyCode: 49,
+      timestamp: 10
+    )
+
+    #expect(suppression.suppresses(keyCode: 49, timestamp: 10.1))
+    #expect(!suppression.isExpired(at: 10.1))
+  }
+
+  @Test func keyboardLayoutChangeKeyUpSuppressionIgnoresDifferentKeyUp() {
+    let suppression = GhosttySurfaceView.KeyboardLayoutChangeKeyUpSuppression(
+      keyCode: 49,
+      timestamp: 10
+    )
+
+    #expect(!suppression.suppresses(keyCode: 50, timestamp: 10.1))
+    #expect(suppression.suppresses(keyCode: 49, timestamp: 10.2))
+    #expect(!suppression.isExpired(at: 10.1))
+  }
+
+  @Test func keyboardLayoutChangeKeyUpSuppressionExpires() {
+    let suppression = GhosttySurfaceView.KeyboardLayoutChangeKeyUpSuppression(
+      keyCode: 49,
+      timestamp: 10
+    )
+
+    #expect(!suppression.suppresses(keyCode: 49, timestamp: 11.1))
+    #expect(suppression.isExpired(at: 11.1))
+  }
 }
