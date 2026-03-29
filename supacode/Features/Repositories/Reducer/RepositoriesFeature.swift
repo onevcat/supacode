@@ -275,6 +275,11 @@ struct RepositoriesFeature {
     let didPruneArchivedWorktreeIDs: Bool
   }
 
+  private struct RemoteSessionAttach {
+    let worktree: Worktree
+    let command: String
+  }
+
   enum StatusToast: Equatable {
     case inProgress(String)
     case success(String)
@@ -2888,20 +2893,54 @@ struct RepositoriesFeature {
         return .none
 
       case .remoteSessionPicker(.presented(.delegate(.attachExisting(let sessionName)))):
+        let pickerState = state.remoteSessionPicker
         persistLastAttachedRemoteTmuxSessionName(
           sessionName,
-          pickerState: state.remoteSessionPicker
+          pickerState: pickerState
         )
         state.remoteSessionPicker = nil
-        return .none
+        guard let attach = remoteSessionAttach(
+          sessionName: sessionName,
+          createIfMissing: false,
+          pickerState: pickerState,
+          state: state
+        ) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(
+            .createTabWithInput(
+              attach.worktree,
+              input: attach.command,
+              runSetupScriptIfNew: false
+            )
+          )
+        }
 
       case .remoteSessionPicker(.presented(.delegate(.createAndAttach(let sessionName)))):
+        let pickerState = state.remoteSessionPicker
         persistLastAttachedRemoteTmuxSessionName(
           sessionName,
-          pickerState: state.remoteSessionPicker
+          pickerState: pickerState
         )
         state.remoteSessionPicker = nil
-        return .none
+        guard let attach = remoteSessionAttach(
+          sessionName: sessionName,
+          createIfMissing: true,
+          pickerState: pickerState,
+          state: state
+        ) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(
+            .createTabWithInput(
+              attach.worktree,
+              input: attach.command,
+              runSetupScriptIfNew: false
+            )
+          )
+        }
 
       case .remoteSessionPicker:
         return .none
@@ -3450,6 +3489,32 @@ struct RepositoriesFeature {
     $repositorySettings.withLock {
       $0.lastAttachedRemoteTmuxSessionName = trimmed
     }
+  }
+
+  private func remoteSessionAttach(
+    sessionName: String,
+    createIfMissing: Bool,
+    pickerState: RemoteSessionPickerFeature.State?,
+    state: State
+  ) -> RemoteSessionAttach? {
+    guard let pickerState, let worktree = state.worktree(for: pickerState.worktreeID) else {
+      return nil
+    }
+    let trimmedSessionName = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedSessionName.isEmpty else {
+      return nil
+    }
+    let command =
+      if createIfMissing {
+        remoteTmuxClient.buildCreateAndAttachCommand(trimmedSessionName, pickerState.remotePath)
+      } else {
+        remoteTmuxClient.buildAttachCommand(trimmedSessionName, pickerState.remotePath)
+      }
+    let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedCommand.isEmpty else {
+      return nil
+    }
+    return RemoteSessionAttach(worktree: worktree, command: trimmedCommand)
   }
 
   private func confirmationAlertForRepositoryRemoval(

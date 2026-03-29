@@ -530,7 +530,7 @@ struct RepositoriesFeatureTests {
     }
   }
 
-  @Test(.dependencies) func pickerAttachSelectionPersistsLastAttachedSessionName() async {
+  @Test(.dependencies) func pickerAttachSelectionPersistsLastAttachedSessionNameAndRunsAttachCommand() async {
     let testID = UUID().uuidString
     let settingsStorage = SettingsTestStorage()
     let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
@@ -556,6 +556,7 @@ struct RepositoriesFeatureTests {
       endpoint: endpoint,
       worktrees: [worktree]
     )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = withDependencies {
       $0.settingsFileStorage = settingsStorage.storage
       $0.settingsFileURL = settingsFileURL
@@ -567,6 +568,12 @@ struct RepositoriesFeatureTests {
       } withDependencies: {
         $0.remoteTmuxClient.listSessions = { _, _ in
           ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildAttachCommand = { sessionName, remotePath in
+          "attach:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
         }
       }
     }
@@ -589,6 +596,7 @@ struct RepositoriesFeatureTests {
     await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops"))))) {
       $0.remoteSessionPicker = nil
     }
+    await store.finish()
 
     withDependencies {
       $0.settingsFileStorage = settingsStorage.storage
@@ -597,6 +605,95 @@ struct RepositoriesFeatureTests {
       @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
       #expect(repositorySettings.lastAttachedRemoteTmuxSessionName == "ops")
     }
+
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          worktree,
+          input: "attach:ops:\(repoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func pickerCreateAndAttachRunsManagedSessionCommand() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildCreateAndAttachCommand = { sessionName, remotePath in
+          "create:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: nil,
+        suggestedManagedSessionName: nil
+      )
+    }
+    await store.send(.remoteSessionPicker(.presented(.delegate(.createAndAttach("managed"))))) {
+      $0.remoteSessionPicker = nil
+    }
+    await store.finish()
+
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          worktree,
+          input: "create:managed:\(repoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
   }
 
   @Test(.dependencies) func removeFailedRepositoryPreservesLoadedEndpointVariantForSamePath() async {
