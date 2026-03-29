@@ -4,6 +4,60 @@ import Testing
 
 @testable import supacode
 
+nonisolated final class StringDictionaryRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [String: String] = [:]
+
+  func set(_ key: String, value: String) {
+    lock.lock()
+    values[key] = value
+    lock.unlock()
+  }
+
+  func snapshot() -> [String: String] {
+    lock.lock()
+    let snapshot = values
+    lock.unlock()
+    return snapshot
+  }
+}
+
+nonisolated final class StringArrayRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [String] = []
+
+  func append(_ value: String) {
+    lock.lock()
+    values.append(value)
+    lock.unlock()
+  }
+
+  func snapshot() -> [String] {
+    lock.lock()
+    let snapshot = values
+    lock.unlock()
+    return snapshot
+  }
+}
+
+nonisolated final class IntRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = 0
+
+  func increment() {
+    lock.lock()
+    value += 1
+    lock.unlock()
+  }
+
+  func snapshot() -> Int {
+    lock.lock()
+    let snapshot = value
+    lock.unlock()
+    return snapshot
+  }
+}
+
 @MainActor
 struct RemoteConnectFeatureTests {
   @Test func continueButtonTappedRequiresHostBeforeAdvancing() async {
@@ -16,6 +70,63 @@ struct RemoteConnectFeatureTests {
     await store.send(.continueButtonTapped) {
       $0.validationMessage = "Host required."
     }
+  }
+
+  @Test func continueButtonTappedRequiresPasswordWhenPasswordAuthIsSelected() async {
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.host = "example.com"
+    state.user = "deploy"
+    state.authMethod = .password
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 1))
+      $0.uuid = .constant(UUID(uuidString: "00000000-0000-0000-0000-000000000123")!)
+      $0.keychainClient = .testValue
+    }
+
+    await store.send(.continueButtonTapped) {
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000123"
+    }
+    await store.receive(.hostValidationFailed("Password required.")) {
+      $0.validationMessage = "Password required."
+    }
+  }
+
+  @Test func continueButtonTappedSavesPasswordAndAdvancesWhenPasswordAuthIsSelected() async {
+    let savedPasswords = StringDictionaryRecorder()
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.host = "example.com"
+    state.user = "deploy"
+    state.authMethod = .password
+    state.password = "secret"
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 2))
+      $0.uuid = .constant(UUID(uuidString: "00000000-0000-0000-0000-000000000123")!)
+      $0.keychainClient = KeychainClient(
+        savePassword: { password, key in
+          savedPasswords.set(key, value: password)
+        },
+        loadPassword: { key in
+          savedPasswords.snapshot()[key]
+        },
+        deletePassword: { _ in }
+      )
+    }
+
+    await store.send(.continueButtonTapped) {
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000123"
+    }
+    await store.receive(.hostValidationSucceeded) {
+      $0.step = .repository
+      $0.validationMessage = nil
+    }
+
+    #expect(savedPasswords.snapshot()["00000000-0000-0000-0000-000000000123"] == "secret")
   }
 
   @Test func selectingSavedHostAdvancesToRepositoryStep() async {
@@ -50,7 +161,7 @@ struct RemoteConnectFeatureTests {
   }
 
   @Test func browseRemoteFoldersNavigatesAndChoosesCurrentFolder() async {
-    let commands = LockIsolated<[String]>([])
+    let commands = StringArrayRecorder()
     var state = RemoteConnectFeature.State(savedHostProfiles: [])
     state.step = .repository
     state.host = "example.com"
@@ -59,9 +170,10 @@ struct RemoteConnectFeatureTests {
     let store = TestStore(initialState: state) {
       RemoteConnectFeature()
     } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 3))
       $0.uuid = .incrementing
       $0.remoteExecutionClient.run = { _, command, _ in
-        commands.withValue { $0.append(command) }
+        commands.append(command)
         if command.contains("/Users/deploy/src") {
           return RemoteExecutionClient.Output(
             stdout: "/Users/deploy/src\n/Users/deploy/src/project\n",
@@ -77,10 +189,11 @@ struct RemoteConnectFeatureTests {
       }
     }
 
-    let rootRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
-    let childRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let rootRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let childRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
 
     await store.send(.browseRemoteFoldersButtonTapped) {
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
       $0.activeBrowseRequestID = rootRequestID
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
@@ -146,8 +259,41 @@ struct RemoteConnectFeatureTests {
       $0.activeBrowseRequestID = nil
     }
 
-    let recordedCommands = commands.value
+    let recordedCommands = commands.snapshot()
     #expect(recordedCommands.count == 2)
+  }
+
+  @Test func browseRemoteFoldersRequiresPasswordWhenPasswordAuthIsSelected() async {
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+    state.authMethod = .password
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 4))
+      $0.uuid = .constant(UUID(uuidString: "00000000-0000-0000-0000-000000000000")!)
+      $0.keychainClient = .testValue
+    }
+
+    await store.send(.browseRemoteFoldersButtonTapped) {
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
+      $0.activeBrowseRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+      $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
+        currentPath: "",
+        childDirectories: [],
+        isLoading: true,
+        errorMessage: nil
+      )
+    }
+    await store.receive(.hostValidationFailed("Password required.")) {
+      $0.validationMessage = "Password required."
+      $0.activeBrowseRequestID = nil
+      $0.directoryBrowser?.isLoading = false
+      $0.directoryBrowser?.errorMessage = "Password required."
+    }
   }
 
   @Test func connectButtonTappedValidatesRemoteRepositoryAndDelegatesSubmission() async {
@@ -214,7 +360,7 @@ struct RemoteConnectFeatureTests {
 
   @Test func repeatedConnectButtonTapWhileSubmittingIsIgnored() async {
     let gate = AsyncGate()
-    let runCount = LockIsolated(0)
+    let runCount = IntRecorder()
     let now = Date(timeIntervalSince1970: 30)
     let newProfileID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!.uuidString
     var state = RemoteConnectFeature.State(savedHostProfiles: [])
@@ -229,7 +375,7 @@ struct RemoteConnectFeatureTests {
       $0.date = .constant(now)
       $0.uuid = .constant(UUID(uuidString: newProfileID)!)
       $0.remoteExecutionClient.run = { _, _, _ in
-        runCount.withValue { $0 += 1 }
+        runCount.increment()
         await gate.wait()
         return RemoteExecutionClient.Output(
           stdout: "/srv/repo\n",
@@ -242,10 +388,11 @@ struct RemoteConnectFeatureTests {
     await store.send(.connectButtonTapped) {
       $0.isSubmitting = true
       $0.validationMessage = nil
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
     }
     await store.send(.connectButtonTapped)
 
-    #expect(runCount.value == 1)
+    #expect(runCount.snapshot() == 1)
 
     await gate.resume()
 
@@ -344,6 +491,7 @@ struct RemoteConnectFeatureTests {
     let store = TestStore(initialState: state) {
       RemoteConnectFeature()
     } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 5))
       $0.uuid = .incrementing
       $0.remoteExecutionClient.run = { _, _, _ in
         RemoteExecutionClient.Output(
@@ -354,9 +502,11 @@ struct RemoteConnectFeatureTests {
       }
     }
 
-    let requestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+    let connectionProfileID = "00000000-0000-0000-0000-000000000000"
+    let requestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
     await store.send(.browseRemoteFoldersButtonTapped) {
+      $0.connectionHostProfileID = connectionProfileID
       $0.activeBrowseRequestID = requestID
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
@@ -401,6 +551,7 @@ struct RemoteConnectFeatureTests {
     await store.send(.connectButtonTapped) {
       $0.isSubmitting = true
       $0.validationMessage = nil
+      $0.connectionHostProfileID = "00000000-0000-0000-0000-000000000000"
     }
     await store.receive(
       .remoteRepositoryValidationFailed("The selected folder is not a Git repository.")

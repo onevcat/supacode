@@ -60,4 +60,48 @@ nonisolated enum SSHCommandSupport {
   static func shellEscape(_ value: String) -> String {
     "'\(value.replacing("'", with: "'\\''"))'"
   }
+
+  static func makeAskpassSupport(password: String) throws -> SSHAskpassSupport {
+    let scriptName = "prowl-ssh-askpass-\(UUID().uuidString).sh"
+    let scriptURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+      .appending(path: scriptName)
+    let script = """
+      #!/bin/sh
+      printf '%s\\n' "$PROWL_REMOTE_SSH_PASSWORD"
+      """
+    let wrote = FileManager.default.createFile(
+      atPath: scriptURL.path(percentEncoded: false),
+      contents: Data(script.utf8),
+      attributes: [.posixPermissions: 0o700]
+    )
+    guard wrote else {
+      throw SSHCommandSupportError.createAskpassScriptFailed
+    }
+
+    return SSHAskpassSupport(
+      environment: [
+        "DISPLAY": ":0",
+        "SSH_ASKPASS": scriptURL.path(percentEncoded: false),
+        "SSH_ASKPASS_REQUIRE": "force",
+        "PROWL_REMOTE_SSH_PASSWORD": password,
+      ],
+      helperURL: scriptURL
+    )
+  }
+}
+
+nonisolated struct SSHAskpassSupport: Sendable {
+  let environment: [String: String]
+  let helperURL: URL
+}
+
+private enum SSHCommandSupportError: LocalizedError {
+  case createAskpassScriptFailed
+
+  var errorDescription: String? {
+    switch self {
+    case .createAskpassScriptFailed:
+      "Could not prepare SSH askpass helper."
+    }
+  }
 }

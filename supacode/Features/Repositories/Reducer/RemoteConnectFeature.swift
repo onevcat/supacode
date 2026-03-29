@@ -33,12 +33,14 @@ struct RemoteConnectFeature {
   struct State: Equatable {
     var savedHostProfiles: [SSHHostProfile]
     var selectedHostProfileID: SSHHostProfile.ID?
+    var connectionHostProfileID: SSHHostProfile.ID?
     var step: Step = .host
     var displayName = ""
     var host = ""
     var user = ""
     var port = ""
     var authMethod: SSHHostProfile.AuthMethod = .publicKey
+    var password = ""
     var remotePath = ""
     var validationMessage: String?
     var isSubmitting = false
@@ -81,6 +83,8 @@ struct RemoteConnectFeature {
     case directoryBrowserChooseCurrentFolderButtonTapped
     case directoryBrowserDismissed
     case connectButtonTapped
+    case hostValidationSucceeded
+    case hostValidationFailed(String)
     case remoteRepositoryValidated(Submission)
     case remoteRepositoryValidationFailed(String)
     case delegate(Delegate)
@@ -93,6 +97,7 @@ struct RemoteConnectFeature {
   }
 
   @Dependency(\.date.now) private var now
+  @Dependency(KeychainClient.self) private var keychainClient
   @Dependency(RemoteExecutionClient.self) private var remoteExecutionClient
   @Dependency(\.uuid) private var uuid
 
@@ -106,6 +111,8 @@ struct RemoteConnectFeature {
 
       case .savedHostProfileSelected(let profileID):
         state.selectedHostProfileID = profileID
+        state.connectionHostProfileID = nil
+        state.password = ""
         state.validationMessage = nil
         guard let profile = state.savedHostProfiles.first(where: { $0.id == profileID }) else {
           state.displayName = ""
@@ -123,8 +130,39 @@ struct RemoteConnectFeature {
         return .none
 
       case .continueButtonTapped:
-        guard validateHostFields(in: &state) != nil else {
+        guard let hostFields = validateHostFields(in: &state) else {
           return .none
+        }
+        let profileID = resolvedHostProfileID(in: &state)
+        let keychain = keychainClient
+        if state.authMethod == .password {
+          let hostProfile = makeConnectionProfile(
+            from: hostFields,
+            existingProfile: state.selectedHostProfile,
+            profileID: profileID,
+            now: now
+          )
+          let password = state.password
+          return .run { send in
+            do {
+              if !password.isEmpty {
+                try await keychain.savePassword(password, hostProfile.id)
+              } else if try await keychain.loadPassword(hostProfile.id) == nil {
+                await send(.hostValidationFailed("Password required."))
+                return
+              }
+              await send(.hostValidationSucceeded)
+            } catch {
+              await send(
+                .hostValidationFailed(
+                  genericFailureMessage(
+                    prefix: "Couldn't validate the SSH host.",
+                    detail: error.localizedDescription
+                  )
+                )
+              )
+            }
+          }
         }
         state.step = .repository
         return .none
@@ -153,7 +191,14 @@ struct RemoteConnectFeature {
           return .none
         }
 
-        let profile = makeConnectionProfile(from: hostFields)
+        let profileID = resolvedHostProfileID(in: &state)
+        let profile = makeConnectionProfile(
+          from: hostFields,
+          existingProfile: state.selectedHostProfile,
+          profileID: profileID,
+          now: now
+        )
+        let keychain = keychainClient
         let requestID = uuid()
         state.validationMessage = nil
         state.activeBrowseRequestID = requestID
@@ -166,7 +211,9 @@ struct RemoteConnectFeature {
         return browseDirectoryEffect(
           requestID: requestID,
           profile: profile,
-          requestedPath: requestedPath
+          requestedPath: requestedPath,
+          password: state.password,
+          keychainClient: keychain
         )
 
       case .remoteDirectoryListingLoaded(let requestID, let listing):
@@ -205,13 +252,22 @@ struct RemoteConnectFeature {
           state.directoryBrowser = directoryBrowser
           return .none
         }
-        let profile = makeConnectionProfile(from: hostFields)
+        let profileID = resolvedHostProfileID(in: &state)
+        let profile = makeConnectionProfile(
+          from: hostFields,
+          existingProfile: state.selectedHostProfile,
+          profileID: profileID,
+          now: now
+        )
+        let keychain = keychainClient
         let requestID = uuid()
         state.activeBrowseRequestID = requestID
         return browseDirectoryEffect(
           requestID: requestID,
           profile: profile,
-          requestedPath: .absolute(path)
+          requestedPath: .absolute(path),
+          password: state.password,
+          keychainClient: keychain
         )
 
       case .directoryBrowserUpButtonTapped:
@@ -254,51 +310,79 @@ struct RemoteConnectFeature {
           return .none
         }
 
-        state.validationMessage = nil
-        state.isSubmitting = true
+        let profileID = resolvedHostProfileID(in: &state)
         let submissionProfile = makeSubmissionProfile(
           from: hostFields,
           existingProfile: state.selectedHostProfile,
-          now: now,
-          uuid: uuid()
+          profileID: profileID,
+          now: now
         )
+        let keychain = keychainClient
+        state.validationMessage = nil
+        state.isSubmitting = true
+        let password = state.password
         return .run { send in
-          let output = try await remoteExecutionClient.run(
-            submissionProfile,
-            validateRepositoryCommand(for: requestedPath),
-            remoteCommandTimeoutSeconds
-          )
-          guard output.exitCode == 0 else {
+          do {
+            if submissionProfile.authMethod == .password {
+              if !password.isEmpty {
+                try await keychain.savePassword(password, submissionProfile.id)
+              } else if try await keychain.loadPassword(submissionProfile.id) == nil {
+                await send(.hostValidationFailed("Password required."))
+                return
+              }
+            }
+            let output = try await remoteExecutionClient.run(
+              submissionProfile,
+              validateRepositoryCommand(for: requestedPath),
+              remoteCommandTimeoutSeconds
+            )
+            guard output.exitCode == 0 else {
+              await send(
+                .remoteRepositoryValidationFailed(
+                  repositoryValidationFailureMessage(for: output)
+                )
+              )
+              return
+            }
+            let normalizedPath = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedPath.isEmpty else {
+              await send(.remoteRepositoryValidationFailed("Couldn't validate the remote repository."))
+              return
+            }
+            await send(
+              .remoteRepositoryValidated(
+                Submission(
+                  hostProfile: submissionProfile,
+                  remotePath: normalizedPath
+                )
+              )
+            )
+          } catch {
             await send(
               .remoteRepositoryValidationFailed(
-                repositoryValidationFailureMessage(for: output)
+                genericFailureMessage(
+                  prefix: "Couldn't validate the remote repository.",
+                  detail: error.localizedDescription
+                )
               )
             )
-            return
           }
-          let normalizedPath = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-          guard !normalizedPath.isEmpty else {
-            await send(.remoteRepositoryValidationFailed("Couldn't validate the remote repository."))
-            return
-          }
-          await send(
-            .remoteRepositoryValidated(
-              Submission(
-                hostProfile: submissionProfile,
-                remotePath: normalizedPath
-              )
-            )
-          )
-        } catch: { error, send in
-          await send(
-            .remoteRepositoryValidationFailed(
-              genericFailureMessage(
-                prefix: "Couldn't validate the remote repository.",
-                detail: error.localizedDescription
-              )
-            )
-          )
         }
+
+      case .hostValidationSucceeded:
+        state.validationMessage = nil
+        state.step = .repository
+        return .none
+
+      case .hostValidationFailed(let message):
+        state.isSubmitting = false
+        state.validationMessage = message
+        if state.directoryBrowser != nil {
+          state.activeBrowseRequestID = nil
+          state.directoryBrowser?.isLoading = false
+          state.directoryBrowser?.errorMessage = message
+        }
+        return .none
 
       case .remoteRepositoryValidated(let submission):
         state.isSubmitting = false
@@ -319,54 +403,66 @@ struct RemoteConnectFeature {
   private func browseDirectoryEffect(
     requestID: UUID,
     profile: SSHHostProfile,
-    requestedPath: RemotePathRequest
+    requestedPath: RemotePathRequest,
+    password: String,
+    keychainClient: KeychainClient
   ) -> Effect<Action> {
     .run { send in
-      let output = try await remoteExecutionClient.run(
-        profile,
-        listDirectoriesCommand(for: requestedPath),
-        remoteCommandTimeoutSeconds
-      )
-      guard output.exitCode == 0 else {
+      do {
+        if profile.authMethod == .password {
+          if !password.isEmpty {
+            try await keychainClient.savePassword(password, profile.id)
+          } else if try await keychainClient.loadPassword(profile.id) == nil {
+            await send(.hostValidationFailed("Password required."))
+            return
+          }
+        }
+        let output = try await remoteExecutionClient.run(
+          profile,
+          listDirectoriesCommand(for: requestedPath),
+          remoteCommandTimeoutSeconds
+        )
+        guard output.exitCode == 0 else {
+          await send(
+            .remoteDirectoryListingFailed(
+              requestID,
+              directoryListingFailureMessage(for: output)
+            )
+          )
+          return
+        }
+        let lines = output.stdout
+          .split(whereSeparator: \.isNewline)
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+        guard let currentPath = lines.first else {
+          await send(.remoteDirectoryListingFailed(requestID, "Couldn't load remote folders."))
+          return
+        }
+        let childDirectories = Array(lines.dropFirst())
+        await send(
+          .remoteDirectoryListingLoaded(
+            requestID,
+            DirectoryListing(
+              currentPath: currentPath,
+              childDirectories: childDirectories
+            )
+          )
+        )
+      } catch {
+        guard !(error is CancellationError) else {
+          return
+        }
         await send(
           .remoteDirectoryListingFailed(
             requestID,
-            directoryListingFailureMessage(for: output)
+            genericFailureMessage(
+              prefix: "Couldn't browse remote folders.",
+              detail: error.localizedDescription
+            )
           )
         )
-        return
       }
-      let lines = output.stdout
-        .split(whereSeparator: \.isNewline)
-        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-      guard let currentPath = lines.first else {
-        await send(.remoteDirectoryListingFailed(requestID, "Couldn't load remote folders."))
-        return
-      }
-      let childDirectories = Array(lines.dropFirst())
-      await send(
-        .remoteDirectoryListingLoaded(
-          requestID,
-          DirectoryListing(
-            currentPath: currentPath,
-            childDirectories: childDirectories
-          )
-        )
-      )
-    } catch: { error, send in
-      guard !(error is CancellationError) else {
-        return
-      }
-      await send(
-        .remoteDirectoryListingFailed(
-          requestID,
-          genericFailureMessage(
-            prefix: "Couldn't browse remote folders.",
-            detail: error.localizedDescription
-          )
-        )
-      )
     }
     .cancellable(id: CancelID.browseDirectoryListing, cancelInFlight: true)
   }
@@ -405,24 +501,26 @@ struct RemoteConnectFeature {
     )
   }
 
-  private func makeConnectionProfile(from hostFields: HostFields) -> SSHHostProfile {
-    SSHHostProfile(
-      displayName: hostFields.displayName,
-      host: hostFields.host,
-      user: hostFields.user,
-      port: hostFields.port,
-      authMethod: hostFields.authMethod
-    )
+  private func resolvedHostProfileID(in state: inout State) -> SSHHostProfile.ID {
+    if let selectedHostProfileID = state.selectedHostProfileID {
+      return selectedHostProfileID
+    }
+    if let connectionHostProfileID = state.connectionHostProfileID {
+      return connectionHostProfileID
+    }
+    let connectionHostProfileID = uuid().uuidString
+    state.connectionHostProfileID = connectionHostProfileID
+    return connectionHostProfileID
   }
 
-  private func makeSubmissionProfile(
+  private func makeConnectionProfile(
     from hostFields: HostFields,
     existingProfile: SSHHostProfile?,
-    now: Date,
-    uuid: UUID
+    profileID: SSHHostProfile.ID,
+    now: Date
   ) -> SSHHostProfile {
     SSHHostProfile(
-      id: existingProfile?.id ?? uuid.uuidString,
+      id: existingProfile?.id ?? profileID,
       displayName: hostFields.displayName,
       host: hostFields.host,
       user: hostFields.user,
@@ -430,6 +528,20 @@ struct RemoteConnectFeature {
       authMethod: hostFields.authMethod,
       createdAt: existingProfile?.createdAt ?? now,
       updatedAt: now
+    )
+  }
+
+  private func makeSubmissionProfile(
+    from hostFields: HostFields,
+    existingProfile: SSHHostProfile?,
+    profileID: SSHHostProfile.ID,
+    now: Date
+  ) -> SSHHostProfile {
+    makeConnectionProfile(
+      from: hostFields,
+      existingProfile: existingProfile,
+      profileID: profileID,
+      now: now
     )
   }
 

@@ -10,6 +10,7 @@ struct RemoteConnectSheet: View {
     case host
     case user
     case port
+    case password
     case remotePath
   }
 
@@ -68,7 +69,12 @@ struct RemoteConnectSheet: View {
     .padding(20)
     .frame(minWidth: 560, idealWidth: 620)
     .task(id: store.step) {
-      focusedField = store.step == .host ? .host : .remotePath
+      focusedField =
+        if store.step == .host {
+          store.authMethod == .password ? .password : .host
+        } else {
+          .remotePath
+        }
     }
   }
 
@@ -155,6 +161,15 @@ struct RemoteConnectSheet: View {
           }
         }
         .pickerStyle(.segmented)
+      }
+
+      if store.authMethod == .password {
+        labeledSecureField(
+          title: "Password",
+          prompt: "Enter SSH password",
+          text: $store.password,
+          field: .password
+        )
       }
     }
   }
@@ -288,6 +303,21 @@ struct RemoteConnectSheet: View {
       Text(title)
         .foregroundStyle(.secondary)
       TextField(prompt, text: text)
+        .textFieldStyle(.roundedBorder)
+        .focused($focusedField, equals: field)
+    }
+  }
+
+  private func labeledSecureField(
+    title: String,
+    prompt: String,
+    text: Binding<String>,
+    field: Field
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .foregroundStyle(.secondary)
+      SecureField(prompt, text: text)
         .textFieldStyle(.roundedBorder)
         .focused($focusedField, equals: field)
     }
