@@ -23,13 +23,11 @@ struct SidebarFooterView: View {
           Label("Add Remote Repository", systemImage: "server.rack")
         }
         .help("Connect Remote Repository")
-      } label: {
-        Label("Add", systemImage: "plus")
-          .labelStyle(.iconOnly)
-          .font(.callout)
-      }
-      .menuIndicator(.hidden)
-      .help("Add Repository")
+        } label: {
+          Label("Add", systemImage: "plus")
+            .font(.callout)
+        }
+      .help("Add Repository or Remote Repository")
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
