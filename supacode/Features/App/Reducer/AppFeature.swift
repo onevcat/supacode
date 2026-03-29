@@ -279,7 +279,7 @@ struct AppFeature {
             settings: repositorySettings,
             onevcatSettings: onevcatRepositorySettings
           )
-        case .general, .notifications, .worktree, .updates, .advanced, .github:
+        case .general, .notifications, .worktree, .sshHosts, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }
         return .none

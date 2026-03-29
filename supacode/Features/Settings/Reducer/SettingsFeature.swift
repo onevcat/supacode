@@ -25,6 +25,7 @@ struct SettingsFeature {
     var promptForWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
     var selection: SettingsSection? = .general
+    var sshHosts = SSHHostsFeature.State()
     var repositorySettings: RepositorySettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
 
@@ -86,6 +87,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case showNotificationPermissionAlert(errorMessage: String?)
+    case sshHosts(SSHHostsFeature.Action)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
@@ -200,6 +202,12 @@ struct SettingsFeature {
 
       case .setSelection(let selection):
         state.selection = selection ?? .general
+        if case .sshHosts = state.selection {
+          return .send(.sshHosts(.task))
+        }
+        return .none
+
+      case .sshHosts:
         return .none
 
       case .alert(.dismiss):
@@ -224,6 +232,9 @@ struct SettingsFeature {
     }
     .ifLet(\.repositorySettings, action: \.repositorySettings) {
       RepositorySettingsFeature()
+    }
+    Scope(state: \.sshHosts, action: \.sshHosts) {
+      SSHHostsFeature()
     }
   }
 
