@@ -20,7 +20,6 @@ struct AppFeature {
     var selectedRunScript: String = ""
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
-    var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
     @Presents var alert: AlertState<Alert>?
@@ -190,9 +189,9 @@ struct AppFeature {
           repositories.flatMap { $0.worktrees.map(\.id) }
             .filter { !archivedIDs.contains($0) || deleteScriptIDs.contains($0) }
         )
+        state.repositories.runScriptWorktreeIDs.formIntersection(ids)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
-        state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
         {
@@ -417,9 +416,10 @@ struct AppFeature {
           return .none
         }
         analyticsClient.capture("script_run", nil)
+        state.repositories.runScriptWorktreeIDs.insert(worktree.id)
         let script = state.selectedRunScript
         return .run { _ in
-          await terminalClient.send(.runScript(worktree, script: script))
+          await terminalClient.send(.runBlockingScript(worktree, kind: .run, script: script))
         }
 
       case .runScriptDraftChanged(let script):
@@ -671,14 +671,6 @@ struct AppFeature {
           }
         }
 
-      case .terminalEvent(.runScriptStatusChanged(let worktreeID, let isRunning)):
-        if isRunning {
-          state.runScriptStatusByWorktreeID[worktreeID] = true
-        } else {
-          state.runScriptStatusByWorktreeID.removeValue(forKey: worktreeID)
-        }
-        return .none
-
       case .terminalEvent(.commandPaletteToggleRequested(let worktreeID)):
         if state.commandPalette.isPresented {
           return .send(.commandPalette(.setPresented(false)))
@@ -692,6 +684,8 @@ struct AppFeature {
 
       case .terminalEvent(.blockingScriptCompleted(let worktreeID, let kind, let exitCode)):
         switch kind {
+        case .run:
+          return .send(.repositories(.runScriptCompleted(worktreeID: worktreeID, exitCode: exitCode)))
         case .archive:
           return .send(.repositories(.archiveScriptCompleted(worktreeID: worktreeID, exitCode: exitCode)))
         case .delete:

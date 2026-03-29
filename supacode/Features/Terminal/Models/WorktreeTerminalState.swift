@@ -24,7 +24,6 @@ final class WorktreeTerminalState {
   private var surfaces: [UUID: GhosttySurfaceView] = [:]
   private var focusedSurfaceIdByTab: [TerminalTabID: UUID] = [:]
   var tabIsRunningById: [TerminalTabID: Bool] = [:]
-  private var runScriptTabId: TerminalTabID?
   private var blockingScripts: [TerminalTabID: BlockingScriptKind] = [:]
   private var blockingScriptCommandFinished: Set<TerminalTabID> = []
   private var blockingScriptLastCommandExitCode: [TerminalTabID: Int] = [:]
@@ -45,7 +44,6 @@ final class WorktreeTerminalState {
   var onTabClosed: (() -> Void)?
   var onFocusChanged: ((UUID) -> Void)?
   var onTaskStatusChanged: ((WorktreeTaskStatus) -> Void)?
-  var onRunScriptStatusChanged: ((Bool) -> Void)?
   var onBlockingScriptCompleted: ((BlockingScriptKind, Int?) -> Void)?
   var onCommandPaletteToggle: (() -> Void)?
   var onSetupScriptConsumed: (() -> Void)?
@@ -65,8 +63,8 @@ final class WorktreeTerminalState {
     tabIsRunningById.values.contains(true) ? .running : .idle
   }
 
-  var isRunScriptRunning: Bool {
-    runScriptTabId != nil
+  func isBlockingScriptRunning(kind: BlockingScriptKind) -> Bool {
+    blockingScripts.values.contains(kind)
   }
 
   func ensureInitialTab(focusing: Bool) {
@@ -103,7 +101,7 @@ final class WorktreeTerminalState {
     let resolvedInheritanceSurfaceId = inheritingFromSurfaceId ?? currentFocusedSurfaceId()
     let title = "\(worktree.name) \(nextTabIndex())"
     let setupInput = setupScriptInput(setupScript: setupScript)
-    let commandInput = initialInput.flatMap { runScriptInput($0) }
+    let commandInput = initialInput.flatMap { formatCommandInput($0) }
     let resolvedInput: String?
     switch (setupInput, commandInput) {
     case (nil, nil):
@@ -137,30 +135,9 @@ final class WorktreeTerminalState {
   }
 
   @discardableResult
-  func runScript(_ script: String) -> TerminalTabID? {
-    guard let input = runScriptInput(script) else { return nil }
-    if let existing = runScriptTabId {
-      closeTab(existing)
-    }
-    let tabId = createTab(
-      TabCreation(
-        title: "RUN SCRIPT",
-        icon: "play.fill",
-        isTitleLocked: true,
-        initialInput: input,
-        focusing: true,
-        inheritingFromSurfaceId: currentFocusedSurfaceId(),
-        context: GHOSTTY_SURFACE_CONTEXT_TAB
-      )
-    )
-    setRunScriptTabId(tabId)
-    return tabId
-  }
-
-  @discardableResult
   func stopRunScript() -> Bool {
-    guard let runScriptTabId else { return false }
-    closeTab(runScriptTabId)
+    guard let tabId = blockingScripts.first(where: { $0.value == .run })?.key else { return false }
+    closeTab(tabId)
     return true
   }
 
@@ -184,6 +161,7 @@ final class WorktreeTerminalState {
         title: kind.tabTitle,
         icon: kind.tabIcon,
         isTitleLocked: true,
+        tintColor: kind.tabColor,
         initialInput: input,
         focusing: true,
         inheritingFromSurfaceId: currentFocusedSurfaceId(),
@@ -197,6 +175,7 @@ final class WorktreeTerminalState {
     }
     blockingScripts[tabId] = kind
     lastBlockingScriptTabByKind[kind] = tabId
+
     blockingScriptLogger.info("Started \(kind.tabTitle) for worktree \(worktree.id)")
     return tabId
   }
@@ -205,6 +184,7 @@ final class WorktreeTerminalState {
     let title: String
     let icon: String?
     let isTitleLocked: Bool
+    var tintColor: TerminalTabTintColor?
     let initialInput: String?
     let focusing: Bool
     let inheritingFromSurfaceId: UUID?
@@ -215,7 +195,8 @@ final class WorktreeTerminalState {
     let tabId = tabManager.createTab(
       title: creation.title,
       icon: creation.icon,
-      isTitleLocked: creation.isTitleLocked
+      isTitleLocked: creation.isTitleLocked,
+      tintColor: creation.tintColor
     )
     let tree = splitTree(
       for: tabId,
@@ -345,7 +326,6 @@ final class WorktreeTerminalState {
   }
 
   func closeTab(_ tabId: TerminalTabID) {
-    let wasRunScriptTab = tabId == runScriptTabId
     let closedBlockingKind = blockingScripts.removeValue(forKey: tabId)
     // Clear lingering tab tracking for completed or non-blocking tabs.
     for (kind, tracked) in lastBlockingScriptTabByKind where tracked == tabId {
@@ -359,12 +339,11 @@ final class WorktreeTerminalState {
       lastEmittedFocusSurfaceId = nil
     }
     emitTaskStatusIfChanged()
-    if wasRunScriptTab {
-      setRunScriptTabId(nil)
-    }
+
     if let closedBlockingKind {
       blockingScriptCommandFinished.remove(tabId)
       blockingScriptLastCommandExitCode.removeValue(forKey: tabId)
+      blockingScriptLogger.info("\(closedBlockingKind.tabTitle) cancelled (tab closed)")
       onBlockingScriptCompleted?(closedBlockingKind, nil)
     }
     onTabClosed?()
@@ -534,12 +513,12 @@ final class WorktreeTerminalState {
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     tabIsRunningById.removeAll()
-    setRunScriptTabId(nil)
     let pendingKinds = Set(blockingScripts.values)
     blockingScripts.removeAll()
     blockingScriptCommandFinished.removeAll()
     blockingScriptLastCommandExitCode.removeAll()
     lastBlockingScriptTabByKind.removeAll()
+
     for kind in pendingKinds {
       onBlockingScriptCompleted?(kind, nil)
     }
@@ -600,18 +579,12 @@ final class WorktreeTerminalState {
 
   private func setupScriptInput(setupScript: String?) -> String? {
     guard pendingSetupScript, let script = setupScript else { return nil }
-    let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      return nil
-    }
-    return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
+    return formatCommandInput(script)
   }
 
-  private func runScriptInput(_ script: String) -> String? {
+  private func formatCommandInput(_ script: String) -> String? {
     let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      return nil
-    }
+    guard !trimmed.isEmpty else { return nil }
     return worktree.scriptEnvironmentExportPrefix + trimmed + "\n"
   }
 
@@ -638,6 +611,8 @@ final class WorktreeTerminalState {
     blockingScripts.removeValue(forKey: tabId)
     blockingScriptCommandFinished.remove(tabId)
     blockingScriptLastCommandExitCode.removeValue(forKey: tabId)
+    tabManager.unlockAndUpdateTitle(tabId, title: "\(worktree.name) \(nextTabIndex())")
+
     Task { @MainActor [weak self] in
       // Bail out if a new script of the same kind started before this ran.
       guard self?.blockingScripts.values.contains(kind) != true else {
@@ -652,6 +627,8 @@ final class WorktreeTerminalState {
   // asynchronously to avoid reentrancy into Ghostty's callback during surface teardown.
   private func handleBlockingScriptChildExited(tabId: TerminalTabID, exitCode: UInt32) {
     guard let kind = blockingScripts.removeValue(forKey: tabId) else { return }
+    tabManager.unlockAndUpdateTitle(tabId, title: "\(worktree.name) \(nextTabIndex())")
+
     guard blockingScriptCommandFinished.remove(tabId) != nil else {
       blockingScriptLastCommandExitCode.removeValue(forKey: tabId)
       // No command ran to completion — user pressed Ctrl+D or
@@ -678,15 +655,6 @@ final class WorktreeTerminalState {
       if code == 0, self?.trees[tabId] != nil {
         self?.closeTab(tabId)
       }
-    }
-  }
-
-  private func setRunScriptTabId(_ tabId: TerminalTabID?) {
-    let wasRunning = runScriptTabId != nil
-    runScriptTabId = tabId
-    let isRunning = tabId != nil
-    if wasRunning != isRunning {
-      onRunScriptStatusChanged?(isRunning)
     }
   }
 
@@ -986,13 +954,11 @@ final class WorktreeTerminalState {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)
       tabManager.closeTab(tabId)
-      if tabId == runScriptTabId {
-        setRunScriptTabId(nil)
-      }
       if let kind = blockingScripts.removeValue(forKey: tabId) {
         blockingScriptCommandFinished.remove(tabId)
         blockingScriptLastCommandExitCode.removeValue(forKey: tabId)
         lastBlockingScriptTabByKind.removeValue(forKey: kind)
+
         onBlockingScriptCompleted?(kind, nil)
       } else {
         for (kind, tracked) in lastBlockingScriptTabByKind where tracked == tabId {

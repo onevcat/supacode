@@ -5,6 +5,7 @@ struct TerminalTabBackground: View {
   var isPressing: Bool
   var isDragging: Bool
   var isHovering: Bool
+  var tintColor: TerminalTabTintColor?
 
   var body: some View {
     ZStack(alignment: .top) {
@@ -16,11 +17,10 @@ struct TerminalTabBackground: View {
         TerminalTabBarColors.inactiveTabBackground
       }
 
-      if isActive {
-        Rectangle()
-          .fill(Color.accentColor)
-          .frame(height: TerminalTabBarMetrics.activeIndicatorHeight)
-      }
+      Rectangle()
+        .fill(tintColor?.color ?? .accentColor)
+        .frame(height: TerminalTabBarMetrics.activeIndicatorHeight)
+        .opacity(isActive || tintColor != nil ? 1 : 0)
 
       if !isActive {
         VStack(spacing: 0) {

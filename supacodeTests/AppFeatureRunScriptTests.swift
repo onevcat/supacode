@@ -60,10 +60,12 @@ struct AppFeatureRunScriptTests {
       $0.runScriptDraft = ""
       $0.isRunScriptPromptPresented = false
     }
-    await store.receive(\.runScript)
+    await store.receive(\.runScript) {
+      $0.repositories.runScriptWorktreeIDs = [worktree.id]
+    }
     await store.finish()
 
-    #expect(sent.value == [.runScript(worktree, script: "npm run dev")])
+    #expect(sent.value == [.runBlockingScript(worktree, kind: .run, script: "npm run dev")])
 
     let savedRunScript = withDependencies {
       $0.settingsFileStorage = storage.storage

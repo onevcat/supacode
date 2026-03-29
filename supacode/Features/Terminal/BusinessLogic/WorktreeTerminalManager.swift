@@ -42,8 +42,6 @@ final class WorktreeTerminalManager {
     case .ensureInitialTab(let worktree, let runSetupScriptIfNew, let focusing):
       let state = state(for: worktree) { runSetupScriptIfNew }
       state.ensureInitialTab(focusing: focusing)
-    case .runScript(let worktree, let script):
-      _ = state(for: worktree).runScript(script)
     case .stopRunScript(let worktree):
       _ = state(for: worktree).stopRunScript()
     case .runBlockingScript(let worktree, let kind, let script):
@@ -161,9 +159,6 @@ final class WorktreeTerminalManager {
     state.onTaskStatusChanged = { [weak self] status in
       self?.emit(.taskStatusChanged(worktreeID: worktree.id, status: status))
     }
-    state.onRunScriptStatusChanged = { [weak self] isRunning in
-      self?.emit(.runScriptStatusChanged(worktreeID: worktree.id, isRunning: isRunning))
-    }
     state.onBlockingScriptCompleted = { [weak self] kind, exitCode in
       self?.emit(.blockingScriptCompleted(worktreeID: worktree.id, kind: kind, exitCode: exitCode))
     }
@@ -230,8 +225,8 @@ final class WorktreeTerminalManager {
     states[worktreeID]?.taskStatus
   }
 
-  func isRunScriptRunning(for worktreeID: Worktree.ID) -> Bool {
-    states[worktreeID]?.isRunScriptRunning == true
+  func isBlockingScriptRunning(kind: BlockingScriptKind, for worktreeID: Worktree.ID) -> Bool {
+    states[worktreeID]?.isBlockingScriptRunning(kind: kind) == true
   }
 
   func setNotificationsEnabled(_ enabled: Bool) {

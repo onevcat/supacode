@@ -55,7 +55,8 @@ struct TerminalTabView: View {
         isActive: isActive,
         isPressing: isPressing,
         isDragging: isDragging,
-        isHovering: isHovering
+        isHovering: isHovering,
+        tintColor: tab.tintColor
       )
       .animation(.easeInOut(duration: TerminalTabBarMetrics.hoverAnimationDuration), value: isHovering)
     }

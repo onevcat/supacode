@@ -1339,7 +1339,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Script exited with code 7.\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Script exited with code 7.\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 7)) {
@@ -1475,7 +1475,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Script failed (exit code 1).\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Script failed (exit code 1).\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 1)) {
@@ -1507,7 +1507,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Permission denied (exit code 126).\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Permission denied (exit code 126).\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 126)) {
@@ -1538,7 +1538,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Command not found (exit code 127).\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Command not found (exit code 127).\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 127)) {
@@ -1569,7 +1569,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Script killed by signal 2 (exit code 130).\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Script killed by signal 2 (exit code 130).\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 130)) {
@@ -1600,7 +1600,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Script killed by signal 9 (exit code 137).\nCheck the ARCHIVE SCRIPT tab for details.")
+      TextState("Script killed by signal 9 (exit code 137).\nCheck the Archive Script tab for details.")
     }
 
     await store.send(.archiveScriptCompleted(worktreeID: featureWorktree.id, exitCode: 137)) {
@@ -1658,7 +1658,7 @@ struct RepositoriesFeatureTests {
           TextState("OK")
         }
       } message: {
-        TextState("Script failed (exit code 1).\nCheck the ARCHIVE SCRIPT tab for details.")
+        TextState("Script failed (exit code 1).\nCheck the Archive Script tab for details.")
       }
     }
     #expect(store.state.archivedWorktreeIDs.isEmpty)
@@ -1803,7 +1803,7 @@ struct RepositoriesFeatureTests {
         TextState("OK")
       }
     } message: {
-      TextState("Script exited with code 7.\nCheck the DELETE SCRIPT tab for details.")
+      TextState("Script exited with code 7.\nCheck the Delete Script tab for details.")
     }
 
     await store.send(.deleteScriptCompleted(worktreeID: featureWorktree.id, exitCode: 7)) {

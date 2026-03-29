@@ -78,10 +78,7 @@ struct AppFeatureArchivedSelectionTests {
       repositories: repositoriesState,
       settings: SettingsFeature.State()
     )
-    appState.runScriptStatusByWorktreeID = [
-      activeWorktree.id: true,
-      archivedWorktree.id: true,
-    ]
+    appState.repositories.runScriptWorktreeIDs = [activeWorktree.id, archivedWorktree.id]
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let store = TestStore(initialState: appState) {
       AppFeature()
@@ -94,7 +91,7 @@ struct AppFeatureArchivedSelectionTests {
     store.exhaustivity = .off
 
     await store.send(.repositories(.delegate(.repositoriesChanged([repository])))) {
-      $0.runScriptStatusByWorktreeID = [activeWorktree.id: true]
+      $0.repositories.runScriptWorktreeIDs = [activeWorktree.id]
     }
     await store.finish()
 

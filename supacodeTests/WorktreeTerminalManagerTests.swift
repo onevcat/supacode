@@ -469,6 +469,92 @@ struct WorktreeTerminalManagerTests {
     #expect(!state.tabManager.tabs.map(\.id).contains(tabId))
   }
 
+  @Test func runScriptBlockingScriptTracksRunningState() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+
+    #expect(manager.isBlockingScriptRunning(kind: .run, for: worktree.id) == false)
+
+    manager.handleCommand(.runBlockingScript(worktree, kind: .run, script: "echo hi"))
+
+    #expect(manager.isBlockingScriptRunning(kind: .run, for: worktree.id) == true)
+  }
+
+  @Test func stopRunScriptClosesRunTab() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+
+    manager.handleCommand(.runBlockingScript(worktree, kind: .run, script: "sleep 10"))
+    #expect(manager.isBlockingScriptRunning(kind: .run, for: worktree.id) == true)
+
+    manager.handleCommand(.stopRunScript(worktree))
+    #expect(manager.isBlockingScriptRunning(kind: .run, for: worktree.id) == false)
+  }
+
+  @Test func runScriptTabTitleResetsAfterSignalInterruption() async {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let stream = manager.eventStream()
+
+    manager.handleCommand(.runBlockingScript(worktree, kind: .run, script: "sleep 10"))
+
+    guard let state = manager.stateIfExists(for: worktree.id),
+      let tabId = state.tabManager.selectedTabId,
+      let surface = state.splitTree(for: tabId).root?.leftmostLeaf()
+    else {
+      Issue.record("Expected run script tab and surface")
+      return
+    }
+
+    let tab = state.tabManager.tabs.first { $0.id == tabId }
+    #expect(tab?.title == "Run Script")
+    #expect(tab?.isTitleLocked == true)
+    #expect(tab?.tintColor == .green)
+
+    // Simulate Ctrl+C (SIGINT = exit code 130).
+    surface.bridge.onCommandFinished?(130)
+
+    // Wait for completion event.
+    _ = await nextEvent(stream) { event in
+      if case .blockingScriptCompleted = event { return true }
+      return false
+    }
+
+    let updatedTab = state.tabManager.tabs.first { $0.id == tabId }
+    #expect(updatedTab?.isTitleLocked == false)
+    #expect(updatedTab?.icon == nil)
+    #expect(updatedTab?.tintColor == nil)
+  }
+
+  @Test func blockingScriptTabTitleResetsAfterFailure() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+
+    manager.handleCommand(.runBlockingScript(worktree, kind: .archive, script: "exit 1"))
+
+    guard let state = manager.stateIfExists(for: worktree.id),
+      let tabId = state.tabManager.selectedTabId,
+      let surface = state.splitTree(for: tabId).root?.leftmostLeaf()
+    else {
+      Issue.record("Expected blocking script tab and surface")
+      return
+    }
+
+    let tab = state.tabManager.tabs.first { $0.id == tabId }
+    #expect(tab?.title == "Archive Script")
+    #expect(tab?.tintColor == .orange)
+
+    // Title reset happens synchronously in handleBlockingScriptChildExited,
+    // before the completion callback fires in an async Task.
+    surface.bridge.onCommandFinished?(1)
+    surface.bridge.onChildExited?(1)
+
+    let updatedTab = state.tabManager.tabs.first { $0.id == tabId }
+    #expect(updatedTab?.isTitleLocked == false)
+    #expect(updatedTab?.icon == nil)
+    #expect(updatedTab?.tintColor == nil)
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",

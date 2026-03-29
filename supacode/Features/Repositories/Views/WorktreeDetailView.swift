@@ -32,7 +32,7 @@ struct WorktreeDetailView: View {
       && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
     let runScriptEnabled = hasActiveWorktree
-    let runScriptIsRunning = selectedWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
+    let runScriptIsRunning = selectedWorktree.map { state.repositories.runScriptWorktreeIDs.contains($0.id) } == true
     let notificationGroups = repositories.toolbarNotificationGroups(terminalManager: terminalManager)
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
       count + repository.unseenWorktreeCount

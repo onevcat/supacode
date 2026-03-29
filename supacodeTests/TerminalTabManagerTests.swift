@@ -63,4 +63,46 @@ struct TerminalTabManagerTests {
     manager.updateDirty(tabId, isDirty: false)
     #expect(manager.tabs.first?.isDirty == false)
   }
+
+  @Test func createTabWithTintColorSetsColor() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "script", icon: "play.fill", tintColor: .green)
+    let tab = manager.tabs.first { $0.id == tabId }
+    #expect(tab?.tintColor == .green)
+    #expect(tab?.icon == "play.fill")
+  }
+
+  @Test func unlockAndUpdateTitleResetsTabToDefaults() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(
+      title: "Run Script",
+      icon: "play.fill",
+      isTitleLocked: true,
+      tintColor: .green
+    )
+    let before = manager.tabs.first { $0.id == tabId }
+    #expect(before?.isTitleLocked == true)
+    #expect(before?.icon == "play.fill")
+    #expect(before?.tintColor == .green)
+
+    manager.unlockAndUpdateTitle(tabId, title: "wt-1 2")
+
+    let after = manager.tabs.first { $0.id == tabId }
+    #expect(after?.title == "wt-1 2")
+    #expect(after?.isTitleLocked == false)
+    #expect(after?.icon == nil)
+    #expect(after?.tintColor == nil)
+  }
+
+  @Test func unlockAndUpdateTitleAllowsSubsequentTitleUpdates() {
+    let manager = TerminalTabManager()
+    let tabId = manager.createTab(title: "Run Script", icon: "play.fill", isTitleLocked: true)
+
+    manager.updateTitle(tabId, title: "should be ignored")
+    #expect(manager.tabs.first { $0.id == tabId }?.title == "Run Script")
+
+    manager.unlockAndUpdateTitle(tabId, title: "wt-1 1")
+    manager.updateTitle(tabId, title: "new shell title")
+    #expect(manager.tabs.first { $0.id == tabId }?.title == "new shell title")
+  }
 }
