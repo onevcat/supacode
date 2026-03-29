@@ -249,6 +249,136 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func addRemoteRepositoryButtonTappedPresentsRemoteConnectSheet() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let profile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Build Box",
+      host: "example.com",
+      user: "deploy",
+      authMethod: .publicKey
+    )
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      }
+    }
+
+    await store.send(.addRemoteRepositoryButtonTapped) {
+      $0.remoteConnect = RemoteConnectFeature.State(savedHostProfiles: [profile])
+    }
+  }
+
+  @Test(.dependencies) func remoteConnectCompletedUpsertsHostProfileAndPersistsRemoteRepository() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let createdAt = Date(timeIntervalSince1970: 10)
+    let updatedAt = Date(timeIntervalSince1970: 20)
+    let originalProfile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Old Name",
+      host: "old.example.com",
+      user: "deploy",
+      authMethod: .publicKey,
+      createdAt: createdAt,
+      updatedAt: createdAt
+    )
+    let submittedProfile = SSHHostProfile(
+      id: originalProfile.id,
+      displayName: "Build Box",
+      host: "example.com",
+      user: "deploy",
+      port: 2222,
+      authMethod: .publicKey,
+      createdAt: createdAt,
+      updatedAt: updatedAt
+    )
+    let submission = RemoteConnectFeature.Submission(
+      hostProfile: submittedProfile,
+      remotePath: repoRoot
+    )
+    let endpoint = RepositoryEndpoint.remote(
+      hostProfileID: submittedProfile.id,
+      remotePath: repoRoot
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var initialState = RepositoriesFeature.State()
+    initialState.remoteConnect = RemoteConnectFeature.State(savedHostProfiles: [originalProfile])
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [originalProfile] }
+      return TestStore(initialState: initialState) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = { [] }
+        $0.repositoryPersistence.saveRepositoryEntries = { entries in
+          savedEntries.withValue { $0.append(entries) }
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository add not to use local git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { rootURL, requestedEndpoint, hostProfile in
+          #expect(rootURL.path(percentEncoded: false) == repoRoot)
+          #expect(requestedEndpoint == endpoint)
+          #expect(hostProfile == submittedProfile)
+          return [worktree]
+        }
+      }
+    }
+
+    await store.send(.remoteConnect(.presented(.delegate(.completed(submission))))) {
+      $0.remoteConnect = nil
+    }
+    await store.receive(\.openRepositoriesFinished) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      #expect(settingsFile.sshHostProfiles == [submittedProfile])
+    }
+    #expect(
+      savedEntries.value == [[
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpoint)
+      ]]
+    )
+  }
+
   @Test(.dependencies) func loadPersistedRepositoriesHandlesDuplicateRemoteEndpointPathsSafely() async {
     let testID = UUID().uuidString
     let settingsStorage = SettingsTestStorage()

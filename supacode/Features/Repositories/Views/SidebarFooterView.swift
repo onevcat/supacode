@@ -21,6 +21,13 @@ struct SidebarFooterView: View {
         }
       }
       .help("Add Repository (\(AppShortcuts.openRepository.display))")
+      Button {
+        store.send(.addRemoteRepositoryButtonTapped)
+      } label: {
+        Label("Remote", systemImage: "server.rack")
+          .font(.callout)
+      }
+      .help("Connect Remote Repository")
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {

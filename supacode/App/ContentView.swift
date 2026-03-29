@@ -76,6 +76,10 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
+    .sheet(store: repositoriesStore.scope(state: \.$remoteConnect, action: \.remoteConnect)) {
+      remoteConnectStore in
+      RemoteConnectSheet(store: remoteConnectStore)
+    }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(
         script: runScriptDraft,

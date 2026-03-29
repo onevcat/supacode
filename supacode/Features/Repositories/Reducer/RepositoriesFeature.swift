@@ -96,6 +96,7 @@ struct RepositoriesFeature {
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
+    @Presents var remoteConnect: RemoteConnectFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -126,6 +127,7 @@ struct RepositoriesFeature {
     case task
     case repositorySnapshotLoaded([Repository]?)
     case setOpenPanelPresented(Bool)
+    case addRemoteRepositoryButtonTapped
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
     case archivedWorktreeIDsLoaded([Worktree.ID])
@@ -240,6 +242,7 @@ struct RepositoriesFeature {
     case delayedPullRequestRefresh(Worktree.ID)
     case openRepositorySettings(Repository.ID)
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
+    case remoteConnect(PresentationAction<RemoteConnectFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -387,6 +390,13 @@ struct RepositoriesFeature {
 
       case .setOpenPanelPresented(let isPresented):
         state.isOpenPanelPresented = isPresented
+        return .none
+
+      case .addRemoteRepositoryButtonTapped:
+        @Shared(.settingsFile) var settingsFile
+        state.remoteConnect = RemoteConnectFeature.State(
+          savedHostProfiles: settingsFile.sshHostProfiles
+        )
         return .none
 
       case .loadPersistedRepositories:
@@ -2743,6 +2753,57 @@ struct RepositoriesFeature {
       case .openRepositorySettings(let repositoryID):
         return .send(.delegate(.openRepositorySettings(repositoryID)))
 
+      case .remoteConnect(.presented(.delegate(.cancel))):
+        state.remoteConnect = nil
+        return .none
+
+      case .remoteConnect(.presented(.delegate(.completed(let submission)))):
+        state.remoteConnect = nil
+        analyticsClient.capture(
+          "repository_added",
+          [
+            "count": 1,
+            "source": "remote",
+          ]
+        )
+        @Shared(.settingsFile) var settingsFile
+        $settingsFile.withLock {
+          upsertSSHHostProfile(submission.hostProfile, settingsFile: &$0)
+        }
+        let repositoryPersistence = repositoryPersistence
+        let loadRepositoriesData = self.loadRepositoriesData
+        return .run { send in
+          let existingEntries = await repositoryPersistence.loadRepositoryEntries()
+          let endpoint = RepositoryEndpoint.remote(
+            hostProfileID: submission.hostProfile.id,
+            remotePath: submission.remotePath
+          )
+          let mergedEntries = RepositoryEntryNormalizer.normalize(
+            existingEntries + [
+              PersistedRepositoryEntry(
+                path: submission.remotePath,
+                kind: .git,
+                endpoint: endpoint
+              )
+            ]
+          )
+          let roots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+          await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+          let (repositories, failures) = await loadRepositoriesData(mergedEntries)
+          await send(
+            .openRepositoriesFinished(
+              repositories,
+              failures: failures,
+              invalidRoots: [],
+              openFailures: [],
+              roots: roots
+            )
+          )
+        }
+
+      case .remoteConnect:
+        return .none
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
@@ -2756,6 +2817,9 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+    .ifLet(\.$remoteConnect, action: \.remoteConnect) {
+      RemoteConnectFeature()
     }
   }
 
@@ -3250,6 +3314,20 @@ struct RepositoriesFeature {
     }
     @Shared(.settingsFile) var settingsFile
     return settingsFile.sshHostProfiles.first { $0.id == hostProfileID }
+  }
+
+  private func upsertSSHHostProfile(
+    _ profile: SSHHostProfile,
+    settingsFile: inout SettingsFile
+  ) {
+    if let index = settingsFile.sshHostProfiles.firstIndex(where: { $0.id == profile.id }) {
+      settingsFile.sshHostProfiles[index] = profile
+      return
+    }
+    settingsFile.sshHostProfiles.append(profile)
+    settingsFile.sshHostProfiles.sort {
+      $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+    }
   }
 
   private func confirmationAlertForRepositoryRemoval(

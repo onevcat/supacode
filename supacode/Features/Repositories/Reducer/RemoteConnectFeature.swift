@@ -1,0 +1,566 @@
+import ComposableArchitecture
+import Foundation
+
+@Reducer
+struct RemoteConnectFeature {
+  enum Step: Equatable {
+    case host
+    case repository
+  }
+
+  struct DirectoryListing: Equatable, Sendable {
+    let currentPath: String
+    let childDirectories: [String]
+  }
+
+  struct DirectoryBrowserState: Equatable {
+    var currentPath: String
+    var childDirectories: [String]
+    var isLoading: Bool
+    var errorMessage: String?
+  }
+
+  struct Submission: Equatable, Sendable {
+    let hostProfile: SSHHostProfile
+    let remotePath: String
+  }
+
+  @ObservableState
+  struct State: Equatable {
+    var savedHostProfiles: [SSHHostProfile]
+    var selectedHostProfileID: SSHHostProfile.ID?
+    var step: Step = .host
+    var displayName = ""
+    var host = ""
+    var user = ""
+    var port = ""
+    var authMethod: SSHHostProfile.AuthMethod = .publicKey
+    var remotePath = ""
+    var validationMessage: String?
+    var isSubmitting = false
+    var directoryBrowser: DirectoryBrowserState?
+
+    init(savedHostProfiles: [SSHHostProfile]) {
+      self.savedHostProfiles = savedHostProfiles.sorted {
+        $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+      }
+    }
+
+    var selectedHostProfile: SSHHostProfile? {
+      guard let selectedHostProfileID else {
+        return nil
+      }
+      return savedHostProfiles.first { $0.id == selectedHostProfileID }
+    }
+
+    var resolvedDisplayName: String {
+      let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty {
+        return trimmed
+      }
+      return host.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+  }
+
+  enum Action: BindableAction, Equatable {
+    case binding(BindingAction<State>)
+    case savedHostProfileSelected(SSHHostProfile.ID?)
+    case continueButtonTapped
+    case backButtonTapped
+    case cancelButtonTapped
+    case browseRemoteFoldersButtonTapped
+    case remoteDirectoryListingLoaded(DirectoryListing)
+    case remoteDirectoryListingFailed(String)
+    case directoryBrowserEntryTapped(String)
+    case directoryBrowserUpButtonTapped
+    case directoryBrowserChooseCurrentFolderButtonTapped
+    case directoryBrowserDismissed
+    case connectButtonTapped
+    case remoteRepositoryValidated(Submission)
+    case remoteRepositoryValidationFailed(String)
+    case delegate(Delegate)
+  }
+
+  @CasePathable
+  enum Delegate: Equatable {
+    case cancel
+    case completed(Submission)
+  }
+
+  @Dependency(\.date.now) private var now
+  @Dependency(RemoteExecutionClient.self) private var remoteExecutionClient
+  @Dependency(\.uuid) private var uuid
+
+  var body: some Reducer<State, Action> {
+    BindingReducer()
+    Reduce { state, action in
+      switch action {
+      case .binding:
+        state.validationMessage = nil
+        return .none
+
+      case .savedHostProfileSelected(let profileID):
+        state.selectedHostProfileID = profileID
+        state.validationMessage = nil
+        guard let profile = state.savedHostProfiles.first(where: { $0.id == profileID }) else {
+          state.displayName = ""
+          state.host = ""
+          state.user = ""
+          state.port = ""
+          state.authMethod = .publicKey
+          return .none
+        }
+        state.displayName = profile.displayName
+        state.host = profile.host
+        state.user = profile.user
+        state.port = profile.port.map(String.init) ?? ""
+        state.authMethod = profile.authMethod
+        return .none
+
+      case .continueButtonTapped:
+        guard validateHostFields(in: &state) != nil else {
+          return .none
+        }
+        state.step = .repository
+        return .none
+
+      case .backButtonTapped:
+        state.step = .host
+        state.directoryBrowser = nil
+        state.validationMessage = nil
+        return .none
+
+      case .cancelButtonTapped:
+        return .send(.delegate(.cancel))
+
+      case .browseRemoteFoldersButtonTapped:
+        guard let hostFields = validateHostFields(in: &state) else {
+          return .none
+        }
+        let requestedPathResult = requestedPath(
+          from: state.remotePath,
+          allowEmptyAsHome: true
+        )
+        guard case .success(let requestedPath) = requestedPathResult else {
+          if case .failure(let message) = requestedPathResult {
+            state.validationMessage = message
+          }
+          return .none
+        }
+
+        let profile = makeConnectionProfile(from: hostFields)
+        state.validationMessage = nil
+        state.directoryBrowser = DirectoryBrowserState(
+          currentPath: state.remotePath.trimmingCharacters(in: .whitespacesAndNewlines),
+          childDirectories: [],
+          isLoading: true,
+          errorMessage: nil
+        )
+        return .run { send in
+          let output = try await remoteExecutionClient.run(
+            profile,
+            listDirectoriesCommand(for: requestedPath),
+            remoteCommandTimeoutSeconds
+          )
+          guard output.exitCode == 0 else {
+            await send(.remoteDirectoryListingFailed(directoryListingFailureMessage(for: output)))
+            return
+          }
+          let lines = output.stdout
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+          guard let currentPath = lines.first else {
+            await send(.remoteDirectoryListingFailed("Couldn't load remote folders."))
+            return
+          }
+          let childDirectories = Array(lines.dropFirst())
+          await send(
+            .remoteDirectoryListingLoaded(
+              DirectoryListing(
+                currentPath: currentPath,
+                childDirectories: childDirectories
+              )
+            )
+          )
+        } catch: { error, send in
+          await send(
+            .remoteDirectoryListingFailed(
+              genericFailureMessage(
+                prefix: "Couldn't browse remote folders.",
+                detail: error.localizedDescription
+              )
+            )
+          )
+        }
+
+      case .remoteDirectoryListingLoaded(let listing):
+        state.directoryBrowser = DirectoryBrowserState(
+          currentPath: listing.currentPath,
+          childDirectories: listing.childDirectories,
+          isLoading: false,
+          errorMessage: nil
+        )
+        return .none
+
+      case .remoteDirectoryListingFailed(let message):
+        if state.directoryBrowser != nil {
+          state.directoryBrowser?.isLoading = false
+          state.directoryBrowser?.errorMessage = message
+        } else {
+          state.validationMessage = message
+        }
+        return .none
+
+      case .directoryBrowserEntryTapped(let path):
+        guard let directoryBrowser = state.directoryBrowser else {
+          return .none
+        }
+        state.directoryBrowser?.isLoading = true
+        state.directoryBrowser?.errorMessage = nil
+        guard let hostFields = validateHostFields(in: &state) else {
+          state.directoryBrowser = directoryBrowser
+          return .none
+        }
+        let profile = makeConnectionProfile(from: hostFields)
+        return .run { send in
+          let output = try await remoteExecutionClient.run(
+            profile,
+            listDirectoriesCommand(for: .absolute(path)),
+            remoteCommandTimeoutSeconds
+          )
+          guard output.exitCode == 0 else {
+            await send(.remoteDirectoryListingFailed(directoryListingFailureMessage(for: output)))
+            return
+          }
+          let lines = output.stdout
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+          guard let currentPath = lines.first else {
+            await send(.remoteDirectoryListingFailed("Couldn't load remote folders."))
+            return
+          }
+          await send(
+            .remoteDirectoryListingLoaded(
+              DirectoryListing(
+                currentPath: currentPath,
+                childDirectories: Array(lines.dropFirst())
+              )
+            )
+          )
+        } catch: { error, send in
+          await send(
+            .remoteDirectoryListingFailed(
+              genericFailureMessage(
+                prefix: "Couldn't browse remote folders.",
+                detail: error.localizedDescription
+              )
+            )
+          )
+        }
+
+      case .directoryBrowserUpButtonTapped:
+        guard let directoryBrowser = state.directoryBrowser else {
+          return .none
+        }
+        let parentPath = Self.parentDirectory(of: directoryBrowser.currentPath)
+        guard parentPath != directoryBrowser.currentPath else {
+          return .none
+        }
+        return .send(.directoryBrowserEntryTapped(parentPath))
+
+      case .directoryBrowserChooseCurrentFolderButtonTapped:
+        guard let currentPath = state.directoryBrowser?.currentPath, !currentPath.isEmpty else {
+          return .none
+        }
+        state.remotePath = currentPath
+        state.directoryBrowser = nil
+        return .none
+
+      case .directoryBrowserDismissed:
+        state.directoryBrowser = nil
+        return .none
+
+      case .connectButtonTapped:
+        guard let hostFields = validateHostFields(in: &state) else {
+          return .none
+        }
+        let requestedPathResult = requestedPath(
+          from: state.remotePath,
+          allowEmptyAsHome: false
+        )
+        guard case .success(let requestedPath) = requestedPathResult else {
+          if case .failure(let message) = requestedPathResult {
+            state.validationMessage = message
+          }
+          return .none
+        }
+
+        state.validationMessage = nil
+        state.isSubmitting = true
+        let submissionProfile = makeSubmissionProfile(
+          from: hostFields,
+          existingProfile: state.selectedHostProfile,
+          now: now,
+          uuid: uuid()
+        )
+        return .run { send in
+          let output = try await remoteExecutionClient.run(
+            submissionProfile,
+            validateRepositoryCommand(for: requestedPath),
+            remoteCommandTimeoutSeconds
+          )
+          guard output.exitCode == 0 else {
+            await send(
+              .remoteRepositoryValidationFailed(
+                repositoryValidationFailureMessage(for: output)
+              )
+            )
+            return
+          }
+          let normalizedPath = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+          guard !normalizedPath.isEmpty else {
+            await send(.remoteRepositoryValidationFailed("Couldn't validate the remote repository."))
+            return
+          }
+          await send(
+            .remoteRepositoryValidated(
+              Submission(
+                hostProfile: submissionProfile,
+                remotePath: normalizedPath
+              )
+            )
+          )
+        } catch: { error, send in
+          await send(
+            .remoteRepositoryValidationFailed(
+              genericFailureMessage(
+                prefix: "Couldn't validate the remote repository.",
+                detail: error.localizedDescription
+              )
+            )
+          )
+        }
+
+      case .remoteRepositoryValidated(let submission):
+        state.isSubmitting = false
+        state.remotePath = submission.remotePath
+        return .send(.delegate(.completed(submission)))
+
+      case .remoteRepositoryValidationFailed(let message):
+        state.isSubmitting = false
+        state.validationMessage = message
+        return .none
+
+      case .delegate:
+        return .none
+      }
+    }
+  }
+
+  private func validateHostFields(in state: inout State) -> HostFields? {
+    let host = state.host.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !host.isEmpty else {
+      state.validationMessage = "Host required."
+      return nil
+    }
+
+    let user = state.user.trimmingCharacters(in: .whitespacesAndNewlines)
+    let displayName = state.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let portValue = state.port.trimmingCharacters(in: .whitespacesAndNewlines)
+    let port: Int?
+    if portValue.isEmpty {
+      port = nil
+    } else if let parsed = Int(portValue), (1 ... 65535).contains(parsed) {
+      port = parsed
+    } else {
+      state.validationMessage = "Enter a valid SSH port."
+      return nil
+    }
+
+    return HostFields(
+      displayName: displayName.isEmpty ? host : displayName,
+      host: host,
+      user: user,
+      port: port,
+      authMethod: state.authMethod
+    )
+  }
+
+  private func makeConnectionProfile(from hostFields: HostFields) -> SSHHostProfile {
+    SSHHostProfile(
+      displayName: hostFields.displayName,
+      host: hostFields.host,
+      user: hostFields.user,
+      port: hostFields.port,
+      authMethod: hostFields.authMethod
+    )
+  }
+
+  private func makeSubmissionProfile(
+    from hostFields: HostFields,
+    existingProfile: SSHHostProfile?,
+    now: Date,
+    uuid: UUID
+  ) -> SSHHostProfile {
+    SSHHostProfile(
+      id: existingProfile?.id ?? uuid.uuidString,
+      displayName: hostFields.displayName,
+      host: hostFields.host,
+      user: hostFields.user,
+      port: hostFields.port,
+      authMethod: hostFields.authMethod,
+      createdAt: existingProfile?.createdAt ?? now,
+      updatedAt: now
+    )
+  }
+
+  private func requestedPath(
+    from rawValue: String,
+    allowEmptyAsHome: Bool
+  ) -> RequestedPathResult {
+    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      return allowEmptyAsHome ? .success(.home) : .failure("Remote path required.")
+    }
+    if trimmed == "~" {
+      return .success(.home)
+    }
+    if trimmed.hasPrefix("~/") {
+      return .success(.homeRelative(String(trimmed.dropFirst(2))))
+    }
+    if trimmed.hasPrefix("/") {
+      return .success(.absolute(trimmed))
+    }
+    return .failure("Enter an absolute remote path or browse remote folders.")
+  }
+
+  private func listDirectoriesCommand(for requestedPath: RemotePathRequest) -> String {
+    let pathAssignment = pathAssignment(for: requestedPath)
+    return """
+      \(pathAssignment)
+      if ! cd -- "$remote_base" 2>/dev/null; then
+        printf '%s\\n' '\(errorMarker)missing-directory' >&2
+        exit 20
+      fi
+      current=$(pwd -P)
+      printf '%s\\n' "$current"
+      find "$current" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | LC_ALL=C sort
+      """
+  }
+
+  private func validateRepositoryCommand(for requestedPath: RemotePathRequest) -> String {
+    let pathAssignment = pathAssignment(for: requestedPath)
+    return """
+      \(pathAssignment)
+      if ! cd -- "$remote_base" 2>/dev/null; then
+        printf '%s\\n' '\(errorMarker)missing-directory' >&2
+        exit 20
+      fi
+      repo_root=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)
+      if [ -z "$repo_root" ]; then
+        printf '%s\\n' '\(errorMarker)not-git' >&2
+        exit 21
+      fi
+      printf '%s\\n' "$repo_root"
+      """
+  }
+
+  private func pathAssignment(for requestedPath: RemotePathRequest) -> String {
+    switch requestedPath {
+    case .home:
+      "remote_base=\"$HOME\""
+    case .absolute(let path):
+      "remote_base=\(SSHCommandSupport.shellEscape(path))"
+    case .homeRelative(let relativePath):
+      if relativePath.isEmpty {
+        "remote_base=\"$HOME\""
+      } else {
+        "remote_base=\"$HOME\"/\(SSHCommandSupport.shellEscape(relativePath))"
+      }
+    }
+  }
+
+  private func directoryListingFailureMessage(
+    for output: RemoteExecutionClient.Output
+  ) -> String {
+    if output.stderr.contains("\(errorMarker)missing-directory") {
+      return "The remote folder couldn't be opened."
+    }
+    return genericFailureMessage(
+      prefix: "Couldn't browse remote folders.",
+      detail: bestAvailableErrorDetail(from: output)
+    )
+  }
+
+  private func repositoryValidationFailureMessage(
+    for output: RemoteExecutionClient.Output
+  ) -> String {
+    if output.stderr.contains("\(errorMarker)missing-directory") {
+      return "The remote folder doesn't exist."
+    }
+    if output.stderr.contains("\(errorMarker)not-git") {
+      return "The selected folder is not a Git repository."
+    }
+    return genericFailureMessage(
+      prefix: "Couldn't validate the remote repository.",
+      detail: bestAvailableErrorDetail(from: output)
+    )
+  }
+
+  private func genericFailureMessage(prefix: String, detail: String?) -> String {
+    guard let detail, !detail.isEmpty else {
+      return prefix
+    }
+    return "\(prefix)\n\(detail)"
+  }
+
+  private func bestAvailableErrorDetail(
+    from output: RemoteExecutionClient.Output
+  ) -> String? {
+    let candidates = [output.stderr, output.stdout]
+    for candidate in candidates {
+      let lines = candidate
+        .split(whereSeparator: \.isNewline)
+        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty && !$0.contains(errorMarker) }
+      if let line = lines.first {
+        return line
+      }
+    }
+    return nil
+  }
+
+  private static func parentDirectory(of path: String) -> String {
+    guard path != "/" else {
+      return "/"
+    }
+    let standardized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    let parent = standardized.deletingLastPathComponent()
+    let resolvedPath = parent.path(percentEncoded: false)
+    return resolvedPath.isEmpty ? "/" : resolvedPath
+  }
+}
+
+private struct HostFields {
+  let displayName: String
+  let host: String
+  let user: String
+  let port: Int?
+  let authMethod: SSHHostProfile.AuthMethod
+}
+
+private enum RemotePathRequest {
+  case home
+  case absolute(String)
+  case homeRelative(String)
+}
+
+private enum RequestedPathResult {
+  case success(RemotePathRequest)
+  case failure(String)
+}
+
+private let remoteCommandTimeoutSeconds = 15
+private let errorMarker = "__PROWL_REMOTE_CONNECT__:"
