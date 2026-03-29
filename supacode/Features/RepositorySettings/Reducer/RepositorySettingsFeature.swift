@@ -7,6 +7,7 @@ struct RepositorySettingsFeature {
   struct State: Equatable {
     var rootURL: URL
     var repositoryKind: Repository.Kind
+    var endpoint: RepositoryEndpoint = .local
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
     var globalDefaultWorktreeBaseDirectoryPath: String?
@@ -83,6 +84,7 @@ struct RepositorySettingsFeature {
       switch action {
       case .task:
         let rootURL = state.rootURL
+        let endpoint = state.endpoint
         @Shared(.repositorySettings(rootURL)) var repositorySettings
         @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
         @Shared(.settingsFile) var settingsFile
@@ -90,6 +92,7 @@ struct RepositorySettingsFeature {
         let userSettings = userRepositorySettings
         let globalDefaultWorktreeBaseDirectoryPath =
           settingsFile.global.defaultWorktreeBaseDirectoryPath
+        let hostProfile = sshHostProfile(for: endpoint, settingsFile: settingsFile)
         guard state.capabilities.supportsRepositoryGitSettings else {
           return .send(
             .settingsLoaded(
@@ -101,28 +104,53 @@ struct RepositorySettingsFeature {
           )
         }
         let gitClient = gitClient
-        return .run { send in
-          let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
-          await send(
-            .settingsLoaded(
-              settings,
-              userSettings,
-              isBareRepository: isBareRepository,
-              globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath
+        return .run { [endpoint] send in
+          switch endpoint {
+          case .local:
+            let isBareRepository = (try? await gitClient.isBareRepository(rootURL)) ?? false
+            await send(
+              .settingsLoaded(
+                settings,
+                userSettings,
+                isBareRepository: isBareRepository,
+                globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath
+              )
             )
-          )
-          let branches: [String]
-          do {
-            branches = try await gitClient.branchRefs(rootURL)
-          } catch {
-            let rootPath = rootURL.path(percentEncoded: false)
-            SupaLogger("Settings").warning(
-              "Branch refs failed for \(rootPath): \(error.localizedDescription)"
+            let branches: [String]
+            do {
+              branches = try await gitClient.branchRefs(rootURL)
+            } catch {
+              let rootPath = rootURL.path(percentEncoded: false)
+              SupaLogger("Settings").warning(
+                "Branch refs failed for \(rootPath): \(error.localizedDescription)"
+              )
+              branches = []
+            }
+            let defaultBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
+            await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
+
+          case .remote:
+            if hostProfile == nil {
+              let rootPath = rootURL.path(percentEncoded: false)
+              SupaLogger("Settings").warning(
+                "Missing SSH host profile for remote repository settings: \(rootPath)"
+              )
+            }
+            await send(
+              .settingsLoaded(
+                settings,
+                userSettings,
+                isBareRepository: false,
+                globalDefaultWorktreeBaseDirectoryPath: globalDefaultWorktreeBaseDirectoryPath
+              )
             )
-            branches = []
+            await send(
+              .branchDataLoaded(
+                [],
+                defaultBaseRef: settings.worktreeBaseRef ?? "HEAD"
+              )
+            )
           }
-          let defaultBaseRef = await gitClient.automaticWorktreeBaseRef(rootURL) ?? "HEAD"
-          await send(.branchDataLoaded(branches, defaultBaseRef: defaultBaseRef))
         }
 
       case .settingsLoaded(
@@ -194,5 +222,15 @@ struct RepositorySettingsFeature {
         return .none
       }
     }
+  }
+
+  private func sshHostProfile(
+    for endpoint: RepositoryEndpoint,
+    settingsFile: SettingsFile
+  ) -> SSHHostProfile? {
+    guard case .remote(let hostProfileID, _) = endpoint else {
+      return nil
+    }
+    return settingsFile.sshHostProfiles.first { $0.id == hostProfileID }
   }
 }

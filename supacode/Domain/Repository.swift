@@ -41,6 +41,7 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
   let rootURL: URL
   let name: String
   let kind: Kind
+  let endpoint: RepositoryEndpoint
   let worktrees: IdentifiedArrayOf<Worktree>
 
   init(
@@ -48,12 +49,14 @@ nonisolated struct Repository: Identifiable, Hashable, Sendable {
     rootURL: URL,
     name: String,
     kind: Kind = .git,
+    endpoint: RepositoryEndpoint = .local,
     worktrees: IdentifiedArrayOf<Worktree>
   ) {
     self.id = id
     self.rootURL = rootURL
     self.name = name
     self.kind = kind
+    self.endpoint = endpoint
     self.worktrees = worktrees
   }
 

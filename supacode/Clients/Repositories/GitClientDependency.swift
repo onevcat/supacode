@@ -4,6 +4,9 @@ import Foundation
 struct GitClientDependency: Sendable {
   var repoRoot: @Sendable (URL) async throws -> URL
   var worktrees: @Sendable (URL) async throws -> [Worktree]
+  var worktreesForEndpoint:
+    @Sendable (_ repoRoot: URL, _ endpoint: RepositoryEndpoint, _ hostProfile: SSHHostProfile?) async throws
+      -> [Worktree]
   var pruneWorktrees: @Sendable (URL) async throws -> Void
   var localBranchNames: @Sendable (URL) async throws -> Set<String>
   var isValidBranchName: @Sendable (String, URL) async -> Bool
@@ -31,7 +34,21 @@ struct GitClientDependency: Sendable {
       _ copyUntracked: Bool,
       _ baseRef: String
     ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error>
+  var createWorktreeStreamForEndpoint:
+    @Sendable (
+      _ name: String,
+      _ repoRoot: URL,
+      _ baseDirectory: URL,
+      _ copyIgnored: Bool,
+      _ copyUntracked: Bool,
+      _ baseRef: String,
+      _ endpoint: RepositoryEndpoint,
+      _ hostProfile: SSHHostProfile?
+    ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error>
   var removeWorktree: @Sendable (_ worktree: Worktree, _ deleteBranch: Bool) async throws -> URL
+  var removeWorktreeForEndpoint:
+    @Sendable (_ worktree: Worktree, _ deleteBranch: Bool, _ endpoint: RepositoryEndpoint, _ hostProfile: SSHHostProfile?)
+      async throws -> URL
   var isBareRepository: @Sendable (_ repoRoot: URL) async throws -> Bool
   var branchName: @Sendable (URL) async -> String?
   var lineChanges: @Sendable (URL) async -> (added: Int, removed: Int)?
@@ -43,6 +60,13 @@ extension GitClientDependency: DependencyKey {
   static let liveValue = GitClientDependency(
     repoRoot: { try await GitClient().repoRoot(for: $0) },
     worktrees: { try await GitClient().worktrees(for: $0) },
+    worktreesForEndpoint: { repoRoot, endpoint, hostProfile in
+      try await GitClient().worktrees(
+        for: repoRoot,
+        endpoint: endpoint,
+        hostProfile: hostProfile
+      )
+    },
     pruneWorktrees: { try await GitClient().pruneWorktrees(for: $0) },
     localBranchNames: { try await GitClient().localBranchNames(for: $0) },
     isValidBranchName: { branchName, repoRoot in
@@ -71,8 +95,35 @@ extension GitClientDependency: DependencyKey {
         baseRef: baseRef
       )
     },
+    createWorktreeStreamForEndpoint: {
+      name,
+      repoRoot,
+      baseDirectory,
+      copyIgnored,
+      copyUntracked,
+      baseRef,
+      endpoint,
+      hostProfile in
+      GitClient().createWorktreeStream(
+        named: name,
+        in: repoRoot,
+        baseDirectory: baseDirectory,
+        copyFiles: (ignored: copyIgnored, untracked: copyUntracked),
+        baseRef: baseRef,
+        endpoint: endpoint,
+        hostProfile: hostProfile
+      )
+    },
     removeWorktree: { worktree, deleteBranch in
       try await GitClient().removeWorktree(worktree, deleteBranch: deleteBranch)
+    },
+    removeWorktreeForEndpoint: { worktree, deleteBranch, endpoint, hostProfile in
+      try await GitClient().removeWorktree(
+        worktree,
+        deleteBranch: deleteBranch,
+        endpoint: endpoint,
+        hostProfile: hostProfile
+      )
     },
     isBareRepository: { repoRoot in
       try await GitClient().isBareRepository(for: repoRoot)

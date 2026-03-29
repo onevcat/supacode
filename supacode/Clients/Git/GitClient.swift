@@ -51,9 +51,21 @@ struct GitClient {
   }
 
   private let shell: ShellClient
+  private let remoteExecution: RemoteExecutionClient
 
   nonisolated init(shell: ShellClient = .live) {
+    self.init(
+      shell: shell,
+      remoteExecution: makeDefaultRemoteExecutionClient(shell: shell)
+    )
+  }
+
+  nonisolated init(
+    shell: ShellClient,
+    remoteExecution: RemoteExecutionClient
+  ) {
     self.shell = shell
+    self.remoteExecution = remoteExecution
   }
 
   nonisolated func repoRoot(for path: URL) async throws -> URL {
@@ -74,7 +86,32 @@ struct GitClient {
   }
 
   nonisolated func worktrees(for repoRoot: URL) async throws -> [Worktree] {
-    let repositoryRootURL = repoRoot.standardizedFileURL
+    try await worktrees(
+      for: repoRoot,
+      endpoint: .local,
+      hostProfile: nil
+    )
+  }
+
+  nonisolated func worktrees(
+    for repoRoot: URL,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) async throws -> [Worktree] {
+    switch endpoint {
+    case .local:
+      return try await localWorktrees(for: repoRoot)
+    case .remote(_, let remotePath):
+      return try await remoteWorktrees(
+        for: repoRoot,
+        remotePath: remotePath,
+        endpoint: endpoint,
+        hostProfile: hostProfile
+      )
+    }
+  }
+
+  nonisolated private func localWorktrees(for repoRoot: URL) async throws -> [Worktree] {
     let output = try await runWtList(repoRoot: repoRoot)
     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
@@ -83,38 +120,43 @@ struct GitClient {
     let data = Data(trimmed.utf8)
     let entries = try JSONDecoder().decode([GitWtWorktreeEntry].self, from: data)
       .filter { !$0.isBare }
-    let worktreeEntries = entries.enumerated().map { index, entry in
-      let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
-      let name = entry.branch.isEmpty ? worktreeURL.lastPathComponent : entry.branch
-      let detail = Self.relativePath(from: repositoryRootURL, to: worktreeURL)
-      let id = worktreeURL.path(percentEncoded: false)
-      let resourceValues = try? worktreeURL.resourceValues(forKeys: [
-        .creationDateKey, .contentModificationDateKey,
-      ])
-      let createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
-      let sortDate = createdAt ?? .distantPast
-      return WorktreeSortEntry(
-        worktree: Worktree(
-          id: id,
-          name: name,
-          detail: detail,
-          workingDirectory: worktreeURL,
-          repositoryRootURL: repositoryRootURL,
-          createdAt: createdAt
-        ),
-        createdAt: sortDate,
-        index: index
-      )
+    return worktrees(
+      from: entries,
+      repositoryRootURL: repoRoot.standardizedFileURL,
+      detailBaseURL: repoRoot.standardizedFileURL,
+      endpoint: .local,
+      includeCreationDates: true
+    )
+  }
+
+  nonisolated private func remoteWorktrees(
+    for repoRoot: URL,
+    remotePath: String,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) async throws -> [Worktree] {
+    let command = buildRemoteGitCommand(
+      remotePath: remotePath,
+      arguments: ["worktree", "list", "--porcelain"]
+    )
+    let output = try await runRemoteGit(
+      operation: .worktreeList,
+      command: command,
+      hostProfile: hostProfile,
+      timeoutSeconds: remoteGitTimeoutSeconds
+    )
+    let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      return []
     }
-    return
-      worktreeEntries
-      .sorted { lhs, rhs in
-        if lhs.createdAt != rhs.createdAt {
-          return lhs.createdAt > rhs.createdAt
-        }
-        return lhs.index < rhs.index
-      }
-      .map(\.worktree)
+    let entries = parseRemoteWorktreeEntries(trimmed).filter { !$0.isBare }
+    return worktrees(
+      from: entries,
+      repositoryRootURL: repoRoot.standardizedFileURL,
+      detailBaseURL: URL(fileURLWithPath: remotePath).standardizedFileURL,
+      endpoint: endpoint,
+      includeCreationDates: false
+    )
   }
 
   nonisolated func pruneWorktrees(for repoRoot: URL) async throws {
@@ -246,13 +288,35 @@ struct GitClient {
     copyFiles: (ignored: Bool, untracked: Bool),
     baseRef: String
   ) async throws -> Worktree {
+    try await createWorktree(
+      named: name,
+      in: repoRoot,
+      baseDirectory: baseDirectory,
+      copyFiles: copyFiles,
+      baseRef: baseRef,
+      endpoint: .local,
+      hostProfile: nil
+    )
+  }
+
+  nonisolated func createWorktree(
+    named name: String,
+    in repoRoot: URL,
+    baseDirectory: URL,
+    copyFiles: (ignored: Bool, untracked: Bool),
+    baseRef: String,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) async throws -> Worktree {
     var createdWorktree: Worktree?
     for try await event in createWorktreeStream(
       named: name,
       in: repoRoot,
       baseDirectory: baseDirectory,
       copyFiles: copyFiles,
-      baseRef: baseRef
+      baseRef: baseRef,
+      endpoint: endpoint,
+      hostProfile: hostProfile
     ) {
       if case .finished(let worktree) = event {
         createdWorktree = worktree
@@ -275,6 +339,55 @@ struct GitClient {
   }
 
   nonisolated func createWorktreeStream(
+    named name: String,
+    in repoRoot: URL,
+    baseDirectory: URL,
+    copyFiles: (ignored: Bool, untracked: Bool),
+    baseRef: String
+  ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
+    createWorktreeStream(
+      named: name,
+      in: repoRoot,
+      baseDirectory: baseDirectory,
+      copyFiles: copyFiles,
+      baseRef: baseRef,
+      endpoint: .local,
+      hostProfile: nil
+    )
+  }
+
+  nonisolated func createWorktreeStream(
+    named name: String,
+    in repoRoot: URL,
+    baseDirectory: URL,
+    copyFiles: (ignored: Bool, untracked: Bool),
+    baseRef: String,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
+    switch endpoint {
+    case .local:
+      return localCreateWorktreeStream(
+        named: name,
+        in: repoRoot,
+        baseDirectory: baseDirectory,
+        copyFiles: copyFiles,
+        baseRef: baseRef
+      )
+    case .remote(_, let remotePath):
+      return remoteCreateWorktreeStream(
+        named: name,
+        in: repoRoot,
+        remotePath: remotePath,
+        baseDirectory: baseDirectory,
+        baseRef: baseRef,
+        endpoint: endpoint,
+        hostProfile: hostProfile
+      )
+    }
+  }
+
+  nonisolated private func localCreateWorktreeStream(
     named name: String,
     in repoRoot: URL,
     baseDirectory: URL,
@@ -350,6 +463,63 @@ struct GitClient {
               )
             }
           }
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+    }
+  }
+
+  nonisolated private func remoteCreateWorktreeStream(
+    named name: String,
+    in repoRoot: URL,
+    remotePath: String,
+    baseDirectory: URL,
+    baseRef: String,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) -> AsyncThrowingStream<GitWorktreeCreateEvent, Error> {
+    AsyncThrowingStream { continuation in
+      Task {
+        let repositoryRootURL = repoRoot.standardizedFileURL
+        let remoteRepositoryRootURL = URL(fileURLWithPath: remotePath).standardizedFileURL
+        let worktreeURL = baseDirectory
+          .appending(path: name, directoryHint: .isDirectory)
+          .standardizedFileURL
+        let worktreePath = worktreeURL.path(percentEncoded: false)
+        let command = buildRemoteCreateWorktreeCommand(
+          remotePath: remotePath,
+          worktreePath: worktreePath,
+          name: name,
+          baseRef: baseRef
+        )
+        do {
+          let output = try await runRemoteGit(
+            operation: .worktreeCreate,
+            command: command,
+            hostProfile: hostProfile,
+            timeoutSeconds: remoteGitCreateTimeoutSeconds
+          )
+          for line in output.stderr.split(whereSeparator: \.isNewline) {
+            continuation.yield(.outputLine(ShellStreamLine(source: .stderr, text: String(line))))
+          }
+          for line in output.stdout.split(whereSeparator: \.isNewline) {
+            continuation.yield(.outputLine(ShellStreamLine(source: .stdout, text: String(line))))
+          }
+          let detail = Self.relativePath(from: remoteRepositoryRootURL, to: worktreeURL)
+          continuation.yield(
+            .finished(
+              Worktree(
+                id: worktreePath,
+                name: name,
+                detail: detail,
+                workingDirectory: worktreeURL,
+                repositoryRootURL: repositoryRootURL,
+                endpoint: endpoint
+              )
+            )
+          )
+          continuation.finish()
         } catch {
           continuation.finish(throwing: error)
         }
@@ -531,6 +701,34 @@ struct GitClient {
   }
 
   nonisolated func removeWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {
+    try await removeWorktree(
+      worktree,
+      deleteBranch: deleteBranch,
+      endpoint: .local,
+      hostProfile: nil
+    )
+  }
+
+  nonisolated func removeWorktree(
+    _ worktree: Worktree,
+    deleteBranch: Bool,
+    endpoint: RepositoryEndpoint,
+    hostProfile: SSHHostProfile?
+  ) async throws -> URL {
+    switch endpoint {
+    case .local:
+      return try await localRemoveWorktree(worktree, deleteBranch: deleteBranch)
+    case .remote(_, let remotePath):
+      return try await remoteRemoveWorktree(
+        worktree,
+        deleteBranch: deleteBranch,
+        remotePath: remotePath,
+        hostProfile: hostProfile
+      )
+    }
+  }
+
+  nonisolated private func localRemoveWorktree(_ worktree: Worktree, deleteBranch: Bool) async throws -> URL {
     let rootPath = worktree.repositoryRootURL.path(percentEncoded: false)
     let worktreeURL = worktree.workingDirectory.standardizedFileURL
     let worktreePath = worktreeURL.path(percentEncoded: false)
@@ -595,6 +793,53 @@ struct GitClient {
       .count
   }
 
+  nonisolated private func worktrees(
+    from entries: [GitWtWorktreeEntry],
+    repositoryRootURL: URL,
+    detailBaseURL: URL,
+    endpoint: RepositoryEndpoint,
+    includeCreationDates: Bool
+  ) -> [Worktree] {
+    let worktreeEntries = entries.enumerated().map { index, entry in
+      let worktreeURL = URL(fileURLWithPath: entry.path).standardizedFileURL
+      let name = entry.branch.isEmpty ? worktreeURL.lastPathComponent : entry.branch
+      let detail = Self.relativePath(from: detailBaseURL, to: worktreeURL)
+      let id = worktreeURL.path(percentEncoded: false)
+      let createdAt: Date?
+      if includeCreationDates {
+        let resourceValues = try? worktreeURL.resourceValues(forKeys: [
+          .creationDateKey, .contentModificationDateKey,
+        ])
+        createdAt = resourceValues?.creationDate ?? resourceValues?.contentModificationDate
+      } else {
+        createdAt = nil
+      }
+      let sortDate = createdAt ?? .distantPast
+      return WorktreeSortEntry(
+        worktree: Worktree(
+          id: id,
+          name: name,
+          detail: detail,
+          workingDirectory: worktreeURL,
+          repositoryRootURL: repositoryRootURL,
+          endpoint: endpoint,
+          createdAt: createdAt
+        ),
+        createdAt: sortDate,
+        index: index
+      )
+    }
+    return
+      worktreeEntries
+      .sorted { lhs, rhs in
+        if lhs.createdAt != rhs.createdAt {
+          return lhs.createdAt > rhs.createdAt
+        }
+        return lhs.index < rhs.index
+      }
+      .map(\.worktree)
+  }
+
   nonisolated private func lastNonEmptyLine(in output: String) -> String? {
     output
       .split(whereSeparator: \.isNewline)
@@ -620,6 +865,63 @@ struct GitClient {
         }
         return localRef.isEmpty ? nil : localRef
       }
+  }
+
+  nonisolated private func parseRemoteWorktreeEntries(_ output: String) -> [GitWtWorktreeEntry] {
+    var entries: [GitWtWorktreeEntry] = []
+    var currentPath: String?
+    var currentBranch = ""
+    var currentHead = ""
+    var currentIsBare = false
+
+    func commitCurrentEntry() {
+      guard let currentPath else { return }
+      entries.append(
+        GitWtWorktreeEntry(
+          branch: currentBranch,
+          path: currentPath,
+          head: currentHead,
+          isBare: currentIsBare
+        )
+      )
+    }
+
+    for line in output.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+      let value = String(line)
+      if value.isEmpty {
+        commitCurrentEntry()
+        currentPath = nil
+        currentBranch = ""
+        currentHead = ""
+        currentIsBare = false
+        continue
+      }
+      if value.hasPrefix("worktree ") {
+        if currentPath != nil {
+          commitCurrentEntry()
+          currentBranch = ""
+          currentHead = ""
+          currentIsBare = false
+        }
+        currentPath = String(value.dropFirst("worktree ".count))
+        continue
+      }
+      if value.hasPrefix("branch ") {
+        let ref = String(value.dropFirst("branch ".count))
+        currentBranch = ref.replacing("refs/heads/", with: "")
+        continue
+      }
+      if value.hasPrefix("HEAD ") {
+        currentHead = String(value.dropFirst("HEAD ".count))
+        continue
+      }
+      if value == "bare" {
+        currentIsBare = true
+      }
+    }
+
+    commitCurrentEntry()
+    return entries
   }
 
   nonisolated private func deduplicated(_ values: [String]) -> [String] {
@@ -685,6 +987,59 @@ struct GitClient {
     } catch {
       throw wrapShellError(error, operation: operation, command: command)
     }
+  }
+
+  nonisolated private func runRemoteGit(
+    operation: GitOperation,
+    command: String,
+    hostProfile: SSHHostProfile?,
+    timeoutSeconds: Int
+  ) async throws -> RemoteExecutionClient.Output {
+    guard let hostProfile else {
+      throw GitClientError.commandFailed(command: command, message: "Missing SSH host profile")
+    }
+    let output: RemoteExecutionClient.Output
+    do {
+      output = try await remoteExecution.run(hostProfile, command, timeoutSeconds)
+    } catch {
+      gitLogger.warning("git command failed operation=\(operation.rawValue) exit_code=-1")
+      throw GitClientError.commandFailed(command: command, message: error.localizedDescription)
+    }
+    guard output.exitCode == 0 else {
+      throw wrapRemoteExecutionFailure(output, operation: operation, command: command)
+    }
+    return output
+  }
+
+  nonisolated private func buildRemoteGitCommand(
+    remotePath: String,
+    arguments: [String]
+  ) -> String {
+    (["git", "-C", SSHCommandSupport.shellEscape(remotePath)] + arguments.map(Self.remoteShellToken))
+      .joined(separator: " ")
+  }
+
+  nonisolated private func buildRemoteCreateWorktreeCommand(
+    remotePath: String,
+    worktreePath: String,
+    name: String,
+    baseRef: String
+  ) -> String {
+    var arguments = [
+      "worktree",
+      "add",
+      "-b",
+      name,
+      worktreePath,
+    ]
+    if !baseRef.isEmpty {
+      arguments.append(baseRef)
+    }
+    let gitCommand = buildRemoteGitCommand(
+      remotePath: remotePath,
+      arguments: arguments
+    )
+    return "\(gitCommand) && printf '%s\\n' \(SSHCommandSupport.shellEscape(worktreePath))"
   }
 
   nonisolated private func runWtList(repoRoot: URL) async throws -> String {
@@ -770,6 +1125,16 @@ struct GitClient {
     return path.deletingLastPathComponent()
   }
 
+  nonisolated private static func remoteShellToken(_ value: String) -> String {
+    let safeCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:")
+    if !value.isEmpty,
+      value.rangeOfCharacter(from: safeCharacters.inverted) == nil
+    {
+      return value
+    }
+    return SSHCommandSupport.shellEscape(value)
+  }
+
   nonisolated private func runGitWorktreeRemove(
     rootPath: String,
     worktreePath: String
@@ -785,6 +1150,38 @@ struct GitClient {
         worktreePath,
       ]
     )
+  }
+
+  nonisolated private func remoteRemoveWorktree(
+    _ worktree: Worktree,
+    deleteBranch: Bool,
+    remotePath: String,
+    hostProfile: SSHHostProfile?
+  ) async throws -> URL {
+    let worktreePath = worktree.workingDirectory.standardizedFileURL.path(percentEncoded: false)
+    let removeCommand = buildRemoteGitCommand(
+      remotePath: remotePath,
+      arguments: ["worktree", "remove", "--force", worktreePath]
+    )
+    _ = try await runRemoteGit(
+      operation: .worktreeRemove,
+      command: removeCommand,
+      hostProfile: hostProfile,
+      timeoutSeconds: remoteGitTimeoutSeconds
+    )
+    if deleteBranch, !worktree.name.isEmpty {
+      let deleteBranchCommand = buildRemoteGitCommand(
+        remotePath: remotePath,
+        arguments: ["branch", "-D", worktree.name]
+      )
+      _ = try? await runRemoteGit(
+        operation: .branchDelete,
+        command: deleteBranchCommand,
+        hostProfile: hostProfile,
+        timeoutSeconds: remoteGitTimeoutSeconds
+      )
+    }
+    return worktree.workingDirectory
   }
 
   nonisolated private static func relocateWorktreeDirectory(_ worktreeURL: URL) -> URL? {
@@ -868,6 +1265,43 @@ struct GitClient {
 }
 
 private nonisolated let gitLogger = SupaLogger("Git")
+private nonisolated let remoteGitTimeoutSeconds = 30
+private nonisolated let remoteGitCreateTimeoutSeconds = 120
+
+nonisolated private func makeDefaultRemoteExecutionClient(shell: ShellClient) -> RemoteExecutionClient {
+  RemoteExecutionClient(
+    run: { profile, command, timeoutSeconds in
+      let endpointKey = [profile.host, profile.user, profile.port.map(String.init) ?? "22"]
+        .joined(separator: "|")
+      let controlPath = SSHCommandSupport.controlSocketPath(endpointKey: endpointKey)
+
+      var options = SSHCommandSupport.connectivityOptions(includeBatchMode: profile.authMethod != .password)
+      options += ["-o", "ControlPath=\(controlPath)"]
+
+      if let port = profile.port {
+        options += ["-p", "\(port)"]
+      }
+
+      let target = profile.user.isEmpty ? profile.host : "\(profile.user)@\(profile.host)"
+      let arguments = options + [target, command]
+      do {
+        let output = try await shell.runWithTimeout(
+          URL(fileURLWithPath: "/usr/bin/ssh"),
+          arguments,
+          nil,
+          timeoutSeconds: timeoutSeconds
+        )
+        return RemoteExecutionClient.Output(stdout: output.stdout, stderr: output.stderr, exitCode: output.exitCode)
+      } catch let shellError as ShellClientError {
+        return RemoteExecutionClient.Output(
+          stdout: shellError.stdout,
+          stderr: shellError.stderr,
+          exitCode: shellError.exitCode
+        )
+      }
+    }
+  )
+}
 
 nonisolated private func shouldFallbackToLoginShell(_ error: Error) -> Bool {
   guard let shellError = error as? ShellClientError else {
@@ -908,6 +1342,35 @@ nonisolated private func wrapShellError(
       attributes: [
         "operation": operation.rawValue,
         "exit_code": Int(exitCode),
+      ]
+    )
+  #endif
+  return gitError
+}
+
+nonisolated private func wrapRemoteExecutionFailure(
+  _ output: RemoteExecutionClient.Output,
+  operation: GitOperation,
+  command: String
+) -> GitClientError {
+  var messageParts: [String] = []
+  if !output.stdout.isEmpty {
+    messageParts.append("stdout:\n\(output.stdout)")
+  }
+  if !output.stderr.isEmpty {
+    messageParts.append("stderr:\n\(output.stderr)")
+  }
+  let gitError = GitClientError.commandFailed(
+    command: command,
+    message: messageParts.joined(separator: "\n")
+  )
+  gitLogger.warning("git command failed operation=\(operation.rawValue) exit_code=\(output.exitCode)")
+  #if !DEBUG
+    SentrySDK.logger.error(
+      "git command failed",
+      attributes: [
+        "operation": operation.rawValue,
+        "exit_code": Int(output.exitCode),
       ]
     )
   #endif

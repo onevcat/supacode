@@ -35,6 +35,8 @@ struct SettingsView: View {
             .tag(SettingsSection.notifications)
           Label("Worktree", systemImage: "archivebox")
             .tag(SettingsSection.worktree)
+          Label("SSH Hosts", systemImage: "network")
+            .tag(SettingsSection.sshHosts)
           Label("Updates", systemImage: "arrow.down.circle")
             .tag(SettingsSection.updates)
           Label("Advanced", systemImage: "gearshape.2")
@@ -73,6 +75,12 @@ struct SettingsView: View {
           WorktreeSettingsView(store: settingsStore)
             .navigationTitle("Worktree")
             .navigationSubtitle("Archive behavior")
+        }
+      case .sshHosts:
+        SettingsDetailView {
+          SSHHostsSettingsView(store: settingsStore.scope(state: \.sshHosts, action: \.sshHosts))
+            .navigationTitle("SSH Hosts")
+            .navigationSubtitle("Shared host profiles for remote repositories")
         }
       case .updates:
         SettingsDetailView {

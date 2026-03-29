@@ -76,6 +76,14 @@ struct ContentView: View {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
     }
+    .sheet(store: repositoriesStore.scope(state: \.$remoteConnect, action: \.remoteConnect)) {
+      remoteConnectStore in
+      RemoteConnectSheet(store: remoteConnectStore)
+    }
+    .sheet(store: repositoriesStore.scope(state: \.$remoteSessionPicker, action: \.remoteSessionPicker)) {
+      remoteSessionPickerStore in
+      RemoteSessionPickerSheet(store: remoteSessionPickerStore)
+    }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(
         script: runScriptDraft,

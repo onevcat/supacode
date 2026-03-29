@@ -115,6 +115,15 @@ struct SettingsFilePersistenceTests {
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
   }
+
+  @Test func settingsFileDecodesWithoutSSHHostsKey() throws {
+    let legacyJSON =
+      #"{"global":{"appearanceMode":"dark","updatesAutomaticallyCheckForUpdates":true,"#
+      + #""updatesAutomaticallyDownloadUpdates":false},"repositories":{},"repositoryRoots":[]}"#
+    let data = Data(legacyJSON.utf8)
+    let decoded = try JSONDecoder().decode(SettingsFile.self, from: data)
+    #expect(decoded.sshHostProfiles.isEmpty)
+  }
 }
 
 nonisolated private final class MutableTestStorage: @unchecked Sendable {
