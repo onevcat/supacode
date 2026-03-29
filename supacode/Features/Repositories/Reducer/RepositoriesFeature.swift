@@ -1936,14 +1936,17 @@ struct RepositoriesFeature {
         state.repositoryRoots.removeAll {
           $0.standardizedFileURL.path(percentEncoded: false) == repositoryID
         }
-        let remainingRoots = state.repositoryRoots
+        let fallbackEntries = fallbackRepositoryEntries(from: state)
+        let preservedEndpoint = state.repositories[id: repositoryID]?.endpoint
         return .run { send in
           let loadedEntries = await loadPersistedRepositoryEntries(
-            fallbackEntries: remainingRoots.map {
-              PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git)
-            }
+            fallbackEntries: fallbackEntries
           )
-          let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+          let remainingEntries = Self.removeFailedRepositoryEntries(
+            loadedEntries,
+            repositoryID: repositoryID,
+            preservedEndpoint: preservedEndpoint
+          )
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
           let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
           let (repositories, failures) = await loadRepositoriesData(remainingEntries)
@@ -1981,16 +1984,19 @@ struct RepositoriesFeature {
           state.shouldSelectFirstAfterReload = true
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
-        let remainingRoots = state.repositoryRoots
+        let fallbackEntries = fallbackRepositoryEntries(from: state)
+        let removedEndpoint = state.repositories[id: repositoryID]?.endpoint
         return .merge(
           .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
           .run { send in
             let loadedEntries = await loadPersistedRepositoryEntries(
-              fallbackEntries: remainingRoots.map {
-                PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git)
-              }
+              fallbackEntries: fallbackEntries
             )
-            let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+            let remainingEntries = Self.removeRepositoryEntries(
+              loadedEntries,
+              repositoryID: repositoryID,
+              endpoint: removedEndpoint
+            )
             await repositoryPersistence.saveRepositoryEntries(remainingEntries)
             let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
             let (repositories, failures) = await loadRepositoriesData(remainingEntries)
@@ -2809,6 +2815,57 @@ struct RepositoriesFeature {
       resolvedEntries = RepositoryEntryNormalizer.normalize(fallback)
     }
     return await upgradedRepositoryEntriesIfNeeded(resolvedEntries)
+  }
+
+  private func fallbackRepositoryEntries(from state: State) -> [PersistedRepositoryEntry] {
+    state.repositories.map { repository in
+      PersistedRepositoryEntry(
+        path: repository.rootURL.path(percentEncoded: false),
+        kind: repository.kind,
+        endpoint: repository.endpoint
+      )
+    }
+  }
+
+  nonisolated static func removeFailedRepositoryEntries(
+    _ entries: [PersistedRepositoryEntry],
+    repositoryID: Repository.ID,
+    preservedEndpoint: RepositoryEndpoint?
+  ) -> [PersistedRepositoryEntry] {
+    let normalizedRepositoryID = Self.normalizedRepositoryPath(repositoryID)
+    guard let preservedEndpoint else {
+      return entries.filter { Self.normalizedRepositoryPath($0.path) != normalizedRepositoryID }
+    }
+    return entries.filter { entry in
+      let matchesRepository = Self.normalizedRepositoryPath(entry.path) == normalizedRepositoryID
+      guard matchesRepository else {
+        return true
+      }
+      return entry.endpoint == preservedEndpoint
+    }
+  }
+
+  nonisolated static func removeRepositoryEntries(
+    _ entries: [PersistedRepositoryEntry],
+    repositoryID: Repository.ID,
+    endpoint: RepositoryEndpoint?
+  ) -> [PersistedRepositoryEntry] {
+    let normalizedRepositoryID = Self.normalizedRepositoryPath(repositoryID)
+    guard let endpoint,
+      let matchIndex = entries.firstIndex(where: { entry in
+        Self.normalizedRepositoryPath(entry.path) == normalizedRepositoryID
+          && entry.endpoint == endpoint
+      })
+    else {
+      return entries.filter { Self.normalizedRepositoryPath($0.path) != normalizedRepositoryID }
+    }
+    var remainingEntries = entries
+    remainingEntries.remove(at: matchIndex)
+    return remainingEntries
+  }
+
+  private nonisolated static func normalizedRepositoryPath(_ path: String) -> String {
+    URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
   }
 
   private func upgradedRepositoryEntriesIfNeeded(

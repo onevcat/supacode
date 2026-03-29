@@ -336,6 +336,158 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func removeFailedRepositoryPreservesLoadedEndpointVariantForSamePath() async {
+    let repoRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2", remotePath: repoRoot)
+    let remainingEntries = RepositoriesFeature.removeFailedRepositoryEntries(
+      [
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+      ],
+      repositoryID: repoRoot,
+      preservedEndpoint: endpointA
+    )
+
+    #expect(remainingEntries == [PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA)])
+  }
+
+  @Test(.dependencies) func repositoryRemovedPreservesOtherEndpointVariantForSamePath() async {
+    let repoRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2", remotePath: repoRoot)
+    let worktreeA = makeWorktree(
+      id: repoRoot,
+      name: "main-a",
+      repoRoot: repoRoot,
+      endpoint: endpointA
+    )
+    let worktreeB = makeWorktree(
+      id: repoRoot,
+      name: "main-b",
+      repoRoot: repoRoot,
+      endpoint: endpointB
+    )
+    let repositoryA = makeRepository(
+      id: repoRoot,
+      name: URL(fileURLWithPath: repoRoot).lastPathComponent,
+      endpoint: endpointA,
+      worktrees: [worktreeA]
+    )
+    let repositoryB = makeRepository(
+      id: repoRoot,
+      name: URL(fileURLWithPath: repoRoot).lastPathComponent,
+      endpoint: endpointB,
+      worktrees: [worktreeB]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var state = RepositoriesFeature.State()
+    state.repositories = [repositoryA]
+    state.repositoryRoots = [
+      URL(fileURLWithPath: repoRoot),
+      URL(fileURLWithPath: repoRoot),
+    ]
+    state.removingRepositoryIDs = [repoRoot]
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [
+          PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+          PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+        ]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { _ in
+        Issue.record("Expected remote repository reload not to use local git client")
+        return []
+      }
+      $0.gitClient.worktreesForEndpoint = { _, endpoint, _ in
+        #expect(endpoint == endpointB)
+        return [worktreeB]
+      }
+    }
+
+    await store.send(.repositoryRemoved(repoRoot, selectionWasRemoved: false)) {
+      $0.removingRepositoryIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repositoryB]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB)]])
+  }
+
+  @Test(.dependencies) func repositoryRemovedUsesEndpointAwareFallbackEntriesWhenPersistenceIsEmpty() async {
+    let localRoot = "/tmp/\(UUID().uuidString)-local"
+    let remoteRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: remoteRoot)
+    let localWorktree = makeWorktree(id: localRoot, name: "main", repoRoot: localRoot)
+    let remoteWorktree = makeWorktree(
+      id: remoteRoot,
+      name: "main",
+      repoRoot: remoteRoot,
+      endpoint: endpoint
+    )
+    let localRepository = makeRepository(
+      id: localRoot,
+      name: URL(fileURLWithPath: localRoot).lastPathComponent,
+      worktrees: [localWorktree]
+    )
+    let remoteRepository = makeRepository(
+      id: remoteRoot,
+      name: URL(fileURLWithPath: remoteRoot).lastPathComponent,
+      endpoint: endpoint,
+      worktrees: [remoteWorktree]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var state = makeState(repositories: [localRepository, remoteRepository])
+    state.removingRepositoryIDs = [localRoot]
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.loadRoots = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { root in
+        Issue.record("Expected fallback remote reload not to use local git client: \(root.path(percentEncoded: false))")
+        return []
+      }
+      $0.gitClient.worktreesForEndpoint = { root, requestedEndpoint, _ in
+        #expect(root.path(percentEncoded: false) == remoteRoot)
+        #expect(requestedEndpoint == endpoint)
+        return [remoteWorktree]
+      }
+    }
+
+    await store.send(.repositoryRemoved(localRoot, selectionWasRemoved: false)) {
+      $0.removingRepositoryIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [remoteRepository]
+      $0.repositoryRoots = [URL(fileURLWithPath: remoteRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: remoteRoot, kind: .git, endpoint: endpoint)]])
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
