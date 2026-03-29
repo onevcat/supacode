@@ -1,6 +1,10 @@
 import ComposableArchitecture
 import Foundation
 
+private enum CancelID {
+  static let browseDirectoryListing = "remote-connect.browse-directory-listing"
+}
+
 @Reducer
 struct RemoteConnectFeature {
   enum Step: Equatable {
@@ -39,6 +43,7 @@ struct RemoteConnectFeature {
     var validationMessage: String?
     var isSubmitting = false
     var directoryBrowser: DirectoryBrowserState?
+    var activeBrowseRequestID: UUID?
 
     init(savedHostProfiles: [SSHHostProfile]) {
       self.savedHostProfiles = savedHostProfiles.sorted {
@@ -69,8 +74,8 @@ struct RemoteConnectFeature {
     case backButtonTapped
     case cancelButtonTapped
     case browseRemoteFoldersButtonTapped
-    case remoteDirectoryListingLoaded(DirectoryListing)
-    case remoteDirectoryListingFailed(String)
+    case remoteDirectoryListingLoaded(UUID, DirectoryListing)
+    case remoteDirectoryListingFailed(UUID, String)
     case directoryBrowserEntryTapped(String)
     case directoryBrowserUpButtonTapped
     case directoryBrowserChooseCurrentFolderButtonTapped
@@ -126,9 +131,9 @@ struct RemoteConnectFeature {
 
       case .backButtonTapped:
         state.step = .host
-        state.directoryBrowser = nil
+        clearBrowseState(in: &state)
         state.validationMessage = nil
-        return .none
+        return .cancel(id: CancelID.browseDirectoryListing)
 
       case .cancelButtonTapped:
         return .send(.delegate(.cancel))
@@ -149,52 +154,26 @@ struct RemoteConnectFeature {
         }
 
         let profile = makeConnectionProfile(from: hostFields)
+        let requestID = uuid()
         state.validationMessage = nil
+        state.activeBrowseRequestID = requestID
         state.directoryBrowser = DirectoryBrowserState(
           currentPath: state.remotePath.trimmingCharacters(in: .whitespacesAndNewlines),
           childDirectories: [],
           isLoading: true,
           errorMessage: nil
         )
-        return .run { send in
-          let output = try await remoteExecutionClient.run(
-            profile,
-            listDirectoriesCommand(for: requestedPath),
-            remoteCommandTimeoutSeconds
-          )
-          guard output.exitCode == 0 else {
-            await send(.remoteDirectoryListingFailed(directoryListingFailureMessage(for: output)))
-            return
-          }
-          let lines = output.stdout
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-          guard let currentPath = lines.first else {
-            await send(.remoteDirectoryListingFailed("Couldn't load remote folders."))
-            return
-          }
-          let childDirectories = Array(lines.dropFirst())
-          await send(
-            .remoteDirectoryListingLoaded(
-              DirectoryListing(
-                currentPath: currentPath,
-                childDirectories: childDirectories
-              )
-            )
-          )
-        } catch: { error, send in
-          await send(
-            .remoteDirectoryListingFailed(
-              genericFailureMessage(
-                prefix: "Couldn't browse remote folders.",
-                detail: error.localizedDescription
-              )
-            )
-          )
-        }
+        return browseDirectoryEffect(
+          requestID: requestID,
+          profile: profile,
+          requestedPath: requestedPath
+        )
 
-      case .remoteDirectoryListingLoaded(let listing):
+      case .remoteDirectoryListingLoaded(let requestID, let listing):
+        guard state.activeBrowseRequestID == requestID, state.directoryBrowser != nil else {
+          return .none
+        }
+        state.activeBrowseRequestID = nil
         state.directoryBrowser = DirectoryBrowserState(
           currentPath: listing.currentPath,
           childDirectories: listing.childDirectories,
@@ -203,7 +182,11 @@ struct RemoteConnectFeature {
         )
         return .none
 
-      case .remoteDirectoryListingFailed(let message):
+      case .remoteDirectoryListingFailed(let requestID, let message):
+        guard state.activeBrowseRequestID == requestID else {
+          return .none
+        }
+        state.activeBrowseRequestID = nil
         if state.directoryBrowser != nil {
           state.directoryBrowser?.isLoading = false
           state.directoryBrowser?.errorMessage = message
@@ -223,42 +206,13 @@ struct RemoteConnectFeature {
           return .none
         }
         let profile = makeConnectionProfile(from: hostFields)
-        return .run { send in
-          let output = try await remoteExecutionClient.run(
-            profile,
-            listDirectoriesCommand(for: .absolute(path)),
-            remoteCommandTimeoutSeconds
-          )
-          guard output.exitCode == 0 else {
-            await send(.remoteDirectoryListingFailed(directoryListingFailureMessage(for: output)))
-            return
-          }
-          let lines = output.stdout
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-          guard let currentPath = lines.first else {
-            await send(.remoteDirectoryListingFailed("Couldn't load remote folders."))
-            return
-          }
-          await send(
-            .remoteDirectoryListingLoaded(
-              DirectoryListing(
-                currentPath: currentPath,
-                childDirectories: Array(lines.dropFirst())
-              )
-            )
-          )
-        } catch: { error, send in
-          await send(
-            .remoteDirectoryListingFailed(
-              genericFailureMessage(
-                prefix: "Couldn't browse remote folders.",
-                detail: error.localizedDescription
-              )
-            )
-          )
-        }
+        let requestID = uuid()
+        state.activeBrowseRequestID = requestID
+        return browseDirectoryEffect(
+          requestID: requestID,
+          profile: profile,
+          requestedPath: .absolute(path)
+        )
 
       case .directoryBrowserUpButtonTapped:
         guard let directoryBrowser = state.directoryBrowser else {
@@ -275,14 +229,17 @@ struct RemoteConnectFeature {
           return .none
         }
         state.remotePath = currentPath
-        state.directoryBrowser = nil
-        return .none
+        clearBrowseState(in: &state)
+        return .cancel(id: CancelID.browseDirectoryListing)
 
       case .directoryBrowserDismissed:
-        state.directoryBrowser = nil
-        return .none
+        clearBrowseState(in: &state)
+        return .cancel(id: CancelID.browseDirectoryListing)
 
       case .connectButtonTapped:
+        guard !state.isSubmitting else {
+          return .none
+        }
         guard let hostFields = validateHostFields(in: &state) else {
           return .none
         }
@@ -357,6 +314,66 @@ struct RemoteConnectFeature {
         return .none
       }
     }
+  }
+
+  private func browseDirectoryEffect(
+    requestID: UUID,
+    profile: SSHHostProfile,
+    requestedPath: RemotePathRequest
+  ) -> Effect<Action> {
+    .run { send in
+      let output = try await remoteExecutionClient.run(
+        profile,
+        listDirectoriesCommand(for: requestedPath),
+        remoteCommandTimeoutSeconds
+      )
+      guard output.exitCode == 0 else {
+        await send(
+          .remoteDirectoryListingFailed(
+            requestID,
+            directoryListingFailureMessage(for: output)
+          )
+        )
+        return
+      }
+      let lines = output.stdout
+        .split(whereSeparator: \.isNewline)
+        .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+      guard let currentPath = lines.first else {
+        await send(.remoteDirectoryListingFailed(requestID, "Couldn't load remote folders."))
+        return
+      }
+      let childDirectories = Array(lines.dropFirst())
+      await send(
+        .remoteDirectoryListingLoaded(
+          requestID,
+          DirectoryListing(
+            currentPath: currentPath,
+            childDirectories: childDirectories
+          )
+        )
+      )
+    } catch: { error, send in
+      guard !(error is CancellationError) else {
+        return
+      }
+      await send(
+        .remoteDirectoryListingFailed(
+          requestID,
+          genericFailureMessage(
+            prefix: "Couldn't browse remote folders.",
+            detail: error.localizedDescription
+          )
+        )
+      )
+    }
+    .cancellable(id: CancelID.browseDirectoryListing, cancelInFlight: true)
+  }
+
+  private func clearBrowseState(in state: inout State) {
+    state.directoryBrowser = nil
+    state.activeBrowseRequestID = nil
   }
 
   private func validateHostFields(in state: inout State) -> HostFields? {

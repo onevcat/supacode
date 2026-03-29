@@ -176,6 +176,9 @@ struct RemoteConnectSheet: View {
             .textFieldStyle(.roundedBorder)
             .focused($focusedField, equals: .remotePath)
             .onSubmit {
+              guard !store.isSubmitting else {
+                return
+              }
               store.send(.connectButtonTapped)
             }
           Button("Browse Remote Folders") {

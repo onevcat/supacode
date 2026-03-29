@@ -59,6 +59,7 @@ struct RemoteConnectFeatureTests {
     let store = TestStore(initialState: state) {
       RemoteConnectFeature()
     } withDependencies: {
+      $0.uuid = .incrementing
       $0.remoteExecutionClient.run = { _, command, _ in
         commands.withValue { $0.append(command) }
         if command.contains("/Users/deploy/src") {
@@ -76,7 +77,11 @@ struct RemoteConnectFeatureTests {
       }
     }
 
+    let rootRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+    let childRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
     await store.send(.browseRemoteFoldersButtonTapped) {
+      $0.activeBrowseRequestID = rootRequestID
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "",
         childDirectories: [],
@@ -86,6 +91,7 @@ struct RemoteConnectFeatureTests {
     }
     await store.receive(
       .remoteDirectoryListingLoaded(
+        rootRequestID,
         RemoteConnectFeature.DirectoryListing(
           currentPath: "/Users/deploy",
           childDirectories: [
@@ -95,6 +101,7 @@ struct RemoteConnectFeatureTests {
         )
       )
     ) {
+      $0.activeBrowseRequestID = nil
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "/Users/deploy",
         childDirectories: [
@@ -107,11 +114,13 @@ struct RemoteConnectFeatureTests {
     }
 
     await store.send(.directoryBrowserEntryTapped("/Users/deploy/src")) {
+      $0.activeBrowseRequestID = childRequestID
       $0.directoryBrowser?.isLoading = true
       $0.directoryBrowser?.errorMessage = nil
     }
     await store.receive(
       .remoteDirectoryListingLoaded(
+        childRequestID,
         RemoteConnectFeature.DirectoryListing(
           currentPath: "/Users/deploy/src",
           childDirectories: [
@@ -120,6 +129,7 @@ struct RemoteConnectFeatureTests {
         )
       )
     ) {
+      $0.activeBrowseRequestID = nil
       $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
         currentPath: "/Users/deploy/src",
         childDirectories: [
@@ -133,6 +143,7 @@ struct RemoteConnectFeatureTests {
     await store.send(.directoryBrowserChooseCurrentFolderButtonTapped) {
       $0.remotePath = "/Users/deploy/src"
       $0.directoryBrowser = nil
+      $0.activeBrowseRequestID = nil
     }
 
     let recordedCommands = commands.value
@@ -199,5 +210,218 @@ struct RemoteConnectFeatureTests {
       $0.isSubmitting = false
     }
     await store.receive(.delegate(.completed(expectedSubmission)))
+  }
+
+  @Test func repeatedConnectButtonTapWhileSubmittingIsIgnored() async {
+    let gate = AsyncGate()
+    let runCount = LockIsolated(0)
+    let now = Date(timeIntervalSince1970: 30)
+    let newProfileID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!.uuidString
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+    state.remotePath = "/srv/repo"
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(now)
+      $0.uuid = .constant(UUID(uuidString: newProfileID)!)
+      $0.remoteExecutionClient.run = { _, _, _ in
+        runCount.withValue { $0 += 1 }
+        await gate.wait()
+        return RemoteExecutionClient.Output(
+          stdout: "/srv/repo\n",
+          stderr: "",
+          exitCode: 0
+        )
+      }
+    }
+
+    await store.send(.connectButtonTapped) {
+      $0.isSubmitting = true
+      $0.validationMessage = nil
+    }
+    await store.send(.connectButtonTapped)
+
+    #expect(runCount.value == 1)
+
+    await gate.resume()
+
+    let expectedSubmission = RemoteConnectFeature.Submission(
+      hostProfile: SSHHostProfile(
+        id: newProfileID,
+        displayName: "example.com",
+        host: "example.com",
+        user: "deploy",
+        authMethod: .publicKey,
+        createdAt: now,
+        updatedAt: now
+      ),
+      remotePath: "/srv/repo"
+    )
+
+    await store.receive(.remoteRepositoryValidated(expectedSubmission)) {
+      $0.remotePath = "/srv/repo"
+      $0.isSubmitting = false
+    }
+    await store.receive(.delegate(.completed(expectedSubmission)))
+  }
+
+  @Test func staleBrowseResponseIsIgnoredAfterDismiss() async {
+    let staleRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let activeRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+    state.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
+      currentPath: "/Users/deploy",
+      childDirectories: [],
+      isLoading: true,
+      errorMessage: nil
+    )
+    state.activeBrowseRequestID = staleRequestID
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    }
+
+    await store.send(.directoryBrowserDismissed) {
+      $0.directoryBrowser = nil
+      $0.activeBrowseRequestID = nil
+    }
+    await store.send(
+      .remoteDirectoryListingLoaded(
+        activeRequestID,
+        RemoteConnectFeature.DirectoryListing(
+          currentPath: "/tmp",
+          childDirectories: ["/tmp/repo"]
+        )
+      )
+    )
+  }
+
+  @Test func staleBrowseResponseIsIgnoredAfterBack() async {
+    let activeRequestID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+    state.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
+      currentPath: "/Users/deploy",
+      childDirectories: [],
+      isLoading: true,
+      errorMessage: nil
+    )
+    state.activeBrowseRequestID = activeRequestID
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    }
+
+    await store.send(.backButtonTapped) {
+      $0.step = .host
+      $0.directoryBrowser = nil
+      $0.activeBrowseRequestID = nil
+      $0.validationMessage = nil
+    }
+    await store.send(
+      .remoteDirectoryListingFailed(
+        activeRequestID,
+        "Couldn't browse remote folders."
+      )
+    )
+  }
+
+  @Test func browseRemoteFoldersFailureMapsMissingDirectoryToFriendlyMessage() async {
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.remoteExecutionClient.run = { _, _, _ in
+        RemoteExecutionClient.Output(
+          stdout: "",
+          stderr: "__PROWL_REMOTE_CONNECT__:missing-directory\n",
+          exitCode: 20
+        )
+      }
+    }
+
+    let requestID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    await store.send(.browseRemoteFoldersButtonTapped) {
+      $0.activeBrowseRequestID = requestID
+      $0.directoryBrowser = RemoteConnectFeature.DirectoryBrowserState(
+        currentPath: "",
+        childDirectories: [],
+        isLoading: true,
+        errorMessage: nil
+      )
+    }
+    await store.receive(
+      .remoteDirectoryListingFailed(
+        requestID,
+        "The remote folder couldn't be opened."
+      )
+    ) {
+      $0.activeBrowseRequestID = nil
+      $0.directoryBrowser?.isLoading = false
+      $0.directoryBrowser?.errorMessage = "The remote folder couldn't be opened."
+    }
+  }
+
+  @Test func connectValidationFailureMapsNotGitToFriendlyMessage() async {
+    var state = RemoteConnectFeature.State(savedHostProfiles: [])
+    state.step = .repository
+    state.host = "example.com"
+    state.user = "deploy"
+    state.remotePath = "/srv/not-a-repo"
+
+    let store = TestStore(initialState: state) {
+      RemoteConnectFeature()
+    } withDependencies: {
+      $0.date = .constant(Date(timeIntervalSince1970: 40))
+      $0.uuid = .incrementing
+      $0.remoteExecutionClient.run = { _, _, _ in
+        RemoteExecutionClient.Output(
+          stdout: "",
+          stderr: "__PROWL_REMOTE_CONNECT__:not-git\n",
+          exitCode: 21
+        )
+      }
+    }
+
+    await store.send(.connectButtonTapped) {
+      $0.isSubmitting = true
+      $0.validationMessage = nil
+    }
+    await store.receive(
+      .remoteRepositoryValidationFailed("The selected folder is not a Git repository.")
+    ) {
+      $0.isSubmitting = false
+      $0.validationMessage = "The selected folder is not a Git repository."
+    }
+  }
+}
+
+private actor AsyncGate {
+  private var continuation: CheckedContinuation<Void, Never>?
+
+  func wait() async {
+    await withCheckedContinuation { continuation in
+      self.continuation = continuation
+    }
+  }
+
+  func resume() {
+    continuation?.resume()
+    continuation = nil
   }
 }
