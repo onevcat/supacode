@@ -12,6 +12,7 @@ private enum CancelID {
   static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
   static let worktreePromptLoad = "repositories.worktreePromptLoad"
   static let worktreePromptValidation = "repositories.worktreePromptValidation"
+  static let remoteTmuxSessionsLoad = "repositories.remoteTmuxSessionsLoad"
   static func archiveScript(_ worktreeID: Worktree.ID) -> String {
     "repositories.archiveScript.\(worktreeID)"
   }
@@ -24,6 +25,7 @@ private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(1
 private nonisolated let worktreeCreationProgressLineLimit = 200
 private nonisolated let worktreeCreationProgressUpdateStride = 20
 private nonisolated let archiveScriptProgressLineLimit = 200
+private nonisolated let remoteTmuxSessionsTimeoutSeconds = 8
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -97,6 +99,7 @@ struct RepositoriesFeature {
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var remoteConnect: RemoteConnectFeature.State?
+    @Presents var remoteSessionPicker: RemoteSessionPickerFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -243,6 +246,9 @@ struct RepositoriesFeature {
     case openRepositorySettings(Repository.ID)
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
     case remoteConnect(PresentationAction<RemoteConnectFeature.Action>)
+    case remoteSessionsLoaded(worktreeID: Worktree.ID, sessions: [String])
+    case remoteSessionsLoadFailed(worktreeID: Worktree.ID, message: String)
+    case remoteSessionPicker(PresentationAction<RemoteSessionPickerFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -307,6 +313,7 @@ struct RepositoriesFeature {
   @Dependency(GithubCLIClient.self) private var githubCLI
   @Dependency(GithubIntegrationClient.self) private var githubIntegration
   @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(RemoteTmuxClient.self) private var remoteTmuxClient
   @Dependency(ShellClient.self) private var shellClient
   @Dependency(\.uuid) private var uuid
 
@@ -709,7 +716,79 @@ struct RepositoriesFeature {
           state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
         }
         let selectedWorktree = state.worktree(for: worktreeID)
-        return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+        state.remoteSessionPicker = nil
+        guard let selectedWorktree else {
+          return .merge(
+            .send(.delegate(.selectedWorktreeChanged(nil))),
+            .cancel(id: CancelID.remoteTmuxSessionsLoad)
+          )
+        }
+        guard case .remote = selectedWorktree.endpoint,
+          let hostProfile = sshHostProfile(for: selectedWorktree.endpoint)
+        else {
+          return .merge(
+            .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
+            .cancel(id: CancelID.remoteTmuxSessionsLoad)
+          )
+        }
+        let selectedWorktreeID = selectedWorktree.id
+        return .merge(
+          .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
+          .run { send in
+            do {
+              let sessions = try await remoteTmuxClient.listSessions(
+                hostProfile,
+                remoteTmuxSessionsTimeoutSeconds
+              )
+              await send(
+                .remoteSessionsLoaded(
+                  worktreeID: selectedWorktreeID,
+                  sessions: sessions
+                )
+              )
+            } catch {
+              await send(
+                .remoteSessionsLoadFailed(
+                  worktreeID: selectedWorktreeID,
+                  message: error.localizedDescription
+                )
+              )
+            }
+          }
+          .cancellable(id: CancelID.remoteTmuxSessionsLoad, cancelInFlight: true)
+        )
+
+      case .remoteSessionsLoaded(let worktreeID, let sessions):
+        guard state.selectedWorktreeID == worktreeID, !sessions.isEmpty,
+          let worktree = state.worktree(for: worktreeID)
+        else {
+          return .none
+        }
+        guard case .remote(_, let remotePath) = worktree.endpoint else {
+          return .none
+        }
+        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        let preferredSessionName =
+          repositorySettings.lastAttachedRemoteTmuxSessionName
+          ?? repositorySettings.defaultRemoteTmuxSessionName
+        state.remoteSessionPicker = RemoteSessionPickerFeature.State(
+          worktreeID: worktreeID,
+          repositoryRootURL: worktree.repositoryRootURL,
+          remotePath: remotePath,
+          sessions: sessions,
+          preferredSessionName: preferredSessionName,
+          suggestedManagedSessionName: repositorySettings.defaultRemoteTmuxSessionName
+        )
+        return .none
+
+      case .remoteSessionsLoadFailed(let worktreeID, let message):
+        guard state.selectedWorktreeID == worktreeID else {
+          return .none
+        }
+        SupaLogger("Repositories").warning(
+          "Remote tmux session listing failed for \(worktreeID): \(message)"
+        )
+        return .none
 
       case .selectNextWorktree:
         guard let id = state.worktreeID(byOffset: 1) else { return .none }
@@ -2804,6 +2883,29 @@ struct RepositoriesFeature {
       case .remoteConnect:
         return .none
 
+      case .remoteSessionPicker(.presented(.delegate(.cancel))):
+        state.remoteSessionPicker = nil
+        return .none
+
+      case .remoteSessionPicker(.presented(.delegate(.attachExisting(let sessionName)))):
+        persistLastAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: state.remoteSessionPicker
+        )
+        state.remoteSessionPicker = nil
+        return .none
+
+      case .remoteSessionPicker(.presented(.delegate(.createAndAttach(let sessionName)))):
+        persistLastAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: state.remoteSessionPicker
+        )
+        state.remoteSessionPicker = nil
+        return .none
+
+      case .remoteSessionPicker:
+        return .none
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
@@ -2820,6 +2922,9 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$remoteConnect, action: \.remoteConnect) {
       RemoteConnectFeature()
+    }
+    .ifLet(\.$remoteSessionPicker, action: \.remoteSessionPicker) {
+      RemoteSessionPickerFeature()
     }
   }
 
@@ -3327,6 +3432,23 @@ struct RepositoriesFeature {
     settingsFile.sshHostProfiles.append(profile)
     settingsFile.sshHostProfiles.sort {
       $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+    }
+  }
+
+  private func persistLastAttachedRemoteTmuxSessionName(
+    _ sessionName: String,
+    pickerState: RemoteSessionPickerFeature.State?
+  ) {
+    guard let pickerState else {
+      return
+    }
+    let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    @Shared(.repositorySettings(pickerState.repositoryRootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.lastAttachedRemoteTmuxSessionName = trimmed
     }
   }
 

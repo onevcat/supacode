@@ -466,6 +466,139 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func selectingRemoteWorktreeWithSessionsAlwaysPresentsPicker() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      $repositorySettings.withLock {
+        $0.lastAttachedRemoteTmuxSessionName = "ops"
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { requestedProfile, timeoutSeconds in
+          #expect(requestedProfile == profile)
+          #expect(timeoutSeconds == 8)
+          return ["dev", "ops"]
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: "ops",
+        suggestedManagedSessionName: nil
+      )
+    }
+  }
+
+  @Test(.dependencies) func pickerAttachSelectionPersistsLastAttachedSessionName() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: nil,
+        suggestedManagedSessionName: nil
+      )
+    }
+    await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops"))))) {
+      $0.remoteSessionPicker = nil
+    }
+
+    withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      #expect(repositorySettings.lastAttachedRemoteTmuxSessionName == "ops")
+    }
+  }
+
   @Test(.dependencies) func removeFailedRepositoryPreservesLoadedEndpointVariantForSamePath() async {
     let repoRoot = "/srv/\(UUID().uuidString)/repo"
     let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: repoRoot)

@@ -80,6 +80,10 @@ struct ContentView: View {
       remoteConnectStore in
       RemoteConnectSheet(store: remoteConnectStore)
     }
+    .sheet(store: repositoriesStore.scope(state: \.$remoteSessionPicker, action: \.remoteSessionPicker)) {
+      remoteSessionPickerStore in
+      RemoteSessionPickerSheet(store: remoteSessionPickerStore)
+    }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(
         script: runScriptDraft,
