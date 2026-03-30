@@ -101,14 +101,16 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
     if !application.isActive {
       cliLogger.info("Activate app for external open.")
-      application.activate(ignoringOtherApps: true)
+      let activated = NSRunningApplication.current.activate(options: [
+        .activateIgnoringOtherApps,
+        .activateAllWindows,
+      ])
+      cliLogger.info("External open activate result: \(activated)")
+      return
     }
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      if self.shouldBringMainWindowToFront(from: application) {
-        cliLogger.info("Show main window for external open (deferred).")
-        _ = self.showMainWindow(from: application)
-      }
+    if shouldBringMainWindowToFront(from: application) {
+      cliLogger.info("Show main window for external open (app already active).")
+      _ = showMainWindow(from: application)
     }
   }
 
