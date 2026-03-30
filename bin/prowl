@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APP_NAME="${PROWL_APP_NAME:-Prowl}"
+APP_BUNDLE_ID="${PROWL_APP_BUNDLE_ID:-com.onevcat.prowl}"
 
 usage() {
   cat <<'EOF'
@@ -61,9 +62,37 @@ PY
 launch_prowl() {
   if (($# == 0)); then
     open -a "$APP_NAME"
-  else
-    open -a "$APP_NAME" "$1"
+    return
   fi
+
+  local target_path="$1"
+  if app_is_running && open_path_in_running_app "$target_path"; then
+    return
+  fi
+
+  open -a "$APP_NAME" "$target_path"
+}
+
+app_is_running() {
+  local result
+  result="$(osascript -e "application id \"$APP_BUNDLE_ID\" is running" 2>/dev/null || true)"
+  [[ "$result" == "true" ]]
+}
+
+open_path_in_running_app() {
+  local target_path="$1"
+  osascript - "$APP_BUNDLE_ID" "$target_path" <<'APPLESCRIPT' >/dev/null 2>&1
+on run argv
+  if (count of argv) is not 2 then error "invalid argument count"
+  set appBundleID to item 1 of argv
+  set targetPath to item 2 of argv
+  set targetAlias to POSIX file targetPath
+  tell application id appBundleID
+    open targetAlias
+    activate
+  end tell
+end run
+APPLESCRIPT
 }
 
 print_version() {

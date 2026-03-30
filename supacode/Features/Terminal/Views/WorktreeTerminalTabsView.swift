@@ -58,6 +58,10 @@ struct WorktreeTerminalTabsView: View {
       }
       let activity = resolvedWindowActivity
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+      DispatchQueue.main.async {
+        let activity = resolvedWindowActivity
+        state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+      }
     }
     .onChange(of: state.tabManager.selectedTabId) { _, _ in
       if shouldAutoFocusTerminal {
@@ -81,6 +85,18 @@ struct WorktreeTerminalTabsView: View {
       return WindowActivityState(
         isKeyWindow: keyWindow.isKeyWindow,
         isVisible: keyWindow.occlusionState.contains(.visible)
+      )
+    }
+    if let mainWindow = NSApp.mainWindow {
+      return WindowActivityState(
+        isKeyWindow: mainWindow.isKeyWindow,
+        isVisible: mainWindow.occlusionState.contains(.visible)
+      )
+    }
+    if let visibleWindow = NSApp.windows.first(where: { $0.occlusionState.contains(.visible) }) {
+      return WindowActivityState(
+        isKeyWindow: visibleWindow.isKeyWindow,
+        isVisible: true
       )
     }
     return windowActivity
