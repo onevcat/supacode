@@ -469,9 +469,7 @@ struct RepositoriesFeature {
         )
         state.repositoryRoots = roots
         state.isInitialLoadComplete = true
-        state.loadFailuresByID = Dictionary(
-          uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
-        )
+        state.loadFailuresByID = mergedLoadFailuresByID(failures)
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
         let selectionChanged = selectionDidChange(
           previousSelectionID: previousSelection,
@@ -598,9 +596,7 @@ struct RepositoriesFeature {
         )
         state.repositoryRoots = roots
         state.isInitialLoadComplete = true
-        state.loadFailuresByID = Dictionary(
-          uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
-        )
+        state.loadFailuresByID = mergedLoadFailuresByID(failures)
         let openFailureMessages = invalidRoots.map { "\($0) is not a Git repository." } + openFailures
         if !openFailureMessages.isEmpty {
           state.alert = messageAlert(
@@ -3349,13 +3345,15 @@ struct RepositoriesFeature {
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
-    let previousCounts = Dictionary(
-      uniqueKeysWithValues: state.repositories.map { ($0.id, $0.worktrees.count) }
-    )
+    var previousCounts: [Repository.ID: Int] = [:]
+    for repository in state.repositories {
+      previousCounts[repository.id] = repository.worktrees.count
+    }
     let repositoryIDs = Set(repositories.map(\.id))
-    let newCounts = Dictionary(
-      uniqueKeysWithValues: repositories.map { ($0.id, $0.worktrees.count) }
-    )
+    var newCounts: [Repository.ID: Int] = [:]
+    for repository in repositories {
+      newCounts[repository.id] = repository.worktrees.count
+    }
     var addedCounts: [Repository.ID: Int] = [:]
     for (id, newCount) in newCounts {
       let oldCount = previousCounts[id] ?? 0
@@ -3769,11 +3767,14 @@ extension RepositoriesFeature.State {
   }
 
   func orderedRepositoryRoots() -> [URL] {
-    let rootsByID = Dictionary(
-      uniqueKeysWithValues: repositoryRoots.map {
-        ($0.standardizedFileURL.path(percentEncoded: false), $0.standardizedFileURL)
+    var rootsByID: [Repository.ID: URL] = [:]
+    for rootURL in repositoryRoots {
+      let standardizedRootURL = rootURL.standardizedFileURL
+      let id = standardizedRootURL.path(percentEncoded: false)
+      if rootsByID[id] == nil {
+        rootsByID[id] = standardizedRootURL
       }
-    )
+    }
     var ordered: [URL] = []
     var seen: Set<Repository.ID> = []
     for id in repositoryOrderIDs {
@@ -3980,7 +3981,10 @@ extension RepositoriesFeature.State {
   }
 
   func orderedWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
-    let repositoriesByID = Dictionary(uniqueKeysWithValues: repositories.map { ($0.id, $0) })
+    var repositoriesByID: [Repository.ID: Repository] = [:]
+    for repository in repositories where repositoriesByID[repository.id] == nil {
+      repositoriesByID[repository.id] = repository
+    }
     return orderedRepositoryIDs()
       .filter { includingRepositoryIDs.contains($0) }
       .compactMap { repositoriesByID[$0] }
@@ -4443,7 +4447,10 @@ private func pruneWorktreeOrderByRepository(
   state: inout RepositoriesFeature.State
 ) -> Bool {
   let rootIDs = Set(roots.map { $0.standardizedFileURL.path(percentEncoded: false) })
-  let repositoriesByID = Dictionary(uniqueKeysWithValues: state.repositories.map { ($0.id, $0) })
+  var repositoriesByID: [Repository.ID: Repository] = [:]
+  for repository in state.repositories where repositoriesByID[repository.id] == nil {
+    repositoriesByID[repository.id] = repository
+  }
   let pinnedSet = Set(state.pinnedWorktreeIDs)
   let archivedSet = state.archivedWorktreeIDSet
   var pruned: [Repository.ID: [Worktree.ID]] = [:]
@@ -4489,6 +4496,26 @@ private func pruneArchivedWorktreeIDs(
     return true
   }
   return false
+}
+
+private func mergedLoadFailuresByID(
+  _ failures: [RepositoriesFeature.LoadFailure]
+) -> [Repository.ID: String] {
+  var mergedMessages: [Repository.ID: [String]] = [:]
+  for failure in failures {
+    let message = failure.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedMessage = message.isEmpty ? failure.message : message
+    var messages = mergedMessages[failure.rootID] ?? []
+    if !messages.contains(normalizedMessage) {
+      messages.append(normalizedMessage)
+    }
+    mergedMessages[failure.rootID] = messages
+  }
+  var mergedFailuresByID: [Repository.ID: String] = [:]
+  for (rootID, messages) in mergedMessages {
+    mergedFailuresByID[rootID] = messages.joined(separator: "\n")
+  }
+  return mergedFailuresByID
 }
 
 private func firstAvailableWorktreeID(

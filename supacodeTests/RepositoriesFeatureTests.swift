@@ -3005,6 +3005,43 @@ struct RepositoriesFeatureTests {
     #expect(store.state.archivedWorktreeIDs == [worktree.id])
   }
 
+  @Test func repositoriesLoadedCoalescesDuplicateFailureIDs() async {
+    let repoRoot = "/tmp/repo"
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [],
+        failures: [
+          RepositoriesFeature.LoadFailure(rootID: repoRoot, message: "permission denied"),
+          RepositoriesFeature.LoadFailure(rootID: repoRoot, message: "duplicate repository identity"),
+        ],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.loadFailuresByID = [repoRoot: "permission denied\nduplicate repository identity"]
+      $0.isInitialLoadComplete = true
+    }
+    await store.finish()
+  }
+
+  @Test func orderedRepositoryRootsDeduplicatesSamePathRoots() {
+    let repoRoot = "/home/momoai/workspace/kyc-nexis"
+    let repository = makeRepository(id: repoRoot, worktrees: [])
+    var state = makeState(repositories: [repository])
+    state.repositoryRoots = [
+      URL(fileURLWithPath: repoRoot),
+      URL(fileURLWithPath: repoRoot),
+    ]
+
+    let ordered = state.orderedRepositoryRoots()
+    #expect(ordered == [URL(fileURLWithPath: repoRoot)])
+  }
+
   @Test func repositoriesLoadedSkipsSelectionChangeWhenOnlyDisplayDataChanges() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: repoRoot)
