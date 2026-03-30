@@ -392,7 +392,7 @@ struct RepositorySettingsView: View {
           get: { iconPickerCommandID == command.id },
           set: { isPresented in
             if !isPresented {
-              iconPickerCommandID = nil
+              dismissIconPicker()
             }
           }
         ),
@@ -582,7 +582,7 @@ struct RepositorySettingsView: View {
           ForEach(Self.symbolPresets, id: \.self) { symbol in
             Button {
               command.wrappedValue.systemImage = symbol
-              iconPickerCommandID = nil
+              dismissIconPicker()
             } label: {
               Image(systemName: symbol)
                 .frame(width: 24, height: 24)
@@ -661,7 +661,7 @@ struct RepositorySettingsView: View {
 
   private func toggleIconEditor(for commandID: UserCustomCommand.ID) {
     if iconPickerCommandID == commandID {
-      iconPickerCommandID = nil
+      dismissIconPicker()
       return
     }
     iconPickerCommandID = commandID
@@ -698,6 +698,13 @@ struct RepositorySettingsView: View {
   private func endNameEditing() {
     editingNameCommandID = nil
     focusedNameEditorCommandID = nil
+  }
+
+  private func dismissIconPicker() {
+    iconPickerCommandID = nil
+    Task { @MainActor in
+      NSApp.keyWindow?.makeFirstResponder(nil)
+    }
   }
 
   private func scriptPlaceholder(for execution: UserCustomCommandExecution) -> String {
