@@ -302,4 +302,30 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.terminalFontSize == 18)
     #expect(capturedEvents.value.isEmpty)
   }
+
+  @Test(.dependencies) func keybindingOverridesPersistAndFanOut() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.keybindingUserOverrides = .empty
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
+          binding: Keybinding(key: ";", modifiers: .init(command: true))
+        ),
+      ]
+    )
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    }
+
+    await store.send(.binding(.set(\.keybindingUserOverrides, overrides))) {
+      $0.keybindingUserOverrides = overrides
+    }
+    await store.receive(\.delegate.settingsChanged)
+
+    #expect(settingsFile.global.keybindingUserOverrides == overrides)
+  }
 }

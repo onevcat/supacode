@@ -121,10 +121,12 @@ struct WorktreeDetailView: View {
   }
 
   private func toolbarState(input: ToolbarStateInput) -> WorktreeToolbarState? {
-    guard let title = DetailToolbarTitle.forSelection(
-      worktree: input.selectedWorktree,
-      repository: input.repositories.selectedRepository
-    ) else {
+    guard
+      let title = DetailToolbarTitle.forSelection(
+        worktree: input.selectedWorktree,
+        repository: input.repositories.selectedRepository
+      )
+    else {
       return nil
     }
     let pullRequest = input.selectedWorktree.flatMap { input.repositories.worktreeInfo(for: $0.id)?.pullRequest }
@@ -189,9 +191,11 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
-      CanvasView(terminalManager: terminalManager, onExitToTab: {
-        store.send(.repositories(.toggleCanvas))
-      })
+      CanvasView(
+        terminalManager: terminalManager,
+        onExitToTab: {
+          store.send(.repositories(.toggleCanvas))
+        })
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)
@@ -386,14 +390,6 @@ struct WorktreeDetailView: View {
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
     let customCommands: [UserCustomCommand]
-
-    var runScriptHelpText: String {
-      "Run Script (\(AppShortcuts.runScript.display))"
-    }
-
-    var stopRunScriptHelpText: String {
-      "Stop Script (\(AppShortcuts.stopRunScript.display))"
-    }
   }
 
   fileprivate struct WorktreeToolbarContent: ToolbarContent {
@@ -407,6 +403,7 @@ struct WorktreeDetailView: View {
     let onRunScript: () -> Void
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (Int) -> Void
+    @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
       ToolbarItem {
@@ -458,7 +455,7 @@ struct WorktreeDetailView: View {
       } label: {
         OpenWorktreeActionMenuLabelView(
           action: resolvedOpenActionSelection,
-          shortcutHint: showExtras ? AppShortcuts.openFinder.display : nil
+          shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.CommandID.openWorktree) : nil
         )
       }
       .help(openActionHelpText(for: resolvedOpenActionSelection, isDefault: true))
@@ -493,9 +490,12 @@ struct WorktreeDetailView: View {
     }
 
     private func openActionHelpText(for action: OpenWorktreeAction, isDefault: Bool) -> String {
-      isDefault
-        ? "\(action.title) (\(AppShortcuts.openFinder.display))"
-        : action.title
+      guard isDefault else { return action.title }
+      return AppShortcuts.helpText(
+        title: action.title,
+        commandID: AppShortcuts.CommandID.openWorktree,
+        in: resolvedKeybindings
+      )
     }
 
     @ToolbarContentBuilder
@@ -505,10 +505,18 @@ struct WorktreeDetailView: View {
           RunScriptToolbarButton(
             isRunning: toolbarState.runScriptIsRunning,
             isEnabled: toolbarState.runScriptEnabled,
-            runHelpText: toolbarState.runScriptHelpText,
-            stopHelpText: toolbarState.stopRunScriptHelpText,
-            runShortcut: AppShortcuts.runScript.display,
-            stopShortcut: AppShortcuts.stopRunScript.display,
+            runHelpText: AppShortcuts.helpText(
+              title: "Run Script",
+              commandID: AppShortcuts.CommandID.runScript,
+              in: resolvedKeybindings
+            ),
+            stopHelpText: AppShortcuts.helpText(
+              title: "Stop Script",
+              commandID: AppShortcuts.CommandID.stopScript,
+              in: resolvedKeybindings
+            ),
+            runShortcut: shortcutDisplay(for: AppShortcuts.CommandID.runScript),
+            stopShortcut: shortcutDisplay(for: AppShortcuts.CommandID.stopScript),
             runAction: onRunScript,
             stopAction: onStopRunScript
           )
@@ -548,6 +556,10 @@ struct WorktreeDetailView: View {
           onRunCustomCommand(index)
         }
       )
+    }
+
+    private func shortcutDisplay(for commandID: String) -> String? {
+      AppShortcuts.display(for: commandID, in: resolvedKeybindings)
     }
   }
 
@@ -656,8 +668,8 @@ private struct RunScriptToolbarButton: View {
   let isEnabled: Bool
   let runHelpText: String
   let stopHelpText: String
-  let runShortcut: String
-  let stopShortcut: String
+  let runShortcut: String?
+  let stopShortcut: String?
   let runAction: () -> Void
   let stopAction: () -> Void
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
@@ -696,8 +708,8 @@ private struct RunScriptToolbarButton: View {
           .accessibilityHidden(true)
         Text(config.title)
 
-        if commandKeyObserver.isPressed {
-          Text(config.shortcut)
+        if commandKeyObserver.isPressed, let shortcut = config.shortcut {
+          Text(shortcut)
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -712,7 +724,7 @@ private struct RunScriptToolbarButton: View {
     let title: String
     let systemImage: String
     let helpText: String
-    let shortcut: String
+    let shortcut: String?
     let isEnabled: Bool
     let action: () -> Void
   }

@@ -21,7 +21,6 @@ struct DetailToolbarTitleTests {
 
     #expect(title?.kind == .branch(name: "feature/title-bar"))
     #expect(title?.systemImage == "arrow.trianglehead.branch")
-    #expect(title?.helpText == "Rename branch (⌘⇧M)")
     #expect(title?.supportsRename == true)
   }
 
@@ -41,7 +40,6 @@ struct DetailToolbarTitleTests {
 
     #expect(title?.kind == .folder(name: "folder"))
     #expect(title?.systemImage == "folder")
-    #expect(title?.helpText == nil)
     #expect(title?.supportsRename == false)
   }
 }

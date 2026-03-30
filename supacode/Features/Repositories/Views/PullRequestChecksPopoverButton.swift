@@ -8,6 +8,7 @@ struct PullRequestChecksPopoverButton<Label: View>: View {
   @State private var isHoveringPopover = false
   @State private var closeTask: Task<Void, Never>?
   @Environment(\.openURL) private var openURL
+  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   var body: some View {
     let pullRequestURL = URL(string: pullRequest.url)
@@ -21,7 +22,7 @@ struct PullRequestChecksPopoverButton<Label: View>: View {
     }
     .buttonStyle(.plain)
     .contentShape(.rect)
-    .help("Open pull request on GitHub (\(AppShortcuts.openPullRequest.display)). Hover to show checks.")
+    .help(openPullRequestHelpText)
     .accessibilityLabel("Open pull request on GitHub")
     .onHover { hovering in
       isHoveringButton = hovering
@@ -59,5 +60,19 @@ struct PullRequestChecksPopoverButton<Label: View>: View {
         isPresented = false
       }
     }
+  }
+
+  private var openPullRequestShortcut: AppShortcut? {
+    AppShortcuts.resolvedShortcut(
+      for: AppShortcuts.CommandID.openPullRequest,
+      in: resolvedKeybindings
+    )
+  }
+
+  private var openPullRequestHelpText: String {
+    if let display = openPullRequestShortcut?.display {
+      return "Open pull request on GitHub (\(display)). Hover to show checks."
+    }
+    return "Open pull request on GitHub. Hover to show checks."
   }
 }

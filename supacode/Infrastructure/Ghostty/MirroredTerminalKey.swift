@@ -30,10 +30,10 @@ struct MirroredTerminalKey: Equatable, Sendable {
   /// Key codes allowed to pass through even with the Command modifier held.
   private static let commandAllowedKeyCodes: Set<UInt16> = [
     51,  // backspace
-    123, // arrowLeft
-    124, // arrowRight
-    125, // arrowDown
-    126, // arrowUp
+    123,  // arrowLeft
+    124,  // arrowRight
+    125,  // arrowDown
+    126,  // arrowUp
   ]
 
   init?(

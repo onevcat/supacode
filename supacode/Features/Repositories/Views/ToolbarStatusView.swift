@@ -41,16 +41,23 @@ struct ToolbarStatusView: View {
 }
 
 private struct MotivationalStatusView: View {
+  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
+
   var body: some View {
     TimelineView(.everyMinute) { context in
       let hour = Calendar.current.component(.hour, from: context.date)
       let style = timeStyle(for: hour)
+      let commandPaletteHint = AppShortcuts.helpText(
+        title: "Open Command Palette",
+        commandID: AppShortcuts.CommandID.commandPalette,
+        in: resolvedKeybindings
+      )
       HStack(spacing: 8) {
         Image(systemName: style.icon)
           .foregroundStyle(style.color)
           .font(.callout)
           .accessibilityHidden(true)
-        Text("\(context.date, format: .dateTime.hour().minute()) – Open Command Palette (⌘P)")
+        Text("\(context.date, format: .dateTime.hour().minute()) – \(commandPaletteHint)")
           .font(.footnote)
           .monospaced()
           .foregroundStyle(.secondary)

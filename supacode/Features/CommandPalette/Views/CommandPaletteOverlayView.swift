@@ -6,6 +6,7 @@ import SwiftUI
 struct CommandPaletteOverlayView: View {
   @Bindable var store: StoreOf<CommandPaletteFeature>
   let items: [CommandPaletteItem]
+  let resolvedKeybindings: ResolvedKeybindingMap
   @FocusState private var isQueryFocused: Bool
   @State private var hoveredID: CommandPaletteItem.ID?
   @State private var filteredItems: [CommandPaletteItem] = []
@@ -34,6 +35,7 @@ struct CommandPaletteOverlayView: View {
                 query: $store.query,
                 selectedIndex: $store.selectedIndex,
                 items: filteredItems,
+                resolvedKeybindings: resolvedKeybindings,
                 hoveredID: $hoveredID,
                 isQueryFocused: _isQueryFocused,
                 onEvent: { event in
@@ -153,6 +155,7 @@ private struct CommandPaletteCard: View {
   @Binding var query: String
   @Binding var selectedIndex: Int?
   let items: [CommandPaletteItem]
+  let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var hoveredID: CommandPaletteItem.ID?
   let isQueryFocused: FocusState<Bool>
   let onEvent: (CommandPaletteKeyboardEvent) -> Void
@@ -180,6 +183,7 @@ private struct CommandPaletteCard: View {
 
       CommandPaletteList(
         rows: items,
+        resolvedKeybindings: resolvedKeybindings,
         selectedIndex: $selectedIndex,
         hoveredID: $hoveredID
       ) { id in
@@ -288,6 +292,7 @@ private struct CommandPaletteList: View {
   static let listHeight: CGFloat = 200
 
   let rows: [CommandPaletteItem]
+  let resolvedKeybindings: ResolvedKeybindingMap
   @Binding var selectedIndex: Int?
   @Binding var hoveredID: CommandPaletteItem.ID?
   let activate: (CommandPaletteItem.ID) -> Void
@@ -302,6 +307,7 @@ private struct CommandPaletteList: View {
             ForEach(Array(rows.enumerated()), id: \.1.id) { index, row in
               CommandPaletteRowView(
                 row: row,
+                resolvedKeybindings: resolvedKeybindings,
                 shortcutIndex: index < 5 ? index : nil,
                 isSelected: isRowSelected(index: index),
                 hoveredID: $hoveredID
@@ -333,6 +339,7 @@ private struct CommandPaletteList: View {
 
 private struct CommandPaletteRowView: View {
   let row: CommandPaletteItem
+  let resolvedKeybindings: ResolvedKeybindingMap
   let shortcutIndex: Int?
   let isSelected: Bool
   @Binding var hoveredID: CommandPaletteItem.ID?
@@ -533,14 +540,14 @@ private struct CommandPaletteRowView: View {
   }
 
   private var titleText: String {
-    guard let shortcutLabel = row.appShortcutLabel else {
+    guard let shortcutLabel = row.appShortcutLabel(in: resolvedKeybindings) else {
       return row.title
     }
     return "\(row.title) (\(shortcutLabel))"
   }
 
   private var explicitShortcutLabel: String? {
-    row.appShortcutLabel
+    row.appShortcutLabel(in: resolvedKeybindings)
   }
 }
 

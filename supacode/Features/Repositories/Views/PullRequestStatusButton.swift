@@ -3,6 +3,7 @@ import SwiftUI
 struct PullRequestStatusButton: View {
   let model: PullRequestStatusModel
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
+  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   var body: some View {
     PullRequestChecksPopoverButton(pullRequest: model.pullRequest) {
@@ -20,11 +21,11 @@ struct PullRequestStatusButton: View {
         if let detailText = model.detailText {
           Text(
             commandKeyObserver.isPressed
-              ? "Open on GitHub \(AppShortcuts.openPullRequest.display)" : detailText
+              ? openPullRequestLabel : detailText
           )
           .lineLimit(1)
         } else if commandKeyObserver.isPressed {
-          Text("Open on GitHub \(AppShortcuts.openPullRequest.display)")
+          Text(openPullRequestLabel)
             .lineLimit(1)
         }
         if model.detailText == nil, !commandKeyObserver.isPressed {
@@ -34,6 +35,17 @@ struct PullRequestStatusButton: View {
       }
     }
     .font(.caption)
+  }
+
+  private var openPullRequestLabel: String {
+    let shortcut = AppShortcuts.resolvedShortcut(
+      for: AppShortcuts.CommandID.openPullRequest,
+      in: resolvedKeybindings
+    )?.display
+    if let shortcut {
+      return "Open on GitHub \(shortcut)"
+    }
+    return "Open on GitHub"
   }
 }
 

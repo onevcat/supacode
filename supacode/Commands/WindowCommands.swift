@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WindowCommands: Commands {
   let ghosttyShortcuts: GhosttyShortcutManager
+  let resolvedKeybindings: ResolvedKeybindingMap
   @FocusedValue(\.closeSurfaceAction) private var closeSurfaceAction
   @FocusedValue(\.selectPreviousTerminalTabAction) private var selectPreviousTerminalTabAction
   @FocusedValue(\.selectNextTerminalTabAction) private var selectNextTerminalTabAction
@@ -41,7 +42,9 @@ struct WindowCommands: Commands {
         selectPreviousTerminalTabAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "previous_tab"))
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectPreviousTerminalTab)
+        )
       )
       .disabled(selectPreviousTerminalTabAction == nil)
 
@@ -49,7 +52,9 @@ struct WindowCommands: Commands {
         selectNextTerminalTabAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "next_tab"))
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectNextTerminalTab)
+        )
       )
       .disabled(selectNextTerminalTabAction == nil)
 
@@ -59,7 +64,9 @@ struct WindowCommands: Commands {
         selectPreviousTerminalPaneAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "goto_split:previous"))
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectPreviousTerminalPane)
+        )
       )
       .disabled(selectPreviousTerminalPaneAction == nil)
 
@@ -67,7 +74,9 @@ struct WindowCommands: Commands {
         selectNextTerminalPaneAction?()
       }
       .modifier(
-        KeyboardShortcutModifier(shortcut: ghosttyShortcuts.keyboardShortcut(for: "goto_split:next"))
+        KeyboardShortcutModifier(
+          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectNextTerminalPane)
+        )
       )
       .disabled(selectNextTerminalPaneAction == nil)
 
@@ -75,25 +84,41 @@ struct WindowCommands: Commands {
         Button("Select Pane Above") {
           selectTerminalPaneAboveAction?()
         }
-        .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectTerminalPaneUp)
+          )
+        )
         .disabled(selectTerminalPaneAboveAction == nil)
 
         Button("Select Pane Below") {
           selectTerminalPaneBelowAction?()
         }
-        .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectTerminalPaneDown)
+          )
+        )
         .disabled(selectTerminalPaneBelowAction == nil)
 
         Button("Select Pane Left") {
           selectTerminalPaneLeftAction?()
         }
-        .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectTerminalPaneLeft)
+          )
+        )
         .disabled(selectTerminalPaneLeftAction == nil)
 
         Button("Select Pane Right") {
           selectTerminalPaneRightAction?()
         }
-        .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+        .modifier(
+          KeyboardShortcutModifier(
+            shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.selectTerminalPaneRight)
+          )
+        )
         .disabled(selectTerminalPaneRightAction == nil)
       }
     }
