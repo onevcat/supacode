@@ -673,18 +673,17 @@ struct ShortcutsSettingsView: View {
   }
 
   private func resetOverrides(in group: ShortcutGroup) {
-    let commandIDs = Set(commands(for: group).map(\.id))
-    var overrides = store.keybindingUserOverrides
-    overrides.overrides = overrides.overrides.filter { !commandIDs.contains($0.key) }
-    $store.keybindingUserOverrides.wrappedValue = overrides
+    let overriddenCommandIDs = commands(for: group)
+      .map(\.id)
+      .filter { store.keybindingUserOverrides.overrides[$0] != nil }
+    guard !overriddenCommandIDs.isEmpty else { return }
 
-    for commandID in commandIDs {
-      invalidMessageByCommandID.removeValue(forKey: commandID)
-    }
-
-    if let recordingCommandID, commandIDs.contains(recordingCommandID) {
-      stopRecording()
-    }
+    let plan = ShortcutResetPlanner.makePlan(
+      commandIDs: overriddenCommandIDs,
+      schema: .appResolverSchema(),
+      userOverrides: store.keybindingUserOverrides
+    )
+    applyResetOverrides(for: plan.commandIDsToReset)
   }
 
   private func resetAllOverrides() {
@@ -744,15 +743,6 @@ enum ShortcutResetPlanner {
     schema: KeybindingSchemaDocument,
     userOverrides: KeybindingUserOverrideStore
   ) -> ShortcutResetPlan {
-    let editableCommandIDs = Set(schema.commands.filter(\.allowUserOverride).map(\.id))
-    guard editableCommandIDs.contains(commandID) else {
-      return ShortcutResetPlan(
-        commandIDsToReset: [commandID],
-        restoredBinding: nil,
-        conflictingCommandIDs: []
-      )
-    }
-
     let restoredResolved = resolvedMap(
       byResetting: commandID,
       in: schema,
@@ -760,17 +750,40 @@ enum ShortcutResetPlanner {
     )
     let restoredBinding = restoredResolved.binding(for: commandID)?.binding
 
-    let initialConflicts = conflictingCommandIDs(
-      for: commandID,
-      in: restoredResolved,
-      editableCommandIDs: editableCommandIDs,
-      excluding: []
+    let cascadePlan = makePlan(
+      commandIDs: [commandID],
+      schema: schema,
+      userOverrides: userOverrides
     )
 
+    return ShortcutResetPlan(
+      commandIDsToReset: cascadePlan.commandIDsToReset,
+      restoredBinding: restoredBinding,
+      conflictingCommandIDs: cascadePlan.conflictingCommandIDs
+    )
+  }
+
+  static func makePlan(
+    commandIDs: [String],
+    schema: KeybindingSchemaDocument,
+    userOverrides: KeybindingUserOverrideStore
+  ) -> ShortcutResetPlan {
+    let editableCommandIDs = Set(schema.commands.filter(\.allowUserOverride).map(\.id))
+    let seedCommandIDs = commandIDs.filter { editableCommandIDs.contains($0) }
+    guard !seedCommandIDs.isEmpty else {
+      return ShortcutResetPlan(
+        commandIDsToReset: commandIDs,
+        restoredBinding: nil,
+        conflictingCommandIDs: []
+      )
+    }
+
+    let seedCommandIDSet = Set(seedCommandIDs)
     var tentative = userOverrides
-    var pending = [commandID]
+    var pending = seedCommandIDs
     var processed: Set<String> = []
     var commandIDsToReset: [String] = []
+    var initialConflicts: Set<String> = []
     var index = 0
 
     while index < pending.count {
@@ -793,17 +806,20 @@ enum ShortcutResetPlanner {
         editableCommandIDs: editableCommandIDs,
         excluding: processed
       )
+      if seedCommandIDSet.contains(currentCommandID) {
+        initialConflicts.formUnion(conflicts)
+      }
       pending.append(contentsOf: conflicts)
     }
 
     if commandIDsToReset.isEmpty {
-      commandIDsToReset = [commandID]
+      commandIDsToReset = seedCommandIDs
     }
 
     return ShortcutResetPlan(
       commandIDsToReset: commandIDsToReset,
-      restoredBinding: restoredBinding,
-      conflictingCommandIDs: initialConflicts
+      restoredBinding: nil,
+      conflictingCommandIDs: initialConflicts.sorted()
     )
   }
 

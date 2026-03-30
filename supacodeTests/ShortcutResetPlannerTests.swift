@@ -108,6 +108,45 @@ struct ShortcutResetPlannerTests {
     #expect(plan.restoredBinding == defaultOne)
   }
 
+  @Test func resetPlanForSectionCascadesAcrossSeeds() {
+    let commandOne = "command.one"
+    let commandTwo = "command.two"
+    let commandThree = "command.three"
+
+    let defaultOne = binding("a")
+    let defaultTwo = binding("b")
+    let defaultThree = binding("c")
+
+    let schema = testSchema([
+      testCommand(id: commandOne, title: "Command One", defaultBinding: defaultOne),
+      testCommand(id: commandTwo, title: "Command Two", defaultBinding: defaultTwo),
+      testCommand(id: commandThree, title: "Command Three", defaultBinding: defaultThree),
+    ])
+
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        commandOne: KeybindingUserOverride(binding: defaultTwo),
+        commandTwo: KeybindingUserOverride(binding: defaultThree),
+        commandThree: KeybindingUserOverride(binding: nil, isEnabled: false),
+      ]
+    )
+
+    let plan = ShortcutResetPlanner.makePlan(
+      commandIDs: [commandTwo, commandThree],
+      schema: schema,
+      userOverrides: overrides
+    )
+
+    #expect(plan.restoredBinding == nil)
+    #expect(plan.conflictingCommandIDs == [commandOne])
+    #expect(plan.commandIDsToReset == [commandTwo, commandThree, commandOne])
+
+    let resolvedAfterReset = resolvedAfterApplying(plan: plan, to: overrides, schema: schema)
+    #expect(resolvedAfterReset.binding(for: commandOne)?.binding == defaultOne)
+    #expect(resolvedAfterReset.binding(for: commandTwo)?.binding == defaultTwo)
+    #expect(resolvedAfterReset.binding(for: commandThree)?.binding == defaultThree)
+  }
+
   private func resolvedAfterApplying(
     plan: ShortcutResetPlan,
     to overrides: KeybindingUserOverrideStore,
