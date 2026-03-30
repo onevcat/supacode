@@ -672,6 +672,10 @@ final class WorktreeTerminalState {
       fontSize: resolvedFontSize,
       context: context
     )
+    // Cold-start external open can create tabs before focus observers are fully
+    // attached. Start un-occluded to avoid a blank first frame; syncFocus will
+    // correct visibility immediately after view attachment.
+    view.setOcclusion(true)
     configureBridgeCallbacks(for: view, tabId: tabId)
     configureSurfaceCallbacks(for: view, tabId: tabId)
     surfaces[view.id] = view
