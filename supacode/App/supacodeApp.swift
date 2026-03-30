@@ -14,7 +14,7 @@ import Sentry
 import Sharing
 import SwiftUI
 
-private let appOpenLogger = SupaLogger("AppOpen")
+private let cliLogger = SupaLogger("CLI")
 
 private enum GhosttyCLI {
   static let argv: [UnsafeMutablePointer<CChar>?] = {
@@ -81,7 +81,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       return normalizedURL
     }
     guard !directoryURLs.isEmpty else { return }
-    appOpenLogger.info(
+    cliLogger.info(
       """
       handleExternalOpen received \(directoryURLs.count) directories. \
       hasStore=\(appStore != nil), launched=\(hasFinishedLaunching), \
@@ -91,16 +91,16 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
     if let appStore, hasFinishedLaunching {
       for directoryURL in directoryURLs {
-        appOpenLogger.info("Dispatch .openPath immediately: \(directoryURL.path(percentEncoded: false))")
+        cliLogger.info("Dispatch .openPath immediately: \(directoryURL.path(percentEncoded: false))")
         appStore.send(.repositories(.openPath(directoryURL)))
       }
     } else {
       pendingExternalOpenURLs.append(contentsOf: directoryURLs)
-      appOpenLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
+      cliLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
     }
 
     if shouldBringMainWindowToFront(from: application) {
-      appOpenLogger.info("Bring main window to front for external open.")
+      cliLogger.info("Bring main window to front for external open.")
       _ = showMainWindow(from: application)
     }
   }
@@ -111,9 +111,9 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     guard let appStore else { return }
     let pendingURLs = pendingExternalOpenURLs
     pendingExternalOpenURLs.removeAll()
-    appOpenLogger.info("Flush pending external opens: \(pendingURLs.count)")
+    cliLogger.info("Flush pending external opens: \(pendingURLs.count)")
     for pendingURL in pendingURLs {
-      appOpenLogger.info("Dispatch pending .openPath: \(pendingURL.path(percentEncoded: false))")
+      cliLogger.info("Dispatch pending .openPath: \(pendingURL.path(percentEncoded: false))")
       appStore.send(.repositories(.openPath(pendingURL)))
     }
   }

@@ -24,7 +24,7 @@ private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(1
 private nonisolated let worktreeCreationProgressLineLimit = 200
 private nonisolated let worktreeCreationProgressUpdateStride = 20
 private nonisolated let archiveScriptProgressLineLimit = 200
-private let repositoriesOpenLogger = SupaLogger("RepoOpen")
+private let cliLogger = SupaLogger("CLI")
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -316,7 +316,7 @@ struct RepositoriesFeature {
       switch action {
       case .task:
         state.hasCompletedInitialRepositoryLoad = false
-        repositoriesOpenLogger.info("Initial repository load started.")
+        cliLogger.info("Initial repository load started.")
         return .run { send in
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
@@ -338,7 +338,7 @@ struct RepositoriesFeature {
         if state.pendingExternalOpenPath != nil,
           !state.hasCompletedInitialRepositoryLoad
         {
-          repositoriesOpenLogger.info("Skip snapshot restore due to pending external open path.")
+          cliLogger.info("Skip snapshot restore due to pending external open path.")
           return .none
         }
         guard let repositories, !repositories.isEmpty else {
@@ -503,7 +503,7 @@ struct RepositoriesFeature {
           )
         }
         if let pendingExternalOpenPath = state.pendingExternalOpenPath {
-          repositoriesOpenLogger.info(
+          cliLogger.info(
             "Replay pending external open path after repositoriesLoaded: \(pendingExternalOpenPath.path(percentEncoded: false))"
           )
           state.pendingExternalOpenPath = nil
@@ -513,7 +513,7 @@ struct RepositoriesFeature {
 
       case .openPath(let requestedURL):
         let normalizedRequestedURL = requestedURL.standardizedFileURL
-        repositoriesOpenLogger.info(
+        cliLogger.info(
           "Handle .openPath: \(normalizedRequestedURL.path(percentEncoded: false)), initialLoadComplete=\(state.hasCompletedInitialRepositoryLoad)"
         )
         guard state.hasCompletedInitialRepositoryLoad else {
@@ -523,15 +523,15 @@ struct RepositoriesFeature {
           state.pendingTerminalFocusWorktreeIDs = []
           state.shouldRestoreLastFocusedWorktree = false
           state.shouldSelectFirstAfterReload = false
-          repositoriesOpenLogger.info("Queue .openPath until initial repository load completes.")
+          cliLogger.info("Queue .openPath until initial repository load completes.")
           return .none
         }
         guard let match = state.openPathMatch(for: normalizedRequestedURL) else {
           state.pendingExternalOpenPath = normalizedRequestedURL
-          repositoriesOpenLogger.info("No in-memory match for .openPath. Trigger openRepositories.")
+          cliLogger.info("No in-memory match for .openPath. Trigger openRepositories.")
           return .send(.openRepositories([normalizedRequestedURL]))
         }
-        repositoriesOpenLogger.info(
+        cliLogger.info(
           "Matched .openPath to selection=\(String(describing: match.selection)) resolution=\(String(describing: match.resolution))"
         )
 
@@ -573,7 +573,7 @@ struct RepositoriesFeature {
         return .merge(effects)
 
       case .openRepositories(let urls):
-        repositoriesOpenLogger.info("openRepositories called with \(urls.count) URL(s).")
+        cliLogger.info("openRepositories called with \(urls.count) URL(s).")
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
         return .run { send in
@@ -634,7 +634,7 @@ struct RepositoriesFeature {
         let openFailures,
         let roots
       ):
-        repositoriesOpenLogger.info(
+        cliLogger.info(
           """
           openRepositoriesFinished repositories=\(repositories.count), failures=\(failures.count), \
           invalidRoots=\(invalidRoots.count), openFailures=\(openFailures.count)
@@ -718,7 +718,7 @@ struct RepositoriesFeature {
         if let pendingExternalOpenPath,
           state.openPathMatch(for: pendingExternalOpenPath) != nil
         {
-          repositoriesOpenLogger.info(
+          cliLogger.info(
             "Replay pending external open path after openRepositoriesFinished: \(pendingExternalOpenPath.path(percentEncoded: false))"
           )
           allEffects.append(.send(.openPath(pendingExternalOpenPath)))
