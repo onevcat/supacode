@@ -536,13 +536,9 @@ struct RepositoriesFeature {
         )
 
         var effects: [Effect<Action>] = []
-        switch match.selection {
-        case .worktree(let worktreeID):
-          effects.append(.send(.selectWorktree(worktreeID, focusTerminal: true)))
-        case .repository(let repositoryID):
-          effects.append(.send(.selectRepository(repositoryID)))
-        }
-
+        // Prepare destination terminal state before switching selection.
+        // This avoids a transient fully-occluded frame while the destination
+        // terminal is still being created.
         switch match.resolution {
         case .exactRoot:
           effects.append(
@@ -568,6 +564,13 @@ struct RepositoriesFeature {
               )
             }
           )
+        }
+
+        switch match.selection {
+        case .worktree(let worktreeID):
+          effects.append(.send(.selectWorktree(worktreeID, focusTerminal: true)))
+        case .repository(let repositoryID):
+          effects.append(.send(.selectRepository(repositoryID)))
         }
 
         return .merge(effects)
