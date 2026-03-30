@@ -3,8 +3,9 @@ import Foundation
 
 struct RemoteTmuxClient: Sendable {
   var listSessions: @Sendable (_ profile: SSHHostProfile, _ timeoutSeconds: Int) async throws -> [String]
-  var buildAttachCommand: @Sendable (_ sessionName: String, _ remotePath: String) -> String
-  var buildCreateAndAttachCommand: @Sendable (_ preferredName: String, _ remotePath: String) -> String
+  var buildAttachCommand: @Sendable (_ profile: SSHHostProfile, _ sessionName: String, _ remotePath: String) -> String
+  var buildCreateAndAttachCommand:
+    @Sendable (_ profile: SSHHostProfile, _ preferredName: String, _ remotePath: String) -> String
 }
 
 extension RemoteTmuxClient: DependencyKey {
@@ -33,25 +34,27 @@ extension RemoteTmuxClient: DependencyKey {
           .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
           .filter { !$0.isEmpty }
       },
-      buildAttachCommand: { sessionName, remotePath in
+      buildAttachCommand: { profile, sessionName, remotePath in
         let escapedPath = SSHCommandSupport.shellEscape(remotePath)
         let escapedSession = SSHCommandSupport.shellEscape(sessionName)
-        return "cd \(escapedPath) && tmux attach-session -t \(escapedSession)"
+        let remoteCommand = "cd \(escapedPath) && tmux attach-session -t \(escapedSession)"
+        return buildSSHCommand(profile: profile, remoteCommand: remoteCommand)
       },
-      buildCreateAndAttachCommand: { preferredName, remotePath in
+      buildCreateAndAttachCommand: { profile, preferredName, remotePath in
         let escapedPath = SSHCommandSupport.shellEscape(remotePath)
         let escapedName = SSHCommandSupport.shellEscape(preferredName)
         let ensureSession =
           "(tmux has-session -t \(escapedName) 2>/dev/null || tmux new-session -d -s \(escapedName))"
-        return "cd \(escapedPath) && \(ensureSession) && tmux attach-session -t \(escapedName)"
+        let remoteCommand = "cd \(escapedPath) && \(ensureSession) && tmux attach-session -t \(escapedName)"
+        return buildSSHCommand(profile: profile, remoteCommand: remoteCommand)
       }
     )
   }
 
   static let testValue = RemoteTmuxClient(
     listSessions: { _, _ in [] },
-    buildAttachCommand: { _, _ in "" },
-    buildCreateAndAttachCommand: { _, _ in "" }
+    buildAttachCommand: { _, _, _ in "" },
+    buildCreateAndAttachCommand: { _, _, _ in "" }
   )
 }
 
@@ -60,6 +63,26 @@ extension DependencyValues {
     get { self[RemoteTmuxClient.self] }
     set { self[RemoteTmuxClient.self] = newValue }
   }
+}
+
+private nonisolated func buildSSHCommand(
+  profile: SSHHostProfile,
+  remoteCommand: String
+) -> String {
+  let endpointKey = [profile.host, profile.user, profile.port.map(String.init) ?? "22"]
+    .joined(separator: "|")
+  let controlPath = SSHCommandSupport.controlSocketPath(endpointKey: endpointKey)
+  let options = SSHCommandSupport.removingBatchMode(
+    from: SSHCommandSupport.connectivityOptions(includeBatchMode: true)
+  )
+  var arguments = options + ["-o", "ControlPath=\(controlPath)", "-t"]
+  if let port = profile.port {
+    arguments += ["-p", "\(port)"]
+  }
+  let target = profile.user.isEmpty ? profile.host : "\(profile.user)@\(profile.host)"
+  arguments += [target, remoteCommand]
+  let shellEscapedArguments = arguments.map(SSHCommandSupport.shellEscape).joined(separator: " ")
+  return "/usr/bin/ssh \(shellEscapedArguments)"
 }
 
 private nonisolated struct RemoteTmuxClientError: LocalizedError {

@@ -568,7 +568,8 @@ struct RepositoriesFeatureTests {
         $0.remoteTmuxClient.listSessions = { _, _ in
           ["dev", "ops"]
         }
-        $0.remoteTmuxClient.buildAttachCommand = { sessionName, remotePath in
+        $0.remoteTmuxClient.buildAttachCommand = { profile, sessionName, remotePath in
+          #expect(profile.id == hostProfileID)
           "attach:\(sessionName):\(remotePath)"
         }
         $0.terminalClient.send = { command in
@@ -655,7 +656,8 @@ struct RepositoriesFeatureTests {
         $0.remoteTmuxClient.listSessions = { _, _ in
           ["dev", "ops"]
         }
-        $0.remoteTmuxClient.buildCreateAndAttachCommand = { sessionName, remotePath in
+        $0.remoteTmuxClient.buildCreateAndAttachCommand = { profile, sessionName, remotePath in
+          #expect(profile.id == hostProfileID)
           "create:\(sessionName):\(remotePath)"
         }
         $0.terminalClient.send = { command in

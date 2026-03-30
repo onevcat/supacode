@@ -15,6 +15,10 @@ struct RepositorySettingsFeature {
     var branchOptions: [String] = []
     var defaultWorktreeBaseRef = "origin/main"
     var isBranchDataLoaded = false
+    var remoteHostDisplayName: String?
+    var remoteHostDestination: String?
+    var remotePath: String?
+    var remoteHostProfileID: String?
 
     var capabilities: Repository.Capabilities {
       switch repositoryKind {
@@ -93,6 +97,23 @@ struct RepositorySettingsFeature {
         let globalDefaultWorktreeBaseDirectoryPath =
           settingsFile.global.defaultWorktreeBaseDirectoryPath
         let hostProfile = sshHostProfile(for: endpoint, settingsFile: settingsFile)
+        switch endpoint {
+        case .local:
+          state.remoteHostDisplayName = nil
+          state.remoteHostDestination = nil
+          state.remotePath = nil
+          state.remoteHostProfileID = nil
+        case .remote(let hostProfileID, let remotePath):
+          state.remotePath = remotePath
+          state.remoteHostProfileID = hostProfileID
+          if let hostProfile {
+            state.remoteHostDisplayName = hostProfile.displayName
+            state.remoteHostDestination = sshDestination(for: hostProfile)
+          } else {
+            state.remoteHostDisplayName = nil
+            state.remoteHostDestination = nil
+          }
+        }
         guard state.capabilities.supportsRepositoryGitSettings else {
           return .send(
             .settingsLoaded(
@@ -232,5 +253,13 @@ struct RepositorySettingsFeature {
       return nil
     }
     return settingsFile.sshHostProfiles.first { $0.id == hostProfileID }
+  }
+
+  private func sshDestination(for profile: SSHHostProfile) -> String {
+    let userHost = profile.user.isEmpty ? profile.host : "\(profile.user)@\(profile.host)"
+    if let port = profile.port {
+      return "\(userHost):\(port)"
+    }
+    return userHost
   }
 }

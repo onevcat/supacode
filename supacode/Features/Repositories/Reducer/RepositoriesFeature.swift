@@ -3494,15 +3494,18 @@ struct RepositoriesFeature {
     guard let pickerState, let worktree = state.worktree(for: pickerState.worktreeID) else {
       return nil
     }
+    guard let hostProfile = sshHostProfile(for: worktree.endpoint) else {
+      return nil
+    }
     let trimmedSessionName = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedSessionName.isEmpty else {
       return nil
     }
     let command =
       if createIfMissing {
-        remoteTmuxClient.buildCreateAndAttachCommand(trimmedSessionName, pickerState.remotePath)
+        remoteTmuxClient.buildCreateAndAttachCommand(hostProfile, trimmedSessionName, pickerState.remotePath)
       } else {
-        remoteTmuxClient.buildAttachCommand(trimmedSessionName, pickerState.remotePath)
+        remoteTmuxClient.buildAttachCommand(hostProfile, trimmedSessionName, pickerState.remotePath)
       }
     let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedCommand.isEmpty else {

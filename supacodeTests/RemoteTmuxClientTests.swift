@@ -20,4 +20,24 @@ struct RemoteTmuxClientTests {
 
     #expect(sessions == ["main", "ops"])
   }
+
+  @Test func buildAttachCommandUsesNativeSSHWithControlSocket() {
+    let client = RemoteTmuxClient.live()
+    let profile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Host",
+      host: "example.com",
+      user: "dev",
+      port: 2222,
+      authMethod: .publicKey
+    )
+
+    let command = client.buildAttachCommand(profile, "kn/master", "/home/dev/project")
+
+    #expect(command.contains("/usr/bin/ssh"))
+    #expect(command.contains("ControlPath="))
+    #expect(command.contains("dev@example.com"))
+    #expect(command.contains("tmux attach-session -t"))
+    #expect(command.contains("cd '/home/dev/project'"))
+  }
 }
