@@ -89,35 +89,14 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       """
     )
 
-    let shouldActivateFirst = !application.isActive
-    if !application.isActive {
-      cliLogger.info("Activate app for external open.")
-      let activated = NSRunningApplication.current.activate(options: [
-        .activateIgnoringOtherApps,
-        .activateAllWindows,
-      ])
-      cliLogger.info("External open activate result: \(activated)")
-    }
-
-    let dispatchOpenPaths = { [weak self] in
-      guard let self else { return }
-      if let appStore = self.appStore, self.hasFinishedLaunching {
-        for directoryURL in directoryURLs {
-          cliLogger.info("Dispatch .openPath: \(directoryURL.path(percentEncoded: false))")
-          appStore.send(.repositories(.openPath(directoryURL)))
-        }
-      } else {
-        self.pendingExternalOpenURLs.append(contentsOf: directoryURLs)
-        cliLogger.info("Queue external open URLs. pending=\(self.pendingExternalOpenURLs.count)")
-      }
-    }
-
-    if shouldActivateFirst {
-      DispatchQueue.main.async {
-        dispatchOpenPaths()
+    if let appStore, hasFinishedLaunching {
+      for directoryURL in directoryURLs {
+        cliLogger.info("Dispatch .openPath: \(directoryURL.path(percentEncoded: false))")
+        appStore.send(.repositories(.openPath(directoryURL)))
       }
     } else {
-      dispatchOpenPaths()
+      pendingExternalOpenURLs.append(contentsOf: directoryURLs)
+      cliLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
     }
   }
 
