@@ -12,6 +12,7 @@ struct ShortcutsSettingsView: View {
   @State private var pendingConflict: ShortcutConflict?
   @State private var pendingOverride: PendingOverride?
   @State private var focusedConflictCommandID: String?
+  @State private var hoveredRecorderCommandID: String?
 
   private var schema: KeybindingSchemaDocument {
     .appDefaultsV1
@@ -33,38 +34,51 @@ struct ShortcutsSettingsView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      TextField("Search actions or shortcuts", text: $searchText)
-        .textFieldStyle(.roundedBorder)
-
+    VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 8) {
+        TextField("Search actions or shortcuts", text: $searchText)
+          .textFieldStyle(.roundedBorder)
+
         Button("Reset All") {
           resetAllOverrides()
         }
         .disabled(store.keybindingUserOverrides.overrides.isEmpty)
-
-        Spacer(minLength: 0)
-
-        Text("Press Record, then type a shortcut. Esc cancels recording.")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
       }
 
-      Form {
+      HStack(spacing: 12) {
+        Text("Command")
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Text("Status")
+          .frame(width: 72, alignment: .leading)
+        Text("Shortcut")
+          .frame(width: 220, alignment: .leading)
+        Color.clear
+          .frame(width: 16, height: 1)
+      }
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .padding(.horizontal, 12)
+
+      List {
         ForEach(visibleGroups) { group in
           Section {
             ForEach(commands(for: group), id: \.id) { command in
               row(for: command)
+                .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                .listRowBackground(rowBackground(for: command.id))
             }
           } header: {
-            HStack {
+            HStack(alignment: .center, spacing: 8) {
               Text(group.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
               Spacer(minLength: 0)
               if hasOverrides(in: group) {
-                Button("Reset Group") {
+                Button("Reset Section") {
                   resetOverrides(in: group)
                 }
                 .buttonStyle(.link)
+                .font(.caption)
               }
             }
           }
@@ -75,9 +89,10 @@ struct ShortcutsSettingsView: View {
             .foregroundStyle(.secondary)
         }
       }
-      .formStyle(.grouped)
+      .listStyle(.inset)
+      .environment(\.defaultMinListRowHeight, 32)
     }
-    .onChange(of: recordingCommandID) { commandID in
+    .onChange(of: recordingCommandID) { _, commandID in
       if commandID == nil {
         stopRecorderMonitor()
       } else {
@@ -116,43 +131,55 @@ struct ShortcutsSettingsView: View {
     let resolvedBinding = resolvedBindings.binding(for: command.id)?.binding
     let source = resolvedBindings.binding(for: command.id)?.source ?? .appDefault
     let hasOverride = store.keybindingUserOverrides.overrides[command.id] != nil
-    let isFocused = focusedConflictCommandID == command.id
+    let isHoveringRecorder = hoveredRecorderCommandID == command.id
 
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .firstTextBaseline, spacing: 12) {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .center, spacing: 12) {
         Text(command.title)
-          .font(.body)
-        Spacer(minLength: 0)
-        Text(resolvedBinding?.display ?? "Unassigned")
-          .font(.body.monospaced())
-          .foregroundStyle(resolvedBinding == nil ? .secondary : .primary)
-      }
-
-      HStack(spacing: 10) {
-        Button(isRecording ? "Recording…" : "Record") {
-          toggleRecording(for: command.id)
-        }
-
-        if isRecording {
-          Button("Cancel") {
-            stopRecording()
-          }
-        }
-
-        if hasOverride {
-          Button("Reset") {
-            resetOverride(for: command.id)
-          }
-        }
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: .infinity, alignment: .leading)
 
         sourceChip(source)
-        Spacer(minLength: 0)
+          .frame(width: 72, alignment: .leading)
+
+        shortcutRecorderField(
+          commandID: command.id,
+          resolvedBinding: resolvedBinding,
+          isRecording: isRecording,
+          isHovering: isHoveringRecorder
+        )
+        .frame(width: 220, alignment: .leading)
+
+        if hasOverride {
+          Button {
+            resetOverride(for: command.id)
+          } label: {
+            Image(systemName: "arrow.counterclockwise")
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
+          }
+          .buttonStyle(.plain)
+          .help("Reset to default")
+        } else {
+          Color.clear
+            .frame(width: 16, height: 16)
+        }
       }
 
       if isRecording {
-        Text("Type a key with at least one modifier (⌘ ⇧ ⌥ ⌃). Return and arrow keys are supported.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+          Text(
+            "Recording: press a key with modifiers (⌘ ⇧ ⌥ ⌃). Return and arrow keys are supported. Press Esc to cancel."
+          )
+          Spacer(minLength: 0)
+          Button("Cancel") {
+            stopRecording()
+          }
+          .buttonStyle(.link)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
 
       if let invalid = invalidMessageByCommandID[command.id] {
@@ -161,31 +188,97 @@ struct ShortcutsSettingsView: View {
           .foregroundStyle(.red)
       }
     }
-    .padding(.vertical, 6)
-    .padding(.horizontal, 8)
-    .background {
-      RoundedRectangle(cornerRadius: 8)
-        .fill(isFocused ? Color.orange.opacity(0.15) : .clear)
+    .padding(.vertical, 2)
+  }
+
+  private func rowBackground(for commandID: String) -> some View {
+    let isFocused = focusedConflictCommandID == commandID
+    return RoundedRectangle(cornerRadius: 6)
+      .fill(isFocused ? Color.orange.opacity(0.15) : .clear)
+  }
+
+  private func shortcutRecorderField(
+    commandID: String,
+    resolvedBinding: Keybinding?,
+    isRecording: Bool,
+    isHovering: Bool
+  ) -> some View {
+    Button {
+      toggleRecording(for: commandID)
+    } label: {
+      HStack(spacing: 6) {
+        if isRecording {
+          Image(systemName: "record.circle.fill")
+            .font(.caption)
+            .foregroundStyle(Color.accentColor)
+        }
+
+        Text(shortcutRecorderTitle(resolvedBinding: resolvedBinding, isRecording: isRecording))
+          .font(.body.monospaced())
+          .lineLimit(1)
+          .truncationMode(.tail)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .foregroundStyle(shortcutRecorderForegroundColor(resolvedBinding: resolvedBinding, isRecording: isRecording))
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .background(
+        RoundedRectangle(cornerRadius: 6)
+          .fill(Color(nsColor: .textBackgroundColor))
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: 6)
+          .strokeBorder(shortcutRecorderBorderColor(isRecording: isRecording, isHovering: isHovering), lineWidth: 1)
+      }
     }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      if hovering {
+        hoveredRecorderCommandID = commandID
+      } else if hoveredRecorderCommandID == commandID {
+        hoveredRecorderCommandID = nil
+      }
+    }
+    .help(isRecording ? "Recording shortcut. Press Esc to cancel." : "Click to record a shortcut.")
+  }
+
+  private func shortcutRecorderTitle(resolvedBinding: Keybinding?, isRecording: Bool) -> String {
+    if isRecording {
+      return "Recording…"
+    }
+    return resolvedBinding?.display ?? "Unassigned"
+  }
+
+  private func shortcutRecorderForegroundColor(resolvedBinding: Keybinding?, isRecording: Bool) -> Color {
+    if isRecording {
+      return .accentColor
+    }
+    return resolvedBinding == nil ? .secondary : .primary
+  }
+
+  private func shortcutRecorderBorderColor(isRecording: Bool, isHovering: Bool) -> Color {
+    if isRecording {
+      return .accentColor
+    }
+    if isHovering {
+      return Color(nsColor: .tertiaryLabelColor)
+    }
+    return Color(nsColor: .separatorColor)
   }
 
   private func sourceChip(_ source: KeybindingSource) -> some View {
-    let label: String
-    switch source {
-    case .appDefault:
-      label = "Default"
-    case .migratedLegacy:
-      label = "Migrated"
-    case .userOverride:
-      label = "Override"
-    }
+    let isDefault = source == .appDefault
+    let label = isDefault ? "Default" : "Defined"
 
     return Text(label)
       .font(.caption2.monospaced())
-      .padding(.horizontal, 6)
-      .padding(.vertical, 2)
-      .background(.quaternary, in: Capsule())
-      .foregroundStyle(.secondary)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
+      .background(
+        Capsule()
+          .fill(isDefault ? Color(nsColor: .quaternaryLabelColor).opacity(0.25) : Color.accentColor.opacity(0.2))
+      )
+      .foregroundStyle(isDefault ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
   }
 
   private func commands(for group: ShortcutGroup) -> [KeybindingCommandSchema] {
