@@ -394,7 +394,7 @@ struct RepositoriesFeature {
 
       case .lastFocusedWorktreeIDLoaded(let lastFocusedWorktreeID):
         state.lastFocusedWorktreeID = lastFocusedWorktreeID
-        state.shouldRestoreLastFocusedWorktree = true
+        state.shouldRestoreLastFocusedWorktree = state.pendingExternalOpenPath == nil
         return .none
 
       case .setOpenPanelPresented(let isPresented):

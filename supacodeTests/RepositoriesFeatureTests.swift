@@ -3223,6 +3223,28 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func lastFocusedWorktreeDoesNotOverridePendingExternalOpenPath() async {
+    let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
+    let lastFocusedWorktreeID = "/tmp/other-repo/main"
+    var initialState = RepositoriesFeature.State()
+    initialState.hasCompletedInitialRepositoryLoad = false
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.openPath(requestedDirectory)) {
+      $0.pendingExternalOpenPath = requestedDirectory.standardizedFileURL
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.shouldSelectFirstAfterReload = false
+    }
+
+    await store.send(.lastFocusedWorktreeIDLoaded(lastFocusedWorktreeID)) {
+      $0.lastFocusedWorktreeID = lastFocusedWorktreeID
+      $0.shouldRestoreLastFocusedWorktree = false
+    }
+  }
+
   private func makeWorktree(
     id: String,
     name: String,
