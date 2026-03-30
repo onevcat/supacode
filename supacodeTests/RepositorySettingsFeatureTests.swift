@@ -135,7 +135,7 @@ struct RepositorySettingsFeatureTests {
           repositoryKind: .git,
           endpoint: endpoint,
           settings: .default,
-          onevcatSettings: .default
+          userSettings: .default
         )
       ) {
         RepositorySettingsFeature()
