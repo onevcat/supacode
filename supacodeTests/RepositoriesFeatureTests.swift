@@ -594,6 +594,7 @@ struct RepositoriesFeatureTests {
       )
     }
     await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops"))))) {
+      $0.attachedRemoteTmuxSessionByWorktreeID[worktree.id] = "ops"
       $0.remoteSessionPicker = nil
     }
     await store.finish()
@@ -682,6 +683,7 @@ struct RepositoriesFeatureTests {
       )
     }
     await store.send(.remoteSessionPicker(.presented(.delegate(.createAndAttach("managed"))))) {
+      $0.attachedRemoteTmuxSessionByWorktreeID[worktree.id] = "managed"
       $0.remoteSessionPicker = nil
     }
     await store.finish()
@@ -691,6 +693,94 @@ struct RepositoriesFeatureTests {
         .createTabWithInput(
           worktree,
           input: "create:managed:\(repoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func reselectingRemoteWorktreeAfterAttachDoesNotPromptAgain() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let remoteRepoRoot = "/srv/\(testID)/repo"
+    let localRepoRoot = "/tmp/\(testID)/local"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: remoteRepoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let remoteWorktree = makeWorktree(
+      id: remoteRepoRoot,
+      name: "main",
+      repoRoot: remoteRepoRoot,
+      endpoint: endpoint
+    )
+    let localWorktree = makeWorktree(
+      id: "\(localRepoRoot)/main",
+      name: "main",
+      repoRoot: localRepoRoot
+    )
+    let remoteRepository = makeRepository(
+      id: remoteRepoRoot,
+      name: "remote",
+      endpoint: endpoint,
+      worktrees: [remoteWorktree]
+    )
+    let localRepository = makeRepository(
+      id: localRepoRoot,
+      name: "local",
+      worktrees: [localWorktree]
+    )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [remoteRepository, localRepository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildAttachCommand = { _, sessionName, remotePath in
+          "attach:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectWorktree(remoteWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded)
+    #expect(store.state.remoteSessionPicker != nil)
+
+    await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops")))))
+    #expect(store.state.remoteSessionPicker == nil)
+    #expect(store.state.attachedRemoteTmuxSessionByWorktreeID[remoteWorktree.id] == "ops")
+
+    await store.send(.selectWorktree(localWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await store.send(.selectWorktree(remoteWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded)
+    #expect(store.state.remoteSessionPicker == nil)
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          remoteWorktree,
+          input: "attach:ops:\(remoteRepoRoot)",
           runSetupScriptIfNew: false
         )
       ]

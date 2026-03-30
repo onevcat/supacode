@@ -96,6 +96,7 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    var attachedRemoteTmuxSessionByWorktreeID: [Worktree.ID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var remoteConnect: RemoteConnectFeature.State?
@@ -764,6 +765,13 @@ struct RepositoriesFeature {
           let worktree = state.worktree(for: worktreeID)
         else {
           return .none
+        }
+        if let attachedSessionName = state.attachedRemoteTmuxSessionByWorktreeID[worktreeID] {
+          let trimmedAttachedSession = attachedSessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+          if sessions.contains(trimmedAttachedSession) {
+            return .none
+          }
+          state.attachedRemoteTmuxSessionByWorktreeID.removeValue(forKey: worktreeID)
         }
         guard case .remote(_, let remotePath) = worktree.endpoint else {
           return .none
@@ -2894,6 +2902,11 @@ struct RepositoriesFeature {
           sessionName,
           pickerState: pickerState
         )
+        persistAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState,
+          state: &state
+        )
         state.remoteSessionPicker = nil
         guard let attach = remoteSessionAttach(
           sessionName: sessionName,
@@ -2918,6 +2931,11 @@ struct RepositoriesFeature {
         persistLastAttachedRemoteTmuxSessionName(
           sessionName,
           pickerState: pickerState
+        )
+        persistAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState,
+          state: &state
         )
         state.remoteSessionPicker = nil
         guard let attach = remoteSessionAttach(
@@ -3483,6 +3501,21 @@ struct RepositoriesFeature {
     $repositorySettings.withLock {
       $0.lastAttachedRemoteTmuxSessionName = trimmed
     }
+  }
+
+  private func persistAttachedRemoteTmuxSessionName(
+    _ sessionName: String,
+    pickerState: RemoteSessionPickerFeature.State?,
+    state: inout State
+  ) {
+    guard let pickerState else {
+      return
+    }
+    let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    state.attachedRemoteTmuxSessionByWorktreeID[pickerState.worktreeID] = trimmed
   }
 
   private func remoteSessionAttach(
