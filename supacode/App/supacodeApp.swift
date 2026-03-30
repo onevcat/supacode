@@ -89,16 +89,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       """
     )
 
-    if let appStore, hasFinishedLaunching {
-      for directoryURL in directoryURLs {
-        cliLogger.info("Dispatch .openPath immediately: \(directoryURL.path(percentEncoded: false))")
-        appStore.send(.repositories(.openPath(directoryURL)))
-      }
-    } else {
-      pendingExternalOpenURLs.append(contentsOf: directoryURLs)
-      cliLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
-    }
-
+    let shouldActivateFirst = !application.isActive
     if !application.isActive {
       cliLogger.info("Activate app for external open.")
       let activated = NSRunningApplication.current.activate(options: [
@@ -106,11 +97,31 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
         .activateAllWindows,
       ])
       cliLogger.info("External open activate result: \(activated)")
-      return
     }
-    if shouldBringMainWindowToFront(from: application) {
-      cliLogger.info("Show main window for external open (app already active).")
-      _ = showMainWindow(from: application)
+
+    let dispatchOpenPaths = { [weak self] in
+      guard let self else { return }
+      if let appStore = self.appStore, self.hasFinishedLaunching {
+        for directoryURL in directoryURLs {
+          cliLogger.info("Dispatch .openPath: \(directoryURL.path(percentEncoded: false))")
+          appStore.send(.repositories(.openPath(directoryURL)))
+        }
+      } else {
+        self.pendingExternalOpenURLs.append(contentsOf: directoryURLs)
+        cliLogger.info("Queue external open URLs. pending=\(self.pendingExternalOpenURLs.count)")
+      }
+      if self.shouldBringMainWindowToFront(from: application) {
+        cliLogger.info("Show main window for external open.")
+        _ = self.showMainWindow(from: application)
+      }
+    }
+
+    if shouldActivateFirst {
+      DispatchQueue.main.async {
+        dispatchOpenPaths()
+      }
+    } else {
+      dispatchOpenPaths()
     }
   }
 
