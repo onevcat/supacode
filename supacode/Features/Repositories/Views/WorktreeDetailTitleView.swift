@@ -3,7 +3,6 @@ import SwiftUI
 struct WorktreeDetailTitleView: View {
   let title: DetailToolbarTitle
   let onSubmit: ((String) -> Void)?
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   @State private var isPresented = false
   @State private var isHovered = false
@@ -18,14 +17,11 @@ struct WorktreeDetailTitleView: View {
         } label: {
           labelContent
         }
-        .help(AppShortcuts.helpText(
-          title: "Rename branch",
-          commandID: AppShortcuts.CommandID.renameBranch,
-          in: resolvedKeybindings
-        ))
-        .modifier(KeyboardShortcutModifier(
-          shortcut: resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.renameBranch)
-        ))
+        .help(title.helpText ?? "")
+        .keyboardShortcut(
+          AppShortcuts.renameBranch.keyEquivalent,
+          modifiers: AppShortcuts.renameBranch.modifiers
+        )
       } else {
         labelContent
       }

@@ -15,16 +15,16 @@ import Sharing
 import SwiftUI
 
 private enum GhosttyCLI {
-  static func argv(resolvedKeybindings: ResolvedKeybindingMap) -> [UnsafeMutablePointer<CChar>?] {
+  static let argv: [UnsafeMutablePointer<CChar>?] = {
     var args: [UnsafeMutablePointer<CChar>?] = []
     let executable = CommandLine.arguments.first ?? "supacode"
     args.append(strdup(executable))
-    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments(from: resolvedKeybindings) {
+    for keybindArgument in AppShortcuts.ghosttyCLIKeybindArguments {
       args.append(strdup(keybindArgument))
     }
     args.append(nil)
     return args
-  }
+  }()
 }
 
 @MainActor
@@ -34,7 +34,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
     UserDefaults.standard.register(defaults: [
-      "ApplePressAndHoldEnabled": false
+      "ApplePressAndHoldEnabled": false,
     ])
     appStore?.send(.appLaunched)
   }
@@ -91,10 +91,6 @@ struct SupacodeApp: App {
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
     let initialSettings = settingsFile.global
-    let initialResolvedKeybindings = KeybindingResolver.resolve(
-      schema: .appResolverSchema(),
-      userOverrides: initialSettings.keybindingUserOverrides
-    )
     #if !DEBUG
       if initialSettings.crashReportsEnabled {
         SentrySDK.start { options in
@@ -117,8 +113,7 @@ struct SupacodeApp: App {
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
-    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: initialResolvedKeybindings)
-    ghosttyArgv.withUnsafeBufferPointer { buffer in
+    GhosttyCLI.argv.withUnsafeBufferPointer { buffer in
       let argc = UInt(max(0, buffer.count - 1))
       let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
       if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
@@ -182,13 +177,6 @@ struct SupacodeApp: App {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
-          .environment(\.resolvedKeybindings, store.resolvedKeybindings)
-      }
-      .onAppear {
-        syncGhosttyManagedShortcuts(with: store.resolvedKeybindings)
-      }
-      .onChange(of: store.resolvedKeybindings) { _, newValue in
-        syncGhosttyManagedShortcuts(with: newValue)
       }
       .preferredColorScheme(store.settings.appearanceMode.colorScheme)
     }
@@ -198,63 +186,37 @@ struct SupacodeApp: App {
       WorktreeCommands(store: store)
       SidebarCommands(store: store)
       TerminalCommands(ghosttyShortcuts: ghosttyShortcuts)
-      WindowCommands(
-        ghosttyShortcuts: ghosttyShortcuts,
-        resolvedKeybindings: store.resolvedKeybindings
-      )
+      WindowCommands(ghosttyShortcuts: ghosttyShortcuts)
       CommandGroup(after: .textEditing) {
         Button("Command Palette") {
           store.send(.commandPalette(.togglePresented))
         }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(
-              for: AppShortcuts.CommandID.commandPalette
-            )
-          )
+        .keyboardShortcut(
+          AppShortcuts.commandPalette.keyEquivalent,
+          modifiers: AppShortcuts.commandPalette.modifiers
         )
-        .help(helpText(title: "Command Palette", commandID: AppShortcuts.CommandID.commandPalette))
+        .help("Command Palette (\(AppShortcuts.commandPalette.display))")
       }
-      UpdateCommands(
-        store: store.scope(state: \.updates, action: \.updates),
-        resolvedKeybindings: store.resolvedKeybindings
-      )
+      UpdateCommands(store: store.scope(state: \.updates, action: \.updates))
       CommandGroup(replacing: .appSettings) {
         Button("Settings...") {
           SettingsWindowManager.shared.show()
         }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(for: AppShortcuts.CommandID.openSettings)
-          )
+        .keyboardShortcut(
+          AppShortcuts.openSettings.keyEquivalent,
+          modifiers: AppShortcuts.openSettings.modifiers
         )
       }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Prowl") {
           store.send(.requestQuit)
         }
-        .modifier(
-          KeyboardShortcutModifier(
-            shortcut: store.resolvedKeybindings.keyboardShortcut(
-              for: AppShortcuts.CommandID.quitApplication
-            )
-          )
+        .keyboardShortcut(
+          AppShortcuts.quitApplication.keyEquivalent,
+          modifiers: AppShortcuts.quitApplication.modifiers
         )
-        .help(helpText(title: "Quit Prowl", commandID: AppShortcuts.CommandID.quitApplication))
+        .help("Quit Prowl (\(AppShortcuts.quitApplication.display))")
       }
     }
-  }
-
-  private func syncGhosttyManagedShortcuts(with resolvedKeybindings: ResolvedKeybindingMap) {
-    ghostty.applyAppKeybindArguments(
-      AppShortcuts.ghosttyCLIKeybindArguments(from: resolvedKeybindings)
-    )
-  }
-
-  private func helpText(title: String, commandID: String) -> String {
-    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
-    }
-    return title
   }
 }

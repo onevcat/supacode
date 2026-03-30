@@ -43,14 +43,8 @@ struct KeybindingSchemaTests {
     #expect(commandIDs.contains("select_all_canvas_cards"))
 
     let commandPalette = schema.commands.first(where: { $0.id == "command_palette" })
-    let renameBranch = schema.commands.first(where: { $0.id == "rename_branch" })
-    let selectAllCanvasCards = schema.commands.first(where: { $0.id == "select_all_canvas_cards" })
-    #expect(commandPalette?.allowUserOverride == true)
-    #expect(commandPalette?.conflictPolicy == .warnAndPreferUserOverride)
-    #expect(renameBranch?.allowUserOverride == true)
-    #expect(renameBranch?.conflictPolicy == .localOnly)
-    #expect(selectAllCanvasCards?.allowUserOverride == true)
-    #expect(selectAllCanvasCards?.conflictPolicy == .localOnly)
+    #expect(commandPalette?.allowUserOverride == false)
+    #expect(commandPalette?.conflictPolicy == .disallowUserOverride)
   }
 
   @Test func resolverAppliesUserOverrideOverMigratedOverride() {
@@ -131,179 +125,85 @@ struct KeybindingSchemaTests {
     #expect(resolved.binding(for: "command.gamma")?.source == .userOverride)
   }
 
-  @Test func physicalDigitBindingsResolveToNumberShortcuts() {
-    let binding = Keybinding(
-      key: "digit_1",
-      modifiers: KeybindingModifiers(command: true, control: true)
-    )
-
-    expectNoDifference(binding.display, "⌘⌃1")
-    expectNoDifference(binding.keyboardShortcut?.display, "⌘⌃1")
-    #expect(binding.userCustomShortcut?.key == "1")
-  }
-
-  @Test func resolverDisableOverrideUnassignsConflictingCommand() {
-    let conflictBinding = Keybinding(
-      key: "w",
-      modifiers: KeybindingModifiers(command: true)
-    )
-    let schema = KeybindingSchemaDocument(
-      version: 1,
-      commands: [
-        KeybindingCommandSchema(
-          id: "command.first",
-          title: "First",
-          scope: .configurableAppAction,
-          platform: .macOS,
-          allowUserOverride: true,
-          conflictPolicy: .warnAndPreferUserOverride,
-          defaultBinding: Keybinding(
-            key: "f",
-            modifiers: KeybindingModifiers(command: true)
-          )
-        ),
-        KeybindingCommandSchema(
-          id: "command.second",
-          title: "Second",
-          scope: .configurableAppAction,
-          platform: .macOS,
-          allowUserOverride: true,
-          conflictPolicy: .warnAndPreferUserOverride,
-          defaultBinding: conflictBinding
-        ),
-      ]
-    )
-    let overrides = KeybindingUserOverrideStore(
-      overrides: [
-        "command.first": KeybindingUserOverride(binding: conflictBinding),
-        "command.second": KeybindingUserOverride(binding: nil, isEnabled: false),
-      ]
-    )
-
-    let resolved = KeybindingResolver.resolve(
-      schema: schema,
-      userOverrides: overrides
-    )
-
-    #expect(resolved.binding(for: "command.first")?.binding == conflictBinding)
-    #expect(resolved.binding(for: "command.first")?.source == .userOverride)
-    #expect(resolved.binding(for: "command.second")?.binding == nil)
-    #expect(resolved.binding(for: "command.second")?.source == .userOverride)
-  }
-
-  @Test func resolverNilEnabledOverrideDoesNotChangeDefaultBinding() {
-    let defaultBinding = Keybinding(
-      key: "n",
-      modifiers: KeybindingModifiers(command: true, shift: true)
-    )
-    let schema = KeybindingSchemaDocument(
-      version: 1,
-      commands: [
-        KeybindingCommandSchema(
-          id: "command.nil-enabled",
-          title: "Nil Enabled",
-          scope: .configurableAppAction,
-          platform: .macOS,
-          allowUserOverride: true,
-          conflictPolicy: .warnAndPreferUserOverride,
-          defaultBinding: defaultBinding
-        ),
-      ]
-    )
-    let overrides = KeybindingUserOverrideStore(
-      overrides: [
-        "command.nil-enabled": KeybindingUserOverride(binding: nil, isEnabled: true)
-      ]
-    )
-
-    let resolved = KeybindingResolver.resolve(
-      schema: schema,
-      userOverrides: overrides
-    )
-
-    #expect(resolved.binding(for: "command.nil-enabled")?.binding == defaultBinding)
-    #expect(resolved.binding(for: "command.nil-enabled")?.source == .appDefault)
-  }
-
   @Test func migrationMigratesLegacyCustomShortcutsAndCollectsUnmappedIssues() throws {
     let fixture = #"""
-      {
-        "customCommands": [
-          {
-            "id": "build",
-            "title": "Build",
-            "systemImage": "hammer",
-            "command": "swift build",
-            "execution": "shellScript",
-            "shortcut": {
-              "key": " B ",
-              "modifiers": {
-                "command": true,
-                "shift": true,
-                "option": false,
-                "control": false
-              }
+    {
+      "customCommands": [
+        {
+          "id": "build",
+          "title": "Build",
+          "systemImage": "hammer",
+          "command": "swift build",
+          "execution": "shellScript",
+          "shortcut": {
+            "key": " B ",
+            "modifiers": {
+              "command": true,
+              "shift": true,
+              "option": false,
+              "control": false
             }
-          },
-          {
-            "id": "deploy",
-            "title": "Deploy",
-            "systemImage": "rocket",
-            "command": "make release",
-            "execution": "shellScript",
-            "shortcut": {
-              "key": "d",
-              "modifiers": {
-                "command": true,
-                "shift": false,
-                "option": false,
-                "control": false
-              }
-            }
-          },
-          {
-            "id": "bad-shortcut",
-            "title": "Bad",
-            "systemImage": "xmark",
-            "command": "echo bad",
-            "execution": "shellScript",
-            "shortcut": {
-              "key": "two",
-              "modifiers": {
-                "command": true,
-                "shift": false,
-                "option": false,
-                "control": false
-              }
-            }
-          },
-          {
-            "id": "",
-            "title": "No ID",
-            "systemImage": "questionmark",
-            "command": "echo noid",
-            "execution": "shellScript",
-            "shortcut": {
-              "key": "n",
-              "modifiers": {
-                "command": true,
-                "shift": false,
-                "option": false,
-                "control": false
-              }
-            }
-          },
-          {
-            "id": "without-shortcut",
-            "title": "No Shortcut",
-            "systemImage": "ellipsis",
-            "command": "echo none",
-            "execution": "shellScript",
-            "shortcut": null
           }
-        ]
-      }
-      """#
+        },
+        {
+          "id": "deploy",
+          "title": "Deploy",
+          "systemImage": "rocket",
+          "command": "make release",
+          "execution": "shellScript",
+          "shortcut": {
+            "key": "d",
+            "modifiers": {
+              "command": true,
+              "shift": false,
+              "option": false,
+              "control": false
+            }
+          }
+        },
+        {
+          "id": "bad-shortcut",
+          "title": "Bad",
+          "systemImage": "xmark",
+          "command": "echo bad",
+          "execution": "shellScript",
+          "shortcut": {
+            "key": "two",
+            "modifiers": {
+              "command": true,
+              "shift": false,
+              "option": false,
+              "control": false
+            }
+          }
+        },
+        {
+          "id": "",
+          "title": "No ID",
+          "systemImage": "questionmark",
+          "command": "echo noid",
+          "execution": "shellScript",
+          "shortcut": {
+            "key": "n",
+            "modifiers": {
+              "command": true,
+              "shift": false,
+              "option": false,
+              "control": false
+            }
+          }
+        },
+        {
+          "id": "without-shortcut",
+          "title": "No Shortcut",
+          "systemImage": "ellipsis",
+          "command": "echo none",
+          "execution": "shellScript",
+          "shortcut": null
+        }
+      ]
+    }
+    """#
 
     let legacySettings = try JSONDecoder().decode(
       LegacyCustomCommandShortcutFixture.self,

@@ -24,6 +24,15 @@ struct DetailToolbarTitle: Equatable {
     }
   }
 
+  var helpText: String? {
+    switch kind {
+    case .branch:
+      return "Rename branch (\(AppShortcuts.renameBranch.display))"
+    case .folder:
+      return nil
+    }
+  }
+
   var supportsRename: Bool {
     if case .branch = kind {
       return true

@@ -12,7 +12,6 @@ struct RepositorySectionView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(\.colorScheme) private var colorScheme
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @State private var isHovering = false
 
   var body: some View {
@@ -123,11 +122,7 @@ struct RepositorySectionView: View {
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
-          .help(AppShortcuts.helpText(
-            title: "New Worktree",
-            commandID: AppShortcuts.CommandID.newWorktree,
-            in: resolvedKeybindings
-          ))
+          .help("New Worktree (\(AppShortcuts.newWorktree.display))")
           .disabled(isRemovingRepository)
         }
         if repository.capabilities.supportsWorktrees {

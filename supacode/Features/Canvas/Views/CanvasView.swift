@@ -3,7 +3,6 @@ import SwiftUI
 
 struct CanvasView: View {
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   let terminalManager: WorktreeTerminalManager
   var onExitToTab: () -> Void = {}
@@ -27,10 +26,6 @@ struct CanvasView: View {
   private let cardSpacing: CGFloat = 20
 
   var body: some View {
-    let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.selectAllCanvasCards,
-      in: resolvedKeybindings
-    )
     CanvasScrollContainer(offset: $canvasOffset, lastOffset: $lastCanvasOffset) {
       GeometryReader { _ in
         let activeStates = terminalManager.activeWorktreeStates
@@ -158,12 +153,8 @@ struct CanvasView: View {
       clearSelection(states: terminalManager.activeWorktreeStates)
       return .handled
     }
-    .onKeyPress(
-      selectAllCanvasShortcut?.keyEquivalent ?? AppShortcuts.selectAllCanvasCards.keyEquivalent,
-      phases: .down
-    ) { keyPress in
-      let shortcutModifiers = selectAllCanvasShortcut?.modifiers ?? AppShortcuts.selectAllCanvasCards.modifiers
-      guard keyPress.modifiers == shortcutModifiers else { return .ignored }
+    .onKeyPress(AppShortcuts.selectAllCanvasCards.keyEquivalent, phases: .down) { keyPress in
+      guard keyPress.modifiers == AppShortcuts.selectAllCanvasCards.modifiers else { return .ignored }
       selectAllCards()
       return .handled
     }
@@ -418,10 +409,10 @@ struct CanvasView: View {
           "Broadcasting to \(selectionState.selectedTabIDs.count) cards",
           systemImage: "dot.radiowaves.left.and.right"
         )
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.bar, in: Capsule())
+          .font(.callout)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .background(.bar, in: Capsule())
       }
 
       Button {
@@ -432,11 +423,7 @@ struct CanvasView: View {
           .accessibilityLabel("Select All")
       }
       .buttonStyle(.bordered)
-      .help(AppShortcuts.helpText(
-        title: "Select all cards for broadcast",
-        commandID: AppShortcuts.CommandID.selectAllCanvasCards,
-        in: resolvedKeybindings
-      ))
+      .help("Select all cards for broadcast (\(AppShortcuts.selectAllCanvasCards.display))")
 
       Button {
         withAnimation(.easeInOut(duration: 0.2)) {

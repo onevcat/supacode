@@ -7,7 +7,6 @@ struct PullRequestChecksPopoverView: View {
   private let sortedChecks: [GithubPullRequestStatusCheck]
   @Environment(\.analyticsClient) private var analyticsClient
   @Environment(\.openURL) private var openURL
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   init(
     pullRequest: GithubPullRequest,
@@ -59,8 +58,8 @@ struct PullRequestChecksPopoverView: View {
           }
           .buttonStyle(.plain)
           .focusable(false)
-          .help(openPullRequestHelpText)
-          .modifier(KeyboardShortcutModifier(shortcut: openPullRequestShortcut?.keyboardShortcut))
+          .help("Open pull request on GitHub (\(AppShortcuts.openPullRequest.display))")
+          .keyboardShortcut(AppShortcuts.openPullRequest.keyboardShortcut)
           .font(.headline)
         } else {
           titleLine
@@ -146,17 +145,4 @@ struct PullRequestChecksPopoverView: View {
     }
   }
 
-  private var openPullRequestShortcut: AppShortcut? {
-    AppShortcuts.resolvedShortcut(
-      for: AppShortcuts.CommandID.openPullRequest,
-      in: resolvedKeybindings
-    )
-  }
-
-  private var openPullRequestHelpText: String {
-    if let display = openPullRequestShortcut?.display {
-      return "Open pull request on GitHub (\(display))"
-    }
-    return "Open pull request on GitHub"
-  }
 }

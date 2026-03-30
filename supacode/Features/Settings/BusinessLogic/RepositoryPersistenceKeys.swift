@@ -1,5 +1,5 @@
-import Dependencies
 import Foundation
+import Dependencies
 import Sharing
 
 nonisolated struct RepositoryEntriesKeyID: Hashable, Sendable {}

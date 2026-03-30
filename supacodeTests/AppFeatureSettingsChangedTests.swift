@@ -1,5 +1,4 @@
 import ComposableArchitecture
-import CustomDump
 import DependenciesTestSupport
 import Testing
 
@@ -55,49 +54,5 @@ struct AppFeatureSettingsChangedTests {
 
     #expect(sentTerminalCommands.value.isEmpty)
     #expect(watcherCommands.value.isEmpty)
-  }
-
-  @Test(.dependencies) func settingsChangedRecomputesResolvedKeybindings() async {
-    var settings = GlobalSettings.default
-    settings.keybindingUserOverrides = KeybindingUserOverrideStore(
-      overrides: [
-        AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
-          binding: Keybinding(key: ";", modifiers: .init(command: true))
-        ),
-      ]
-    )
-
-    let expectedResolved = KeybindingResolver.resolve(
-      schema: .appResolverSchema(),
-      userOverrides: settings.keybindingUserOverrides
-    )
-
-    let store = TestStore(initialState: AppFeature.State()) {
-      AppFeature()
-    }
-
-    await store.send(.settings(.delegate(.settingsChanged(settings)))) {
-      $0.settings.keybindingUserOverrides = settings.keybindingUserOverrides
-      $0.resolvedKeybindings = expectedResolved
-    }
-    await store.receive(\.repositories.setGithubIntegrationEnabled)
-    await store.receive(\.repositories.setAutomaticallyArchiveMergedWorktrees)
-    await store.receive(\.repositories.setMoveNotifiedWorktreeToTop)
-    await store.receive(\.updates.applySettings) {
-      $0.updates.didConfigureUpdates = true
-    }
-    await store.receive(\.repositories.refreshGithubIntegrationAvailability) {
-      $0.repositories.githubIntegrationAvailability = .checking
-    }
-    await store.receive(\.repositories.githubIntegrationAvailabilityUpdated) {
-      $0.repositories.githubIntegrationAvailability = .available
-      $0.repositories.queuedPullRequestRefreshByRepositoryID = [:]
-      $0.repositories.inFlightPullRequestRefreshRepositoryIDs = []
-    }
-
-    expectNoDifference(
-      store.state.resolvedKeybindings.display(for: AppShortcuts.CommandID.openSettings),
-      "⌘;"
-    )
   }
 }

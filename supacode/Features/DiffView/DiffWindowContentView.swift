@@ -5,7 +5,6 @@ struct DiffWindowContentView: View {
   var state: DiffWindowState
   @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
   @AppStorage("diffViewStyle") private var diffStyleRaw = DiffStyle.split.rawValue
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   private var diffStyle: DiffStyle {
     DiffStyle(rawValue: diffStyleRaw) ?? .split
@@ -38,11 +37,7 @@ struct DiffWindowContentView: View {
           Image(systemName: "sidebar.left")
             .accessibilityLabel("Toggle Sidebar")
         }
-        .help(AppShortcuts.helpText(
-          title: "Toggle Sidebar",
-          commandID: AppShortcuts.CommandID.toggleLeftSidebar,
-          in: resolvedKeybindings
-        ))
+        .help("Toggle Sidebar (\(AppShortcuts.toggleLeftSidebar.display))")
       }
       ToolbarItem(id: "diffStyle", placement: .primaryAction) {
         Picker("Diff Style", selection: $diffStyleRaw) {

@@ -33,8 +33,6 @@ struct SettingsView: View {
             .tag(SettingsSection.general)
           Label("Notifications", systemImage: "bell")
             .tag(SettingsSection.notifications)
-          Label("Shortcuts", systemImage: "keyboard")
-            .tag(SettingsSection.shortcuts)
           Label("Worktree", systemImage: "archivebox")
             .tag(SettingsSection.worktree)
           Label("Updates", systemImage: "arrow.down.circle")
@@ -69,12 +67,6 @@ struct SettingsView: View {
           NotificationsSettingsView(store: settingsStore)
             .navigationTitle("Notifications")
             .navigationSubtitle("In-app alerts and delivery")
-        }
-      case .shortcuts:
-        SettingsDetailView {
-          ShortcutsSettingsView(store: settingsStore)
-            .navigationTitle("Shortcuts")
-            .navigationSubtitle("Global keybindings")
         }
       case .worktree:
         SettingsDetailView {

@@ -73,9 +73,6 @@ struct AppFeaturePlainFolderTerminalTests {
     }
     await store.receive(\.worktreeUserSettingsLoaded) {
       $0.selectedCustomCommands = userSettings.customCommands
-      $0.resolvedKeybindings = KeybindingResolver.resolve(
-        schema: .appResolverSchema(customCommands: userSettings.customCommands)
-      )
     }
     await store.finish()
 
@@ -154,11 +151,6 @@ struct AppFeaturePlainFolderTerminalTests {
 
     await store.send(.worktreeUserSettingsLoaded(conflicted, worktreeID: repository.id)) {
       $0.selectedCustomCommands = conflicted.customCommands
-      let migration = LegacyCustomCommandShortcutMigration.migrate(commands: conflicted.customCommands)
-      $0.resolvedKeybindings = KeybindingResolver.resolve(
-        schema: .appResolverSchema(customCommands: conflicted.customCommands),
-        migratedOverrides: migration.overrides
-      )
     }
     await store.finish()
 

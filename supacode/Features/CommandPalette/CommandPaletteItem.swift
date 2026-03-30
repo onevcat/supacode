@@ -93,22 +93,23 @@ struct CommandPaletteItem: Identifiable, Equatable {
     }
   }
 
-  var appShortcutCommandID: String? {
+  var appShortcut: AppShortcut? {
     switch kind {
     case .checkForUpdates:
-      return AppShortcuts.CommandID.checkForUpdates
+      return AppShortcuts.checkForUpdates
     case .openRepository:
-      return AppShortcuts.CommandID.openRepository
+      return AppShortcuts.openRepository
     case .openSettings:
-      return AppShortcuts.CommandID.openSettings
+      return AppShortcuts.openSettings
     case .newWorktree:
-      return AppShortcuts.CommandID.newWorktree
+      return AppShortcuts.newWorktree
     case .refreshWorktrees:
-      return AppShortcuts.CommandID.refreshWorktrees
+      return AppShortcuts.refreshWorktrees
+    case .ghosttyCommand:
+      return nil
     case .openPullRequest:
-      return AppShortcuts.CommandID.openPullRequest
-    case .ghosttyCommand,
-      .markPullRequestReady,
+      return AppShortcuts.openPullRequest
+    case .markPullRequestReady,
       .mergePullRequest,
       .closePullRequest,
       .copyFailingJobURL,
@@ -126,16 +127,11 @@ struct CommandPaletteItem: Identifiable, Equatable {
     }
   }
 
-  func appShortcut(in resolvedKeybindings: ResolvedKeybindingMap) -> AppShortcut? {
-    guard let commandID = appShortcutCommandID else { return nil }
-    return AppShortcuts.resolvedShortcut(for: commandID, in: resolvedKeybindings)
+  var appShortcutLabel: String? {
+    appShortcut?.display
   }
 
-  func appShortcutLabel(in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
-    appShortcut(in: resolvedKeybindings)?.display
-  }
-
-  func appShortcutSymbols(in resolvedKeybindings: ResolvedKeybindingMap) -> [String]? {
-    appShortcut(in: resolvedKeybindings)?.displaySymbols
+  var appShortcutSymbols: [String]? {
+    appShortcut?.displaySymbols
   }
 }

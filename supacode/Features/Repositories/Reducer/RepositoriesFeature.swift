@@ -2772,7 +2772,7 @@ struct RepositoriesFeature {
   }
 
   private nonisolated static func isNotGitRepositoryError(_ error: any Error) -> Bool {
-    guard case GitClientError.commandFailed(_, let message) = error else {
+    guard case let GitClientError.commandFailed(_, message) = error else {
       return false
     }
     return message.localizedCaseInsensitiveContains("not a git repository")
@@ -2780,7 +2780,7 @@ struct RepositoriesFeature {
 
   private nonisolated static func openRepositoryFailureMessage(path: String, error: any Error) -> String {
     let detail: String
-    if case GitClientError.commandFailed(_, let message) = error,
+    if case let GitClientError.commandFailed(_, message) = error,
       !message.isEmpty
     {
       detail = message
@@ -2852,14 +2852,14 @@ struct RepositoriesFeature {
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
-                id: rootURL.path(percentEncoded: false),
-                rootURL: rootURL,
-                name: Repository.name(for: rootURL),
-                kind: .plain,
-                worktrees: IdentifiedArray()
-              ),
-              errorMessage: nil
-            )
+                  id: rootURL.path(percentEncoded: false),
+                  rootURL: rootURL,
+                  name: Repository.name(for: rootURL),
+                  kind: .plain,
+                  worktrees: IdentifiedArray()
+                ),
+                errorMessage: nil
+              )
           }
         }
       }

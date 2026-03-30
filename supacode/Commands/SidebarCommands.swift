@@ -10,15 +10,20 @@ struct SidebarCommands: Commands {
       Button("Toggle Left Sidebar") {
         toggleLeftSidebarAction?()
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleLeftSidebar)))
-      .help(helpText(title: "Toggle Left Sidebar", commandID: AppShortcuts.CommandID.toggleLeftSidebar))
+      .keyboardShortcut(
+        AppShortcuts.toggleLeftSidebar.keyEquivalent, modifiers: AppShortcuts.toggleLeftSidebar.modifiers
+      )
+      .help("Toggle Left Sidebar (\(AppShortcuts.toggleLeftSidebar.display))")
       .disabled(toggleLeftSidebarAction == nil)
       Divider()
       Button("Canvas") {
         store.send(.repositories(.toggleCanvas))
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
-      .help(helpText(title: "Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
+      .keyboardShortcut(
+        AppShortcuts.toggleCanvas.keyEquivalent,
+        modifiers: AppShortcuts.toggleCanvas.modifiers
+      )
+      .help("Canvas (\(AppShortcuts.toggleCanvas.display))")
       Button("Show Diff") {
         let repos = store.repositories
         guard let worktreeID = repos.selectedWorktreeID,
@@ -27,24 +32,15 @@ struct SidebarCommands: Commands {
         DiffWindowManager.shared.show(
           worktreeURL: worktree.workingDirectory,
           branchName: worktree.name,
-          resolvedKeybindings: store.resolvedKeybindings
         )
       }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.showDiff)))
-      .help(helpText(title: "Show Diff", commandID: AppShortcuts.CommandID.showDiff))
+      .keyboardShortcut(
+        AppShortcuts.showDiff.keyEquivalent,
+        modifiers: AppShortcuts.showDiff.modifiers
+      )
+      .help("Show Diff (\(AppShortcuts.showDiff.display))")
       .disabled(store.repositories.selectedWorktreeID == nil)
     }
-  }
-
-  private func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
-    store.resolvedKeybindings.keyboardShortcut(for: commandID)
-  }
-
-  private func helpText(title: String, commandID: String) -> String {
-    if let shortcut = store.resolvedKeybindings.display(for: commandID) {
-      return "\(title) (\(shortcut))"
-    }
-    return title
   }
 }
 

@@ -19,7 +19,6 @@ struct AppFeature {
     var openActionSelection: OpenWorktreeAction = .finder
     var selectedRunScript: String = ""
     var selectedCustomCommands: [UserCustomCommand] = []
-    var resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
     var runScriptDraft: String = ""
     var isRunScriptPromptPresented = false
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
@@ -85,18 +84,6 @@ struct AppFeature {
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
 
-  private func resolvedKeybindings(
-    settings: SettingsFeature.State,
-    customCommands: [UserCustomCommand]
-  ) -> ResolvedKeybindingMap {
-    let migration = LegacyCustomCommandShortcutMigration.migrate(commands: customCommands)
-    return KeybindingResolver.resolve(
-      schema: .appResolverSchema(customCommands: customCommands),
-      userOverrides: settings.keybindingUserOverrides,
-      migratedOverrides: migration.overrides
-    )
-  }
-
   var body: some Reducer<State, Action> {
     let core = Reduce<State, Action> { state, action in
       switch action {
@@ -152,10 +139,6 @@ struct AppFeature {
           state.openActionSelection = .finder
           state.selectedRunScript = ""
           state.selectedCustomCommands = []
-          state.resolvedKeybindings = resolvedKeybindings(
-            settings: state.settings,
-            customCommands: state.selectedCustomCommands
-          )
           state.runScriptDraft = ""
           state.isRunScriptPromptPresented = false
           var effects: [Effect<Action>] = [
@@ -184,10 +167,6 @@ struct AppFeature {
         let rootURL = worktree.repositoryRootURL
         let worktreeID = worktree.id
         state.selectedCustomCommands = []
-        state.resolvedKeybindings = resolvedKeybindings(
-          settings: state.settings,
-          customCommands: state.selectedCustomCommands
-        )
         state.runScriptDraft = ""
         state.isRunScriptPromptPresented = false
         @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -296,7 +275,7 @@ struct AppFeature {
             settings: repositorySettings,
             userSettings: userRepositorySettings
           )
-        case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github:
+        case .general, .notifications, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }
         return .none
@@ -305,7 +284,6 @@ struct AppFeature {
         let shouldCheckSystemNotificationPermission =
           settings.systemNotificationsEnabled && !state.lastKnownSystemNotificationsEnabled
         state.lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
-        state.settings.keybindingUserOverrides = settings.keybindingUserOverrides
         if let selectedWorktree = state.repositories.selectedTerminalWorktree {
           let rootURL = selectedWorktree.repositoryRootURL
           @Shared(.repositorySettings(rootURL)) var repositorySettings
@@ -314,10 +292,6 @@ struct AppFeature {
             defaultEditorID: settings.defaultEditorID
           )
         }
-        state.resolvedKeybindings = resolvedKeybindings(
-          settings: state.settings,
-          customCommands: state.selectedCustomCommands
-        )
         return .merge(
           .send(.repositories(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled))),
           .send(
@@ -649,14 +623,10 @@ struct AppFeature {
         }
         state.selectedCustomCommands = UserRepositorySettings.normalizedCommands(settings.customCommands)
           .filter(\.hasRunnableCommand)
-        state.resolvedKeybindings = resolvedKeybindings(
-          settings: state.settings,
-          customCommands: state.selectedCustomCommands
-        )
         let userOverrideConflicts = AppShortcuts.userOverrideConflicts(in: state.selectedCustomCommands)
         let shortcuts: [UserCustomShortcut] = state.selectedCustomCommands.compactMap { command in
-          let commandID = LegacyCustomCommandShortcutMigration.customCommandBindingID(for: command.id)
-          return state.resolvedKeybindings.keybinding(for: commandID)?.userCustomShortcut
+          guard let shortcut = command.shortcut, shortcut.isValid else { return nil }
+          return shortcut.normalized()
         }
         return .run { _ in
           let logger = SupaLogger("Shortcuts")

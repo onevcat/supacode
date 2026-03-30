@@ -37,10 +37,6 @@ nonisolated struct KeybindingModifiers: Codable, Equatable, Sendable {
     self.control = control
   }
 
-  var isEmpty: Bool {
-    !command && !shift && !option && !control
-  }
-
   var eventModifiers: EventModifiers {
     var value: EventModifiers = []
     if command {
@@ -108,18 +104,8 @@ nonisolated struct Keybinding: Codable, Equatable, Sendable {
     case "arrow_right":
       return "→"
     default:
-      if let digitCharacter = physicalDigitCharacter(for: key) {
-        return String(digitCharacter)
-      }
       return key.uppercased()
     }
-  }
-
-  private static func physicalDigitCharacter(for key: String) -> Character? {
-    guard key.hasPrefix("digit_") else { return nil }
-    let value = key.dropFirst("digit_".count)
-    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
-    return character
   }
 }
 
@@ -147,6 +133,24 @@ nonisolated struct KeybindingCommandSchema: Codable, Equatable, Sendable {
   var allowUserOverride: Bool
   var conflictPolicy: KeybindingConflictPolicy
   var defaultBinding: Keybinding?
+
+  init(
+    id: String,
+    title: String,
+    scope: KeybindingScope,
+    platform: KeybindingPlatform,
+    allowUserOverride: Bool,
+    conflictPolicy: KeybindingConflictPolicy,
+    defaultBinding: Keybinding?
+  ) {
+    self.id = id
+    self.title = title
+    self.scope = scope
+    self.platform = platform
+    self.allowUserOverride = allowUserOverride
+    self.conflictPolicy = conflictPolicy
+    self.defaultBinding = defaultBinding
+  }
 }
 
 nonisolated struct KeybindingUserOverrideStore: Codable, Equatable, Sendable {
@@ -182,26 +186,6 @@ nonisolated struct ResolvedKeybindingMap: Equatable, Sendable {
 
   func binding(for commandID: String) -> ResolvedKeybinding? {
     bindingsByCommandID[commandID]
-  }
-}
-
-extension ResolvedKeybindingMap {
-  static let appDefaults = KeybindingResolver.resolve(schema: .appResolverSchema())
-
-  func keybinding(for commandID: String) -> Keybinding? {
-    binding(for: commandID)?.binding
-  }
-
-  func appShortcut(for commandID: String) -> AppShortcut? {
-    keybinding(for: commandID)?.appShortcut
-  }
-
-  func keyboardShortcut(for commandID: String) -> KeyboardShortcut? {
-    keybinding(for: commandID)?.keyboardShortcut
-  }
-
-  func display(for commandID: String) -> String? {
-    keybinding(for: commandID)?.display
   }
 }
 
@@ -379,18 +363,11 @@ extension KeybindingSchemaDocument {
           title: binding.title,
           scope: .init(binding.scope),
           platform: .macOS,
-          allowUserOverride: binding.scope != .systemFixedAppAction,
+          allowUserOverride: binding.scope == .configurableAppAction,
           conflictPolicy: binding.scope.conflictPolicy,
           defaultBinding: binding.shortcut.keybinding
         )
       }
-    )
-  }
-
-  static func appResolverSchema(customCommands: [UserCustomCommand] = []) -> KeybindingSchemaDocument {
-    KeybindingSchemaDocument(
-      version: currentVersion,
-      commands: appDefaultsV1.commands + customCommands.map(\.keybindingCommandSchema)
     )
   }
 }
@@ -411,106 +388,5 @@ extension AppShortcuts.Scope {
 extension AppShortcut {
   fileprivate var keybinding: Keybinding {
     Keybinding(key: keyToken, modifiers: .init(modifiers))
-  }
-}
-
-extension UserCustomCommand {
-  fileprivate var keybindingCommandSchema: KeybindingCommandSchema {
-    KeybindingCommandSchema(
-      id: LegacyCustomCommandShortcutMigration.customCommandBindingID(for: id),
-      title: resolvedTitle,
-      scope: .customCommand,
-      platform: .macOS,
-      allowUserOverride: true,
-      conflictPolicy: .warnAndPreferUserOverride,
-      defaultBinding: nil
-    )
-  }
-}
-
-extension Keybinding {
-  var keyEquivalent: KeyEquivalent? {
-    if let specialKeyEquivalent {
-      return specialKeyEquivalent
-    }
-    if let singleCharacter {
-      return KeyEquivalent(singleCharacter)
-    }
-    if let physicalDigitCharacter {
-      return KeyEquivalent(physicalDigitCharacter)
-    }
-    return nil
-  }
-
-  var keyboardShortcut: KeyboardShortcut? {
-    guard let keyEquivalent else { return nil }
-    return KeyboardShortcut(keyEquivalent, modifiers: modifiers.eventModifiers)
-  }
-
-  var appShortcut: AppShortcut? {
-    if let specialKeyEquivalent {
-      return AppShortcut(
-        keyEquivalent: specialKeyEquivalent,
-        ghosttyKeyName: key,
-        modifiers: modifiers.eventModifiers
-      )
-    }
-    if let singleCharacter {
-      return AppShortcut(key: singleCharacter, modifiers: modifiers.eventModifiers)
-    }
-    if let physicalDigitCharacter {
-      return AppShortcut(key: physicalDigitCharacter, modifiers: modifiers.eventModifiers)
-    }
-    return nil
-  }
-
-  var userCustomShortcut: UserCustomShortcut? {
-    if key.count == 1 {
-      return UserCustomShortcut(key: key, modifiers: .init(modifiers))
-    }
-    if let physicalDigitCharacter {
-      return UserCustomShortcut(key: String(physicalDigitCharacter), modifiers: .init(modifiers))
-    }
-    return nil
-  }
-
-  private var specialKeyEquivalent: KeyEquivalent? {
-    switch key {
-    case "return":
-      return .return
-    case "arrow_up":
-      return .upArrow
-    case "arrow_down":
-      return .downArrow
-    case "arrow_left":
-      return .leftArrow
-    case "arrow_right":
-      return .rightArrow
-    default:
-      return nil
-    }
-  }
-
-  private var singleCharacter: Character? {
-    guard key.count == 1 else { return nil }
-    return key.first
-  }
-
-  private var physicalDigitCharacter: Character? {
-    guard key.hasPrefix("digit_") else { return nil }
-    let value = key.dropFirst("digit_".count)
-    guard value.count == 1, let character = value.first, character.isNumber else { return nil }
-    return character
-  }
-}
-
-extension UserCustomShortcutModifiers {
-  nonisolated init(_ modifiers: KeybindingModifiers) {
-    self.init(
-      command: modifiers.command,
-      shift: modifiers.shift,
-      option: modifiers.option,
-      control: modifiers.control
-    )
   }
 }

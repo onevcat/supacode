@@ -228,7 +228,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: root, kind: .git)]
+      [PersistedRepositoryEntry(path: root, kind: .git)],
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -317,7 +317,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: root, kind: .plain)]
+      [PersistedRepositoryEntry(path: root, kind: .plain)],
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -484,7 +484,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: repoRoot, kind: .git)]
+      [PersistedRepositoryEntry(path: repoRoot, kind: .git)],
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }

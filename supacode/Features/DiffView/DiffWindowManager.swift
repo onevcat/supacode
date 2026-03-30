@@ -12,22 +12,11 @@ final class DiffWindowManager {
 
   private init() {}
 
-  func show(
-    worktreeURL: URL,
-    branchName: String,
-    resolvedKeybindings: ResolvedKeybindingMap = .appDefaults
-  ) {
+  func show(worktreeURL: URL, branchName: String) {
     state.load(worktreeURL: worktreeURL, branchName: branchName)
     skipNextFocusRefresh = true
-    let rootView = AnyView(
-      DiffWindowContentView(state: state)
-        .environment(\.resolvedKeybindings, resolvedKeybindings)
-    )
 
     if let existingWindow = window {
-      if let hostingController = existingWindow.contentViewController as? NSHostingController<AnyView> {
-        hostingController.rootView = rootView
-      }
       existingWindow.title = windowTitle(branchName: branchName)
       if existingWindow.isMiniaturized {
         existingWindow.deminiaturize(nil)
@@ -36,7 +25,8 @@ final class DiffWindowManager {
       return
     }
 
-    let hostingController = NSHostingController(rootView: rootView)
+    let contentView = DiffWindowContentView(state: state)
+    let hostingController = NSHostingController(rootView: contentView)
 
     let newWindow = NSWindow(contentViewController: hostingController)
     newWindow.title = windowTitle(branchName: branchName)

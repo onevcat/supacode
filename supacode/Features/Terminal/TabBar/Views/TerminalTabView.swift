@@ -15,7 +15,6 @@ struct TerminalTabView: View {
   @State private var isHoveringClose = false
   @State private var isPressing = false
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
-  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   var body: some View {
     ZStack(alignment: .trailing) {
@@ -74,7 +73,9 @@ struct TerminalTabView: View {
   }
 
   private var shortcutHint: String? {
-    AppShortcuts.terminalTabSelectionDisplay(at: tabIndex, in: resolvedKeybindings)
+    let number = tabIndex + 1
+    guard number > 0 && number <= 9 else { return nil }
+    return "⌘\(number)"
   }
 
   private var showsShortcutHint: Bool {
