@@ -522,7 +522,18 @@ struct RepositorySettingsView: View {
   }
 
   private var removableCommandID: UserCustomCommand.ID? {
-    effectiveSelectedCommandID ?? store.userSettings.customCommands.last?.id
+    let commands = store.userSettings.customCommands
+    if let selectedCustomCommandID,
+      commands.contains(where: { $0.id == selectedCustomCommandID })
+    {
+      return selectedCustomCommandID
+    }
+    if let effectiveSelectedCommandID,
+      commands.contains(where: { $0.id == effectiveSelectedCommandID })
+    {
+      return effectiveSelectedCommandID
+    }
+    return commands.last?.id
   }
 
   @ViewBuilder
@@ -814,7 +825,13 @@ struct RepositorySettingsView: View {
       return
     }
 
-    store.userSettings.customCommands.removeAll { $0.id == selectedCommandID }
+    if let removalIndex = store.userSettings.customCommands.firstIndex(where: { $0.id == selectedCommandID }) {
+      store.userSettings.customCommands.remove(at: removalIndex)
+    } else if !store.userSettings.customCommands.isEmpty {
+      store.userSettings.customCommands.removeLast()
+    }
+    syncSelectedCommandID(with: store.userSettings.customCommands)
+    clearRemovedCommandState(using: store.userSettings.customCommands)
   }
 
   private func clearShortcut(for commandID: UserCustomCommand.ID) {
