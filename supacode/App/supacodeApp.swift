@@ -29,7 +29,12 @@ private enum GhosttyCLI {
 
 @MainActor
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
-  var appStore: StoreOf<AppFeature>?
+  var appStore: StoreOf<AppFeature>? {
+    didSet {
+      flushPendingExternalOpens()
+    }
+  }
+  private var pendingExternalOpenURLs: [URL] = []
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
@@ -37,6 +42,17 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       "ApplePressAndHoldEnabled": false,
     ])
     appStore?.send(.appLaunched)
+    flushPendingExternalOpens()
+  }
+
+  func application(_ application: NSApplication, open urls: [URL]) {
+    handleExternalOpen(urls: urls, application: application)
+  }
+
+  func application(_ sender: NSApplication, openFiles filenames: [String]) {
+    let urls = filenames.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    handleExternalOpen(urls: urls, application: sender)
+    sender.reply(toOpenOrPrint: .success)
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
@@ -52,6 +68,43 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     false
+  }
+
+  private func handleExternalOpen(urls: [URL], application: NSApplication) {
+    let directoryURLs = urls.compactMap { url -> URL? in
+      let normalizedURL = url.standardizedFileURL
+      guard directoryExists(at: normalizedURL) else {
+        return nil
+      }
+      return normalizedURL
+    }
+    guard !directoryURLs.isEmpty else { return }
+
+    if let appStore {
+      for directoryURL in directoryURLs {
+        appStore.send(.repositories(.openPath(directoryURL)))
+      }
+    } else {
+      pendingExternalOpenURLs.append(contentsOf: directoryURLs)
+    }
+
+    _ = showMainWindow(from: application)
+  }
+
+  private func flushPendingExternalOpens() {
+    guard !pendingExternalOpenURLs.isEmpty else { return }
+    guard let appStore else { return }
+    let pendingURLs = pendingExternalOpenURLs
+    pendingExternalOpenURLs.removeAll()
+    for pendingURL in pendingURLs {
+      appStore.send(.repositories(.openPath(pendingURL)))
+    }
+  }
+
+  private func directoryExists(at url: URL) -> Bool {
+    var isDirectory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory)
+      && isDirectory.boolValue
   }
 
   private func mainWindow(from sender: NSApplication) -> NSWindow? {

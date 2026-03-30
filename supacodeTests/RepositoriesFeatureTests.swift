@@ -3030,6 +3030,107 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.selectedWorktreeChanged)
   }
 
+  @Test func openPathFocusesExactWorktreeAndEnsuresInitialTab() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.openPath(worktree.workingDirectory))
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(
+      sentCommands.value
+        == [
+          .ensureInitialTab(worktree, runSetupScriptIfNew: false, focusing: true)
+        ]
+    )
+  }
+
+  @Test func openPathInsideWorktreeCreatesTabAtRequestedDirectory() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
+
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.openPath(requestedDirectory))
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(
+      sentCommands.value
+        == [
+          .createTabAtDirectory(
+            worktree,
+            directory: requestedDirectory.standardizedFileURL,
+            runSetupScriptIfNew: false
+          ),
+        ]
+    )
+  }
+
+  @Test func openPathFocusesExactPlainFolderRoot() async {
+    let root = "/tmp/folder"
+    let plainRepository = makeRepository(id: root, name: "folder", kind: .plain, worktrees: [])
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(initialState: makeState(repositories: [plainRepository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.openPath(URL(fileURLWithPath: root)))
+    await store.receive(\.selectRepository) {
+      $0.selection = .repository(root)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(
+      sentCommands.value
+        == [
+          .ensureInitialTab(
+            Worktree(
+              id: root,
+              name: "folder",
+              detail: root,
+              workingDirectory: URL(fileURLWithPath: root),
+              repositoryRootURL: URL(fileURLWithPath: root)
+            ),
+            runSetupScriptIfNew: false,
+            focusing: true
+          ),
+        ]
+    )
+  }
+
   private func makeWorktree(
     id: String,
     name: String,

@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import Sharing
 
@@ -44,6 +45,10 @@ final class WorktreeTerminalManager {
     switch command {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
+    case .createTabAtDirectory(let worktree, let directory, let runSetupScriptIfNew):
+      Task {
+        createTabAsync(in: worktree, workingDirectory: directory, runSetupScriptIfNew: runSetupScriptIfNew)
+      }
     case .createTabWithInput(let worktree, let input, let runSetupScriptIfNew):
       Task {
         createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew, initialInput: input)
@@ -214,6 +219,7 @@ final class WorktreeTerminalManager {
 
   private func createTabAsync(
     in worktree: Worktree,
+    workingDirectory: URL? = nil,
     runSetupScriptIfNew: Bool,
     initialInput: String? = nil
   ) {
@@ -226,7 +232,11 @@ final class WorktreeTerminalManager {
     } else {
       setupScript = nil
     }
-    _ = state.createTab(setupScript: setupScript, initialInput: initialInput)
+    _ = state.createTab(
+      setupScript: setupScript,
+      initialInput: initialInput,
+      workingDirectory: workingDirectory
+    )
   }
 
   @discardableResult

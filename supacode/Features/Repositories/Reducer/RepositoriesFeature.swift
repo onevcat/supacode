@@ -88,6 +88,7 @@ struct RepositoriesFeature {
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
+    var pendingExternalOpenPath: URL?
     var statusToast: StatusToast?
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
@@ -139,6 +140,7 @@ struct RepositoriesFeature {
     case selectCanvas
     case toggleCanvas
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
+    case openPath(URL)
     case openRepositories([URL])
     case openRepositoriesFinished(
       [Repository],
@@ -491,6 +493,50 @@ struct RepositoriesFeature {
         }
         return .merge(allEffects)
 
+      case .openPath(let requestedURL):
+        let normalizedRequestedURL = requestedURL.standardizedFileURL
+        guard let match = state.openPathMatch(for: normalizedRequestedURL) else {
+          state.pendingExternalOpenPath = normalizedRequestedURL
+          return .send(.openRepositories([normalizedRequestedURL]))
+        }
+
+        var effects: [Effect<Action>] = []
+        switch match.selection {
+        case .worktree(let worktreeID):
+          effects.append(.send(.selectWorktree(worktreeID, focusTerminal: true)))
+        case .repository(let repositoryID):
+          effects.append(.send(.selectRepository(repositoryID)))
+        }
+
+        switch match.resolution {
+        case .exactRoot:
+          effects.append(
+            .run { _ in
+              await terminalClient.send(
+                .ensureInitialTab(
+                  match.worktree,
+                  runSetupScriptIfNew: false,
+                  focusing: true
+                )
+              )
+            }
+          )
+        case .insideRoot:
+          effects.append(
+            .run { _ in
+              await terminalClient.send(
+                .createTabAtDirectory(
+                  match.worktree,
+                  directory: normalizedRequestedURL,
+                  runSetupScriptIfNew: false
+                )
+              )
+            }
+          )
+        }
+
+        return .merge(effects)
+
       case .openRepositories(let urls):
         analyticsClient.capture("repository_added", ["count": urls.count])
         state.alert = nil
@@ -552,6 +598,8 @@ struct RepositoriesFeature {
         let openFailures,
         let roots
       ):
+        let pendingExternalOpenPath = state.pendingExternalOpenPath
+        state.pendingExternalOpenPath = nil
         state.isRefreshingWorktrees = false
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
@@ -623,6 +671,11 @@ struct RepositoriesFeature {
               await repositoryPersistence.saveRepositorySnapshot(repositories)
             }
           )
+        }
+        if let pendingExternalOpenPath,
+          state.openPathMatch(for: pendingExternalOpenPath) != nil
+        {
+          allEffects.append(.send(.openPath(pendingExternalOpenPath)))
         }
         return .merge(allEffects)
 
@@ -3253,6 +3306,78 @@ extension RepositoriesFeature.State {
     repositories[id: id]?.name
   }
 
+  func openPathMatch(for requestedURL: URL) -> OpenPathMatch? {
+    let normalizedRequestedURL = requestedURL.standardizedFileURL
+    var exactMatch: OpenPathMatch?
+    var insideMatches: [OpenPathMatch] = []
+
+    for candidate in openPathCandidates() {
+      let normalizedRootURL = candidate.worktree.workingDirectory.standardizedFileURL
+      if normalizedRootURL == normalizedRequestedURL {
+        exactMatch = OpenPathMatch(
+          resolution: .exactRoot,
+          selection: candidate.selection,
+          worktree: candidate.worktree
+        )
+        break
+      }
+      if isDescendantPath(normalizedRequestedURL, of: normalizedRootURL) {
+        insideMatches.append(
+          OpenPathMatch(
+            resolution: .insideRoot,
+            selection: candidate.selection,
+            worktree: candidate.worktree
+          )
+        )
+      }
+    }
+
+    if let exactMatch {
+      return exactMatch
+    }
+
+    return insideMatches.max { lhs, rhs in
+      lhs.worktree.workingDirectory.pathComponents.count < rhs.worktree.workingDirectory.pathComponents.count
+    }
+  }
+
+  private func openPathCandidates() -> [OpenPathCandidate] {
+    repositories.flatMap { repository in
+      if repository.capabilities.supportsWorktrees {
+        return repository.worktrees.map { worktree in
+          OpenPathCandidate(
+            selection: .worktree(worktree.id),
+            worktree: worktree
+          )
+        }
+      }
+      if repository.capabilities.supportsRunnableFolderActions {
+        return [
+          OpenPathCandidate(
+            selection: .repository(repository.id),
+            worktree: Worktree(
+              id: repository.id,
+              name: repository.name,
+              detail: repository.rootURL.path(percentEncoded: false),
+              workingDirectory: repository.rootURL,
+              repositoryRootURL: repository.rootURL
+            )
+          ),
+        ]
+      }
+      return []
+    }
+  }
+
+  private func isDescendantPath(_ path: URL, of root: URL) -> Bool {
+    let normalizedPath = path.standardizedFileURL.pathComponents
+    let normalizedRoot = root.standardizedFileURL.pathComponents
+    guard normalizedPath.count > normalizedRoot.count else {
+      return false
+    }
+    return Array(normalizedPath.prefix(normalizedRoot.count)) == normalizedRoot
+  }
+
   func orderedRepositoryRoots() -> [URL] {
     let rootsByID = Dictionary(
       uniqueKeysWithValues: repositoryRoots.map {
@@ -3471,6 +3596,27 @@ extension RepositoriesFeature.State {
       .compactMap { repositoriesByID[$0] }
       .flatMap { worktreeRows(in: $0) }
   }
+}
+
+struct OpenPathMatch: Equatable {
+  enum Resolution: Equatable {
+    case exactRoot
+    case insideRoot
+  }
+
+  let resolution: Resolution
+  let selection: OpenPathSelection
+  let worktree: Worktree
+}
+
+enum OpenPathSelection: Equatable {
+  case worktree(Worktree.ID)
+  case repository(Repository.ID)
+}
+
+private struct OpenPathCandidate: Equatable {
+  let selection: OpenPathSelection
+  let worktree: Worktree
 }
 
 struct WorktreeRowSections {

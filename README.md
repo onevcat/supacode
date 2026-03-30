@@ -28,6 +28,24 @@ make test      # Run tests
 make format    # Run swift-format
 ```
 
+## Command Line (open-path entry)
+
+Prowl now ships a first-class CLI entry script at `bin/prowl`.
+
+```bash
+bin/prowl
+bin/prowl ~/Downloads
+bin/prowl .
+bin/prowl open ~/Projects/Prowl
+```
+
+Argument routing rules:
+- Reserved subcommands go to subcommand routing: `help version open list focus send key read`
+- Path-like first arguments route to open-path: `/...`, `./...`, `../...`, `~/...`, `file://...`, `.`, `..`
+- Other first arguments fail with usage error
+
+Current scope of this entrypoint is open-path (`prowl`, `prowl <path>`, `prowl open <path>`). The other reserved subcommands are intentionally reserved for upcoming first-class implementations.
+
 ## Contributing
 
 - I actual prefer a well written issue describing features/bugs u want rather than a vibe-coded PR

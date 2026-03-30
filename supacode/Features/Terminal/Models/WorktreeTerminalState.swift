@@ -139,6 +139,7 @@ final class WorktreeTerminalState {
     focusing: Bool = true,
     setupScript: String? = nil,
     initialInput: String? = nil,
+    workingDirectory: URL? = nil,
     inheritingFromSurfaceId: UUID? = nil
   ) -> TerminalTabID? {
     let context: ghostty_surface_context_e =
@@ -170,6 +171,7 @@ final class WorktreeTerminalState {
         icon: "terminal",
         isTitleLocked: false,
         initialInput: resolvedInput,
+        workingDirectory: workingDirectory,
         focusing: focusing,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
         context: context
@@ -193,6 +195,7 @@ final class WorktreeTerminalState {
         icon: "play.fill",
         isTitleLocked: true,
         initialInput: input,
+        workingDirectory: nil,
         focusing: true,
         inheritingFromSurfaceId: currentFocusedSurfaceId(),
         context: GHOSTTY_SURFACE_CONTEXT_TAB
@@ -214,6 +217,7 @@ final class WorktreeTerminalState {
     let icon: String?
     let isTitleLocked: Bool
     let initialInput: String?
+    let workingDirectory: URL?
     let focusing: Bool
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
@@ -229,6 +233,7 @@ final class WorktreeTerminalState {
       for: tabId,
       inheritingFromSurfaceId: creation.inheritingFromSurfaceId,
       initialInput: creation.initialInput,
+      workingDirectory: creation.workingDirectory,
       context: creation.context
     )
     tabIsRunningById[tabId] = false
@@ -410,6 +415,7 @@ final class WorktreeTerminalState {
     for tabId: TerminalTabID,
     inheritingFromSurfaceId: UUID? = nil,
     initialInput: String? = nil,
+    workingDirectory: URL? = nil,
     context: ghostty_surface_context_e = GHOSTTY_SURFACE_CONTEXT_TAB
   ) -> SplitTree<GhosttySurfaceView> {
     if let existing = trees[tabId] {
@@ -418,6 +424,7 @@ final class WorktreeTerminalState {
     let surface = createSurface(
       tabId: tabId,
       initialInput: initialInput,
+      workingDirectory: workingDirectory,
       inheritingFromSurfaceId: inheritingFromSurfaceId,
       context: context
     )
@@ -439,6 +446,7 @@ final class WorktreeTerminalState {
       let newSurface = createSurface(
         tabId: tabId,
         initialInput: nil,
+        workingDirectory: nil,
         inheritingFromSurfaceId: surfaceId,
         context: GHOSTTY_SURFACE_CONTEXT_SPLIT
       )
@@ -646,6 +654,7 @@ final class WorktreeTerminalState {
   private func createSurface(
     tabId: TerminalTabID,
     initialInput: String?,
+    workingDirectory: URL?,
     inheritingFromSurfaceId: UUID?,
     context: ghostty_surface_context_e
   ) -> GhosttySurfaceView {
@@ -655,9 +664,10 @@ final class WorktreeTerminalState {
       inheritedFontSize: inherited.fontSize,
       context: context
     )
+    let resolvedWorkingDirectory = workingDirectory ?? inherited.workingDirectory ?? worktree.workingDirectory
     let view = GhosttySurfaceView(
       runtime: runtime,
-      workingDirectory: inherited.workingDirectory ?? worktree.workingDirectory,
+      workingDirectory: resolvedWorkingDirectory,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context

@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="${PROWL_APP_NAME:-Prowl}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  prowl
+  prowl <path>
+  prowl open <path>
+  prowl help
+  prowl version
+
+Reserved subcommands:
+  help version open list focus send key read
+
+Notes:
+  - <path> must look like a path: /... ./... ../... ~/... file://... . ..
+  - list/focus/send/key/read are reserved but not implemented in this build
+EOF
+}
+
+error() {
+  echo "prowl: $*" >&2
+}
+
+is_reserved_subcommand() {
+  case "$1" in
+    help | version | open | list | focus | send | key | read) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_path_like() {
+  case "$1" in
+    / | /* | ./* | ../* | ~ | ~/* | . | .. | file://*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+import urllib.parse
+
+raw = sys.argv[1]
+if raw.startswith("file://"):
+    parsed = urllib.parse.urlparse(raw)
+    path = urllib.parse.unquote(parsed.path)
+else:
+    path = raw
+path = os.path.expanduser(path)
+if not os.path.isabs(path):
+    path = os.path.abspath(path)
+print(os.path.normpath(path))
+PY
+}
+
+launch_prowl() {
+  if (($# == 0)); then
+    open -a "$APP_NAME"
+  else
+    open -a "$APP_NAME" "$1"
+  fi
+}
+
+print_version() {
+  local app_path="/Applications/${APP_NAME}.app"
+  if [[ -d "$app_path" ]]; then
+    defaults read "$app_path/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "unknown"
+  else
+    echo "unknown"
+  fi
+}
+
+run_open() {
+  if (($# > 1)); then
+    error "too many arguments for open"
+    exit 64
+  fi
+
+  if (($# == 0)); then
+    launch_prowl
+    exit 0
+  fi
+
+  local raw_path="$1"
+  if ! is_path_like "$raw_path"; then
+    error "invalid path argument: $raw_path"
+    exit 64
+  fi
+
+  local resolved_path
+  resolved_path="$(resolve_path "$raw_path")"
+  if [[ ! -d "$resolved_path" ]]; then
+    error "directory not found: $resolved_path"
+    exit 66
+  fi
+
+  launch_prowl "$resolved_path"
+}
+
+if (($# == 0)); then
+  launch_prowl
+  exit 0
+fi
+
+first_arg="$1"
+shift
+
+if is_reserved_subcommand "$first_arg"; then
+  case "$first_arg" in
+    help)
+      usage
+      ;;
+    version)
+      print_version
+      ;;
+    open)
+      run_open "$@"
+      ;;
+    list | focus | send | key | read)
+      error "subcommand '$first_arg' is reserved but not implemented yet"
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+
+if is_path_like "$first_arg"; then
+  if (($# > 0)); then
+    error "unexpected extra arguments after path"
+    exit 64
+  fi
+  run_open "$first_arg"
+  exit 0
+fi
+
+error "unknown subcommand or invalid path: $first_arg"
+usage >&2
+exit 64
