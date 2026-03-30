@@ -99,9 +99,16 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       cliLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
     }
 
-    if shouldBringMainWindowToFront(from: application) {
-      cliLogger.info("Bring main window to front for external open.")
-      _ = showMainWindow(from: application)
+    if !application.isActive {
+      cliLogger.info("Activate app for external open.")
+      application.activate(ignoringOtherApps: true)
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      if self.shouldBringMainWindowToFront(from: application) {
+        cliLogger.info("Show main window for external open (deferred).")
+        _ = self.showMainWindow(from: application)
+      }
     }
   }
 
@@ -125,9 +132,6 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func shouldBringMainWindowToFront(from application: NSApplication) -> Bool {
-    if !application.isActive {
-      return true
-    }
     return !application.windows.contains(where: \.isVisible)
   }
 
