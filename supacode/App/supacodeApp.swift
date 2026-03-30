@@ -110,10 +110,6 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
         self.pendingExternalOpenURLs.append(contentsOf: directoryURLs)
         cliLogger.info("Queue external open URLs. pending=\(self.pendingExternalOpenURLs.count)")
       }
-      if self.shouldBringMainWindowToFront(from: application) {
-        cliLogger.info("Show main window for external open.")
-        _ = self.showMainWindow(from: application)
-      }
     }
 
     if shouldActivateFirst {
@@ -142,10 +138,6 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     var isDirectory: ObjCBool = false
     return FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory)
       && isDirectory.boolValue
-  }
-
-  private func shouldBringMainWindowToFront(from application: NSApplication) -> Bool {
-    return !application.windows.contains(where: \.isVisible)
   }
 
   private func mainWindow(from sender: NSApplication) -> NSWindow? {
