@@ -343,9 +343,15 @@ struct RepositorySettingsView: View {
         Button {
           addCustomCommand()
         } label: {
-          Image(systemName: "plus")
-            .frame(width: 16, height: 16)
-            .accessibilityLabel("Add command")
+          ZStack {
+            RoundedRectangle(cornerRadius: 6)
+              .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
+            Image(systemName: "plus")
+              .frame(width: 16, height: 16)
+          }
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+          .accessibilityLabel("Add command")
         }
         .buttonStyle(.plain)
         .help("Add command")
@@ -359,14 +365,15 @@ struct RepositorySettingsView: View {
           )
           removeSelectedCustomCommand()
         } label: {
-          Image(systemName: "minus")
-            .frame(width: 16, height: 16)
-            .padding(6)
-            .background {
-              RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
-            }
-            .accessibilityLabel("Remove selected command")
+          ZStack {
+            RoundedRectangle(cornerRadius: 6)
+              .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
+            Image(systemName: "minus")
+              .frame(width: 16, height: 16)
+          }
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+          .accessibilityLabel("Remove selected command")
         }
         .buttonStyle(.plain)
         .disabled(store.userSettings.customCommands.isEmpty)
