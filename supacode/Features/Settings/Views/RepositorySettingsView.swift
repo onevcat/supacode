@@ -10,11 +10,13 @@ struct RepositorySettingsView: View {
   @State private var selectedCustomCommandID: UserCustomCommand.ID?
   @State private var recordingCustomCommandID: UserCustomCommand.ID?
   @State private var recorderMonitor: Any?
-  @State private var hoveredRecorderCommandID: UserCustomCommand.ID?
   @State private var invalidMessageByCommandID: [UserCustomCommand.ID: String] = [:]
   @State private var pendingShortcutConflict: CustomCommandShortcutConflict?
   @State private var pendingShortcut: PendingCustomShortcut?
   @State private var iconPickerCommandID: UserCustomCommand.ID?
+  @State private var commandEditorCommandID: UserCustomCommand.ID?
+  @State private var editingNameCommandID: UserCustomCommand.ID?
+  @FocusState private var focusedNameEditorCommandID: UserCustomCommand.ID?
 
   private let keyTokenResolver = ShortcutKeyTokenResolver()
 
@@ -255,6 +257,21 @@ struct RepositorySettingsView: View {
       syncSelectedCommandID(with: commands)
       clearRemovedCommandState(using: commands)
     }
+    .onChange(of: selectedCustomCommandID) { _, selectedID in
+      if editingNameCommandID != selectedID {
+        editingNameCommandID = nil
+      }
+      focusedNameEditorCommandID = nil
+      if let iconPickerCommandID, iconPickerCommandID != selectedID {
+        self.iconPickerCommandID = nil
+      }
+      if let commandEditorCommandID, commandEditorCommandID != selectedID {
+        self.commandEditorCommandID = nil
+      }
+      if let recordingCustomCommandID, recordingCustomCommandID != selectedID {
+        self.recordingCustomCommandID = nil
+      }
+    }
     .onChange(of: recordingCustomCommandID) { _, commandID in
       if commandID == nil {
         stopRecorderMonitor()
@@ -264,6 +281,7 @@ struct RepositorySettingsView: View {
     }
     .onDisappear {
       stopRecorderMonitor()
+      focusedNameEditorCommandID = nil
     }
     .alert(
       "Shortcut Conflict",
@@ -289,31 +307,23 @@ struct RepositorySettingsView: View {
     VStack(alignment: .leading, spacing: 10) {
       Table(store.userSettings.customCommands, selection: $selectedCustomCommandID) {
         TableColumn("") { command in
-          Image(systemName: command.resolvedSystemImage)
-            .foregroundStyle(.secondary)
-            .frame(width: 16, alignment: .center)
-            .accessibilityHidden(true)
+          customCommandIconCell(command)
         }
-        .width(24)
+        .width(32)
 
         TableColumn("Name") { command in
-          Text(command.resolvedTitle)
-            .lineLimit(1)
+          customCommandNameCell(command)
         }
 
-        TableColumn("Type") { command in
-          Text(command.execution.title)
-            .foregroundStyle(.secondary)
+        TableColumn("Command") { command in
+          customCommandCell(command)
         }
 
         TableColumn("Shortcut") { command in
-          Text(resolvedShortcutDisplay(for: command) ?? "Unassigned")
-            .font(.body.monospaced())
-            .foregroundStyle(resolvedShortcutDisplay(for: command) == nil ? .secondary : .primary)
-            .lineLimit(1)
+          customCommandShortcutCell(command)
         }
       }
-      .frame(minHeight: 220, maxHeight: 280)
+      .frame(minHeight: 220, maxHeight: 300)
 
       HStack(spacing: 8) {
         Button {
@@ -334,7 +344,7 @@ struct RepositorySettingsView: View {
             .accessibilityLabel("Remove selected command")
         }
         .buttonStyle(.plain)
-        .disabled(bindingForSelectedCustomCommand() == nil)
+        .disabled(selectedCustomCommandID == nil)
         .help("Remove selected command")
 
         Spacer(minLength: 0)
@@ -343,122 +353,190 @@ struct RepositorySettingsView: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
-
-      Divider()
-
-      if let command = bindingForSelectedCustomCommand() {
-        customCommandDetail(for: command)
+      if let invalidMessage = selectedCommandInvalidMessage {
+        Text(invalidMessage)
+          .font(.caption)
+          .foregroundStyle(.red)
       } else {
-        Text("Add a custom command to configure its name, script, icon, and shortcut.")
+        Text("Select a row, then click cells to edit icon, name, command, and shortcut inline.")
+          .font(.caption)
           .foregroundStyle(.secondary)
       }
     }
   }
 
   @ViewBuilder
-  private func customCommandDetail(for command: Binding<UserCustomCommand>) -> some View {
-    let commandID = command.wrappedValue.id
-    let resolvedBinding = resolvedCustomCommandBindings.keybinding(for: customCommandBindingID(for: commandID))
-    let isRecording = recordingCustomCommandID == commandID
-    let isHovering = hoveredRecorderCommandID == commandID
-
-    VStack(alignment: .leading, spacing: 10) {
-      TextField("Name", text: command.title)
-        .textFieldStyle(.roundedBorder)
-
-      HStack(spacing: 10) {
-        TextField("SF Symbol", text: command.systemImage)
-          .textFieldStyle(.roundedBorder)
-        iconPickerButton(for: command)
-        Image(systemName: command.wrappedValue.resolvedSystemImage)
-          .frame(width: 20)
+  private func customCommandIconCell(_ command: UserCustomCommand) -> some View {
+    if selectedCustomCommandID == command.id,
+      let binding = bindingForCustomCommand(id: command.id)
+    {
+      InlineEditableCellButton(isActive: iconPickerCommandID == command.id) {
+        toggleIconEditor(for: command.id)
+      } label: {
+        Image(systemName: binding.wrappedValue.resolvedSystemImage)
           .foregroundStyle(.secondary)
+          .frame(width: 16, alignment: .center)
           .accessibilityHidden(true)
       }
-
-      Picker("Type", selection: command.execution) {
-        ForEach(UserCustomCommandExecution.allCases) { execution in
-          Text(execution.title)
-            .tag(execution)
-        }
-      }
-      .pickerStyle(.segmented)
-      .frame(maxWidth: 280)
-
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 8) {
-          shortcutRecorderField(
-            commandID: commandID,
-            resolvedBinding: resolvedBinding,
-            isRecording: isRecording,
-            isHovering: isHovering
-          )
-
-          Button("Clear") {
-            clearShortcut(for: commandID)
+      .popover(
+        isPresented: Binding(
+          get: { iconPickerCommandID == command.id },
+          set: { isPresented in
+            if !isPresented {
+              iconPickerCommandID = nil
+            }
           }
-          .disabled(command.wrappedValue.shortcut == nil)
-        }
-
-        if isRecording {
-          Text(
-            "Recording: press a key with modifiers (⌘ ⇧ ⌥ ⌃). Custom commands currently support character keys only."
-              + " Press Esc to cancel."
-          )
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        }
-
-        if let invalidMessage = invalidMessageByCommandID[commandID] {
-          Text(invalidMessage)
-            .font(.caption)
-            .foregroundStyle(.red)
-        }
+        ),
+        arrowEdge: .bottom
+      ) {
+        iconEditorPopover(for: binding)
       }
-
-      ZStack(alignment: .topLeading) {
-        PlainTextEditor(
-          text: command.command,
-          isMonospaced: true
-        )
-        .frame(minHeight: 140)
-
-        if command.wrappedValue.command.isEmpty {
-          Text(scriptPlaceholder(for: command.wrappedValue.execution))
-            .foregroundStyle(.secondary)
-            .padding(.leading, 6)
-            .font(.body.monospaced())
-            .allowsHitTesting(false)
-        }
-      }
-
-      Text(scriptDescription(for: command.wrappedValue.execution))
-        .font(.caption)
+    } else {
+      Image(systemName: command.resolvedSystemImage)
         .foregroundStyle(.secondary)
+        .frame(width: 16, alignment: .center)
+        .accessibilityHidden(true)
     }
   }
 
-  private func iconPickerButton(for command: Binding<UserCustomCommand>) -> some View {
-    let commandID = command.wrappedValue.id
-
-    return Button {
-      iconPickerCommandID = commandID
-    } label: {
-      Label("Icons", systemImage: "square.grid.3x3")
-        .labelStyle(.iconOnly)
+  @ViewBuilder
+  private func customCommandNameCell(_ command: UserCustomCommand) -> some View {
+    if selectedCustomCommandID == command.id,
+      let binding = bindingForCustomCommand(id: command.id)
+    {
+      if editingNameCommandID == command.id {
+        InlineEditableFieldContainer(isActive: true) {
+          TextField("Name", text: binding.title)
+            .textFieldStyle(.plain)
+            .focused($focusedNameEditorCommandID, equals: command.id)
+            .onSubmit {
+              endNameEditing()
+            }
+        }
+        .onAppear {
+          focusedNameEditorCommandID = command.id
+        }
+      } else {
+        InlineEditableCellButton {
+          beginNameEditing(for: command.id)
+        } label: {
+          Text(binding.wrappedValue.resolvedTitle)
+            .lineLimit(1)
+        }
+      }
+    } else {
+      Text(command.resolvedTitle)
+        .lineLimit(1)
     }
-    .help("Pick a common SF Symbol")
-    .popover(
-      isPresented: Binding(
-        get: { iconPickerCommandID == commandID },
-        set: { shouldPresent in
-          if !shouldPresent {
-            iconPickerCommandID = nil
+  }
+
+  @ViewBuilder
+  private func customCommandCell(_ command: UserCustomCommand) -> some View {
+    if selectedCustomCommandID == command.id,
+      let binding = bindingForCustomCommand(id: command.id)
+    {
+      InlineEditableCellButton(isActive: commandEditorCommandID == command.id) {
+        toggleCommandEditor(for: command.id)
+      } label: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(inlineCommandTitle(for: binding.wrappedValue.execution))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Text(inlineCommandScriptPreview(for: binding.wrappedValue.command))
+            .lineLimit(1)
+        }
+      }
+      .popover(
+        isPresented: Binding(
+          get: { commandEditorCommandID == command.id },
+          set: { isPresented in
+            if !isPresented {
+              commandEditorCommandID = nil
+            }
+          }
+        ),
+        arrowEdge: .bottom
+      ) {
+        commandEditorPopover(for: binding)
+      }
+      .help("Shell runs in a new tab. Terminal sends input to the focused terminal.")
+    } else {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(inlineCommandTitle(for: command.execution))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Text(inlineCommandScriptPreview(for: command.command))
+          .lineLimit(1)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func customCommandShortcutCell(_ command: UserCustomCommand) -> some View {
+    let resolvedBinding = resolvedCustomCommandBindings.keybinding(for: customCommandBindingID(for: command.id))
+    let shortcutDisplay = resolvedBinding?.display ?? "Unassigned"
+    let isRecording = recordingCustomCommandID == command.id
+
+    if selectedCustomCommandID == command.id {
+      InlineEditableCellButton(isActive: isRecording) {
+        toggleRecording(for: command.id)
+      } label: {
+        Text(isRecording ? "Recording…" : shortcutDisplay)
+          .font(.body.monospaced())
+          .foregroundStyle(isRecording ? Color.accentColor : (resolvedBinding == nil ? .secondary : .primary))
+          .lineLimit(1)
+      }
+      .contextMenu {
+        if command.shortcut != nil {
+          Button("Clear Shortcut") {
+            clearShortcut(for: command.id)
           }
         }
-      ),
-      arrowEdge: .bottom
-    ) {
+      }
+      .help(isRecording ? "Recording shortcut. Press Esc to cancel." : "Click to record a shortcut.")
+    } else {
+      Text(shortcutDisplay)
+        .font(.body.monospaced())
+        .foregroundStyle(resolvedBinding == nil ? .secondary : .primary)
+        .lineLimit(1)
+    }
+  }
+
+  private func inlineCommandTitle(for execution: UserCustomCommandExecution) -> String {
+    switch execution {
+    case .shellScript:
+      return "Shell"
+    case .terminalInput:
+      return "Terminal"
+    }
+  }
+
+  private func inlineCommandScriptPreview(for script: String) -> String {
+    let firstLine =
+      script
+      .split(separator: "\n", omittingEmptySubsequences: false)
+      .first
+      .map(String.init)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return firstLine.isEmpty ? "Click to set command script" : firstLine
+  }
+
+  private func iconEditorPopover(for command: Binding<UserCustomCommand>) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Icon")
+        .font(.headline)
+      Text("Pick from common symbols or enter any SF Symbol name available in your system.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      HStack(spacing: 8) {
+        TextField("SF Symbol name", text: command.systemImage)
+          .textFieldStyle(.roundedBorder)
+        Button("Open SF Symbols") {
+          openSFSymbolsReference()
+        }
+      }
+
       ScrollView {
         LazyVGrid(
           columns: Array(repeating: GridItem(.fixed(24), spacing: 12), count: 8),
@@ -479,8 +557,110 @@ struct RepositorySettingsView: View {
         }
         .padding(12)
       }
-      .frame(width: 320, height: 124)
+      .frame(maxHeight: 124)
     }
+    .padding(12)
+    .frame(width: 360)
+  }
+
+  private func commandEditorPopover(for command: Binding<UserCustomCommand>) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Command")
+        .font(.headline)
+      Text("Choose where this command runs and edit the script used by this repository custom command.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      Picker("Execution", selection: command.execution) {
+        Text("Shell")
+          .tag(UserCustomCommandExecution.shellScript)
+        Text("Terminal")
+          .tag(UserCustomCommandExecution.terminalInput)
+      }
+      .pickerStyle(.segmented)
+
+      ZStack(alignment: .topLeading) {
+        PlainTextEditor(
+          text: command.command,
+          isMonospaced: true
+        )
+        .frame(height: 140)
+
+        if command.wrappedValue.command.isEmpty {
+          Text(scriptPlaceholder(for: command.wrappedValue.execution))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 6)
+            .font(.body.monospaced())
+            .allowsHitTesting(false)
+        }
+      }
+
+      Text(scriptDescription(for: command.wrappedValue.execution))
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+    .padding(12)
+    .frame(width: 420)
+  }
+
+  private var selectedCommandInvalidMessage: String? {
+    guard let selectedCustomCommandID else {
+      return nil
+    }
+    return invalidMessageByCommandID[selectedCustomCommandID]
+  }
+
+  private func openSFSymbolsReference() {
+    if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.SFSymbols") {
+      let configuration = NSWorkspace.OpenConfiguration()
+      NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in }
+      return
+    }
+    guard let url = URL(string: "https://developer.apple.com/sf-symbols/") else {
+      return
+    }
+    NSWorkspace.shared.open(url)
+  }
+
+  private func toggleIconEditor(for commandID: UserCustomCommand.ID) {
+    if iconPickerCommandID == commandID {
+      iconPickerCommandID = nil
+      return
+    }
+    iconPickerCommandID = commandID
+    commandEditorCommandID = nil
+    endNameEditing()
+    if recordingCustomCommandID == commandID {
+      recordingCustomCommandID = nil
+    }
+  }
+
+  private func toggleCommandEditor(for commandID: UserCustomCommand.ID) {
+    if commandEditorCommandID == commandID {
+      commandEditorCommandID = nil
+      return
+    }
+    commandEditorCommandID = commandID
+    iconPickerCommandID = nil
+    endNameEditing()
+    if recordingCustomCommandID == commandID {
+      recordingCustomCommandID = nil
+    }
+  }
+
+  private func beginNameEditing(for commandID: UserCustomCommand.ID) {
+    editingNameCommandID = commandID
+    iconPickerCommandID = nil
+    commandEditorCommandID = nil
+    if recordingCustomCommandID == commandID {
+      recordingCustomCommandID = nil
+    }
+    focusedNameEditorCommandID = commandID
+  }
+
+  private func endNameEditing() {
+    editingNameCommandID = nil
+    focusedNameEditorCommandID = nil
   }
 
   private func scriptPlaceholder(for execution: UserCustomCommandExecution) -> String {
@@ -501,76 +681,6 @@ struct RepositorySettingsView: View {
     }
   }
 
-  private func shortcutRecorderField(
-    commandID: UserCustomCommand.ID,
-    resolvedBinding: Keybinding?,
-    isRecording: Bool,
-    isHovering: Bool
-  ) -> some View {
-    Button {
-      toggleRecording(for: commandID)
-    } label: {
-      HStack(spacing: 6) {
-        if isRecording {
-          Image(systemName: "record.circle.fill")
-            .font(.caption)
-            .foregroundStyle(Color.accentColor)
-            .accessibilityHidden(true)
-        }
-
-        Text(shortcutRecorderTitle(resolvedBinding: resolvedBinding, isRecording: isRecording))
-          .font(.body.monospaced())
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .foregroundStyle(shortcutRecorderForegroundColor(resolvedBinding: resolvedBinding, isRecording: isRecording))
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      .background(
-        RoundedRectangle(cornerRadius: 6)
-          .fill(Color(nsColor: .textBackgroundColor))
-      )
-      .overlay {
-        RoundedRectangle(cornerRadius: 6)
-          .strokeBorder(shortcutRecorderBorderColor(isRecording: isRecording, isHovering: isHovering), lineWidth: 1)
-      }
-    }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      if hovering {
-        hoveredRecorderCommandID = commandID
-      } else if hoveredRecorderCommandID == commandID {
-        hoveredRecorderCommandID = nil
-      }
-    }
-    .help(isRecording ? "Recording shortcut. Press Esc to cancel." : "Click to record a shortcut.")
-  }
-
-  private func shortcutRecorderTitle(resolvedBinding: Keybinding?, isRecording: Bool) -> String {
-    if isRecording {
-      return "Recording…"
-    }
-    return resolvedBinding?.display ?? "Unassigned"
-  }
-
-  private func shortcutRecorderForegroundColor(resolvedBinding: Keybinding?, isRecording: Bool) -> Color {
-    if isRecording {
-      return .accentColor
-    }
-    return resolvedBinding == nil ? .secondary : .primary
-  }
-
-  private func shortcutRecorderBorderColor(isRecording: Bool, isHovering: Bool) -> Color {
-    if isRecording {
-      return .accentColor
-    }
-    if isHovering {
-      return Color(nsColor: .tertiaryLabelColor)
-    }
-    return Color(nsColor: .separatorColor)
-  }
-
   private var resolvedCustomCommandBindings: ResolvedKeybindingMap {
     let commands = store.userSettings.customCommands
     let migration = LegacyCustomCommandShortcutMigration.migrate(commands: commands)
@@ -581,19 +691,12 @@ struct RepositorySettingsView: View {
     )
   }
 
-  private func resolvedShortcutDisplay(for command: UserCustomCommand) -> String? {
-    resolvedCustomCommandBindings.display(for: customCommandBindingID(for: command.id))
-  }
-
   private func customCommandBindingID(for commandID: String) -> String {
     LegacyCustomCommandShortcutMigration.customCommandBindingID(for: commandID)
   }
 
-  private func bindingForSelectedCustomCommand() -> Binding<UserCustomCommand>? {
-    guard let selectedCustomCommandID else {
-      return nil
-    }
-    guard let index = store.userSettings.customCommands.firstIndex(where: { $0.id == selectedCustomCommandID }) else {
+  private func bindingForCustomCommand(id commandID: UserCustomCommand.ID) -> Binding<UserCustomCommand>? {
+    guard let index = store.userSettings.customCommands.firstIndex(where: { $0.id == commandID }) else {
       return nil
     }
     return $store.userSettings.customCommands[index]
@@ -604,6 +707,9 @@ struct RepositorySettingsView: View {
       selectedCustomCommandID = nil
       recordingCustomCommandID = nil
       iconPickerCommandID = nil
+      commandEditorCommandID = nil
+      editingNameCommandID = nil
+      focusedNameEditorCommandID = nil
       return
     }
 
@@ -631,6 +737,19 @@ struct RepositorySettingsView: View {
       !validIDs.contains(iconPickerCommandID)
     {
       self.iconPickerCommandID = nil
+    }
+
+    if let commandEditorCommandID,
+      !validIDs.contains(commandEditorCommandID)
+    {
+      self.commandEditorCommandID = nil
+    }
+
+    if let editingNameCommandID,
+      !validIDs.contains(editingNameCommandID)
+    {
+      self.editingNameCommandID = nil
+      focusedNameEditorCommandID = nil
     }
   }
 
@@ -672,6 +791,9 @@ struct RepositorySettingsView: View {
 
   private func toggleRecording(for commandID: UserCustomCommand.ID) {
     invalidMessageByCommandID[commandID] = nil
+    iconPickerCommandID = nil
+    commandEditorCommandID = nil
+    endNameEditing()
 
     if recordingCustomCommandID == commandID {
       recordingCustomCommandID = nil
@@ -811,6 +933,106 @@ struct RepositorySettingsView: View {
         }
       }
     )
+  }
+}
+
+private struct InlineEditableCellButton<Label: View>: View {
+  let isActive: Bool
+  let action: () -> Void
+  @ViewBuilder let label: () -> Label
+
+  @State private var isHovering = false
+
+  init(
+    isActive: Bool = false,
+    action: @escaping () -> Void,
+    @ViewBuilder label: @escaping () -> Label
+  ) {
+    self.isActive = isActive
+    self.action = action
+    self.label = label
+  }
+
+  var body: some View {
+    Button(action: action) {
+      label()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      isHovering = hovering
+    }
+    .background(
+      RoundedRectangle(cornerRadius: 6)
+        .fill(Color(nsColor: .textBackgroundColor))
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: 6)
+        .strokeBorder(borderColor, lineWidth: borderWidth)
+    }
+  }
+
+  private var borderColor: Color {
+    if isActive {
+      return .accentColor
+    }
+    if isHovering {
+      return Color(nsColor: .tertiaryLabelColor)
+    }
+    return .clear
+  }
+
+  private var borderWidth: CGFloat {
+    (isActive || isHovering) ? 1 : 0
+  }
+}
+
+private struct InlineEditableFieldContainer<Content: View>: View {
+  let isActive: Bool
+  @ViewBuilder let content: () -> Content
+  @State private var isHovering = false
+
+  init(
+    isActive: Bool = false,
+    @ViewBuilder content: @escaping () -> Content
+  ) {
+    self.isActive = isActive
+    self.content = content
+  }
+
+  var body: some View {
+    content()
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+      .onHover { hovering in
+        isHovering = hovering
+      }
+      .background(
+        RoundedRectangle(cornerRadius: 6)
+          .fill(Color(nsColor: .textBackgroundColor))
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: 6)
+          .strokeBorder(borderColor, lineWidth: borderWidth)
+      }
+  }
+
+  private var borderColor: Color {
+    if isActive {
+      return .accentColor
+    }
+    if isHovering {
+      return Color(nsColor: .tertiaryLabelColor)
+    }
+    return .clear
+  }
+
+  private var borderWidth: CGFloat {
+    (isActive || isHovering) ? 1 : 0
   }
 }
 
