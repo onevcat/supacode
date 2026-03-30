@@ -1142,9 +1142,9 @@ struct RepositorySettingsView: View {
 
   private var customCommandsIconColumnWidth: CGFloat { 48 }
 
-  private var customCommandsNameColumnWidth: CGFloat { 190 }
+  private var customCommandsNameColumnWidth: CGFloat { 160 }
 
-  private var customCommandsShortcutColumnWidth: CGFloat { 140 }
+  private var customCommandsShortcutColumnWidth: CGFloat { 120 }
 
   private var customCommandsListHeight: CGFloat { 200 }
 }
