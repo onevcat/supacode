@@ -491,10 +491,18 @@ struct RepositoriesFeature {
             }
           )
         }
+        if let pendingExternalOpenPath = state.pendingExternalOpenPath {
+          state.pendingExternalOpenPath = nil
+          allEffects.append(.send(.openPath(pendingExternalOpenPath)))
+        }
         return .merge(allEffects)
 
       case .openPath(let requestedURL):
         let normalizedRequestedURL = requestedURL.standardizedFileURL
+        guard state.isInitialLoadComplete else {
+          state.pendingExternalOpenPath = normalizedRequestedURL
+          return .none
+        }
         guard let match = state.openPathMatch(for: normalizedRequestedURL) else {
           state.pendingExternalOpenPath = normalizedRequestedURL
           return .send(.openRepositories([normalizedRequestedURL]))
@@ -2825,7 +2833,7 @@ struct RepositoriesFeature {
   }
 
   private nonisolated static func isNotGitRepositoryError(_ error: any Error) -> Bool {
-    guard case let GitClientError.commandFailed(_, message) = error else {
+    guard case GitClientError.commandFailed(_, let message) = error else {
       return false
     }
     return message.localizedCaseInsensitiveContains("not a git repository")
@@ -2833,7 +2841,7 @@ struct RepositoriesFeature {
 
   private nonisolated static func openRepositoryFailureMessage(path: String, error: any Error) -> String {
     let detail: String
-    if case let GitClientError.commandFailed(_, message) = error,
+    if case GitClientError.commandFailed(_, let message) = error,
       !message.isEmpty
     {
       detail = message
@@ -2905,14 +2913,14 @@ struct RepositoriesFeature {
             return WorktreesFetchResult(
               entry: entry,
               repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
-                  name: Repository.name(for: rootURL),
-                  kind: .plain,
-                  worktrees: IdentifiedArray()
-                ),
-                errorMessage: nil
-              )
+                id: rootURL.path(percentEncoded: false),
+                rootURL: rootURL,
+                name: Repository.name(for: rootURL),
+                kind: .plain,
+                worktrees: IdentifiedArray()
+              ),
+              errorMessage: nil
+            )
           }
         }
       }

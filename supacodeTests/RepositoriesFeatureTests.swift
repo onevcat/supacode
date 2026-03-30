@@ -228,7 +228,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: root, kind: .git)],
+      [PersistedRepositoryEntry(path: root, kind: .git)]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -317,7 +317,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: root, kind: .plain)],
+      [PersistedRepositoryEntry(path: root, kind: .plain)]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -484,7 +484,7 @@ struct RepositoriesFeatureTests {
     await store.finish()
 
     let expectedSavedEntries = [
-      [PersistedRepositoryEntry(path: repoRoot, kind: .git)],
+      [PersistedRepositoryEntry(path: repoRoot, kind: .git)]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -3034,8 +3034,10 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    var initialState = makeState(repositories: [repository])
+    initialState.isInitialLoadComplete = true
 
-    let store = TestStore(initialState: makeState(repositories: [repository])) {
+    let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in
@@ -3064,8 +3066,10 @@ struct RepositoriesFeatureTests {
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
+    var initialState = makeState(repositories: [repository])
+    initialState.isInitialLoadComplete = true
 
-    let store = TestStore(initialState: makeState(repositories: [repository])) {
+    let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in
@@ -3097,8 +3101,10 @@ struct RepositoriesFeatureTests {
     let root = "/tmp/folder"
     let plainRepository = makeRepository(id: root, name: "folder", kind: .plain, worktrees: [])
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    var initialState = makeState(repositories: [plainRepository])
+    initialState.isInitialLoadComplete = true
 
-    let store = TestStore(initialState: makeState(repositories: [plainRepository])) {
+    let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in
@@ -3126,6 +3132,58 @@ struct RepositoriesFeatureTests {
             ),
             runSetupScriptIfNew: false,
             focusing: true
+          ),
+        ]
+    )
+  }
+
+  @Test func openPathBeforeInitialLoadQueuesAndRoutesAfterRepositoriesLoaded() async {
+    let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.openPath(requestedDirectory)) {
+      $0.pendingExternalOpenPath = requestedDirectory.standardizedFileURL
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [repository.rootURL]
+      $0.isInitialLoadComplete = true
+      $0.pendingExternalOpenPath = nil
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.openPath)
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    #expect(
+      sentCommands.value
+        == [
+          .createTabAtDirectory(
+            worktree,
+            directory: requestedDirectory.standardizedFileURL,
+            runSetupScriptIfNew: false
           ),
         ]
     )
