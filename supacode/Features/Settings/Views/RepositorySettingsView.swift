@@ -16,7 +16,6 @@ struct RepositorySettingsView: View {
   @State private var iconPickerCommandID: UserCustomCommand.ID?
   @State private var iconPickerReturnResponder: NSResponder?
   @State private var customCommandsFocusAnchor: NSView?
-  @State private var customCommandsMeasuredRowHeight: CGFloat = 44
   @State private var commandEditorCommandID: UserCustomCommand.ID?
   @State private var editingNameCommandID: UserCustomCommand.ID?
   @FocusState private var focusedNameEditorCommandID: UserCustomCommand.ID?
@@ -308,42 +307,22 @@ struct RepositorySettingsView: View {
   @ViewBuilder
   private var customCommandsEditor: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Table(store.userSettings.customCommands, selection: $selectedCustomCommandID) {
-        TableColumn("") { command in
-          customCommandRowCell(commandID: command.id) {
-            customCommandIconCell(command)
+      VStack(spacing: 0) {
+        customCommandsHeaderRow
+        Divider()
+        ScrollView {
+          LazyVStack(spacing: 4) {
+            ForEach(store.userSettings.customCommands) { command in
+              customCommandRow(command)
+                .id(command.id)
+            }
           }
+          .padding(.horizontal, 6)
+          .padding(.vertical, 6)
         }
-        .width(32)
-
-        TableColumn("Name") { command in
-          customCommandRowCell(commandID: command.id) {
-            customCommandNameCell(command)
-          }
-        }
-
-        TableColumn("Command") { command in
-          customCommandRowCell(commandID: command.id) {
-            customCommandCell(command)
-          }
-        }
-
-        TableColumn("Shortcut") { command in
-          customCommandRowCell(commandID: command.id) {
-            customCommandShortcutCell(command)
-          }
-        }
+        .frame(height: 300)
       }
-      .frame(
-        minHeight: customCommandsTableHeight,
-        idealHeight: customCommandsTableHeight,
-        maxHeight: customCommandsTableHeight
-      )
-      .onPreferenceChange(CustomCommandRowHeightPreferenceKey.self) { height in
-        if height > 0 {
-          customCommandsMeasuredRowHeight = height
-        }
-      }
+      .clipShape(RoundedRectangle(cornerRadius: 8))
 
       HStack(spacing: 8) {
         Button {
@@ -564,23 +543,77 @@ struct RepositorySettingsView: View {
     return commands.last?.id
   }
 
+  private var customCommandsHeaderRow: some View {
+    HStack(spacing: 8) {
+      customCommandHeaderCell("", width: customCommandsIconColumnWidth, alignment: .center)
+      customCommandHeaderCell("Name")
+      customCommandHeaderCell("Command")
+      customCommandHeaderCell("Shortcut", width: customCommandsShortcutColumnWidth)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 8)
+    .font(.headline)
+    .foregroundStyle(.secondary)
+  }
+
+  @ViewBuilder
+  private func customCommandRow(_ command: UserCustomCommand) -> some View {
+    let isSelected = selectedCustomCommandID == command.id
+    HStack(spacing: 8) {
+      customCommandRowCell(width: customCommandsIconColumnWidth, alignment: .center) {
+        customCommandIconCell(command)
+      }
+      customCommandRowCell {
+        customCommandNameCell(command)
+      }
+      customCommandRowCell {
+        customCommandCell(command)
+      }
+      customCommandRowCell(width: customCommandsShortcutColumnWidth) {
+        customCommandShortcutCell(command)
+      }
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 2)
+    .background {
+      RoundedRectangle(cornerRadius: 8)
+        .fill(isSelected ? Color.accentColor.opacity(0.35) : .clear)
+    }
+    .contentShape(RoundedRectangle(cornerRadius: 8))
+    .onTapGesture {
+      selectCustomCommand(command.id)
+    }
+  }
+
+  @ViewBuilder
+  private func customCommandHeaderCell(
+    _ title: String,
+    width: CGFloat? = nil,
+    alignment: Alignment = .leading
+  ) -> some View {
+    if let width {
+      Text(title)
+        .frame(width: width, alignment: alignment)
+    } else {
+      Text(title)
+        .frame(maxWidth: .infinity, alignment: alignment)
+    }
+  }
+
   @ViewBuilder
   private func customCommandRowCell<Content: View>(
-    commandID: UserCustomCommand.ID,
+    width: CGFloat? = nil,
+    alignment: Alignment = .leading,
     @ViewBuilder content: () -> Content
   ) -> some View {
-    content()
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .background {
-        GeometryReader { proxy in
-          Color.clear
-            .preference(key: CustomCommandRowHeightPreferenceKey.self, value: proxy.size.height)
-        }
-      }
-      .contentShape(Rectangle())
-      .onTapGesture {
-        selectCustomCommand(commandID)
-      }
+    if let width {
+      content()
+        .frame(width: width, alignment: alignment)
+        .frame(maxHeight: .infinity, alignment: alignment)
+    } else {
+      content()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+    }
   }
 
   private func selectCustomCommand(_ commandID: UserCustomCommand.ID) {
@@ -1104,13 +1137,9 @@ struct RepositorySettingsView: View {
     )
   }
 
-  private var customCommandsTableHeight: CGFloat {
-    let rowCount = CGFloat(store.userSettings.customCommands.count)
-    let rowHeight = max(customCommandsMeasuredRowHeight, 1)
-    let headerHeight: CGFloat = 32
-    let contentHeight = headerHeight + (rowCount * rowHeight) + 2
-    return max(220, contentHeight)
-  }
+  private var customCommandsIconColumnWidth: CGFloat { 48 }
+
+  private var customCommandsShortcutColumnWidth: CGFloat { 180 }
 }
 
 private struct InlineEditableCellButton<Label: View>: View {
@@ -1230,14 +1259,6 @@ private struct FirstResponderAnchorView: NSViewRepresentable {
 private final class FirstResponderAnchorNSView: NSView {
   override var acceptsFirstResponder: Bool {
     true
-  }
-}
-
-private struct CustomCommandRowHeightPreferenceKey: PreferenceKey {
-  static var defaultValue: CGFloat = 0
-
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
   }
 }
 
