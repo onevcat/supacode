@@ -2,8 +2,6 @@ import AppKit
 import ComposableArchitecture
 import SwiftUI
 
-private let settingsLogger = SupaLogger("Settings")
-
 struct RepositorySettingsView: View {
   @Bindable var store: StoreOf<RepositorySettingsFeature>
   @State private var isBranchPickerPresented = false
@@ -256,10 +254,6 @@ struct RepositorySettingsView: View {
       syncSelectedCommandID(with: store.userSettings.customCommands)
     }
     .onChange(of: store.userSettings.customCommands) { _, commands in
-      settingsLogger.debug(
-        "custom command list changed repo=\(repositoryPathForLog) count=\(commands.count) "
-          + "selected=\(selectedCustomCommandID ?? "nil") ids=\(commandIDsForLog(commands))"
-      )
       syncSelectedCommandID(with: commands)
       clearRemovedCommandState(using: commands)
     }
@@ -344,8 +338,6 @@ struct RepositorySettingsView: View {
           addCustomCommand()
         } label: {
           ZStack {
-            RoundedRectangle(cornerRadius: 6)
-              .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
             Image(systemName: "plus")
               .frame(width: 16, height: 16)
           }
@@ -357,17 +349,9 @@ struct RepositorySettingsView: View {
         .help("Add command")
 
         Button {
-          let commands = store.userSettings.customCommands
-          settingsLogger.debug(
-            "custom command remove tapped repo=\(repositoryPathForLog) count=\(commands.count) "
-              + "selected=\(selectedCustomCommandID ?? "nil") effective=\(effectiveSelectedCommandID ?? "nil") "
-              + "removable=\(removableCommandID ?? "nil") ids=\(commandIDsForLog(commands))"
-          )
           removeSelectedCustomCommand()
         } label: {
           ZStack {
-            RoundedRectangle(cornerRadius: 6)
-              .strokeBorder(.secondary.opacity(0.45), lineWidth: 1)
             Image(systemName: "minus")
               .frame(width: 16, height: 16)
           }
@@ -869,44 +853,22 @@ struct RepositorySettingsView: View {
 
   private func removeSelectedCustomCommand() {
     guard let selectedCommandID = removableCommandID else {
-      settingsLogger.warning(
-        "custom command remove skipped repo=\(repositoryPathForLog) reason=no-removable-id "
-          + "count=\(store.userSettings.customCommands.count) selected=\(selectedCustomCommandID ?? "nil")"
-      )
       return
     }
 
     let commandsBinding = $store.userSettings.customCommands
-    let beforeCommands = commandsBinding.wrappedValue
     var commands = commandsBinding.wrappedValue
     if let removalIndex = commands.firstIndex(where: { $0.id == selectedCommandID }) {
-      settingsLogger.debug(
-        "custom command remove strategy=selected-id repo=\(repositoryPathForLog) id=\(selectedCommandID) "
-          + "index=\(removalIndex)"
-      )
       commands.remove(at: removalIndex)
     } else if !commands.isEmpty {
-      settingsLogger.warning(
-        "custom command remove strategy=fallback-last repo=\(repositoryPathForLog) requested_id=\(selectedCommandID) "
-          + "fallback_id=\(commands.last?.id ?? "nil")"
-      )
       commands.removeLast()
     } else {
-      settingsLogger.warning(
-        "custom command remove skipped repo=\(repositoryPathForLog) reason=empty-list-after-selection "
-          + "requested_id=\(selectedCommandID)"
-      )
       return
     }
     let normalizedCommands = UserRepositorySettings.normalizedCommands(commands)
     commandsBinding.wrappedValue = normalizedCommands
     syncSelectedCommandID(with: commandsBinding.wrappedValue)
     clearRemovedCommandState(using: commandsBinding.wrappedValue)
-    settingsLogger.debug(
-      "custom command remove applied repo=\(repositoryPathForLog) removed_id=\(selectedCommandID) "
-        + "before=\(beforeCommands.count) after=\(normalizedCommands.count) "
-        + "selected_after=\(selectedCustomCommandID ?? "nil") ids_after=\(commandIDsForLog(normalizedCommands))"
-    )
   }
 
   private func clearShortcut(for commandID: UserCustomCommand.ID) {
@@ -926,10 +888,6 @@ struct RepositorySettingsView: View {
     let commandsBinding = $store.userSettings.customCommands
     var commands = commandsBinding.wrappedValue
     guard let index = commands.firstIndex(where: { $0.id == id }) else {
-      settingsLogger.warning(
-        "custom command update skipped repo=\(repositoryPathForLog) reason=missing-id id=\(id) "
-          + "count=\(commands.count)"
-      )
       return
     }
 
@@ -1081,21 +1039,6 @@ struct RepositorySettingsView: View {
         }
       }
     )
-  }
-
-  private var repositoryPathForLog: String {
-    store.rootURL.path(percentEncoded: false)
-  }
-
-  private func commandIDsForLog(_ commands: [UserCustomCommand]) -> String {
-    if commands.isEmpty {
-      return "[]"
-    }
-    let ids = commands.prefix(6).map(\.id)
-    if commands.count > 6 {
-      return "[\(ids.joined(separator: ",")),...]"
-    }
-    return "[\(ids.joined(separator: ","))]"
   }
 }
 
