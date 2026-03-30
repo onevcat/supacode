@@ -2,38 +2,34 @@ import OSLog
 
 nonisolated struct SupaLogger: Sendable {
   private let category: String
-  #if !DEBUG
-    private let logger: Logger
-  #endif
+  private let logger: Logger
 
   init(_ category: String) {
     self.category = category
-    #if !DEBUG
-      self.logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: category)
-    #endif
+    self.logger = Logger(
+      subsystem: Bundle.main.bundleIdentifier ?? "com.onevcat.prowl",
+      category: category
+    )
   }
 
   func debug(_ message: String) {
     #if DEBUG
       print("[\(category)] \(message)")
-    #else
-      logger.notice("\(message, privacy: .public)")
     #endif
+    logger.notice("\(message, privacy: .public)")
   }
 
   func info(_ message: String) {
     #if DEBUG
       print("[\(category)] \(message)")
-    #else
-      logger.notice("\(message, privacy: .public)")
     #endif
+    logger.notice("\(message, privacy: .public)")
   }
 
   func warning(_ message: String) {
     #if DEBUG
       print("[\(category)] \(message)")
-    #else
-      logger.warning("\(message, privacy: .public)")
     #endif
+    logger.warning("\(message, privacy: .public)")
   }
 }
