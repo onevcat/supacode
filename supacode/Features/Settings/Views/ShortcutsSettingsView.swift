@@ -534,7 +534,17 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.archivedWorktrees:
       return .scripts
 
-    case AppShortcuts.CommandID.selectPreviousTerminalTab,
+    case AppShortcuts.CommandID.selectTerminalTab1,
+      AppShortcuts.CommandID.selectTerminalTab2,
+      AppShortcuts.CommandID.selectTerminalTab3,
+      AppShortcuts.CommandID.selectTerminalTab4,
+      AppShortcuts.CommandID.selectTerminalTab5,
+      AppShortcuts.CommandID.selectTerminalTab6,
+      AppShortcuts.CommandID.selectTerminalTab7,
+      AppShortcuts.CommandID.selectTerminalTab8,
+      AppShortcuts.CommandID.selectTerminalTab9,
+      AppShortcuts.CommandID.selectTerminalTab0,
+      AppShortcuts.CommandID.selectPreviousTerminalTab,
       AppShortcuts.CommandID.selectNextTerminalTab,
       AppShortcuts.CommandID.selectPreviousTerminalPane,
       AppShortcuts.CommandID.selectNextTerminalPane,
