@@ -5,6 +5,7 @@ struct CanvasView: View {
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
   let terminalManager: WorktreeTerminalManager
+  let preferredFocusedWorktreeID: Worktree.ID?
   var onExitToTab: () -> Void = {}
   @State private var layoutStore = CanvasLayoutStore()
 
@@ -556,21 +557,29 @@ struct CanvasView: View {
   private func syncPrimaryFocus(
     from previousTabID: TerminalTabID?,
     to newTabID: TerminalTabID?,
-    states: [WorktreeTerminalState]
+    states: [WorktreeTerminalState],
+    preferredSurfaceID: UUID? = nil
   ) {
     if let previousTabID, previousTabID != newTabID {
       unfocusTab(previousTabID, states: states)
     }
 
     guard let newTabID,
-      let ownerState = states.first(where: { $0.surfaceView(for: newTabID) != nil }),
-      let surfaceView = ownerState.surfaceView(for: newTabID)
+      let ownerState = states.first(where: { $0.surfaceView(for: newTabID) != nil })
     else {
       terminalManager.canvasFocusedWorktreeID = nil
       return
     }
 
-    ownerState.tabManager.selectTab(newTabID)
+    if let preferredSurfaceID {
+      _ = ownerState.focusSurface(id: preferredSurfaceID)
+    } else {
+      ownerState.tabManager.selectTab(newTabID)
+    }
+    guard let surfaceView = ownerState.surfaceView(for: newTabID) else {
+      terminalManager.canvasFocusedWorktreeID = nil
+      return
+    }
     terminalManager.canvasFocusedWorktreeID = ownerState.worktreeID
     surfaceView.focusDidChange(true)
     surfaceView.requestFocus()
@@ -630,18 +639,6 @@ struct CanvasView: View {
 
     let activeStates = terminalManager.activeWorktreeStates
 
-    // Auto-focus the card that was active before entering canvas.
-    if let selectedID = terminalManager.selectedWorktreeID,
-      let state = activeStates.first(where: { $0.worktreeID == selectedID }),
-      let tabID = state.tabManager.selectedTabId
-    {
-      selectionState.focusSingle(tabID)
-      syncPrimaryFocus(from: nil, to: tabID, states: activeStates)
-    } else {
-      selectionState.clear()
-      syncBroadcastCallbacks(states: activeStates)
-    }
-
     for state in activeStates {
       state.setAllSurfacesOccluded()
     }
@@ -652,6 +649,45 @@ struct CanvasView: View {
           surface.setOcclusion(true)
         }
       }
+    }
+
+    // Auto-focus the card that was active before entering canvas after
+    // the canvas surfaces have been made visible again.
+    let preferredSurfaceID =
+      activeStates
+      .first(where: { $0.worktreeID == preferredFocusedWorktreeID })
+      .flatMap { state in
+        state.tabManager.selectedTabId.flatMap { selectedTabID in
+          state.splitTree(for: selectedTabID).leaves().first(where: { $0.bridge.state.searchNeedle != nil })?.id
+        }
+      }
+    let initialFocus = CanvasInitialFocusResolver.initialFocus(
+      preferredSurfaceID: preferredSurfaceID,
+      preferredWorktreeID: preferredFocusedWorktreeID,
+      candidates: activeStates.flatMap { state in
+        state.tabManager.tabs.compactMap { tab in
+          guard let surface = state.surfaceView(for: tab.id) else { return nil }
+          return CanvasInitialFocusResolver.Candidate(
+            worktreeID: state.worktreeID,
+            tabID: tab.id,
+            focusedSurfaceID: surface.id,
+            isSelectedTab: tab.id == state.tabManager.selectedTabId
+          )
+        }
+      }
+    )
+    if let initialFocus
+    {
+      selectionState.focusSingle(initialFocus.tabID)
+      syncPrimaryFocus(
+        from: nil,
+        to: initialFocus.tabID,
+        states: activeStates,
+        preferredSurfaceID: initialFocus.surfaceID
+      )
+    } else {
+      selectionState.clear()
+      syncBroadcastCallbacks(states: activeStates)
     }
   }
 

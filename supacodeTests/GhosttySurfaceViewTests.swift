@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -71,5 +72,37 @@ struct GhosttySurfaceViewTests {
         in: content
       ) == nil
     )
+  }
+
+  @Test func setPinnedSizePreservesUserScrollbackPosition() throws {
+    let runtime = GhosttyRuntime()
+    let worktree = Worktree(
+      id: "/tmp/repo/wt",
+      name: "wt",
+      detail: "detail",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt"),
+      repositoryRootURL: URL(fileURLWithPath: "/tmp/repo")
+    )
+    let state = WorktreeTerminalState(runtime: runtime, worktree: worktree)
+    let tabId = try #require(state.createTab())
+    let surfaceView = try #require(state.surfaceView(for: tabId))
+    let scrollWrapper = GhosttySurfaceScrollView(surfaceView: surfaceView)
+    scrollWrapper.frame = CGRect(x: 0, y: 0, width: 400, height: 200)
+    scrollWrapper.layoutSubtreeIfNeeded()
+    surfaceView.updateCellSize(width: 10, height: 10)
+    scrollWrapper.updateScrollbar(total: 100, offset: 0, length: 10)
+    scrollWrapper.layoutSubtreeIfNeeded()
+
+    let scrollView = try #require(scrollWrapper.subviews.first as? NSScrollView)
+    scrollView.contentView.scroll(to: CGPoint(x: 0, y: 200))
+    scrollView.reflectScrolledClipView(scrollView.contentView)
+
+    let scrolledY = scrollView.contentView.documentVisibleRect.origin.y
+    #expect(scrolledY == 200)
+
+    scrollWrapper.setPinnedSize(CGSize(width: 320, height: 200))
+
+    let updatedY = scrollView.contentView.documentVisibleRect.origin.y
+    #expect(abs(updatedY - scrolledY) < 0.5)
   }
 }

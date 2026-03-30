@@ -8,6 +8,7 @@ struct WorktreeTerminalTabsView: View {
   let forceAutoFocus: Bool
   let createTab: () -> Void
   @State private var windowActivity = WindowActivityState.inactive
+  @State private var deferredFocusTask: Task<Void, Never>?
 
   var body: some View {
     let state = manager.state(for: worktree) { shouldRunSetupScript }
@@ -58,6 +59,7 @@ struct WorktreeTerminalTabsView: View {
       }
       let activity = resolvedWindowActivity
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+      scheduleDeferredFocusSync(for: state)
     }
     .onChange(of: state.tabManager.selectedTabId) { _, _ in
       if shouldAutoFocusTerminal {
@@ -66,14 +68,18 @@ struct WorktreeTerminalTabsView: View {
       let activity = resolvedWindowActivity
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
+    .onDisappear {
+      deferredFocusTask?.cancel()
+      deferredFocusTask = nil
+    }
   }
 
   private var shouldAutoFocusTerminal: Bool {
-    if forceAutoFocus {
-      return true
-    }
-    guard let responder = NSApp.keyWindow?.firstResponder else { return true }
-    return !(responder is NSTableView) && !(responder is NSOutlineView)
+    Self.shouldAutoFocusTerminal(
+      firstResponder: NSApp.keyWindow?.firstResponder,
+      forceAutoFocus: forceAutoFocus,
+      respectsActiveTextInput: true
+    )
   }
 
   private var resolvedWindowActivity: WindowActivityState {
@@ -84,5 +90,45 @@ struct WorktreeTerminalTabsView: View {
       )
     }
     return windowActivity
+  }
+
+  private func scheduleDeferredFocusSync(for state: WorktreeTerminalState) {
+    deferredFocusTask?.cancel()
+    deferredFocusTask = Task { @MainActor in
+      await Self.nextMainRunLoopTurn()
+      guard !Task.isCancelled else { return }
+      if Self.shouldAutoFocusTerminal(
+        firstResponder: NSApp.keyWindow?.firstResponder,
+        forceAutoFocus: forceAutoFocus,
+        respectsActiveTextInput: true
+      ) {
+        state.focusSelectedTab()
+      }
+      let activity = resolvedWindowActivity
+      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+    }
+  }
+
+  private static func nextMainRunLoopTurn() async {
+    await withCheckedContinuation { continuation in
+      DispatchQueue.main.async {
+        continuation.resume()
+      }
+    }
+  }
+
+  static func shouldAutoFocusTerminal(
+    firstResponder: NSResponder?,
+    forceAutoFocus: Bool,
+    respectsActiveTextInput: Bool
+  ) -> Bool {
+    if respectsActiveTextInput, firstResponder is NSTextView {
+      return false
+    }
+    if forceAutoFocus {
+      return true
+    }
+    guard let responder = firstResponder else { return true }
+    return !(responder is NSTableView) && !(responder is NSOutlineView)
   }
 }

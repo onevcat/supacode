@@ -880,7 +880,11 @@ final class WorktreeTerminalState {
     updateTabTitle(for: tabId)
     guard tabId == tabManager.selectedTabId else { return }
     let fromSurface = (previousSurface === surface) ? nil : previousSurface
-    GhosttySurfaceView.moveFocus(to: surface, from: fromSurface)
+    GhosttySurfaceView.moveFocus(
+      to: surface,
+      from: fromSurface,
+      respectsActiveTextInput: true
+    )
     emitFocusChangedIfNeeded(surface.id)
   }
 
