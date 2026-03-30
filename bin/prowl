@@ -88,7 +88,9 @@ on run argv
   set targetPath to item 2 of argv
   set targetAlias to POSIX file targetPath
   tell application id appBundleID
-    open targetAlias
+    ignoring application responses
+      open targetAlias
+    end ignoring
   end tell
 end run
 APPLESCRIPT
