@@ -40,6 +40,57 @@ struct AppShortcutsTests {
     }
   }
 
+  @Test func selectionDisplayUsesResolvedOverrides() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectWorktree1: KeybindingUserOverride(
+          binding: Keybinding(key: "m", modifiers: .init(control: true))
+        ),
+        AppShortcuts.CommandID.selectTerminalTab1: KeybindingUserOverride(
+          binding: Keybinding(key: "j", modifiers: .init(command: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    #expect(AppShortcuts.worktreeSelectionDisplay(at: 0, in: resolved) == "⌃M")
+    #expect(AppShortcuts.terminalTabSelectionDisplay(at: 0, in: resolved) == "⌘J")
+    #expect(AppShortcuts.worktreeSelectionDisplay(at: 10, in: resolved) == nil)
+    #expect(AppShortcuts.terminalTabSelectionDisplay(at: 10, in: resolved) == nil)
+  }
+
+  @Test func helpTextUsesResolvedShortcutAndHandlesDisabledBinding() {
+    let defaultHelpText = AppShortcuts.helpText(
+      title: "Run Script",
+      commandID: AppShortcuts.CommandID.runScript,
+      in: .appDefaults
+    )
+    #expect(defaultHelpText == "Run Script (⌘R)")
+
+    let disabledOverrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.runScript: KeybindingUserOverride(
+          binding: nil,
+          isEnabled: false
+        )
+      ]
+    )
+    let resolvedDisabled = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: disabledOverrides
+    )
+
+    let disabledHelpText = AppShortcuts.helpText(
+      title: "Run Script",
+      commandID: AppShortcuts.CommandID.runScript,
+      in: resolvedDisabled
+    )
+    #expect(disabledHelpText == "Run Script")
+  }
+
   @Test func defaultGlobalShortcutTableMatchesPlan() {
     expectNoDifference(
       [

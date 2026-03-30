@@ -27,6 +27,7 @@ struct SidebarCommands: Commands {
         DiffWindowManager.shared.show(
           worktreeURL: worktree.workingDirectory,
           branchName: worktree.name,
+          resolvedKeybindings: store.resolvedKeybindings
         )
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.showDiff)))

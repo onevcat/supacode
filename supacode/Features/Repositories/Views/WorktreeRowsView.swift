@@ -11,6 +11,7 @@ struct WorktreeRowsView: View {
   let terminalManager: WorktreeTerminalManager
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @State private var draggingWorktreeIDs: Set<Worktree.ID> = []
   @State private var hoveredWorktreeID: Worktree.ID?
 
@@ -123,6 +124,7 @@ struct WorktreeRowsView: View {
       DiffWindowManager.shared.show(
         worktreeURL: worktree.workingDirectory,
         branchName: worktree.name,
+        resolvedKeybindings: resolvedKeybindings
       )
     }
     let config = WorktreeRowViewConfig(
@@ -286,8 +288,8 @@ struct WorktreeRowsView: View {
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {
-    guard let index, AppShortcuts.worktreeSelection.indices.contains(index) else { return nil }
-    return AppShortcuts.worktreeSelection[index].display
+    guard let index else { return nil }
+    return AppShortcuts.worktreeSelectionDisplay(at: index, in: resolvedKeybindings)
   }
 
   private func togglePin(for worktreeID: Worktree.ID, isPinned: Bool) {

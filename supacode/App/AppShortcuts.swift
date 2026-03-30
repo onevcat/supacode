@@ -639,6 +639,31 @@ enum AppShortcuts {
     return resolvedBinding.binding?.appShortcut
   }
 
+  static func display(for commandID: String, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    resolvedShortcut(for: commandID, in: resolvedKeybindings)?.display
+  }
+
+  static func helpText(
+    title: String,
+    commandID: String,
+    in resolvedKeybindings: ResolvedKeybindingMap
+  ) -> String {
+    if let shortcut = display(for: commandID, in: resolvedKeybindings) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
+  }
+
+  static func worktreeSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    guard worktreeSelectionCommandIDs.indices.contains(index) else { return nil }
+    return display(for: worktreeSelectionCommandIDs[index], in: resolvedKeybindings)
+  }
+
+  static func terminalTabSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    guard terminalTabSelectionCommandIDs.indices.contains(index) else { return nil }
+    return display(for: terminalTabSelectionCommandIDs[index], in: resolvedKeybindings)
+  }
+
   private static let ghosttyManagedActionBindings: [(commandID: String, action: String)] = [
     (CommandID.selectTerminalTab1, "goto_tab:1"),
     (CommandID.selectTerminalTab2, "goto_tab:2"),
