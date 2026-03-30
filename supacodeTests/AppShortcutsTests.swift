@@ -29,6 +29,68 @@ struct AppShortcutsTests {
     }
   }
 
+  @Test func terminalTabSelectionUsesCommandNumberShortcuts() {
+    expectNoDifference(
+      AppShortcuts.terminalTabSelection.map(\.display),
+      ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9", "⌘0"]
+    )
+
+    for shortcut in AppShortcuts.terminalTabSelection {
+      #expect(shortcut.modifiers == .command)
+    }
+  }
+
+  @Test func selectionDisplayUsesResolvedOverrides() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectWorktree1: KeybindingUserOverride(
+          binding: Keybinding(key: "m", modifiers: .init(control: true))
+        ),
+        AppShortcuts.CommandID.selectTerminalTab1: KeybindingUserOverride(
+          binding: Keybinding(key: "j", modifiers: .init(command: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    #expect(AppShortcuts.worktreeSelectionDisplay(at: 0, in: resolved) == "⌃M")
+    #expect(AppShortcuts.terminalTabSelectionDisplay(at: 0, in: resolved) == "⌘J")
+    #expect(AppShortcuts.worktreeSelectionDisplay(at: 10, in: resolved) == nil)
+    #expect(AppShortcuts.terminalTabSelectionDisplay(at: 10, in: resolved) == nil)
+  }
+
+  @Test func helpTextUsesResolvedShortcutAndHandlesDisabledBinding() {
+    let defaultHelpText = AppShortcuts.helpText(
+      title: "Run Script",
+      commandID: AppShortcuts.CommandID.runScript,
+      in: .appDefaults
+    )
+    #expect(defaultHelpText == "Run Script (⌘R)")
+
+    let disabledOverrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.runScript: KeybindingUserOverride(
+          binding: nil,
+          isEnabled: false
+        ),
+      ]
+    )
+    let resolvedDisabled = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: disabledOverrides
+    )
+
+    let disabledHelpText = AppShortcuts.helpText(
+      title: "Run Script",
+      commandID: AppShortcuts.CommandID.runScript,
+      in: resolvedDisabled
+    )
+    #expect(disabledHelpText == "Run Script")
+  }
+
   @Test func defaultGlobalShortcutTableMatchesPlan() {
     expectNoDifference(
       [
@@ -40,6 +102,24 @@ struct AppShortcutsTests {
         "showDiff=\(AppShortcuts.showDiff.display)",
         "openFinder=\(AppShortcuts.openFinder.display)",
         "openRepository=\(AppShortcuts.openRepository.display)",
+        "selectTerminalTab1=\(AppShortcuts.selectTerminalTab1.display)",
+        "selectTerminalTab2=\(AppShortcuts.selectTerminalTab2.display)",
+        "selectTerminalTab3=\(AppShortcuts.selectTerminalTab3.display)",
+        "selectTerminalTab4=\(AppShortcuts.selectTerminalTab4.display)",
+        "selectTerminalTab5=\(AppShortcuts.selectTerminalTab5.display)",
+        "selectTerminalTab6=\(AppShortcuts.selectTerminalTab6.display)",
+        "selectTerminalTab7=\(AppShortcuts.selectTerminalTab7.display)",
+        "selectTerminalTab8=\(AppShortcuts.selectTerminalTab8.display)",
+        "selectTerminalTab9=\(AppShortcuts.selectTerminalTab9.display)",
+        "selectTerminalTab0=\(AppShortcuts.selectTerminalTab0.display)",
+        "selectPreviousTerminalTab=\(AppShortcuts.selectPreviousTerminalTab.display)",
+        "selectNextTerminalTab=\(AppShortcuts.selectNextTerminalTab.display)",
+        "selectPreviousTerminalPane=\(AppShortcuts.selectPreviousTerminalPane.display)",
+        "selectNextTerminalPane=\(AppShortcuts.selectNextTerminalPane.display)",
+        "selectTerminalPaneUp=\(AppShortcuts.selectTerminalPaneUp.display)",
+        "selectTerminalPaneDown=\(AppShortcuts.selectTerminalPaneDown.display)",
+        "selectTerminalPaneLeft=\(AppShortcuts.selectTerminalPaneLeft.display)",
+        "selectTerminalPaneRight=\(AppShortcuts.selectTerminalPaneRight.display)",
       ],
       [
         "openSettings=⌘,",
@@ -50,11 +130,29 @@ struct AppShortcutsTests {
         "showDiff=⌘⇧Y",
         "openFinder=⌘O",
         "openRepository=⌘⇧O",
+        "selectTerminalTab1=⌘1",
+        "selectTerminalTab2=⌘2",
+        "selectTerminalTab3=⌘3",
+        "selectTerminalTab4=⌘4",
+        "selectTerminalTab5=⌘5",
+        "selectTerminalTab6=⌘6",
+        "selectTerminalTab7=⌘7",
+        "selectTerminalTab8=⌘8",
+        "selectTerminalTab9=⌘9",
+        "selectTerminalTab0=⌘0",
+        "selectPreviousTerminalTab=⌘⇧[",
+        "selectNextTerminalTab=⌘⇧]",
+        "selectPreviousTerminalPane=⌘[",
+        "selectNextTerminalPane=⌘]",
+        "selectTerminalPaneUp=⌘⌥↑",
+        "selectTerminalPaneDown=⌘⌥↓",
+        "selectTerminalPaneLeft=⌘⌥←",
+        "selectTerminalPaneRight=⌘⌥→",
       ]
     )
   }
 
-  @Test func systemFixedAndLocalInteractionShortcutsAreDefinedInRegistry() {
+  @Test func configurableSystemFixedAndLocalInteractionShortcutsAreDefinedInRegistry() {
     let idToDisplay = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.shortcut.display) })
     let idToScope = Dictionary(uniqueKeysWithValues: AppShortcuts.bindings.map { ($0.id, $0.scope) })
 
@@ -75,38 +173,10 @@ struct AppShortcutsTests {
       AppShortcuts.selectAllCanvasCards.display
     )
 
-    #expect(idToScope["command_palette"] == .systemFixedAppAction)
+    #expect(idToScope["command_palette"] == .configurableAppAction)
     #expect(idToScope["quit_application"] == .systemFixedAppAction)
     #expect(idToScope["rename_branch"] == .localInteraction)
     #expect(idToScope["select_all_canvas_cards"] == .localInteraction)
-  }
-
-  @Test func tabSelectionGhosttyKeybindArgumentsMatchExpected() {
-    expectNoDifference(
-      AppShortcuts.tabSelectionGhosttyKeybindArguments,
-      [
-        "--keybind=ctrl+1=goto_tab:1",
-        "--keybind=ctrl+digit_1=goto_tab:1",
-        "--keybind=ctrl+2=goto_tab:2",
-        "--keybind=ctrl+digit_2=goto_tab:2",
-        "--keybind=ctrl+3=goto_tab:3",
-        "--keybind=ctrl+digit_3=goto_tab:3",
-        "--keybind=ctrl+4=goto_tab:4",
-        "--keybind=ctrl+digit_4=goto_tab:4",
-        "--keybind=ctrl+5=goto_tab:5",
-        "--keybind=ctrl+digit_5=goto_tab:5",
-        "--keybind=ctrl+6=goto_tab:6",
-        "--keybind=ctrl+digit_6=goto_tab:6",
-        "--keybind=ctrl+7=goto_tab:7",
-        "--keybind=ctrl+digit_7=goto_tab:7",
-        "--keybind=ctrl+8=goto_tab:8",
-        "--keybind=ctrl+digit_8=goto_tab:8",
-        "--keybind=ctrl+9=goto_tab:9",
-        "--keybind=ctrl+digit_9=goto_tab:9",
-        "--keybind=ctrl+0=goto_tab:10",
-        "--keybind=ctrl+digit_0=goto_tab:10",
-      ]
-    )
   }
 
   @Test func userOverrideConflictsDetectsReservedAppShortcuts() {
@@ -148,10 +218,17 @@ struct AppShortcutsTests {
 
     for shortcut in AppShortcuts.worktreeSelection {
       #expect(arguments.contains(shortcut.ghosttyUnbindArgument))
+      let tabIndex = shortcut.keyToken == "0" ? 10 : Int(shortcut.keyToken) ?? 0
+      for argument in shortcut.ghosttyBindArguments(action: "goto_tab:\(tabIndex)") {
+        #expect(arguments.contains(argument) == false)
+      }
     }
 
-    for argument in AppShortcuts.tabSelectionGhosttyKeybindArguments {
-      #expect(arguments.contains(argument))
+    for (index, shortcut) in AppShortcuts.terminalTabSelection.enumerated() {
+      let tabIndex = index == 9 ? 10 : index + 1
+      for argument in shortcut.ghosttyBindArguments(action: "goto_tab:\(tabIndex)") {
+        #expect(arguments.contains(argument))
+      }
     }
 
     for argument in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map({ "--keybind=ctrl+digit_\($0)=unbind" }) {
@@ -161,13 +238,94 @@ struct AppShortcutsTests {
     for argument in [
       "--keybind=super+[=unbind",
       "--keybind=super+]=unbind",
-      "--keybind=super+shift+[=unbind",
-      "--keybind=super+shift+]=unbind",
+      "--keybind=shift+super+[=unbind",
+      "--keybind=shift+super+]=unbind",
+    ] {
+      #expect(arguments.contains(argument))
+    }
+
+    for argument in [
       "--keybind=super+d=unbind",
       "--keybind=super+shift+d=unbind",
     ] {
       #expect(arguments.contains(argument) == false)
     }
+  }
+
+  @Test func ghosttyCLIArgumentsIncludeTerminalNavigationBindings() {
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments
+
+    for argument in [
+      "--keybind=shift+super+[=previous_tab",
+      "--keybind=shift+super+]=next_tab",
+      "--keybind=super+[=goto_split:previous",
+      "--keybind=super+]=goto_split:next",
+      "--keybind=alt+super+arrow_up=goto_split:up",
+      "--keybind=alt+super+arrow_down=goto_split:down",
+      "--keybind=alt+super+arrow_left=goto_split:left",
+      "--keybind=alt+super+arrow_right=goto_split:right",
+    ] {
+      #expect(arguments.contains(argument))
+    }
+  }
+
+  @Test func managedGhosttyActionOverrideRebindsAndUnbindsDefaults() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectNextTerminalTab: KeybindingUserOverride(
+          binding: Keybinding(key: "t", modifiers: .init(command: true, shift: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=shift+super+t=unbind"))
+    #expect(arguments.contains("--keybind=shift+super+]=unbind"))
+    #expect(arguments.contains("--keybind=shift+super+t=next_tab"))
+    #expect(arguments.contains("--keybind=shift+super+]=next_tab") == false)
+  }
+
+  @Test func worktreeSelectionOverrideDoesNotAffectTerminalTabBindings() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectWorktree1: KeybindingUserOverride(
+          binding: Keybinding(key: "m", modifiers: .init(control: true))
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+1=goto_tab:1"))
+    #expect(arguments.contains("--keybind=super+digit_1=goto_tab:1"))
+    #expect(arguments.contains("--keybind=ctrl+m=goto_tab:1") == false)
+  }
+
+  @Test func disabledManagedGhosttyActionKeepsDefaultUnboundWithoutBindingAction() {
+    let overrides = KeybindingUserOverrideStore(
+      overrides: [
+        AppShortcuts.CommandID.selectNextTerminalPane: KeybindingUserOverride(
+          binding: Keybinding(key: "k", modifiers: .init(command: true)),
+          isEnabled: false
+        ),
+      ]
+    )
+    let resolved = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: overrides
+    )
+
+    let arguments = AppShortcuts.ghosttyCLIKeybindArguments(from: resolved)
+    #expect(arguments.contains("--keybind=super+]=unbind"))
+    #expect(arguments.contains("--keybind=super+]=goto_split:next") == false)
+    #expect(arguments.contains("--keybind=super+k=goto_split:next") == false)
   }
 
   @Test func resolverOverridePropagatesToMenuPaletteAndGhosttyArgs() {
@@ -290,4 +448,3 @@ struct AppShortcutsTests {
     #expect(arguments.contains("--keybind=super+,=unbind") == false)
   }
 }
-

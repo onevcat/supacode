@@ -21,6 +21,7 @@ struct WorktreeRow: View {
   let archiveAction: (() -> Void)?
   let onDiffTap: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   var body: some View {
     let showsSpinner = isLoading || taskStatus == .running
@@ -90,7 +91,11 @@ struct WorktreeRow: View {
             )
           }
           .buttonStyle(.plain)
-          .help("Show Diff (\(AppShortcuts.showDiff.display))")
+          .help(AppShortcuts.helpText(
+            title: "Show Diff",
+            commandID: AppShortcuts.CommandID.showDiff,
+            in: resolvedKeybindings
+          ))
         }
         if isHovered {
           Button {

@@ -176,12 +176,14 @@ struct WorktreeCommands: Commands {
       store.send(.repositories(.selectWorktree(row.id)))
     }
     .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: commandID)))
-    .help({
-      if let shortcut = shortcutDisplay(for: commandID) {
-        return "Switch to \(title) (\(shortcut))"
-      }
-      return "Switch to \(title)"
-    }())
+    .help(
+      {
+        if let shortcut = shortcutDisplay(for: commandID) {
+          return "Switch to \(title) (\(shortcut))"
+        }
+        return "Switch to \(title)"
+      }()
+    )
     .disabled(row == nil)
   }
 

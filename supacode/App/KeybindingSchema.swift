@@ -37,6 +37,10 @@ nonisolated struct KeybindingModifiers: Codable, Equatable, Sendable {
     self.control = control
   }
 
+  var isEmpty: Bool {
+    !command && !shift && !option && !control
+  }
+
   var eventModifiers: EventModifiers {
     var value: EventModifiers = []
     if command {
@@ -375,7 +379,7 @@ extension KeybindingSchemaDocument {
           title: binding.title,
           scope: .init(binding.scope),
           platform: .macOS,
-          allowUserOverride: binding.scope == .configurableAppAction,
+          allowUserOverride: binding.scope != .systemFixedAppAction,
           conflictPolicy: binding.scope.conflictPolicy,
           defaultBinding: binding.shortcut.keybinding
         )

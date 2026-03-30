@@ -3,6 +3,8 @@ import GhosttyKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private let ghosttyLogger = SupaLogger("GhosttyRuntime")
+
 final class GhosttyRuntime {
   final class SurfaceReference {
     let surface: ghostty_surface_t
@@ -22,6 +24,8 @@ final class GhosttyRuntime {
   private var observers: [NSObjectProtocol] = []
   private var surfaceRefs: [SurfaceReference] = []
   private var lastColorScheme: ghostty_color_scheme_e?
+  private var appKeybindOverrideContents = ""
+  private var appKeybindOverrideEntries: [String] = []
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
@@ -475,6 +479,75 @@ final class GhosttyRuntime {
       ghostty_config_free(existing)
     }
     self.config = config
+  }
+
+  func applyAppKeybindArguments(_ keybindArguments: [String]) {
+    let entries = Self.keybindEntries(from: keybindArguments)
+    let overrideEntries = Self.makeKeybindOverrideEntries(
+      entries: entries,
+      previousEntries: appKeybindOverrideEntries
+    )
+    let contents = overrideEntries
+      .map { "keybind = \($0)" }
+      .joined(separator: "\n")
+    guard contents != appKeybindOverrideContents else { return }
+    appKeybindOverrideEntries = entries
+    appKeybindOverrideContents = contents
+
+    let overrideURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("prowl-ghostty-keybind-overrides.conf")
+    do {
+      try contents.write(to: overrideURL, atomically: true, encoding: .utf8)
+    } catch {
+      ghosttyLogger.warning("Failed to write ghostty keybind override file: \(error.localizedDescription)")
+      return
+    }
+
+    guard let app else { return }
+    guard let updated = ghostty_config_new() else { return }
+    ghostty_config_load_default_files(updated)
+    ghostty_config_load_recursive_files(updated)
+    ghostty_config_load_cli_args(updated)
+    overrideURL.path.withCString { path in
+      ghostty_config_load_file(updated, path)
+    }
+    ghostty_config_finalize(updated)
+    ghostty_app_update_config(app, updated)
+    if let clone = ghostty_config_clone(updated) {
+      setConfig(clone)
+    }
+    ghostty_config_free(updated)
+    onConfigChange?()
+    NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: self)
+  }
+
+  private static func keybindEntries(from keybindArguments: [String]) -> [String] {
+    let prefix = "--keybind="
+    return keybindArguments.compactMap { argument in
+      guard argument.hasPrefix(prefix) else { return nil }
+      return String(argument.dropFirst(prefix.count))
+    }
+  }
+
+  private static func makeKeybindOverrideEntries(
+    entries: [String],
+    previousEntries: [String]
+  ) -> [String] {
+    var unbindEntries: [String] = []
+    var seenTriggers = Set<String>()
+    for entry in previousEntries + entries {
+      guard let trigger = keybindTrigger(from: entry), seenTriggers.insert(trigger).inserted else {
+        continue
+      }
+      unbindEntries.append("\(trigger)=unbind")
+    }
+    return unbindEntries + entries
+  }
+
+  private static func keybindTrigger(from entry: String) -> String? {
+    guard let separator = entry.firstIndex(of: "=") else { return nil }
+    let trigger = String(entry[..<separator])
+    return trigger.isEmpty ? nil : trigger
   }
 
   private static func loadConfig() -> ghostty_config_t? {

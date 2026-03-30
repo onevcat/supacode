@@ -112,8 +112,26 @@ enum AppShortcuts {
     static let selectWorktree8 = "select_worktree_8"
     static let selectWorktree9 = "select_worktree_9"
     static let selectWorktree0 = "select_worktree_0"
+    static let selectTerminalTab1 = "select_terminal_tab_1"
+    static let selectTerminalTab2 = "select_terminal_tab_2"
+    static let selectTerminalTab3 = "select_terminal_tab_3"
+    static let selectTerminalTab4 = "select_terminal_tab_4"
+    static let selectTerminalTab5 = "select_terminal_tab_5"
+    static let selectTerminalTab6 = "select_terminal_tab_6"
+    static let selectTerminalTab7 = "select_terminal_tab_7"
+    static let selectTerminalTab8 = "select_terminal_tab_8"
+    static let selectTerminalTab9 = "select_terminal_tab_9"
+    static let selectTerminalTab0 = "select_terminal_tab_0"
     static let renameBranch = "rename_branch"
     static let selectAllCanvasCards = "select_all_canvas_cards"
+    static let selectPreviousTerminalTab = "select_previous_terminal_tab"
+    static let selectNextTerminalTab = "select_next_terminal_tab"
+    static let selectPreviousTerminalPane = "select_previous_terminal_pane"
+    static let selectNextTerminalPane = "select_next_terminal_pane"
+    static let selectTerminalPaneUp = "select_terminal_pane_up"
+    static let selectTerminalPaneDown = "select_terminal_pane_down"
+    static let selectTerminalPaneLeft = "select_terminal_pane_left"
+    static let selectTerminalPaneRight = "select_terminal_pane_right"
   }
 
   enum Scope: String {
@@ -140,25 +158,6 @@ enum AppShortcuts {
     let actionTitle: String
     let shortcut: AppShortcut
   }
-
-  private struct TabSelectionBinding {
-    let unicode: String
-    let physical: String
-    let tabIndex: Int
-  }
-
-  private static let tabSelectionBindings: [TabSelectionBinding] = [
-    TabSelectionBinding(unicode: "1", physical: "digit_1", tabIndex: 1),
-    TabSelectionBinding(unicode: "2", physical: "digit_2", tabIndex: 2),
-    TabSelectionBinding(unicode: "3", physical: "digit_3", tabIndex: 3),
-    TabSelectionBinding(unicode: "4", physical: "digit_4", tabIndex: 4),
-    TabSelectionBinding(unicode: "5", physical: "digit_5", tabIndex: 5),
-    TabSelectionBinding(unicode: "6", physical: "digit_6", tabIndex: 6),
-    TabSelectionBinding(unicode: "7", physical: "digit_7", tabIndex: 7),
-    TabSelectionBinding(unicode: "8", physical: "digit_8", tabIndex: 8),
-    TabSelectionBinding(unicode: "9", physical: "digit_9", tabIndex: 9),
-    TabSelectionBinding(unicode: "0", physical: "digit_0", tabIndex: 10),
-  ]
 
   static let newWorktree = AppShortcut(key: "n", modifiers: .command)
   static let commandPalette = AppShortcut(key: "p", modifiers: .command)
@@ -194,6 +193,32 @@ enum AppShortcuts {
   static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.control])
   static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.control])
   static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.control])
+  static let selectTerminalTab1 = AppShortcut(key: "1", modifiers: [.command])
+  static let selectTerminalTab2 = AppShortcut(key: "2", modifiers: [.command])
+  static let selectTerminalTab3 = AppShortcut(key: "3", modifiers: [.command])
+  static let selectTerminalTab4 = AppShortcut(key: "4", modifiers: [.command])
+  static let selectTerminalTab5 = AppShortcut(key: "5", modifiers: [.command])
+  static let selectTerminalTab6 = AppShortcut(key: "6", modifiers: [.command])
+  static let selectTerminalTab7 = AppShortcut(key: "7", modifiers: [.command])
+  static let selectTerminalTab8 = AppShortcut(key: "8", modifiers: [.command])
+  static let selectTerminalTab9 = AppShortcut(key: "9", modifiers: [.command])
+  static let selectTerminalTab0 = AppShortcut(key: "0", modifiers: [.command])
+  static let selectPreviousTerminalTab = AppShortcut(key: "[", modifiers: [.command, .shift])
+  static let selectNextTerminalTab = AppShortcut(key: "]", modifiers: [.command, .shift])
+  static let selectPreviousTerminalPane = AppShortcut(key: "[", modifiers: [.command])
+  static let selectNextTerminalPane = AppShortcut(key: "]", modifiers: [.command])
+  static let selectTerminalPaneUp = AppShortcut(
+    keyEquivalent: .upArrow, ghosttyKeyName: "arrow_up", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneDown = AppShortcut(
+    keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneLeft = AppShortcut(
+    keyEquivalent: .leftArrow, ghosttyKeyName: "arrow_left", modifiers: [.command, .option]
+  )
+  static let selectTerminalPaneRight = AppShortcut(
+    keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .option]
+  )
   static let renameBranch = AppShortcut(key: "m", modifiers: [.command, .shift])
   static let selectAllCanvasCards = AppShortcut(key: "a", modifiers: [.command, .option])
   static let worktreeSelection: [AppShortcut] = [
@@ -222,6 +247,32 @@ enum AppShortcuts {
     CommandID.selectWorktree0,
   ]
 
+  static let terminalTabSelection: [AppShortcut] = [
+    selectTerminalTab1,
+    selectTerminalTab2,
+    selectTerminalTab3,
+    selectTerminalTab4,
+    selectTerminalTab5,
+    selectTerminalTab6,
+    selectTerminalTab7,
+    selectTerminalTab8,
+    selectTerminalTab9,
+    selectTerminalTab0,
+  ]
+
+  static let terminalTabSelectionCommandIDs: [String] = [
+    CommandID.selectTerminalTab1,
+    CommandID.selectTerminalTab2,
+    CommandID.selectTerminalTab3,
+    CommandID.selectTerminalTab4,
+    CommandID.selectTerminalTab5,
+    CommandID.selectTerminalTab6,
+    CommandID.selectTerminalTab7,
+    CommandID.selectTerminalTab8,
+    CommandID.selectTerminalTab9,
+    CommandID.selectTerminalTab0,
+  ]
+
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
     .init(actionTitle: "Open Settings", shortcut: openSettings),
     .init(actionTitle: "Toggle Left Sidebar", shortcut: toggleLeftSidebar),
@@ -231,6 +282,24 @@ enum AppShortcuts {
     .init(actionTitle: "Show Diff", shortcut: showDiff),
     .init(actionTitle: "Open Worktree", shortcut: openFinder),
     .init(actionTitle: "Open Repository", shortcut: openRepository),
+    .init(actionTitle: "Select Terminal Tab 1", shortcut: selectTerminalTab1),
+    .init(actionTitle: "Select Terminal Tab 2", shortcut: selectTerminalTab2),
+    .init(actionTitle: "Select Terminal Tab 3", shortcut: selectTerminalTab3),
+    .init(actionTitle: "Select Terminal Tab 4", shortcut: selectTerminalTab4),
+    .init(actionTitle: "Select Terminal Tab 5", shortcut: selectTerminalTab5),
+    .init(actionTitle: "Select Terminal Tab 6", shortcut: selectTerminalTab6),
+    .init(actionTitle: "Select Terminal Tab 7", shortcut: selectTerminalTab7),
+    .init(actionTitle: "Select Terminal Tab 8", shortcut: selectTerminalTab8),
+    .init(actionTitle: "Select Terminal Tab 9", shortcut: selectTerminalTab9),
+    .init(actionTitle: "Select Terminal Tab 0", shortcut: selectTerminalTab0),
+    .init(actionTitle: "Select Previous Tab", shortcut: selectPreviousTerminalTab),
+    .init(actionTitle: "Select Next Tab", shortcut: selectNextTerminalTab),
+    .init(actionTitle: "Select Previous Pane", shortcut: selectPreviousTerminalPane),
+    .init(actionTitle: "Select Next Pane", shortcut: selectNextTerminalPane),
+    .init(actionTitle: "Select Pane Up", shortcut: selectTerminalPaneUp),
+    .init(actionTitle: "Select Pane Down", shortcut: selectTerminalPaneDown),
+    .init(actionTitle: "Select Pane Left", shortcut: selectTerminalPaneLeft),
+    .init(actionTitle: "Select Pane Right", shortcut: selectTerminalPaneRight),
   ]
 
   static let bindings: [Binding] = [
@@ -391,9 +460,117 @@ enum AppShortcuts {
       shortcut: selectWorktree0
     ),
     .init(
+      id: CommandID.selectTerminalTab1,
+      title: "Select Terminal Tab 1",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab1
+    ),
+    .init(
+      id: CommandID.selectTerminalTab2,
+      title: "Select Terminal Tab 2",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab2
+    ),
+    .init(
+      id: CommandID.selectTerminalTab3,
+      title: "Select Terminal Tab 3",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab3
+    ),
+    .init(
+      id: CommandID.selectTerminalTab4,
+      title: "Select Terminal Tab 4",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab4
+    ),
+    .init(
+      id: CommandID.selectTerminalTab5,
+      title: "Select Terminal Tab 5",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab5
+    ),
+    .init(
+      id: CommandID.selectTerminalTab6,
+      title: "Select Terminal Tab 6",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab6
+    ),
+    .init(
+      id: CommandID.selectTerminalTab7,
+      title: "Select Terminal Tab 7",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab7
+    ),
+    .init(
+      id: CommandID.selectTerminalTab8,
+      title: "Select Terminal Tab 8",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab8
+    ),
+    .init(
+      id: CommandID.selectTerminalTab9,
+      title: "Select Terminal Tab 9",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab9
+    ),
+    .init(
+      id: CommandID.selectTerminalTab0,
+      title: "Select Terminal Tab 0",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalTab0
+    ),
+    .init(
+      id: CommandID.selectPreviousTerminalTab,
+      title: "Select Previous Tab",
+      scope: .configurableAppAction,
+      shortcut: selectPreviousTerminalTab
+    ),
+    .init(
+      id: CommandID.selectNextTerminalTab,
+      title: "Select Next Tab",
+      scope: .configurableAppAction,
+      shortcut: selectNextTerminalTab
+    ),
+    .init(
+      id: CommandID.selectPreviousTerminalPane,
+      title: "Select Previous Pane",
+      scope: .configurableAppAction,
+      shortcut: selectPreviousTerminalPane
+    ),
+    .init(
+      id: CommandID.selectNextTerminalPane,
+      title: "Select Next Pane",
+      scope: .configurableAppAction,
+      shortcut: selectNextTerminalPane
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneUp,
+      title: "Select Pane Up",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneUp
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneDown,
+      title: "Select Pane Down",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneDown
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneLeft,
+      title: "Select Pane Left",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneLeft
+    ),
+    .init(
+      id: CommandID.selectTerminalPaneRight,
+      title: "Select Pane Right",
+      scope: .configurableAppAction,
+      shortcut: selectTerminalPaneRight
+    ),
+    .init(
       id: CommandID.commandPalette,
       title: "Command Palette",
-      scope: .systemFixedAppAction,
+      scope: .configurableAppAction,
       shortcut: commandPalette
     ),
     .init(
@@ -462,30 +639,80 @@ enum AppShortcuts {
     return resolvedBinding.binding?.appShortcut
   }
 
-  static var tabSelectionGhosttyKeybindArguments: [String] {
-    var result: [String] = []
-    for binding in tabSelectionBindings {
-      result.append("--keybind=ctrl+\(binding.unicode)=goto_tab:\(binding.tabIndex)")
-      result.append("--keybind=ctrl+\(binding.physical)=goto_tab:\(binding.tabIndex)")
-    }
-    return result
+  static func display(for commandID: String, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    resolvedShortcut(for: commandID, in: resolvedKeybindings)?.display
   }
+
+  static func helpText(
+    title: String,
+    commandID: String,
+    in resolvedKeybindings: ResolvedKeybindingMap
+  ) -> String {
+    if let shortcut = display(for: commandID, in: resolvedKeybindings) {
+      return "\(title) (\(shortcut))"
+    }
+    return title
+  }
+
+  static func worktreeSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    guard worktreeSelectionCommandIDs.indices.contains(index) else { return nil }
+    return display(for: worktreeSelectionCommandIDs[index], in: resolvedKeybindings)
+  }
+
+  static func terminalTabSelectionDisplay(at index: Int, in resolvedKeybindings: ResolvedKeybindingMap) -> String? {
+    guard terminalTabSelectionCommandIDs.indices.contains(index) else { return nil }
+    return display(for: terminalTabSelectionCommandIDs[index], in: resolvedKeybindings)
+  }
+
+  private static let ghosttyManagedActionBindings: [(commandID: String, action: String)] = [
+    (CommandID.selectTerminalTab1, "goto_tab:1"),
+    (CommandID.selectTerminalTab2, "goto_tab:2"),
+    (CommandID.selectTerminalTab3, "goto_tab:3"),
+    (CommandID.selectTerminalTab4, "goto_tab:4"),
+    (CommandID.selectTerminalTab5, "goto_tab:5"),
+    (CommandID.selectTerminalTab6, "goto_tab:6"),
+    (CommandID.selectTerminalTab7, "goto_tab:7"),
+    (CommandID.selectTerminalTab8, "goto_tab:8"),
+    (CommandID.selectTerminalTab9, "goto_tab:9"),
+    (CommandID.selectTerminalTab0, "goto_tab:10"),
+    (CommandID.selectPreviousTerminalTab, "previous_tab"),
+    (CommandID.selectNextTerminalTab, "next_tab"),
+    (CommandID.selectPreviousTerminalPane, "goto_split:previous"),
+    (CommandID.selectNextTerminalPane, "goto_split:next"),
+    (CommandID.selectTerminalPaneUp, "goto_split:up"),
+    (CommandID.selectTerminalPaneDown, "goto_split:down"),
+    (CommandID.selectTerminalPaneLeft, "goto_split:left"),
+    (CommandID.selectTerminalPaneRight, "goto_split:right"),
+  ]
 
   static func ghosttyCLIKeybindArguments(from resolvedKeybindings: ResolvedKeybindingMap) -> [String] {
     var unbindArguments: [String] = []
-    for binding in bindings where binding.scope == .configurableAppAction {
-      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+    var seenUnbindArguments = Set<String>()
+    func appendUnbindArgument(_ argument: String) {
+      if seenUnbindArguments.insert(argument).inserted {
         unbindArguments.append(argument)
       }
     }
 
-    var tabArguments: [String] = []
-    for (commandID, binding) in zip(worktreeSelectionCommandIDs, tabSelectionBindings) {
-      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
-      tabArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: "goto_tab:\(binding.tabIndex)"))
+    for binding in bindings where binding.scope == .configurableAppAction {
+      if let argument = resolvedShortcut(for: binding.id, in: resolvedKeybindings)?.ghosttyUnbindArgument {
+        appendUnbindArgument(argument)
+      }
     }
 
-    return unbindArguments + tabArguments
+    for (commandID, _) in ghosttyManagedActionBindings {
+      if let defaultUnbind = binding(for: commandID)?.shortcut.ghosttyUnbindArgument {
+        appendUnbindArgument(defaultUnbind)
+      }
+    }
+
+    var managedActionArguments: [String] = []
+    for (commandID, action) in ghosttyManagedActionBindings {
+      guard let shortcut = resolvedShortcut(for: commandID, in: resolvedKeybindings) else { continue }
+      managedActionArguments.append(contentsOf: shortcut.ghosttyBindArguments(action: action))
+    }
+
+    return unbindArguments + managedActionArguments
   }
 
   static var ghosttyCLIKeybindArguments: [String] {
@@ -519,6 +746,24 @@ enum AppShortcuts {
     selectWorktree8,
     selectWorktree9,
     selectWorktree0,
+    selectTerminalTab1,
+    selectTerminalTab2,
+    selectTerminalTab3,
+    selectTerminalTab4,
+    selectTerminalTab5,
+    selectTerminalTab6,
+    selectTerminalTab7,
+    selectTerminalTab8,
+    selectTerminalTab9,
+    selectTerminalTab0,
+    selectPreviousTerminalTab,
+    selectNextTerminalTab,
+    selectPreviousTerminalPane,
+    selectNextTerminalPane,
+    selectTerminalPaneUp,
+    selectTerminalPaneDown,
+    selectTerminalPaneLeft,
+    selectTerminalPaneRight,
   ]
 }
 
