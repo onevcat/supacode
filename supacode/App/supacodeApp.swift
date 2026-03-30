@@ -14,6 +14,8 @@ import Sentry
 import Sharing
 import SwiftUI
 
+private let appOpenLogger = SupaLogger("AppOpen")
+
 private enum GhosttyCLI {
   static let argv: [UnsafeMutablePointer<CChar>?] = {
     var args: [UnsafeMutablePointer<CChar>?] = []
@@ -29,20 +31,20 @@ private enum GhosttyCLI {
 
 @MainActor
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
-  var appStore: StoreOf<AppFeature>? {
-    didSet {
-      flushPendingExternalOpens()
-    }
-  }
+  var appStore: StoreOf<AppFeature>?
   private var pendingExternalOpenURLs: [URL] = []
+  private var hasFinishedLaunching = false
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
     UserDefaults.standard.register(defaults: [
       "ApplePressAndHoldEnabled": false
     ])
+    hasFinishedLaunching = true
     appStore?.send(.appLaunched)
-    flushPendingExternalOpens()
+    DispatchQueue.main.async { [weak self] in
+      self?.flushPendingExternalOpens()
+    }
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
@@ -79,26 +81,39 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       return normalizedURL
     }
     guard !directoryURLs.isEmpty else { return }
+    appOpenLogger.info(
+      """
+      handleExternalOpen received \(directoryURLs.count) directories. \
+      hasStore=\(appStore != nil), launched=\(hasFinishedLaunching), \
+      appActive=\(application.isActive), visibleWindows=\(application.windows.filter(\.isVisible).count)
+      """
+    )
 
-    if let appStore {
+    if let appStore, hasFinishedLaunching {
       for directoryURL in directoryURLs {
+        appOpenLogger.info("Dispatch .openPath immediately: \(directoryURL.path(percentEncoded: false))")
         appStore.send(.repositories(.openPath(directoryURL)))
       }
     } else {
       pendingExternalOpenURLs.append(contentsOf: directoryURLs)
+      appOpenLogger.info("Queue external open URLs. pending=\(pendingExternalOpenURLs.count)")
     }
 
     if shouldBringMainWindowToFront(from: application) {
+      appOpenLogger.info("Bring main window to front for external open.")
       _ = showMainWindow(from: application)
     }
   }
 
   private func flushPendingExternalOpens() {
     guard !pendingExternalOpenURLs.isEmpty else { return }
+    guard hasFinishedLaunching else { return }
     guard let appStore else { return }
     let pendingURLs = pendingExternalOpenURLs
     pendingExternalOpenURLs.removeAll()
+    appOpenLogger.info("Flush pending external opens: \(pendingURLs.count)")
     for pendingURL in pendingURLs {
+      appOpenLogger.info("Dispatch pending .openPath: \(pendingURL.path(percentEncoded: false))")
       appStore.send(.repositories(.openPath(pendingURL)))
     }
   }
