@@ -333,7 +333,9 @@ struct RepositorySettingsView: View {
           }
         }
       }
-      .frame(height: 300)
+      .frame(minHeight: 300, idealHeight: 300, maxHeight: 300)
+      .clipped()
+      .scrollDisabled(false)
 
       HStack(spacing: 8) {
         Button {
