@@ -52,7 +52,11 @@ run-app: build-app # Build then launch (Debug) with log streaming
 		echo "error: failed to resolve app path from build settings"; \
 		exit 1; \
 	fi; \
-	"$$build_dir/$$product/Contents/MacOS/$$exec_name"
+	app_bundle="$$build_dir/$$product"; \
+	app_exec="$$app_bundle/Contents/MacOS/$$exec_name"; \
+	echo "run-app: app bundle = $$app_bundle"; \
+	echo "run-app: executable = $$app_exec"; \
+	"$$app_exec"
 
 install-dev-build: build-app # install dev build to /Applications
 	@set -euo pipefail; \

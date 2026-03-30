@@ -127,83 +127,83 @@ struct KeybindingSchemaTests {
 
   @Test func migrationMigratesLegacyCustomShortcutsAndCollectsUnmappedIssues() throws {
     let fixture = #"""
-    {
-      "customCommands": [
-        {
-          "id": "build",
-          "title": "Build",
-          "systemImage": "hammer",
-          "command": "swift build",
-          "execution": "shellScript",
-          "shortcut": {
-            "key": " B ",
-            "modifiers": {
-              "command": true,
-              "shift": true,
-              "option": false,
-              "control": false
+      {
+        "customCommands": [
+          {
+            "id": "build",
+            "title": "Build",
+            "systemImage": "hammer",
+            "command": "swift build",
+            "execution": "shellScript",
+            "shortcut": {
+              "key": " B ",
+              "modifiers": {
+                "command": true,
+                "shift": true,
+                "option": false,
+                "control": false
+              }
             }
-          }
-        },
-        {
-          "id": "deploy",
-          "title": "Deploy",
-          "systemImage": "rocket",
-          "command": "make release",
-          "execution": "shellScript",
-          "shortcut": {
-            "key": "d",
-            "modifiers": {
-              "command": true,
-              "shift": false,
-              "option": false,
-              "control": false
+          },
+          {
+            "id": "deploy",
+            "title": "Deploy",
+            "systemImage": "rocket",
+            "command": "make release",
+            "execution": "shellScript",
+            "shortcut": {
+              "key": "d",
+              "modifiers": {
+                "command": true,
+                "shift": false,
+                "option": false,
+                "control": false
+              }
             }
-          }
-        },
-        {
-          "id": "bad-shortcut",
-          "title": "Bad",
-          "systemImage": "xmark",
-          "command": "echo bad",
-          "execution": "shellScript",
-          "shortcut": {
-            "key": "two",
-            "modifiers": {
-              "command": true,
-              "shift": false,
-              "option": false,
-              "control": false
+          },
+          {
+            "id": "bad-shortcut",
+            "title": "Bad",
+            "systemImage": "xmark",
+            "command": "echo bad",
+            "execution": "shellScript",
+            "shortcut": {
+              "key": "two",
+              "modifiers": {
+                "command": true,
+                "shift": false,
+                "option": false,
+                "control": false
+              }
             }
-          }
-        },
-        {
-          "id": "",
-          "title": "No ID",
-          "systemImage": "questionmark",
-          "command": "echo noid",
-          "execution": "shellScript",
-          "shortcut": {
-            "key": "n",
-            "modifiers": {
-              "command": true,
-              "shift": false,
-              "option": false,
-              "control": false
+          },
+          {
+            "id": "",
+            "title": "No ID",
+            "systemImage": "questionmark",
+            "command": "echo noid",
+            "execution": "shellScript",
+            "shortcut": {
+              "key": "n",
+              "modifiers": {
+                "command": true,
+                "shift": false,
+                "option": false,
+                "control": false
+              }
             }
+          },
+          {
+            "id": "without-shortcut",
+            "title": "No Shortcut",
+            "systemImage": "ellipsis",
+            "command": "echo none",
+            "execution": "shellScript",
+            "shortcut": null
           }
-        },
-        {
-          "id": "without-shortcut",
-          "title": "No Shortcut",
-          "systemImage": "ellipsis",
-          "command": "echo none",
-          "execution": "shellScript",
-          "shortcut": null
-        }
-      ]
-    }
-    """#
+        ]
+      }
+      """#
 
     let legacySettings = try JSONDecoder().decode(
       LegacyCustomCommandShortcutFixture.self,

@@ -409,10 +409,10 @@ struct CanvasView: View {
           "Broadcasting to \(selectionState.selectedTabIDs.count) cards",
           systemImage: "dot.radiowaves.left.and.right"
         )
-          .font(.callout)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(.bar, in: Capsule())
+        .font(.callout)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.bar, in: Capsule())
       }
 
       Button {

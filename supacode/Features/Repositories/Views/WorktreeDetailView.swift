@@ -121,10 +121,12 @@ struct WorktreeDetailView: View {
   }
 
   private func toolbarState(input: ToolbarStateInput) -> WorktreeToolbarState? {
-    guard let title = DetailToolbarTitle.forSelection(
-      worktree: input.selectedWorktree,
-      repository: input.repositories.selectedRepository
-    ) else {
+    guard
+      let title = DetailToolbarTitle.forSelection(
+        worktree: input.selectedWorktree,
+        repository: input.repositories.selectedRepository
+      )
+    else {
       return nil
     }
     let pullRequest = input.selectedWorktree.flatMap { input.repositories.worktreeInfo(for: $0.id)?.pullRequest }
@@ -189,9 +191,11 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
-      CanvasView(terminalManager: terminalManager, onExitToTab: {
-        store.send(.repositories(.toggleCanvas))
-      })
+      CanvasView(
+        terminalManager: terminalManager,
+        onExitToTab: {
+          store.send(.repositories(.toggleCanvas))
+        })
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)
