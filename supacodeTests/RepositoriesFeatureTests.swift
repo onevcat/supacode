@@ -379,7 +379,7 @@ struct RepositoriesFeatureTests {
     )
   }
 
-  @Test(.dependencies) func loadPersistedRepositoriesHandlesDuplicateRemoteEndpointPathsSafely() async {
+  @Test(.dependencies) func loadPersistedRepositoriesUsesLatestDuplicateRemoteEndpointPath() async {
     let testID = UUID().uuidString
     let settingsStorage = SettingsTestStorage()
     let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
@@ -415,8 +415,8 @@ struct RepositoriesFeatureTests {
     let expectedRepository = makeRepository(
       id: repoRoot,
       name: "repo",
-      endpoint: endpointA,
-      worktrees: [worktreeA]
+      endpoint: endpointB,
+      worktrees: [worktreeB]
     )
     let store = withDependencies {
       $0.settingsFileStorage = settingsStorage.storage
@@ -459,7 +459,6 @@ struct RepositoriesFeatureTests {
         URL(fileURLWithPath: repoRoot),
         URL(fileURLWithPath: repoRoot),
       ]
-      $0.loadFailuresByID = [repoRoot: "Duplicate repository identity/path conflict for \(repoRoot)"]
       $0.isInitialLoadComplete = true
     }
     await store.receive(\.delegate.repositoriesChanged)

@@ -3308,24 +3308,19 @@ struct RepositoriesFeature {
       return resultsByIndex
     }
 
-    var loaded: [Repository] = []
+    var loadedByID: [Repository.ID: Repository] = [:]
+    var loadedOrder: [Repository.ID] = []
     var failures: [LoadFailure] = []
-    var loadedRepositoryIDs = Set<Repository.ID>()
     for (index, entry) in entries.enumerated() {
       let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
       guard let result = fetchResults[index] else { continue }
       if let repository = result.repository {
-        if loadedRepositoryIDs.insert(repository.id).inserted {
-          loaded.append(repository)
-        } else {
-          failures.append(
-            LoadFailure(
-              rootID: repository.id,
-              message: "Duplicate repository identity/path conflict for \(rootID)"
-            )
-          )
+        if loadedByID[repository.id] == nil {
+          loadedOrder.append(repository.id)
         }
+        // Last persisted entry wins when multiple endpoints resolve to the same repository path.
+        loadedByID[repository.id] = repository
       } else {
         failures.append(
           LoadFailure(
@@ -3335,6 +3330,7 @@ struct RepositoriesFeature {
         )
       }
     }
+    let loaded = loadedOrder.compactMap { loadedByID[$0] }
     return (loaded, failures)
   }
 
