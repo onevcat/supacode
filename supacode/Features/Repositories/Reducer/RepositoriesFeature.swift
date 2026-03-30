@@ -71,6 +71,7 @@ struct RepositoriesFeature {
     var worktreeOrderByRepository: [Repository.ID: [Worktree.ID]] = [:]
     var isOpenPanelPresented = false
     var isInitialLoadComplete = false
+    var hasCompletedInitialRepositoryLoad = true
     var pendingWorktrees: [PendingWorktree] = []
     var pendingSetupScriptWorktreeIDs: Set<Worktree.ID> = []
     var pendingTerminalFocusWorktreeIDs: Set<Worktree.ID> = []
@@ -313,6 +314,7 @@ struct RepositoriesFeature {
     Reduce { state, action in
       switch action {
       case .task:
+        state.hasCompletedInitialRepositoryLoad = false
         return .run { send in
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
@@ -331,6 +333,11 @@ struct RepositoriesFeature {
         }
 
       case .repositorySnapshotLoaded(let repositories):
+        if state.pendingExternalOpenPath != nil,
+          !state.hasCompletedInitialRepositoryLoad
+        {
+          return .none
+        }
         guard let repositories, !repositories.isEmpty else {
           return .none
         }
@@ -424,6 +431,7 @@ struct RepositoriesFeature {
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
+        state.hasCompletedInitialRepositoryLoad = true
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
         let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
@@ -499,8 +507,13 @@ struct RepositoriesFeature {
 
       case .openPath(let requestedURL):
         let normalizedRequestedURL = requestedURL.standardizedFileURL
-        guard state.isInitialLoadComplete else {
+        guard state.hasCompletedInitialRepositoryLoad else {
           state.pendingExternalOpenPath = normalizedRequestedURL
+          state.selection = nil
+          state.sidebarSelectedWorktreeIDs = []
+          state.pendingTerminalFocusWorktreeIDs = []
+          state.shouldRestoreLastFocusedWorktree = false
+          state.shouldSelectFirstAfterReload = false
           return .none
         }
         guard let match = state.openPathMatch(for: normalizedRequestedURL) else {
@@ -609,6 +622,7 @@ struct RepositoriesFeature {
         let pendingExternalOpenPath = state.pendingExternalOpenPath
         state.pendingExternalOpenPath = nil
         state.isRefreshingWorktrees = false
+        state.hasCompletedInitialRepositoryLoad = true
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
         let applyResult = applyRepositories(
@@ -2028,7 +2042,7 @@ struct RepositoriesFeature {
         var effects: [Effect<Action>] = [
           .run { _ in
             await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
-          },
+          }
         ]
         if didUpdateWorktreeOrder {
           let worktreeOrderByRepository = state.worktreeOrderByRepository
@@ -2055,7 +2069,7 @@ struct RepositoriesFeature {
         var effects: [Effect<Action>] = [
           .run { _ in
             await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
-          },
+          }
         ]
         if didUpdateWorktreeOrder {
           let worktreeOrderByRepository = state.worktreeOrderByRepository
@@ -3370,7 +3384,7 @@ extension RepositoriesFeature.State {
               workingDirectory: repository.rootURL,
               repositoryRootURL: repository.rootURL
             )
-          ),
+          )
         ]
       }
       return []

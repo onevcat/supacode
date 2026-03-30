@@ -85,7 +85,9 @@ struct RepositoriesFeatureTests {
       }
     }
 
-    await store.send(.task)
+    await store.send(.task) {
+      $0.hasCompletedInitialRepositoryLoad = false
+    }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreeIDsLoaded)
     await store.receive(\.repositoryOrderIDsLoaded)
@@ -125,7 +127,9 @@ struct RepositoriesFeatureTests {
       $0.gitClient.worktrees = { _ in [worktree] }
     }
 
-    await store.send(.task)
+    await store.send(.task) {
+      $0.hasCompletedInitialRepositoryLoad = false
+    }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreeIDsLoaded)
     await store.receive(\.repositoryOrderIDsLoaded)
@@ -420,7 +424,7 @@ struct RepositoriesFeatureTests {
       [
         PersistedRepositoryEntry(path: repoRoot, kind: .git),
         PersistedRepositoryEntry(path: plainRoot, kind: .plain),
-      ],
+      ]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -1324,7 +1328,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      ),
+      )
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -1361,7 +1365,7 @@ struct RepositoriesFeatureTests {
           stage: .checkingRepositoryMode,
           worktreeName: "swift-otter"
         )
-      ),
+      )
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -1552,7 +1556,7 @@ struct RepositoriesFeatureTests {
         addedLines: nil,
         removedLines: nil,
         pullRequest: makePullRequest(state: "MERGED")
-      ),
+      )
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -2234,7 +2238,7 @@ struct RepositoriesFeatureTests {
         id: removedWorktree.id,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .choosingWorktreeName)
-      ),
+      )
     ]
     initialState.pinnedWorktreeIDs = [removedWorktree.id]
     initialState.worktreeInfoByID = [
@@ -2317,7 +2321,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      ),
+      )
     ]
     initialState.selection = .worktree(pendingID)
     initialState.sidebarSelectedWorktreeIDs = [existingWorktree.id, pendingID]
@@ -3036,6 +3040,7 @@ struct RepositoriesFeatureTests {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var initialState = makeState(repositories: [repository])
     initialState.isInitialLoadComplete = true
+    initialState.hasCompletedInitialRepositoryLoad = true
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -3068,6 +3073,7 @@ struct RepositoriesFeatureTests {
     let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
     var initialState = makeState(repositories: [repository])
     initialState.isInitialLoadComplete = true
+    initialState.hasCompletedInitialRepositoryLoad = true
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -3092,7 +3098,7 @@ struct RepositoriesFeatureTests {
             worktree,
             directory: requestedDirectory.standardizedFileURL,
             runSetupScriptIfNew: false
-          ),
+          )
         ]
     )
   }
@@ -3103,6 +3109,7 @@ struct RepositoriesFeatureTests {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var initialState = makeState(repositories: [plainRepository])
     initialState.isInitialLoadComplete = true
+    initialState.hasCompletedInitialRepositoryLoad = true
 
     let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
@@ -3132,7 +3139,7 @@ struct RepositoriesFeatureTests {
             ),
             runSetupScriptIfNew: false,
             focusing: true
-          ),
+          )
         ]
     )
   }
@@ -3142,8 +3149,10 @@ struct RepositoriesFeatureTests {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+    var initialState = RepositoriesFeature.State()
+    initialState.hasCompletedInitialRepositoryLoad = false
 
-    let store = TestStore(initialState: RepositoriesFeature.State()) {
+    let store = TestStore(initialState: initialState) {
       RepositoriesFeature()
     } withDependencies: {
       $0.terminalClient.send = { command in
@@ -3166,6 +3175,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [repository]
       $0.repositoryRoots = [repository.rootURL]
       $0.isInitialLoadComplete = true
+      $0.hasCompletedInitialRepositoryLoad = true
       $0.pendingExternalOpenPath = nil
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -3184,9 +3194,33 @@ struct RepositoriesFeatureTests {
             worktree,
             directory: requestedDirectory.standardizedFileURL,
             runSetupScriptIfNew: false
-          ),
+          )
         ]
     )
+  }
+
+  @Test func openPathBeforeInitialLoadSkipsSnapshotRestore() async {
+    let requestedDirectory = URL(fileURLWithPath: "/tmp/repo/main/Sources")
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = RepositoriesFeature.State()
+    initialState.hasCompletedInitialRepositoryLoad = false
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.openPath(requestedDirectory)) {
+      $0.pendingExternalOpenPath = requestedDirectory.standardizedFileURL
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.shouldSelectFirstAfterReload = false
+    }
+
+    await store.send(.repositorySnapshotLoaded([repository])) {
+      $0.pendingExternalOpenPath = requestedDirectory.standardizedFileURL
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.shouldSelectFirstAfterReload = false
+    }
   }
 
   private func makeWorktree(

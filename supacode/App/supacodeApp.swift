@@ -39,7 +39,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
     UserDefaults.standard.register(defaults: [
-      "ApplePressAndHoldEnabled": false,
+      "ApplePressAndHoldEnabled": false
     ])
     appStore?.send(.appLaunched)
     flushPendingExternalOpens()
@@ -88,7 +88,9 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
       pendingExternalOpenURLs.append(contentsOf: directoryURLs)
     }
 
-    _ = showMainWindow(from: application)
+    if shouldBringMainWindowToFront(from: application) {
+      _ = showMainWindow(from: application)
+    }
   }
 
   private func flushPendingExternalOpens() {
@@ -105,6 +107,13 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     var isDirectory: ObjCBool = false
     return FileManager.default.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory)
       && isDirectory.boolValue
+  }
+
+  private func shouldBringMainWindowToFront(from application: NSApplication) -> Bool {
+    if !application.isActive {
+      return true
+    }
+    return !application.windows.contains(where: \.isVisible)
   }
 
   private func mainWindow(from sender: NSApplication) -> NSWindow? {
