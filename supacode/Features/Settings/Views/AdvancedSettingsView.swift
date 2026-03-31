@@ -22,6 +22,7 @@ struct AdvancedSettingsView: View {
               .font(.callout)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
+
           VStack(alignment: .leading) {
             Toggle(
               "Share crash reports with Prowl",
@@ -34,6 +35,21 @@ struct AdvancedSettingsView: View {
             Text("Requires app restart.")
               .foregroundStyle(.secondary)
               .font(.callout)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Toggle(
+              "Restore terminal layout on launch (experimental)",
+              isOn: $store.restoreTerminalLayoutOnLaunch
+            )
+            Text("When enabled, Prowl attempts to restore tabs and splits after restart.")
+              .foregroundStyle(.secondary)
+              .font(.callout)
+            Button("Clear saved terminal layout") {
+              store.send(.clearTerminalLayoutSnapshotButtonTapped)
+            }
+            .buttonStyle(.bordered)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         }

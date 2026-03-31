@@ -110,4 +110,44 @@ struct SupacodePathsTests {
 
     #expect(path == expectedPath)
   }
+
+  @Test func repositorySnapshotURLUsesAppSupportCacheDirectory() {
+    let path = SupacodePaths.repositorySnapshotURL.path(percentEncoded: false)
+
+    #expect(path.contains("/Library/Application Support/com.onevcat.prowl/cache/"))
+  }
+
+  @Test func migrateLegacyCacheMovesSnapshotFilesToCacheDirectory() throws {
+    let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let legacyDirectory = tempRoot.appending(path: "legacy", directoryHint: .isDirectory)
+    let cacheDirectory = tempRoot.appending(path: "cache", directoryHint: .isDirectory)
+    let repositorySnapshot = legacyDirectory.appending(path: "repository-snapshot.json", directoryHint: .notDirectory)
+    let terminalSnapshot = legacyDirectory.appending(
+      path: "terminal-layout-snapshot.json",
+      directoryHint: .notDirectory
+    )
+
+    try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
+    try Data("repo".utf8).write(to: repositorySnapshot)
+    try Data("terminal".utf8).write(to: terminalSnapshot)
+
+    try SupacodePaths.migrateLegacyCacheFilesIfNeeded(
+      legacyDirectory: legacyDirectory,
+      cacheDirectory: cacheDirectory
+    )
+
+    let migratedRepositorySnapshotPath = cacheDirectory
+      .appending(path: "repository-snapshot.json")
+      .path(percentEncoded: false)
+    let migratedTerminalSnapshotPath = cacheDirectory
+      .appending(path: "terminal-layout-snapshot.json")
+      .path(percentEncoded: false)
+    #expect(FileManager.default.fileExists(atPath: migratedRepositorySnapshotPath))
+    #expect(FileManager.default.fileExists(atPath: migratedTerminalSnapshotPath))
+    #expect(!FileManager.default.fileExists(atPath: repositorySnapshot.path(percentEncoded: false)))
+    #expect(!FileManager.default.fileExists(atPath: terminalSnapshot.path(percentEncoded: false)))
+
+    try? FileManager.default.removeItem(at: tempRoot)
+  }
 }

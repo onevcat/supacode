@@ -206,10 +206,7 @@ struct SettingsFeatureTests {
   @Test(.dependencies) func settingsLoadedNormalizesDefaultWorktreeBaseDirectoryPath() async {
     var loaded = GlobalSettings.default
     loaded.defaultWorktreeBaseDirectoryPath = " ~/worktrees "
-    let expectedPath = FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "worktrees", directoryHint: .isDirectory)
-      .standardizedFileURL
-      .path(percentEncoded: false)
+    let expectedPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
     let storage = SettingsTestStorage()
     let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(UUID().uuidString).json")
     let store = TestStore(initialState: SettingsFeature.State()) {
@@ -228,10 +225,7 @@ struct SettingsFeatureTests {
 
   @Test(.dependencies) func changingDefaultWorktreeBaseDirectoryUpdatesRepositorySettingsState() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let expectedPath = FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "worktrees", directoryHint: .isDirectory)
-      .standardizedFileURL
-      .path(percentEncoded: false)
+    let expectedPath = SupacodePaths.normalizedWorktreeBaseDirectoryPath(" ~/worktrees ")!
     @Shared(.settingsFile) var settingsFile
     $settingsFile.withLock { $0.global = .default }
     var state = SettingsFeature.State()
@@ -301,5 +295,16 @@ struct SettingsFeatureTests {
 
     #expect(settingsFile.global.terminalFontSize == 18)
     #expect(capturedEvents.value.isEmpty)
+  }
+
+  @Test(.dependencies) func clearTerminalLayoutSnapshotSendsDelegate() async {
+    let store = TestStore(initialState: SettingsFeature.State()) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.terminalLayoutPersistence.clearSnapshot = { true }
+    }
+
+    await store.send(.clearTerminalLayoutSnapshotButtonTapped)
+    await store.receive(\.delegate.terminalLayoutSnapshotCleared)
   }
 }

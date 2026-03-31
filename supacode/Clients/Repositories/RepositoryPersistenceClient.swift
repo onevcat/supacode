@@ -101,11 +101,17 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
       },
       loadRepositorySnapshot: {
+        try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
         let snapshotURL = SupacodePaths.repositorySnapshotURL
         guard let data = try? Data(contentsOf: snapshotURL) else {
           return nil
         }
         guard !data.isEmpty else {
+          discardRepositorySnapshot(at: snapshotURL)
+          return nil
+        }
+        guard data.count <= RepositorySnapshotCachePayload.maxSnapshotFileBytes else {
+          repositoryPersistenceLogger.warning("Repository snapshot exceeded size fuse and was reset")
           discardRepositorySnapshot(at: snapshotURL)
           return nil
         }
@@ -137,6 +143,7 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
       },
       saveRepositorySnapshot: { repositories in
+        try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
         let snapshotURL = SupacodePaths.repositorySnapshotURL
         guard !repositories.isEmpty else {
           discardRepositorySnapshot(at: snapshotURL)
@@ -144,7 +151,7 @@ extension RepositoryPersistenceClient: DependencyKey {
         }
         do {
           try FileManager.default.createDirectory(
-            at: SupacodePaths.baseDirectory,
+            at: SupacodePaths.cacheDirectory,
             withIntermediateDirectories: true
           )
           let encoder = JSONEncoder()
@@ -154,6 +161,10 @@ extension RepositoryPersistenceClient: DependencyKey {
           }
           let data = try await MainActor.run {
             try encoder.encode(payload)
+          }
+          guard data.count <= RepositorySnapshotCachePayload.maxSnapshotFileBytes else {
+            repositoryPersistenceLogger.warning("Repository snapshot exceeded size fuse and was skipped")
+            return
           }
           try data.write(to: snapshotURL, options: .atomic)
         } catch {
@@ -206,8 +217,11 @@ private nonisolated func discardRepositorySnapshot(at url: URL) {
   }
 }
 
-struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
-  static let currentVersion = 2
+nonisolated struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
+  nonisolated static let currentVersion = 2
+  nonisolated static let maxSnapshotFileBytes = 2 * 1024 * 1024
+  nonisolated static let maxRepositories = 256
+  nonisolated static let maxWorktreesPerRepository = 512
 
   let version: Int
   let repositories: [SnapshotRepository]
@@ -221,6 +235,9 @@ struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
     pathExists: @Sendable (String) -> Bool
   ) -> [Repository]? {
     guard version == Self.currentVersion, !repositories.isEmpty else {
+      return nil
+    }
+    guard repositories.count <= Self.maxRepositories else {
       return nil
     }
 
@@ -239,7 +256,7 @@ struct RepositorySnapshotCachePayload: Codable, Equatable, Sendable {
 }
 
 extension RepositorySnapshotCachePayload {
-  struct SnapshotRepository: Codable, Equatable, Sendable {
+  nonisolated struct SnapshotRepository: Codable, Equatable, Sendable {
     let rootPath: String
     let name: String
     let kind: Repository.Kind
@@ -256,6 +273,9 @@ extension RepositorySnapshotCachePayload {
       pathExists: @Sendable (String) -> Bool
     ) -> Repository? {
       guard let normalizedRootPath = normalizePath(rootPath), pathExists(normalizedRootPath) else {
+        return nil
+      }
+      guard worktrees.count <= RepositorySnapshotCachePayload.maxWorktreesPerRepository else {
         return nil
       }
 
@@ -286,7 +306,7 @@ extension RepositorySnapshotCachePayload {
     }
   }
 
-  struct SnapshotWorktree: Codable, Equatable, Sendable {
+  nonisolated struct SnapshotWorktree: Codable, Equatable, Sendable {
     let name: String
     let detail: String
     let workingDirectoryPath: String
@@ -320,8 +340,8 @@ extension RepositorySnapshotCachePayload {
   }
 }
 
-private func normalizePath(_ path: String) -> String? {
-  RepositoryPathNormalizer.normalize([path]).first
+private nonisolated func normalizePath(_ path: String) -> String? {
+  PathPolicy.normalizePath(path)
 }
 
 nonisolated enum RepositoryOrderNormalizer {

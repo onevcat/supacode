@@ -18,6 +18,19 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "repo", directoryHint: .isDirectory)
   }
 
+  static var appSupportDirectory: URL {
+    let appSupport =
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? baseDirectory
+    return appSupport
+      .appending(path: "com.onevcat.prowl", directoryHint: .isDirectory)
+      .standardizedFileURL
+  }
+
+  static var cacheDirectory: URL {
+    appSupportDirectory.appending(path: "cache", directoryHint: .isDirectory)
+  }
+
   static var reposDirectory: URL {
     baseDirectory.appending(path: "repos", directoryHint: .isDirectory)
   }
@@ -34,22 +47,11 @@ nonisolated enum SupacodePaths {
     guard let rawPath else {
       return nil
     }
-    let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else {
-      return nil
-    }
-    let expanded = NSString(string: trimmed).expandingTildeInPath
-    let directoryURL: URL
-    if expanded.hasPrefix("/") {
-      directoryURL = URL(filePath: expanded, directoryHint: .isDirectory)
-    } else if let repositoryRootURL {
-      directoryURL = repositoryRootURL.standardizedFileURL
-        .appending(path: expanded, directoryHint: .isDirectory)
-    } else {
-      directoryURL = FileManager.default.homeDirectoryForCurrentUser
-        .appending(path: expanded, directoryHint: .isDirectory)
-    }
-    return directoryURL.standardizedFileURL.path(percentEncoded: false)
+    return PathPolicy.normalizePath(
+      rawPath,
+      relativeTo: repositoryRootURL,
+      resolvingSymlinks: false
+    )
   }
 
   static func worktreeBaseDirectory(
@@ -62,13 +64,18 @@ nonisolated enum SupacodePaths {
       repositoryOverridePath,
       repositoryRootURL: rootURL
     ) {
-      return URL(filePath: repositoryOverridePath, directoryHint: .isDirectory).standardizedFileURL
+      return PathPolicy.normalizeURL(
+        URL(filePath: repositoryOverridePath, directoryHint: .isDirectory),
+        resolvingSymlinks: false
+      )
     }
     if let globalDefaultPath = normalizedWorktreeBaseDirectoryPath(globalDefaultPath) {
-      return URL(filePath: globalDefaultPath, directoryHint: .isDirectory)
-        .standardizedFileURL
-        .appending(path: repositoryDirectoryName(for: rootURL), directoryHint: .isDirectory)
-        .standardizedFileURL
+      return PathPolicy.normalizeURL(
+        URL(filePath: globalDefaultPath, directoryHint: .isDirectory),
+        resolvingSymlinks: false
+      )
+      .appending(path: repositoryDirectoryName(for: rootURL), directoryHint: .isDirectory)
+      .standardizedFileURL
     }
     return repositoryDirectory(for: rootURL)
   }
@@ -94,11 +101,47 @@ nonisolated enum SupacodePaths {
   }
 
   static var repositorySnapshotURL: URL {
-    baseDirectory.appending(path: "repository-snapshot.json", directoryHint: .notDirectory)
+    cacheDirectory.appending(path: "repository-snapshot.json", directoryHint: .notDirectory)
+  }
+
+  static var terminalLayoutSnapshotURL: URL {
+    cacheDirectory.appending(path: "terminal-layout-snapshot.json", directoryHint: .notDirectory)
   }
 
   static var repositoryEntriesURL: URL {
     baseDirectory.appending(path: "repository-entries.json", directoryHint: .notDirectory)
+  }
+
+  static func migrateLegacyCacheFilesIfNeeded(
+    fileManager: FileManager = .default,
+    legacyDirectory: URL? = nil,
+    cacheDirectory: URL? = nil
+  ) throws {
+    let sourceDirectory = (legacyDirectory ?? baseDirectory).standardizedFileURL
+    let destinationDirectory = (cacheDirectory ?? self.cacheDirectory).standardizedFileURL
+    try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+
+    let fileNames = [
+      "repository-snapshot.json",
+      "terminal-layout-snapshot.json",
+    ]
+
+    for name in fileNames {
+      let legacyURL = sourceDirectory.appending(path: name, directoryHint: .notDirectory)
+      let destinationURL = destinationDirectory.appending(path: name, directoryHint: .notDirectory)
+      guard !fileManager.fileExists(atPath: destinationURL.path(percentEncoded: false)) else {
+        continue
+      }
+      guard fileManager.fileExists(atPath: legacyURL.path(percentEncoded: false)) else {
+        continue
+      }
+      do {
+        try fileManager.moveItem(at: legacyURL, to: destinationURL)
+      } catch {
+        try fileManager.copyItem(at: legacyURL, to: destinationURL)
+        try? fileManager.removeItem(at: legacyURL)
+      }
+    }
   }
 
   static func repositorySettingsURL(for rootURL: URL) -> URL {

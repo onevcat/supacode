@@ -89,6 +89,7 @@ struct RepositoriesFeature {
     var shouldSelectFirstAfterReload = false
     var isRefreshingWorktrees = false
     var statusToast: StatusToast?
+    var snapshotPersistencePhase: SnapshotPersistencePhase = .idle
     var githubIntegrationAvailability: GithubIntegrationAvailability = .unknown
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
@@ -271,6 +272,12 @@ struct RepositoriesFeature {
     case success(String)
   }
 
+  enum SnapshotPersistencePhase: Equatable {
+    case idle
+    case restoring
+    case active
+  }
+
   enum Alert: Equatable {
     case confirmArchiveWorktree(Worktree.ID, Repository.ID)
     case confirmArchiveWorktrees([ArchiveWorktreeTarget])
@@ -311,6 +318,7 @@ struct RepositoriesFeature {
     Reduce { state, action in
       switch action {
       case .task:
+        state.snapshotPersistencePhase = .restoring
         return .run { send in
           let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
           let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
@@ -422,6 +430,10 @@ struct RepositoriesFeature {
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
+        let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
+        if failures.isEmpty, state.snapshotPersistencePhase != .active {
+          state.snapshotPersistencePhase = .active
+        }
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
         let incomingRepositories = IdentifiedArray(uniqueElements: repositories)
@@ -481,7 +493,7 @@ struct RepositoriesFeature {
             }
           )
         }
-        if failures.isEmpty {
+        if failures.isEmpty, !wasRestoringSnapshot {
           let repositories = Array(state.repositories)
           allEffects.append(
             .run { _ in
@@ -553,6 +565,10 @@ struct RepositoriesFeature {
         let roots
       ):
         state.isRefreshingWorktrees = false
+        let wasRestoringSnapshot = state.snapshotPersistencePhase == .restoring
+        if failures.isEmpty, state.snapshotPersistencePhase != .active {
+          state.snapshotPersistencePhase = .active
+        }
         let previousSelection = state.selectedWorktreeID
         let previousSelectedWorktree = state.worktree(for: previousSelection)
         let applyResult = applyRepositories(
@@ -616,7 +632,7 @@ struct RepositoriesFeature {
             }
           )
         }
-        if failures.isEmpty {
+        if failures.isEmpty, !wasRestoringSnapshot {
           let repositories = Array(state.repositories)
           allEffects.append(
             .run { _ in
@@ -3605,12 +3621,7 @@ private func cleanupFailedWorktree(
 }
 
 private func isPathInsideBaseDirectory(_ path: URL, baseDirectory: URL) -> Bool {
-  let normalizedPath = path.standardizedFileURL.pathComponents
-  let normalizedBase = baseDirectory.standardizedFileURL.pathComponents
-  guard normalizedPath.count >= normalizedBase.count else {
-    return false
-  }
-  return Array(normalizedPath.prefix(normalizedBase.count)) == normalizedBase
+  PathPolicy.contains(path, in: baseDirectory)
 }
 
 private struct WorktreeCleanupStateResult {

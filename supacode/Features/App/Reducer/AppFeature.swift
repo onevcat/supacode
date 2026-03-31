@@ -355,6 +355,19 @@ struct AppFeature {
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 
+      case .settings(.delegate(.terminalLayoutSnapshotCleared(let success))):
+        if success {
+          return .send(.repositories(.showToast(.success("Saved terminal layout cleared"))))
+        }
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Unable to clear saved terminal layout",
+              message: "Please check file permissions and try again."
+            )
+          )
+        )
+
       case .openActionSelectionChanged(let action):
         state.openActionSelection = action
         guard let worktree = state.repositories.selectedTerminalWorktree else {
