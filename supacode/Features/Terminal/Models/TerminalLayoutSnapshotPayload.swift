@@ -9,15 +9,18 @@ nonisolated struct TerminalLayoutSnapshotPayload: Codable, Equatable, Sendable {
   nonisolated static let maxSplitDepth = 24
 
   let version: Int
+  let selectedWorktreeID: String?
   let worktrees: [SnapshotWorktree]
 
-  init(worktrees: [SnapshotWorktree]) {
+  init(selectedWorktreeID: String? = nil, worktrees: [SnapshotWorktree]) {
     version = Self.currentVersion
+    self.selectedWorktreeID = selectedWorktreeID
     self.worktrees = worktrees
   }
 
-  init(version: Int, worktrees: [SnapshotWorktree]) {
+  init(version: Int, selectedWorktreeID: String? = nil, worktrees: [SnapshotWorktree]) {
     self.version = version
+    self.selectedWorktreeID = selectedWorktreeID
     self.worktrees = worktrees
   }
 
@@ -39,13 +42,21 @@ nonisolated struct TerminalLayoutSnapshotPayload: Codable, Equatable, Sendable {
     guard !worktrees.isEmpty, worktrees.count <= Self.maxWorktrees else {
       return false
     }
-    return worktrees.allSatisfy {
+    guard worktrees.allSatisfy({
       $0.isValid(
         maxTabsPerWorktree: Self.maxTabsPerWorktree,
         maxSplitNodesPerTab: Self.maxSplitNodesPerTab,
         maxSplitDepth: Self.maxSplitDepth
       )
+    }) else {
+      return false
     }
+    if let selectedWorktreeID {
+      guard worktrees.contains(where: { $0.worktreeID == selectedWorktreeID }) else {
+        return false
+      }
+    }
+    return true
   }
 }
 

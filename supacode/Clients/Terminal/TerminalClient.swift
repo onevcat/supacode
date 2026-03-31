@@ -41,6 +41,7 @@ struct TerminalClient {
     case commandPaletteToggleRequested(worktreeID: Worktree.ID)
     case setupScriptConsumed(worktreeID: Worktree.ID)
     case fontSizeChanged(Float32?)
+    case layoutRestored(selectedWorktreeID: Worktree.ID?)
   }
 }
 

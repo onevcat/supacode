@@ -444,7 +444,12 @@ final class WorktreeTerminalManager {
     }
     let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
     terminalLogger.info("[LayoutRestore] restore: applyResult=\(didRestore)")
-    if !didRestore {
+    if didRestore {
+      terminalLogger.info(
+        "[LayoutRestore] restore: emitting layoutRestored selectedWorktreeID=\(payload.selectedWorktreeID ?? "nil")"
+      )
+      emit(.layoutRestored(selectedWorktreeID: payload.selectedWorktreeID))
+    } else {
       terminalLogger.info("[LayoutRestore] restore: clearing invalid snapshot")
       _ = await layoutPersistence.clearSnapshot()
     }
@@ -471,7 +476,10 @@ final class WorktreeTerminalManager {
       }
       snapshotWorktrees.append(snapshot)
     }
-    return TerminalLayoutSnapshotPayload(worktrees: snapshotWorktrees)
+    return TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: selectedWorktreeID,
+      worktrees: snapshotWorktrees
+    )
   }
 
   private func applyLayoutSnapshotPayload(

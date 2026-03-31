@@ -49,7 +49,7 @@ struct AppFeature {
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
-    var didAttemptTerminalLayoutRestore = false
+    var launchRestoreMode: LaunchRestoreMode
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -59,6 +59,7 @@ struct AppFeature {
       self.repositories = repositories
       self.settings = settings
       lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
+      launchRestoreMode = settings.restoreTerminalLayoutOnLaunch ? .restoreLayout : .lastFocusedWorktree
     }
   }
 
@@ -115,6 +116,7 @@ struct AppFeature {
       switch action {
       case .appLaunched:
         try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
+        appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
@@ -255,18 +257,17 @@ struct AppFeature {
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
-        let shouldRestoreLayoutOnLaunch =
-          !state.didAttemptTerminalLayoutRestore
-          && state.settings.restoreTerminalLayoutOnLaunch
+        let shouldRestoreLayout =
+          state.launchRestoreMode == .restoreLayout
           && state.repositories.snapshotPersistencePhase == .active
         appLogger.info(
-          "[LayoutRestore] repositoriesChanged: didAttempt=\(state.didAttemptTerminalLayoutRestore)"
-            + " settingEnabled=\(state.settings.restoreTerminalLayoutOnLaunch)"
+          "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
             + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
-            + " → shouldRestore=\(shouldRestoreLayoutOnLaunch)"
+            + " → shouldRestore=\(shouldRestoreLayout)"
         )
-        if shouldRestoreLayoutOnLaunch {
-          state.didAttemptTerminalLayoutRestore = true
+        if shouldRestoreLayout {
+          state.launchRestoreMode = .lastFocusedWorktree
+          state.repositories.selection = nil
         }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
         let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
@@ -284,7 +285,7 @@ struct AppFeature {
               await worktreeInfoWatcher.send(.setWorktrees(worktrees))
             },
           ]
-          if shouldRestoreLayoutOnLaunch {
+          if shouldRestoreLayout {
             effects.append(
               .run { _ in
                 await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
@@ -302,7 +303,7 @@ struct AppFeature {
             await worktreeInfoWatcher.send(.setWorktrees(worktrees))
           },
         ]
-        if shouldRestoreLayoutOnLaunch {
+        if shouldRestoreLayout {
           effects.append(
             .run { _ in
               await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
@@ -873,6 +874,13 @@ struct AppFeature {
 
       case .terminalEvent(.fontSizeChanged(let fontSize)):
         return .send(.settings(.setTerminalFontSize(fontSize)))
+
+      case .terminalEvent(.layoutRestored(let selectedWorktreeID)):
+        appLogger.info("[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")")
+        if let selectedWorktreeID {
+          return .send(.repositories(.selectWorktree(selectedWorktreeID)))
+        }
+        return .none
 
       case .terminalEvent:
         return .none
