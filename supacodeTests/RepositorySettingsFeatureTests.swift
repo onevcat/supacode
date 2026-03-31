@@ -221,6 +221,11 @@ struct RepositorySettingsFeatureTests {
     continuation.resume()
 
     await store.receive(\.settingsLoaded, timeout: .seconds(5))
+    await store.receive(\.branchDataLoaded) {
+      $0.defaultWorktreeBaseRef = "origin/main"
+      $0.branchOptions = ["origin/main"]
+      $0.isBranchDataLoaded = true
+    }
     #expect(store.state.userSettings == updatedUserSettings)
   }
 }
