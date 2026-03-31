@@ -6,40 +6,51 @@ struct WorktreeCreationPromptView: View {
   @FocusState private var isBranchFieldFocused: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text("New Worktree")
-          .font(.title3)
-        Text("Create a branch in \(store.repositoryName)")
-          .foregroundStyle(.secondary)
-      }
-
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Branch name")
-          .foregroundStyle(.secondary)
-        TextField("feature/my-change", text: $store.branchName)
-          .textFieldStyle(.roundedBorder)
+    Form {
+      Section {
+        TextField("Branch name", text: $store.branchName)
           .focused($isBranchFieldFocused)
           .onSubmit {
             store.send(.createButtonTapped)
           }
+      } header: {
+        // `NavigationStack` with title and subtitle is bugged inside
+        // sheets in macOS 26.*, and this is a nice enough fallback.
+        Text("New Worktree")
+        Text("Create a branch in `\(store.repositoryName)`.")
       }
+      .headerProminence(.increased)
 
-      Picker("Branch from", selection: $store.selectedBaseRef) {
-        Text(store.automaticBaseRefLabel)
-          .tag(Optional<String>.none)
-        ForEach(store.baseRefOptions, id: \.self) { ref in
-          Text(ref)
-            .tag(Optional(ref))
+      Section {
+        Picker(selection: $store.selectedBaseRef) {
+          automaticRefLabel
+            .tag(Optional<String>.none)
+          ForEach(store.baseRefOptions, id: \.self) { ref in
+            Text(ref)
+              .tag(Optional(ref))
+          }
+        } label: {
+          Text("Base ref")
+          Text("The branch or ref the new worktree will be created from.")
+        }
+
+        Toggle(isOn: $store.fetchOrigin) {
+          Text("Fetch remote branch")
+          Text(
+            "Runs `git fetch` to ensure the base branch is up to date before creating the worktree."
+          )
+        }
+      } footer: {
+        if let validationMessage = store.validationMessage, !validationMessage.isEmpty {
+          Text(validationMessage)
+            .foregroundStyle(.red)
         }
       }
 
-      if let validationMessage = store.validationMessage, !validationMessage.isEmpty {
-        Text(validationMessage)
-          .font(.footnote)
-          .foregroundStyle(.red)
-      }
-
+    }
+    .formStyle(.grouped)
+    .scrollBounceBehavior(.basedOnSize)
+    .safeAreaInset(edge: .bottom, spacing: 0) {
       HStack {
         if store.isValidating {
           ProgressView()
@@ -58,11 +69,16 @@ struct WorktreeCreationPromptView: View {
         .help("Create (↩)")
         .disabled(store.isValidating)
       }
+      .padding(.horizontal, 20)
+      .padding(.bottom, 20)
     }
-    .padding(20)
     .frame(minWidth: 420)
-    .task {
-      isBranchFieldFocused = true
-    }
+    .task { isBranchFieldFocused = true }
+  }
+
+  private var automaticRefLabel: Text {
+    let ref = store.automaticBaseRef
+    guard !ref.isEmpty else { return Text("Auto") }
+    return Text("Auto \(Text(ref).foregroundStyle(.secondary))")
   }
 }

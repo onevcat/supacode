@@ -6,6 +6,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var copyUntracked: Bool?
   var ignoredFilesToCopyCount: Int?
   var untrackedFilesToCopyCount: Int?
+  var fetchRemoteName: String?
   var commandText: String?
   var latestOutputLine: String?
   var outputLines: [String]
@@ -18,6 +19,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     copyUntracked: Bool? = nil,
     ignoredFilesToCopyCount: Int? = nil,
     untrackedFilesToCopyCount: Int? = nil,
+    fetchRemoteName: String? = nil,
     commandText: String? = nil,
     latestOutputLine: String? = nil,
     outputLines: [String] = []
@@ -29,6 +31,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     self.copyUntracked = copyUntracked
     self.ignoredFilesToCopyCount = ignoredFilesToCopyCount
     self.untrackedFilesToCopyCount = untrackedFilesToCopyCount
+    self.fetchRemoteName = fetchRemoteName
     self.commandText = commandText
     self.latestOutputLine = latestOutputLine
     self.outputLines = outputLines
@@ -51,6 +54,8 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       return "Checking repository mode"
     case .resolvingBaseReference:
       return "Resolving base reference (\(baseRefDisplay))"
+    case .fetchingOrigin:
+      return "Fetching latest from \(fetchRemoteName ?? "remote")"
     case .creatingWorktree:
       if let outputLine = outputLines.last, !outputLine.isEmpty {
         return outputLine
@@ -121,5 +126,6 @@ nonisolated enum WorktreeCreationStage: Hashable, Sendable {
   case choosingWorktreeName
   case checkingRepositoryMode
   case resolvingBaseReference
+  case fetchingOrigin
   case creatingWorktree
 }

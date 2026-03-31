@@ -17,6 +17,10 @@ struct WorktreeSettingsView: View {
           Text("Prompt for branch name on creation")
           Text("Choose the branch name and base ref before creating the worktree.")
         }
+        Toggle(isOn: $store.fetchOriginBeforeWorktreeCreation) {
+          Text("Fetch remote branch before creating worktree")
+          Text("Runs git fetch to ensure the base branch is up to date.")
+        }
         TextField(
           text: $store.defaultWorktreeBaseDirectoryPath,
           prompt: Text(defaultPath)

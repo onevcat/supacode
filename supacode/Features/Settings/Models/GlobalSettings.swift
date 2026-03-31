@@ -15,6 +15,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var deleteBranchOnDeleteWorktree: Bool
   var automaticallyArchiveMergedWorktrees: Bool
   var promptForWorktreeCreation: Bool
+  var fetchOriginBeforeWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
   var terminalThemeSyncEnabled: Bool
   var shortcutOverrides: [AppShortcutID: AppShortcutOverride]
@@ -36,6 +37,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: true,
     automaticallyArchiveMergedWorktrees: false,
     promptForWorktreeCreation: true,
+    fetchOriginBeforeWorktreeCreation: true,
     terminalThemeSyncEnabled: false,
     defaultWorktreeBaseDirectoryPath: nil,
     shortcutOverrides: [:]
@@ -58,6 +60,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: Bool,
     automaticallyArchiveMergedWorktrees: Bool,
     promptForWorktreeCreation: Bool,
+    fetchOriginBeforeWorktreeCreation: Bool = true,
     terminalThemeSyncEnabled: Bool = false,
     defaultWorktreeBaseDirectoryPath: String? = nil,
     shortcutOverrides: [AppShortcutID: AppShortcutOverride] = [:]
@@ -78,6 +81,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
     self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
     self.promptForWorktreeCreation = promptForWorktreeCreation
+    self.fetchOriginBeforeWorktreeCreation = fetchOriginBeforeWorktreeCreation
     self.terminalThemeSyncEnabled = terminalThemeSyncEnabled
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
     self.shortcutOverrides = shortcutOverrides
@@ -127,6 +131,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
       ?? Self.default.promptForWorktreeCreation
+    fetchOriginBeforeWorktreeCreation =
+      try container.decodeIfPresent(Bool.self, forKey: .fetchOriginBeforeWorktreeCreation)
+      ?? Self.default.fetchOriginBeforeWorktreeCreation
     terminalThemeSyncEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .terminalThemeSyncEnabled)
       ?? Self.default.terminalThemeSyncEnabled

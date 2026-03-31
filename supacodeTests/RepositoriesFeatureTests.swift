@@ -558,10 +558,11 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
         repositoryName: repository.name,
-        automaticBaseRefLabel: "Automatic (origin/main)",
+        automaticBaseRef: "origin/main",
         baseRefOptions: ["origin/dev", "origin/main"],
         branchName: "",
         selectedBaseRef: nil,
+        fetchOrigin: true,
         validationMessage: nil
       )
     }
@@ -575,10 +576,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/new-branch",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -590,6 +592,71 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test(.dependencies) func promptedWorktreeCreationSubmitThreadsFetchOrigin() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/feature-new",
+      name: "feature/new",
+      repoRoot: repoRoot,
+    )
+    let fetchedRemote = LockIsolated<String?>(nil)
+    var state = makeState(repositories: [repository])
+    state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
+      repositoryID: repository.id,
+      repositoryName: repository.name,
+      automaticBaseRef: "origin/main",
+      baseRefOptions: ["origin/main"],
+      branchName: "feature/new",
+      selectedBaseRef: nil,
+      fetchOrigin: true,
+      validationMessage: nil
+    )
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isValidBranchName = { _, _ in true }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { remote, _ in
+        fetchedRemote.withValue { $0 = remote }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreationPrompt(
+        .presented(
+          .delegate(
+            .submit(
+              repositoryID: repository.id,
+              branchName: "feature/new",
+              baseRef: nil,
+              fetchOrigin: true
+            )
+          )
+        )
+      )
+    )
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchedRemote.value == "origin")
+  }
+
   @Test func startPromptedWorktreeCreationWithDuplicateLocalBranchShowsValidation() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -598,10 +665,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/existing",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -614,7 +682,8 @@ struct RepositoriesFeatureTests {
       .startPromptedWorktreeCreation(
         repositoryID: repository.id,
         branchName: "feature/existing",
-        baseRef: nil
+        baseRef: nil,
+        fetchOrigin: true
       )
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
@@ -679,10 +748,11 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repoB.id,
         repositoryName: repoB.name,
-        automaticBaseRefLabel: "Automatic (origin/main)",
+        automaticBaseRef: "origin/main",
         baseRefOptions: ["origin/main"],
         branchName: "",
         selectedBaseRef: nil,
+        fetchOrigin: true,
         validationMessage: nil
       )
     }
@@ -698,10 +768,11 @@ struct RepositoriesFeatureTests {
     state.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
       repositoryID: repository.id,
       repositoryName: repository.name,
-      automaticBaseRefLabel: "Automatic (origin/main)",
+      automaticBaseRef: "origin/main",
       baseRefOptions: ["origin/main"],
       branchName: "feature/new-branch",
       selectedBaseRef: nil,
+      fetchOrigin: true,
       validationMessage: nil
     )
     let store = TestStore(initialState: state) {
@@ -717,7 +788,8 @@ struct RepositoriesFeatureTests {
       .startPromptedWorktreeCreation(
         repositoryID: repository.id,
         branchName: "feature/new-branch",
-        baseRef: nil
+        baseRef: nil,
+        fetchOrigin: true
       )
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
@@ -757,7 +829,8 @@ struct RepositoriesFeatureTests {
       .createWorktreeInRepository(
         repositoryID: repository.id,
         nameSource: .explicit("../../Desktop"),
-        baseRefSource: .repositorySetting
+        baseRefSource: .repositorySetting,
+        fetchOrigin: false
       )
     )
     await store.receive(\.createRandomWorktreeFailed) {
@@ -852,6 +925,282 @@ struct RepositoriesFeatureTests {
     #expect(store.state.pendingSetupScriptWorktreeIDs.contains(createdWorktree.id))
     #expect(store.state.pendingTerminalFocusWorktreeIDs.contains(createdWorktree.id))
     #expect(store.state.repositories[id: repository.id]?.worktrees[id: createdWorktree.id] != nil)
+    #expect(store.state.alert == nil)
+  }
+
+  @Test(.dependencies) func createWorktreeFetchesRemoteWhenEnabled() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    let fetchedRemote = LockIsolated<String?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = true
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { remote, _ in
+        fetchedRemote.withValue { $0 = remote }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchedRemote.value == "origin")
+  }
+
+  @Test(.dependencies) func createWorktreeSkipsFetchWhenDisabled() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    let fetchCalled = LockIsolated(false)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = false
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { _, _ in
+        fetchCalled.withValue { $0 = true }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchCalled.value == false)
+  }
+
+  @Test(.dependencies) func createWorktreeProceedsWhenFetchFails() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = true
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { _, _ in
+        throw GitClientError.commandFailed(command: "git fetch", message: "network error")
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(store.state.alert == nil)
+  }
+
+  @Test(.dependencies) func createWorktreeSkipsFetchForLocalRef() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    let fetchCalled = LockIsolated(false)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = true
+    }
+    @Shared(.repositorySettings(URL(fileURLWithPath: repoRoot))) var repoSettings
+    $repoSettings.withLock { $0.worktreeBaseRef = "main" }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { _, _ in
+        fetchCalled.withValue { $0 = true }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchCalled.value == false)
+  }
+
+  @Test(.dependencies) func createWorktreeFetchesCorrectRemoteWithAmbiguousPrefixes() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    let fetchedRemote = LockIsolated<String?>(nil)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = true
+    }
+    @Shared(.repositorySettings(URL(fileURLWithPath: repoRoot))) var repoSettings
+    $repoSettings.withLock { $0.worktreeBaseRef = "origin-fork/main" }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in ["origin", "origin-fork"] }
+      $0.gitClient.fetchRemote = { remote, _ in
+        fetchedRemote.withValue { $0 = remote }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchedRemote.value == "origin-fork")
+  }
+
+  @Test(.dependencies) func createWorktreeSkipsFetchWhenRemoteNamesThrows() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "/tmp/repo/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+    )
+    let fetchCalled = LockIsolated(false)
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      $0.global.promptForWorktreeCreation = false
+      $0.global.fetchOriginBeforeWorktreeCreation = true
+    }
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.remoteNames = { _ in
+        throw GitClientError.commandFailed(command: "git remote", message: "not a git repo")
+      }
+      $0.gitClient.fetchRemote = { _, _ in
+        fetchCalled.withValue { $0 = true }
+      }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(fetchCalled.value == false)
     #expect(store.state.alert == nil)
   }
 
@@ -1087,7 +1436,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      )
+      ),
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -1124,7 +1473,7 @@ struct RepositoriesFeatureTests {
           stage: .checkingRepositoryMode,
           worktreeName: "swift-otter"
         )
-      )
+      ),
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -1321,7 +1670,7 @@ struct RepositoriesFeatureTests {
         addedLines: nil,
         removedLines: nil,
         pullRequest: makePullRequest(state: "MERGED")
-      )
+      ),
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -2503,7 +2852,7 @@ struct RepositoriesFeatureTests {
         id: removedWorktree.id,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .choosingWorktreeName)
-      )
+      ),
     ]
     initialState.pinnedWorktreeIDs = [removedWorktree.id]
     initialState.worktreeInfoByID = [
@@ -2586,7 +2935,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      )
+      ),
     ]
     initialState.selection = .worktree(pendingID)
     initialState.sidebarSelectedWorktreeIDs = [existingWorktree.id, pendingID]

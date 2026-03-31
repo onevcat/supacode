@@ -3,6 +3,37 @@ import Testing
 @testable import supacode
 
 struct WorktreeCreationProgressTests {
+  @Test func fetchingOriginShowsDetailTextWithRemoteName() {
+    let progress = WorktreeCreationProgress(
+      stage: .fetchingOrigin,
+      worktreeName: "swift-otter",
+      baseRef: "origin/main",
+      fetchRemoteName: "origin",
+    )
+
+    #expect(progress.titleText == "Creating swift-otter")
+    #expect(progress.detailText == "Fetching latest from origin")
+  }
+
+  @Test func fetchingOriginShowsGenericTextWhenRemoteNameMissing() {
+    let progress = WorktreeCreationProgress(
+      stage: .fetchingOrigin,
+      worktreeName: "swift-otter",
+    )
+
+    #expect(progress.detailText == "Fetching latest from remote")
+  }
+
+  @Test func fetchingOriginShowsCustomRemoteName() {
+    let progress = WorktreeCreationProgress(
+      stage: .fetchingOrigin,
+      worktreeName: "swift-otter",
+      fetchRemoteName: "upstream",
+    )
+
+    #expect(progress.detailText == "Fetching latest from upstream")
+  }
+
   @Test func resolvingBaseReferenceUsesHeadFallback() {
     let progress = WorktreeCreationProgress(
       stage: .resolvingBaseReference,

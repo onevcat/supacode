@@ -19,6 +19,8 @@ enum GitOperation: String {
   case branchDelete = "branch_delete"
   case lineChanges = "line_changes"
   case remoteInfo = "remote_info"
+  case remoteList = "remote_list"
+  case fetchOrigin = "fetch_origin"
 }
 
 enum GitClientError: LocalizedError {
@@ -206,6 +208,29 @@ struct GitClient {
       return fallback
     }
     return nil
+  }
+
+  /// Returns the list of configured remote names for a repository.
+  nonisolated func remoteNames(for repoRoot: URL) async throws -> [String] {
+    let path = repoRoot.path(percentEncoded: false)
+    let output = try await runGit(
+      operation: .remoteList,
+      arguments: ["-C", path, "remote"]
+    )
+    return
+      output
+      .split(whereSeparator: \.isNewline)
+      .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+  }
+
+  /// Fetches updates from the given remote.
+  nonisolated func fetchRemote(_ remote: String, for repoRoot: URL) async throws {
+    let path = repoRoot.path(percentEncoded: false)
+    _ = try await runGit(
+      operation: .fetchOrigin,
+      arguments: ["-C", path, "fetch", remote]
+    )
   }
 
   nonisolated func automaticWorktreeBaseRef(for repoRoot: URL) async -> String? {
