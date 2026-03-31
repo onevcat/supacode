@@ -561,6 +561,7 @@ struct RepositorySettingsView: View {
         .fill(isSelected ? Color.accentColor.opacity(0.35) : .clear)
     }
     .contentShape(RoundedRectangle(cornerRadius: 8))
+    .accessibilityAddTraits(.isButton)
     .onTapGesture {
       selectCustomCommand(command.id)
     }
@@ -1274,7 +1275,6 @@ private final class FirstResponderAnchorNSView: NSView {
     true
   }
 }
-
 
 private struct BranchPickerPopover: View {
   @Binding var searchText: String
