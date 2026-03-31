@@ -680,6 +680,11 @@ final class WorktreeTerminalState {
     tabManager.tabs = restoredTabs
     tabManager.selectedTabId = selectedTabID
     setRunScriptTabId(nil)
+
+    // Explicitly unfocus all restored surfaces so only the focused one blinks.
+    for surface in surfaces.values {
+      surface.focusDidChange(false)
+    }
     if let selectedTabID {
       focusSurface(in: selectedTabID)
     } else {
