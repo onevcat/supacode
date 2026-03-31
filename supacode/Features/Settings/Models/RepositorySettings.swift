@@ -10,6 +10,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
   var copyIgnoredOnWorktreeCreate: Bool
   var copyUntrackedOnWorktreeCreate: Bool
   var pullRequestMergeStrategy: PullRequestMergeStrategy
+  var defaultRemoteTmuxSessionName: String?
+  var lastAttachedRemoteTmuxSessionName: String?
 
   private enum CodingKeys: String, CodingKey {
     case setupScript
@@ -21,6 +23,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     case copyIgnoredOnWorktreeCreate
     case copyUntrackedOnWorktreeCreate
     case pullRequestMergeStrategy
+    case defaultRemoteTmuxSessionName
+    case lastAttachedRemoteTmuxSessionName
   }
 
   static let `default` = RepositorySettings(
@@ -32,7 +36,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     worktreeBaseDirectoryPath: nil,
     copyIgnoredOnWorktreeCreate: false,
     copyUntrackedOnWorktreeCreate: false,
-    pullRequestMergeStrategy: .merge
+    pullRequestMergeStrategy: .merge,
+    defaultRemoteTmuxSessionName: nil,
+    lastAttachedRemoteTmuxSessionName: nil
   )
 
   init(
@@ -44,7 +50,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     worktreeBaseDirectoryPath: String? = nil,
     copyIgnoredOnWorktreeCreate: Bool,
     copyUntrackedOnWorktreeCreate: Bool,
-    pullRequestMergeStrategy: PullRequestMergeStrategy
+    pullRequestMergeStrategy: PullRequestMergeStrategy,
+    defaultRemoteTmuxSessionName: String? = nil,
+    lastAttachedRemoteTmuxSessionName: String? = nil
   ) {
     self.setupScript = setupScript
     self.archiveScript = archiveScript
@@ -55,6 +63,8 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
     self.copyIgnoredOnWorktreeCreate = copyIgnoredOnWorktreeCreate
     self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
     self.pullRequestMergeStrategy = pullRequestMergeStrategy
+    self.defaultRemoteTmuxSessionName = defaultRemoteTmuxSessionName
+    self.lastAttachedRemoteTmuxSessionName = lastAttachedRemoteTmuxSessionName
   }
 
   init(from decoder: Decoder) throws {
@@ -90,5 +100,9 @@ nonisolated struct RepositorySettings: Codable, Equatable, Sendable {
         PullRequestMergeStrategy.self,
         forKey: .pullRequestMergeStrategy
       ) ?? Self.default.pullRequestMergeStrategy
+    defaultRemoteTmuxSessionName =
+      try container.decodeIfPresent(String.self, forKey: .defaultRemoteTmuxSessionName)
+    lastAttachedRemoteTmuxSessionName =
+      try container.decodeIfPresent(String.self, forKey: .lastAttachedRemoteTmuxSessionName)
   }
 }

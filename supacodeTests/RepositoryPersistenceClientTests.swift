@@ -8,6 +8,12 @@ import Testing
 @testable import supacode
 
 struct RepositoryPersistenceClientTests {
+  @Test func persistedRepositoryEntryDecodesLegacyLocalFormat() throws {
+    let legacy = #"{"path":"/tmp/repo","kind":"git"}"#
+    let decoded = try JSONDecoder().decode(PersistedRepositoryEntry.self, from: Data(legacy.utf8))
+    #expect(decoded.endpoint == .local)
+  }
+
   @Test(.dependencies) func savesAndLoadsRootsAndPins() async throws {
     let storage = SettingsTestStorage()
 
@@ -81,6 +87,31 @@ struct RepositoryPersistenceClientTests {
     }
 
     #expect(finalSettings.repositoryRoots == result.map(\.path))
+  }
+
+  @Test(.dependencies) func saveRepositoryEntriesPreservesDistinctRemoteEndpointsForSamePath() async throws {
+    let storage = SettingsTestStorage()
+    let client = RepositoryPersistenceClient.liveValue
+    let sharedPath = "/tmp/shared-remote"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "host-a", remotePath: sharedPath)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "host-b", remotePath: sharedPath)
+
+    let result = await withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      await client.saveRepositoryEntries([
+        PersistedRepositoryEntry(path: sharedPath, kind: .git, endpoint: endpointA),
+        PersistedRepositoryEntry(path: sharedPath, kind: .git, endpoint: endpointB),
+      ])
+      return await client.loadRepositoryEntries()
+    }
+
+    #expect(
+      result == [
+        PersistedRepositoryEntry(path: sharedPath, kind: .git, endpoint: endpointA),
+        PersistedRepositoryEntry(path: sharedPath, kind: .git, endpoint: endpointB),
+      ]
+    )
   }
 
   @Test(.dependencies) func loadsLegacyRepositoryRootsAsGitEntries() async throws {

@@ -272,10 +272,11 @@ struct AppFeature {
           state.settings.repositorySettings = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
             repositoryKind: repository.kind,
+            endpoint: repository.endpoint,
             settings: repositorySettings,
             userSettings: userRepositorySettings
           )
-        case .general, .notifications, .worktree, .updates, .advanced, .github:
+        case .general, .notifications, .worktree, .sshHosts, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }
         return .none

@@ -189,9 +189,13 @@ struct WorktreeDetailView: View {
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
     if repositories.isShowingCanvas {
-      CanvasView(terminalManager: terminalManager, onExitToTab: {
-        store.send(.repositories(.toggleCanvas))
-      })
+      CanvasView(
+        terminalManager: terminalManager,
+        preferredFocusedWorktreeID: repositories.preCanvasTerminalTargetID ?? repositories.preCanvasWorktreeID,
+        onExitToTab: {
+          store.send(.repositories(.toggleCanvas))
+        }
+      )
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)

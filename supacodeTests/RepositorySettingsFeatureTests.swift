@@ -87,6 +87,91 @@ struct RepositorySettingsFeatureTests {
     #expect(automaticBaseRefRequests.value == 0)
   }
 
+  @Test(.dependencies) func remoteRepositoryTaskUsesSafeEndpointAwareFallback() async throws {
+    let testID = UUID().uuidString
+    let rootURL = URL(fileURLWithPath: "/tmp/remote-\(testID)")
+    let settingsStorage = SettingsTestStorage()
+    let localStorage = RepositoryLocalSettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(
+      hostProfileID: hostProfileID,
+      remotePath: "/srv/\(testID)/repo"
+    )
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let storedSettings = RepositorySettings(
+      setupScript: "echo setup",
+      archiveScript: "echo archive",
+      runScript: "npm run dev",
+      openActionID: OpenWorktreeAction.automaticSettingsID,
+      worktreeBaseRef: "origin/remote-main",
+      copyIgnoredOnWorktreeCreate: true,
+      copyUntrackedOnWorktreeCreate: true,
+      pullRequestMergeStrategy: .squash
+    )
+    let repositoryID = rootURL.standardizedFileURL.path(percentEncoded: false)
+    let bareRepositoryRequests = LockIsolated(0)
+    let branchRefRequests = LockIsolated(0)
+    let automaticBaseRefRequests = LockIsolated(0)
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+      $0.repositoryLocalSettingsStorage = localStorage.storage
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.repositories[repositoryID] = storedSettings
+        $0.sshHostProfiles = [profile]
+      }
+      return TestStore(
+        initialState: RepositorySettingsFeature.State(
+          rootURL: rootURL,
+          repositoryKind: .git,
+          endpoint: endpoint,
+          settings: .default,
+          userSettings: .default
+        )
+      ) {
+        RepositorySettingsFeature()
+      } withDependencies: {
+        $0.gitClient.isBareRepository = { _ in
+          bareRepositoryRequests.withValue { $0 += 1 }
+          return false
+        }
+        $0.gitClient.branchRefs = { _ in
+          branchRefRequests.withValue { $0 += 1 }
+          return []
+        }
+        $0.gitClient.automaticWorktreeBaseRef = { _ in
+          automaticBaseRefRequests.withValue { $0 += 1 }
+          return "origin/main"
+        }
+      }
+    }
+
+    await store.send(.task)
+    await store.receive(\.settingsLoaded, timeout: .seconds(5)) {
+      $0.settings = storedSettings
+      $0.isBareRepository = false
+    }
+    await store.receive(\.branchDataLoaded, timeout: .seconds(5)) {
+      $0.defaultWorktreeBaseRef = "origin/remote-main"
+      $0.branchOptions = ["origin/remote-main"]
+      $0.isBranchDataLoaded = true
+    }
+    await store.finish(timeout: .seconds(5))
+
+    #expect(bareRepositoryRequests.value == 0)
+    #expect(branchRefRequests.value == 0)
+    #expect(automaticBaseRefRequests.value == 0)
+  }
+
   @Test func plainFolderVisibilityHidesGitOnlySections() {
     let state = RepositorySettingsFeature.State(
       rootURL: URL(fileURLWithPath: "/tmp/folder"),

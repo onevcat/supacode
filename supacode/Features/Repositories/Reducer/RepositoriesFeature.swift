@@ -12,6 +12,7 @@ private enum CancelID {
   static let githubIntegrationRecovery = "repositories.githubIntegrationRecovery"
   static let worktreePromptLoad = "repositories.worktreePromptLoad"
   static let worktreePromptValidation = "repositories.worktreePromptValidation"
+  static let remoteTmuxSessionsLoad = "repositories.remoteTmuxSessionsLoad"
   static func archiveScript(_ worktreeID: Worktree.ID) -> String {
     "repositories.archiveScript.\(worktreeID)"
   }
@@ -24,6 +25,7 @@ private nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(1
 private nonisolated let worktreeCreationProgressLineLimit = 200
 private nonisolated let worktreeCreationProgressUpdateStride = 20
 private nonisolated let archiveScriptProgressLineLimit = 200
+private nonisolated let remoteTmuxSessionsTimeoutSeconds = 8
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -94,8 +96,11 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    var attachedRemoteTmuxSessionByWorktreeID: [Worktree.ID: String] = [:]
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
+    @Presents var remoteConnect: RemoteConnectFeature.State?
+    @Presents var remoteSessionPicker: RemoteSessionPickerFeature.State?
     @Presents var alert: AlertState<Alert>?
   }
 
@@ -126,6 +131,7 @@ struct RepositoriesFeature {
     case task
     case repositorySnapshotLoaded([Repository]?)
     case setOpenPanelPresented(Bool)
+    case addRemoteRepositoryButtonTapped
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
     case archivedWorktreeIDsLoaded([Worktree.ID])
@@ -240,6 +246,10 @@ struct RepositoriesFeature {
     case delayedPullRequestRefresh(Worktree.ID)
     case openRepositorySettings(Repository.ID)
     case worktreeCreationPrompt(PresentationAction<WorktreeCreationPromptFeature.Action>)
+    case remoteConnect(PresentationAction<RemoteConnectFeature.Action>)
+    case remoteSessionsLoaded(worktreeID: Worktree.ID, sessions: [String])
+    case remoteSessionsLoadFailed(worktreeID: Worktree.ID, message: String)
+    case remoteSessionPicker(PresentationAction<RemoteSessionPickerFeature.Action>)
     case alert(PresentationAction<Alert>)
     case delegate(Delegate)
   }
@@ -264,6 +274,11 @@ struct RepositoriesFeature {
     let didPruneRepositoryOrder: Bool
     let didPruneWorktreeOrder: Bool
     let didPruneArchivedWorktreeIDs: Bool
+  }
+
+  private struct RemoteSessionAttach {
+    let worktree: Worktree
+    let command: String
   }
 
   enum StatusToast: Equatable {
@@ -304,6 +319,7 @@ struct RepositoriesFeature {
   @Dependency(GithubCLIClient.self) private var githubCLI
   @Dependency(GithubIntegrationClient.self) private var githubIntegration
   @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
+  @Dependency(RemoteTmuxClient.self) private var remoteTmuxClient
   @Dependency(ShellClient.self) private var shellClient
   @Dependency(\.uuid) private var uuid
 
@@ -389,6 +405,13 @@ struct RepositoriesFeature {
         state.isOpenPanelPresented = isPresented
         return .none
 
+      case .addRemoteRepositoryButtonTapped:
+        @Shared(.settingsFile) var settingsFile
+        state.remoteConnect = RemoteConnectFeature.State(
+          savedHostProfiles: settingsFile.sshHostProfiles
+        )
+        return .none
+
       case .loadPersistedRepositories:
         state.alert = nil
         state.isRefreshingWorktrees = false
@@ -418,7 +441,19 @@ struct RepositoriesFeature {
           state.isRefreshingWorktrees = false
           return .none
         }
-        return loadRepositories(fallbackRoots: roots, animated: animated)
+        let fallbackEntries =
+          if state.repositories.isEmpty {
+            roots.map { PersistedRepositoryEntry(path: $0.path(percentEncoded: false), kind: .git) }
+          } else {
+            state.repositories.map { repository in
+              PersistedRepositoryEntry(
+                path: repository.rootURL.path(percentEncoded: false),
+                kind: repository.kind,
+                endpoint: repository.endpoint
+              )
+            }
+          }
+        return loadRepositories(fallbackEntries: fallbackEntries, animated: animated)
 
       case .repositoriesLoaded(let repositories, let failures, let roots, let animated):
         state.isRefreshingWorktrees = false
@@ -435,9 +470,7 @@ struct RepositoriesFeature {
         )
         state.repositoryRoots = roots
         state.isInitialLoadComplete = true
-        state.loadFailuresByID = Dictionary(
-          uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
-        )
+        state.loadFailuresByID = mergedLoadFailuresByID(failures)
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
         let selectionChanged = selectionDidChange(
           previousSelectionID: previousSelection,
@@ -564,9 +597,7 @@ struct RepositoriesFeature {
         )
         state.repositoryRoots = roots
         state.isInitialLoadComplete = true
-        state.loadFailuresByID = Dictionary(
-          uniqueKeysWithValues: failures.map { ($0.rootID, $0.message) }
-        )
+        state.loadFailuresByID = mergedLoadFailuresByID(failures)
         let openFailureMessages = invalidRoots.map { "\($0) is not a Git repository." } + openFailures
         if !openFailureMessages.isEmpty {
           state.alert = messageAlert(
@@ -687,7 +718,86 @@ struct RepositoriesFeature {
           state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)
         }
         let selectedWorktree = state.worktree(for: worktreeID)
-        return .send(.delegate(.selectedWorktreeChanged(selectedWorktree)))
+        state.remoteSessionPicker = nil
+        guard let selectedWorktree else {
+          return .merge(
+            .send(.delegate(.selectedWorktreeChanged(nil))),
+            .cancel(id: CancelID.remoteTmuxSessionsLoad)
+          )
+        }
+        guard case .remote = selectedWorktree.endpoint,
+          let hostProfile = sshHostProfile(for: selectedWorktree.endpoint)
+        else {
+          return .merge(
+            .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
+            .cancel(id: CancelID.remoteTmuxSessionsLoad)
+          )
+        }
+        let selectedWorktreeID = selectedWorktree.id
+        return .merge(
+          .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
+          .run { send in
+            do {
+              let sessions = try await remoteTmuxClient.listSessions(
+                hostProfile,
+                remoteTmuxSessionsTimeoutSeconds
+              )
+              await send(
+                .remoteSessionsLoaded(
+                  worktreeID: selectedWorktreeID,
+                  sessions: sessions
+                )
+              )
+            } catch {
+              await send(
+                .remoteSessionsLoadFailed(
+                  worktreeID: selectedWorktreeID,
+                  message: error.localizedDescription
+                )
+              )
+            }
+          }
+          .cancellable(id: CancelID.remoteTmuxSessionsLoad, cancelInFlight: true)
+        )
+
+      case .remoteSessionsLoaded(let worktreeID, let sessions):
+        guard state.selectedWorktreeID == worktreeID, !sessions.isEmpty,
+          let worktree = state.worktree(for: worktreeID)
+        else {
+          return .none
+        }
+        if let attachedSessionName = state.attachedRemoteTmuxSessionByWorktreeID[worktreeID] {
+          let trimmedAttachedSession = attachedSessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+          if sessions.contains(trimmedAttachedSession) {
+            return .none
+          }
+          state.attachedRemoteTmuxSessionByWorktreeID.removeValue(forKey: worktreeID)
+        }
+        guard case .remote(_, let remotePath) = worktree.endpoint else {
+          return .none
+        }
+        @Shared(.repositorySettings(worktree.repositoryRootURL)) var repositorySettings
+        let preferredSessionName =
+          repositorySettings.lastAttachedRemoteTmuxSessionName
+          ?? repositorySettings.defaultRemoteTmuxSessionName
+        state.remoteSessionPicker = RemoteSessionPickerFeature.State(
+          worktreeID: worktreeID,
+          repositoryRootURL: worktree.repositoryRootURL,
+          remotePath: remotePath,
+          sessions: sessions,
+          preferredSessionName: preferredSessionName,
+          suggestedManagedSessionName: repositorySettings.defaultRemoteTmuxSessionName
+        )
+        return .none
+
+      case .remoteSessionsLoadFailed(let worktreeID, let message):
+        guard state.selectedWorktreeID == worktreeID else {
+          return .none
+        }
+        SupaLogger("Repositories").warning(
+          "Remote tmux session listing failed for \(worktreeID): \(message)"
+        )
+        return .none
 
       case .selectNextWorktree:
         guard let id = state.worktreeID(byOffset: 1) else { return .none }
@@ -978,7 +1088,15 @@ struct RepositoriesFeature {
         setSingleWorktreeSelection(pendingID, state: &state)
         let existingNames = Set(repository.worktrees.map { $0.name.lowercased() })
         let createWorktreeStream = gitClient.createWorktreeStream
+        let createWorktreeStreamForEndpoint = gitClient.createWorktreeStreamForEndpoint
+        let endpoint = repository.endpoint
+        let hostProfile = sshHostProfile(for: endpoint)
         let isValidBranchName = gitClient.isValidBranchName
+        let localBranchNames = gitClient.localBranchNames
+        let isBareRepository = gitClient.isBareRepository
+        let automaticWorktreeBaseRef = gitClient.automaticWorktreeBaseRef
+        let ignoredFileCount = gitClient.ignoredFileCount
+        let untrackedFileCount = gitClient.untrackedFileCount
         return .run { send in
           var newWorktreeName: String?
           var progress = WorktreeCreationProgress(stage: .loadingLocalBranches)
@@ -992,7 +1110,13 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let branchNames = try await gitClient.localBranchNames(repository.rootURL)
+            let branchNames: Set<String>
+            switch endpoint {
+            case .local:
+              branchNames = try await localBranchNames(repository.rootURL)
+            case .remote:
+              branchNames = []
+            }
             let existing = existingNames.union(branchNames)
             let name: String
             switch nameSource {
@@ -1055,19 +1179,21 @@ struct RepositoriesFeature {
                 )
                 return
               }
-              guard await isValidBranchName(trimmed, repository.rootURL) else {
-                await send(
-                  .createRandomWorktreeFailed(
-                    title: "Branch name invalid",
-                    message: "Enter a valid git branch name and try again.",
-                    pendingID: pendingID,
-                    previousSelection: previousSelection,
-                    repositoryID: repository.id,
-                    name: nil,
-                    baseDirectory: worktreeBaseDirectory
+              if case .local = endpoint {
+                guard await isValidBranchName(trimmed, repository.rootURL) else {
+                  await send(
+                    .createRandomWorktreeFailed(
+                      title: "Branch name invalid",
+                      message: "Enter a valid git branch name and try again.",
+                      pendingID: pendingID,
+                      previousSelection: previousSelection,
+                      repositoryID: repository.id,
+                      name: nil,
+                      baseDirectory: worktreeBaseDirectory
+                    )
                   )
-                )
-                return
+                  return
+                }
               }
               guard !existing.contains(trimmed.lowercased()) else {
                 await send(
@@ -1094,9 +1220,17 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let isBareRepository = (try? await gitClient.isBareRepository(repository.rootURL)) ?? false
-            let copyIgnored = isBareRepository ? false : copyIgnoredOnWorktreeCreate
-            let copyUntracked = isBareRepository ? false : copyUntrackedOnWorktreeCreate
+            let copyIgnored: Bool
+            let copyUntracked: Bool
+            switch endpoint {
+            case .local:
+              let repositoryIsBare = (try? await isBareRepository(repository.rootURL)) ?? false
+              copyIgnored = repositoryIsBare ? false : copyIgnoredOnWorktreeCreate
+              copyUntracked = repositoryIsBare ? false : copyUntrackedOnWorktreeCreate
+            case .remote:
+              copyIgnored = false
+              copyUntracked = false
+            }
             progress.stage = .resolvingBaseReference
             await send(
               .pendingWorktreeProgressUpdated(
@@ -1108,7 +1242,12 @@ struct RepositoriesFeature {
             switch baseRefSource {
             case .repositorySetting:
               if (selectedBaseRef ?? "").isEmpty {
-                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                switch endpoint {
+                case .local:
+                  resolvedBaseRef = await automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                case .remote:
+                  resolvedBaseRef = ""
+                }
               } else {
                 resolvedBaseRef = selectedBaseRef ?? ""
               }
@@ -1116,16 +1255,21 @@ struct RepositoriesFeature {
               if let explicitBaseRef, !explicitBaseRef.isEmpty {
                 resolvedBaseRef = explicitBaseRef
               } else {
-                resolvedBaseRef = await gitClient.automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                switch endpoint {
+                case .local:
+                  resolvedBaseRef = await automaticWorktreeBaseRef(repository.rootURL) ?? ""
+                case .remote:
+                  resolvedBaseRef = ""
+                }
               }
             }
             progress.baseRef = resolvedBaseRef
             progress.copyIgnored = copyIgnored
             progress.copyUntracked = copyUntracked
             progress.ignoredFilesToCopyCount =
-              copyIgnored ? ((try? await gitClient.ignoredFileCount(repository.rootURL)) ?? 0) : 0
+              copyIgnored ? ((try? await ignoredFileCount(repository.rootURL)) ?? 0) : 0
             progress.untrackedFilesToCopyCount =
-              copyUntracked ? ((try? await gitClient.untrackedFileCount(repository.rootURL)) ?? 0) : 0
+              copyUntracked ? ((try? await untrackedFileCount(repository.rootURL)) ?? 0) : 0
             progress.stage = .creatingWorktree
             progress.commandText = worktreeCreateCommand(
               baseDirectoryURL: worktreeBaseDirectory,
@@ -1140,14 +1284,29 @@ struct RepositoriesFeature {
                 progress: progress
               )
             )
-            let stream = createWorktreeStream(
-              name,
-              repository.rootURL,
-              worktreeBaseDirectory,
-              copyIgnored,
-              copyUntracked,
-              resolvedBaseRef
-            )
+            let stream: AsyncThrowingStream<GitWorktreeCreateEvent, Error>
+            switch endpoint {
+            case .local:
+              stream = createWorktreeStream(
+                name,
+                repository.rootURL,
+                worktreeBaseDirectory,
+                copyIgnored,
+                copyUntracked,
+                resolvedBaseRef
+              )
+            case .remote:
+              stream = createWorktreeStreamForEndpoint(
+                name,
+                repository.rootURL,
+                worktreeBaseDirectory,
+                copyIgnored,
+                copyUntracked,
+                resolvedBaseRef,
+                endpoint,
+                hostProfile
+              )
+            }
             for try await event in stream {
               switch event {
               case .outputLine(let outputLine):
@@ -1294,11 +1453,23 @@ struct RepositoriesFeature {
           )
         }
         if let cleanupWorktree = cleanup.worktree {
+          let endpoint = state.repositories[id: repositoryID]?.endpoint ?? cleanupWorktree.endpoint
+          let hostProfile = sshHostProfile(for: endpoint)
           let repositoryRootURL = cleanupWorktree.repositoryRootURL
           effects.append(
             .run { send in
-              _ = try? await gitClient.removeWorktree(cleanupWorktree, true)
-              _ = try? await gitClient.pruneWorktrees(repositoryRootURL)
+              switch endpoint {
+              case .local:
+                _ = try? await gitClient.removeWorktree(cleanupWorktree, true)
+                _ = try? await gitClient.pruneWorktrees(repositoryRootURL)
+              case .remote:
+                _ = try? await gitClient.removeWorktreeForEndpoint(
+                  cleanupWorktree,
+                  true,
+                  endpoint,
+                  hostProfile
+                )
+              }
               await send(.reloadRepositories(animated: true))
             }
           )
@@ -1690,12 +1861,24 @@ struct RepositoriesFeature {
           : nil
         @Shared(.settingsFile) var settingsFile
         let deleteBranchOnDeleteWorktree = settingsFile.global.deleteBranchOnDeleteWorktree
+        let endpoint = repository.endpoint
+        let hostProfile = sshHostProfile(for: endpoint)
         return .run { send in
           do {
-            _ = try await gitClient.removeWorktree(
-              worktree,
-              deleteBranchOnDeleteWorktree
-            )
+            switch endpoint {
+            case .local:
+              _ = try await gitClient.removeWorktree(
+                worktree,
+                deleteBranchOnDeleteWorktree
+              )
+            case .remote:
+              _ = try await gitClient.removeWorktreeForEndpoint(
+                worktree,
+                deleteBranchOnDeleteWorktree,
+                endpoint,
+                hostProfile
+              )
+            }
             await send(
               .worktreeDeleted(
                 worktree.id,
@@ -1851,10 +2034,17 @@ struct RepositoriesFeature {
         state.repositoryRoots.removeAll {
           $0.standardizedFileURL.path(percentEncoded: false) == repositoryID
         }
-        let remainingRoots = state.repositoryRoots
+        let fallbackEntries = fallbackRepositoryEntries(from: state)
+        let preservedEndpoint = state.repositories[id: repositoryID]?.endpoint
         return .run { send in
-          let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
-          let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+          let loadedEntries = await loadPersistedRepositoryEntries(
+            fallbackEntries: fallbackEntries
+          )
+          let remainingEntries = Self.removeFailedRepositoryEntries(
+            loadedEntries,
+            repositoryID: repositoryID,
+            preservedEndpoint: preservedEndpoint
+          )
           await repositoryPersistence.saveRepositoryEntries(remainingEntries)
           let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
           let (repositories, failures) = await loadRepositoriesData(remainingEntries)
@@ -1892,12 +2082,19 @@ struct RepositoriesFeature {
           state.shouldSelectFirstAfterReload = true
         }
         let selectedWorktree = state.worktree(for: state.selectedWorktreeID)
-        let remainingRoots = state.repositoryRoots
+        let fallbackEntries = fallbackRepositoryEntries(from: state)
+        let removedEndpoint = state.repositories[id: repositoryID]?.endpoint
         return .merge(
           .send(.delegate(.selectedWorktreeChanged(selectedWorktree))),
           .run { send in
-            let loadedEntries = await loadPersistedRepositoryEntries(fallbackRoots: remainingRoots)
-            let remainingEntries = loadedEntries.filter { $0.path != repositoryID }
+            let loadedEntries = await loadPersistedRepositoryEntries(
+              fallbackEntries: fallbackEntries
+            )
+            let remainingEntries = Self.removeRepositoryEntries(
+              loadedEntries,
+              repositoryID: repositoryID,
+              endpoint: removedEndpoint
+            )
             await repositoryPersistence.saveRepositoryEntries(remainingEntries)
             let roots = remainingEntries.map { URL(fileURLWithPath: $0.path) }
             let (repositories, failures) = await loadRepositoriesData(remainingEntries)
@@ -2644,6 +2841,124 @@ struct RepositoriesFeature {
       case .openRepositorySettings(let repositoryID):
         return .send(.delegate(.openRepositorySettings(repositoryID)))
 
+      case .remoteConnect(.presented(.delegate(.cancel))):
+        state.remoteConnect = nil
+        return .none
+
+      case .remoteConnect(.presented(.delegate(.completed(let submission)))):
+        state.remoteConnect = nil
+        analyticsClient.capture(
+          "repository_added",
+          [
+            "count": 1,
+            "source": "remote",
+          ]
+        )
+        @Shared(.settingsFile) var settingsFile
+        $settingsFile.withLock {
+          upsertSSHHostProfile(submission.hostProfile, settingsFile: &$0)
+        }
+        let repositoryPersistence = repositoryPersistence
+        let loadRepositoriesData = self.loadRepositoriesData
+        return .run { send in
+          let existingEntries = await repositoryPersistence.loadRepositoryEntries()
+          let endpoint = RepositoryEndpoint.remote(
+            hostProfileID: submission.hostProfile.id,
+            remotePath: submission.remotePath
+          )
+          let mergedEntries = RepositoryEntryNormalizer.normalize(
+            existingEntries + [
+              PersistedRepositoryEntry(
+                path: submission.remotePath,
+                kind: .git,
+                endpoint: endpoint
+              )
+            ]
+          )
+          let roots = mergedEntries.map { URL(fileURLWithPath: $0.path) }
+          await repositoryPersistence.saveRepositoryEntries(mergedEntries)
+          let (repositories, failures) = await loadRepositoriesData(mergedEntries)
+          await send(
+            .openRepositoriesFinished(
+              repositories,
+              failures: failures,
+              invalidRoots: [],
+              openFailures: [],
+              roots: roots
+            )
+          )
+        }
+
+      case .remoteConnect:
+        return .none
+
+      case .remoteSessionPicker(.presented(.delegate(.cancel))):
+        state.remoteSessionPicker = nil
+        return .none
+
+      case .remoteSessionPicker(.presented(.delegate(.attachExisting(let sessionName)))):
+        let pickerState = state.remoteSessionPicker
+        persistLastAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState
+        )
+        persistAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState,
+          state: &state
+        )
+        state.remoteSessionPicker = nil
+        guard let attach = remoteSessionAttach(
+          sessionName: sessionName,
+          createIfMissing: false,
+          pickerState: pickerState,
+          state: state
+        ) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(
+            .createTabWithInput(
+              attach.worktree,
+              input: attach.command,
+              runSetupScriptIfNew: false
+            )
+          )
+        }
+
+      case .remoteSessionPicker(.presented(.delegate(.createAndAttach(let sessionName)))):
+        let pickerState = state.remoteSessionPicker
+        persistLastAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState
+        )
+        persistAttachedRemoteTmuxSessionName(
+          sessionName,
+          pickerState: pickerState,
+          state: &state
+        )
+        state.remoteSessionPicker = nil
+        guard let attach = remoteSessionAttach(
+          sessionName: sessionName,
+          createIfMissing: true,
+          pickerState: pickerState,
+          state: state
+        ) else {
+          return .none
+        }
+        return .run { _ in
+          await terminalClient.send(
+            .createTabWithInput(
+              attach.worktree,
+              input: attach.command,
+              runSetupScriptIfNew: false
+            )
+          )
+        }
+
+      case .remoteSessionPicker:
+        return .none
+
       case .alert(.dismiss):
         state.alert = nil
         return .none
@@ -2657,6 +2972,12 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+    .ifLet(\.$remoteConnect, action: \.remoteConnect) {
+      RemoteConnectFeature()
+    }
+    .ifLet(\.$remoteSessionPicker, action: \.remoteSessionPicker) {
+      RemoteSessionPickerFeature()
     }
   }
 
@@ -2699,7 +3020,7 @@ struct RepositoriesFeature {
   }
 
   private func loadPersistedRepositoryEntries(
-    fallbackRoots: [URL] = []
+    fallbackEntries: [PersistedRepositoryEntry] = []
   ) async -> [PersistedRepositoryEntry] {
     let entries = await repositoryPersistence.loadRepositoryEntries()
     let resolvedEntries: [PersistedRepositoryEntry]
@@ -2707,17 +3028,66 @@ struct RepositoriesFeature {
       resolvedEntries = entries
     } else {
       let loadedPaths = await repositoryPersistence.loadRoots()
-      let pathSource =
+      let fallback =
         if !loadedPaths.isEmpty {
-          loadedPaths
+          loadedPaths.map { PersistedRepositoryEntry(path: $0, kind: .git) }
         } else {
-          fallbackRoots.map { $0.path(percentEncoded: false) }
+          fallbackEntries
         }
-      resolvedEntries = RepositoryEntryNormalizer.normalize(
-        pathSource.map { PersistedRepositoryEntry(path: $0, kind: .git) }
-      )
+      resolvedEntries = RepositoryEntryNormalizer.normalize(fallback)
     }
     return await upgradedRepositoryEntriesIfNeeded(resolvedEntries)
+  }
+
+  private func fallbackRepositoryEntries(from state: State) -> [PersistedRepositoryEntry] {
+    state.repositories.map { repository in
+      PersistedRepositoryEntry(
+        path: repository.rootURL.path(percentEncoded: false),
+        kind: repository.kind,
+        endpoint: repository.endpoint
+      )
+    }
+  }
+
+  nonisolated static func removeFailedRepositoryEntries(
+    _ entries: [PersistedRepositoryEntry],
+    repositoryID: Repository.ID,
+    preservedEndpoint: RepositoryEndpoint?
+  ) -> [PersistedRepositoryEntry] {
+    let normalizedRepositoryID = Self.normalizedRepositoryPath(repositoryID)
+    guard let preservedEndpoint else {
+      return entries.filter { Self.normalizedRepositoryPath($0.path) != normalizedRepositoryID }
+    }
+    return entries.filter { entry in
+      let matchesRepository = Self.normalizedRepositoryPath(entry.path) == normalizedRepositoryID
+      guard matchesRepository else {
+        return true
+      }
+      return entry.endpoint == preservedEndpoint
+    }
+  }
+
+  nonisolated static func removeRepositoryEntries(
+    _ entries: [PersistedRepositoryEntry],
+    repositoryID: Repository.ID,
+    endpoint: RepositoryEndpoint?
+  ) -> [PersistedRepositoryEntry] {
+    let normalizedRepositoryID = Self.normalizedRepositoryPath(repositoryID)
+    guard let endpoint,
+      let matchIndex = entries.firstIndex(where: { entry in
+        Self.normalizedRepositoryPath(entry.path) == normalizedRepositoryID
+          && entry.endpoint == endpoint
+      })
+    else {
+      return entries.filter { Self.normalizedRepositoryPath($0.path) != normalizedRepositoryID }
+    }
+    var remainingEntries = entries
+    remainingEntries.remove(at: matchIndex)
+    return remainingEntries
+  }
+
+  private nonisolated static func normalizedRepositoryPath(_ path: String) -> String {
+    URL(fileURLWithPath: path).standardizedFileURL.path(percentEncoded: false)
   }
 
   private func upgradedRepositoryEntriesIfNeeded(
@@ -2725,6 +3095,22 @@ struct RepositoriesFeature {
   ) async -> [PersistedRepositoryEntry] {
     let upgradedEntries = await withTaskGroup(of: (Int, PersistedRepositoryEntry).self) { group in
       for (index, entry) in entries.enumerated() {
+        if entry.endpoint.isRemote {
+          let normalizedPath = URL(fileURLWithPath: entry.path)
+            .standardizedFileURL
+            .path(percentEncoded: false)
+          group.addTask {
+            (
+              index,
+              PersistedRepositoryEntry(
+                path: normalizedPath,
+                kind: entry.kind,
+                endpoint: entry.endpoint
+              )
+            )
+          }
+          continue
+        }
         let gitClient = self.gitClient
         group.addTask {
           let normalizedPath = URL(fileURLWithPath: entry.path)
@@ -2736,24 +3122,66 @@ struct RepositoriesFeature {
             switch entry.kind {
             case .plain:
               if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+                return (
+                  index,
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .git,
+                    endpoint: entry.endpoint
+                  )
+                )
               }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             case .git:
               if normalizedRepoRoot == normalizedPath {
-                return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .git))
+                return (
+                  index,
+                  PersistedRepositoryEntry(
+                    path: normalizedPath,
+                    kind: .git,
+                    endpoint: entry.endpoint
+                  )
+                )
               }
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             }
           } catch {
             if entry.kind == .git,
               Self.isNotGitRepositoryError(error),
               FileManager.default.fileExists(atPath: normalizedPath)
             {
-              return (index, PersistedRepositoryEntry(path: normalizedPath, kind: .plain))
+              return (
+                index,
+                PersistedRepositoryEntry(
+                  path: normalizedPath,
+                  kind: .plain,
+                  endpoint: entry.endpoint
+                )
+              )
             }
           }
-          return (index, PersistedRepositoryEntry(path: normalizedPath, kind: entry.kind))
+          return (
+            index,
+            PersistedRepositoryEntry(
+              path: normalizedPath,
+              kind: entry.kind,
+              endpoint: entry.endpoint
+            )
+          )
         }
       }
 
@@ -2791,14 +3219,17 @@ struct RepositoriesFeature {
   }
 
   private func loadRepositories(
-    fallbackRoots: [URL] = [],
+    fallbackEntries: [PersistedRepositoryEntry] = [],
     animated: Bool = false
   ) -> Effect<Action> {
     let gitClient = gitClient
-    return .run { [animated, fallbackRoots] send in
-      let entries = await loadPersistedRepositoryEntries(fallbackRoots: fallbackRoots)
+    return .run { [animated, fallbackEntries] send in
+      let entries = await loadPersistedRepositoryEntries(fallbackEntries: fallbackEntries)
       let roots = entries.map { URL(fileURLWithPath: $0.path) }
       for entry in entries where entry.kind == .git {
+        guard case .local = entry.endpoint else {
+          continue
+        }
         _ = try? await gitClient.pruneWorktrees(URL(fileURLWithPath: entry.path))
       }
       let (repositories, failures) = await loadRepositoriesData(entries)
@@ -2815,34 +3246,56 @@ struct RepositoriesFeature {
   }
 
   private struct WorktreesFetchResult: Sendable {
+    let index: Int
     let entry: PersistedRepositoryEntry
     let repository: Repository?
     let errorMessage: String?
   }
 
   private func loadRepositoriesData(_ entries: [PersistedRepositoryEntry]) async -> ([Repository], [LoadFailure]) {
+    @Shared(.settingsFile) var settingsFile
+    let sshHostProfilesByID = Dictionary(uniqueKeysWithValues: settingsFile.sshHostProfiles.map { ($0.id, $0) })
     let fetchResults = await withTaskGroup(of: WorktreesFetchResult.self) { group in
-      for entry in entries {
+      for (index, entry) in entries.enumerated() {
         let gitClient = self.gitClient
+        let hostProfile: SSHHostProfile? =
+          if case .remote(let hostProfileID, _) = entry.endpoint {
+            sshHostProfilesByID[hostProfileID]
+          } else {
+            nil
+          }
         group.addTask {
           let rootURL = URL(fileURLWithPath: entry.path).standardizedFileURL
           switch entry.kind {
           case .git:
             do {
-              let worktrees = try await gitClient.worktrees(rootURL)
+              let worktrees: [Worktree]
+              switch entry.endpoint {
+              case .local:
+                worktrees = try await gitClient.worktrees(rootURL)
+              case .remote:
+                worktrees = try await gitClient.worktreesForEndpoint(
+                  rootURL,
+                  entry.endpoint,
+                  hostProfile
+                )
+              }
               return WorktreesFetchResult(
+                index: index,
                 entry: entry,
                 repository: Repository(
                   id: rootURL.path(percentEncoded: false),
                   rootURL: rootURL,
                   name: Repository.name(for: rootURL),
                   kind: .git,
+                  endpoint: entry.endpoint,
                   worktrees: IdentifiedArray(uniqueElements: worktrees)
                 ),
                 errorMessage: nil
               )
             } catch {
               return WorktreesFetchResult(
+                index: index,
                 entry: entry,
                 repository: nil,
                 errorMessage: error.localizedDescription
@@ -2850,36 +3303,42 @@ struct RepositoriesFeature {
             }
           case .plain:
             return WorktreesFetchResult(
+              index: index,
               entry: entry,
               repository: Repository(
-                  id: rootURL.path(percentEncoded: false),
-                  rootURL: rootURL,
-                  name: Repository.name(for: rootURL),
-                  kind: .plain,
-                  worktrees: IdentifiedArray()
-                ),
-                errorMessage: nil
-              )
+                id: rootURL.path(percentEncoded: false),
+                rootURL: rootURL,
+                name: Repository.name(for: rootURL),
+                kind: .plain,
+                endpoint: entry.endpoint,
+                worktrees: IdentifiedArray()
+              ),
+              errorMessage: nil
+            )
           }
         }
       }
 
-      var resultsByRootID: [Repository.ID: WorktreesFetchResult] = [:]
+      var resultsByIndex = Array<WorktreesFetchResult?>(repeating: nil, count: entries.count)
       for await result in group {
-        let rootID = URL(fileURLWithPath: result.entry.path).standardizedFileURL.path(percentEncoded: false)
-        resultsByRootID[rootID] = result
+        resultsByIndex[result.index] = result
       }
-      return resultsByRootID
+      return resultsByIndex
     }
 
-    var loaded: [Repository] = []
+    var loadedByID: [Repository.ID: Repository] = [:]
+    var loadedOrder: [Repository.ID] = []
     var failures: [LoadFailure] = []
-    for entry in entries {
+    for (index, entry) in entries.enumerated() {
       let normalizedRoot = URL(fileURLWithPath: entry.path).standardizedFileURL
       let rootID = normalizedRoot.path(percentEncoded: false)
-      guard let result = fetchResults[rootID] else { continue }
+      guard let result = fetchResults[index] else { continue }
       if let repository = result.repository {
-        loaded.append(repository)
+        if loadedByID[repository.id] == nil {
+          loadedOrder.append(repository.id)
+        }
+        // Last persisted entry wins when multiple endpoints resolve to the same repository path.
+        loadedByID[repository.id] = repository
       } else {
         failures.append(
           LoadFailure(
@@ -2889,6 +3348,7 @@ struct RepositoriesFeature {
         )
       }
     }
+    let loaded = loadedOrder.compactMap { loadedByID[$0] }
     return (loaded, failures)
   }
 
@@ -2899,13 +3359,15 @@ struct RepositoriesFeature {
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
-    let previousCounts = Dictionary(
-      uniqueKeysWithValues: state.repositories.map { ($0.id, $0.worktrees.count) }
-    )
+    var previousCounts: [Repository.ID: Int] = [:]
+    for repository in state.repositories {
+      previousCounts[repository.id] = repository.worktrees.count
+    }
     let repositoryIDs = Set(repositories.map(\.id))
-    let newCounts = Dictionary(
-      uniqueKeysWithValues: repositories.map { ($0.id, $0.worktrees.count) }
-    )
+    var newCounts: [Repository.ID: Int] = [:]
+    for repository in repositories {
+      newCounts[repository.id] = repository.worktrees.count
+    }
     var addedCounts: [Repository.ID: Int] = [:]
     for (id, newCount) in newCounts {
       let oldCount = previousCounts[id] ?? 0
@@ -3000,6 +3462,89 @@ struct RepositoriesFeature {
     } message: {
       TextState(message)
     }
+  }
+
+  private func sshHostProfile(for endpoint: RepositoryEndpoint) -> SSHHostProfile? {
+    guard case .remote(let hostProfileID, _) = endpoint else {
+      return nil
+    }
+    @Shared(.settingsFile) var settingsFile
+    return settingsFile.sshHostProfiles.first { $0.id == hostProfileID }
+  }
+
+  private func upsertSSHHostProfile(
+    _ profile: SSHHostProfile,
+    settingsFile: inout SettingsFile
+  ) {
+    if let index = settingsFile.sshHostProfiles.firstIndex(where: { $0.id == profile.id }) {
+      settingsFile.sshHostProfiles[index] = profile
+      return
+    }
+    settingsFile.sshHostProfiles.append(profile)
+    settingsFile.sshHostProfiles.sort {
+      $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+    }
+  }
+
+  private func persistLastAttachedRemoteTmuxSessionName(
+    _ sessionName: String,
+    pickerState: RemoteSessionPickerFeature.State?
+  ) {
+    guard let pickerState else {
+      return
+    }
+    let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    @Shared(.repositorySettings(pickerState.repositoryRootURL)) var repositorySettings
+    $repositorySettings.withLock {
+      $0.lastAttachedRemoteTmuxSessionName = trimmed
+    }
+  }
+
+  private func persistAttachedRemoteTmuxSessionName(
+    _ sessionName: String,
+    pickerState: RemoteSessionPickerFeature.State?,
+    state: inout State
+  ) {
+    guard let pickerState else {
+      return
+    }
+    let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    state.attachedRemoteTmuxSessionByWorktreeID[pickerState.worktreeID] = trimmed
+  }
+
+  private func remoteSessionAttach(
+    sessionName: String,
+    createIfMissing: Bool,
+    pickerState: RemoteSessionPickerFeature.State?,
+    state: State
+  ) -> RemoteSessionAttach? {
+    guard let pickerState, let worktree = state.worktree(for: pickerState.worktreeID) else {
+      return nil
+    }
+    guard let hostProfile = sshHostProfile(for: worktree.endpoint) else {
+      return nil
+    }
+    let trimmedSessionName = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedSessionName.isEmpty else {
+      return nil
+    }
+    let command =
+      if createIfMissing {
+        remoteTmuxClient.buildCreateAndAttachCommand(hostProfile, trimmedSessionName, pickerState.remotePath)
+      } else {
+        remoteTmuxClient.buildAttachCommand(hostProfile, trimmedSessionName, pickerState.remotePath)
+      }
+    let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedCommand.isEmpty else {
+      return nil
+    }
+    return RemoteSessionAttach(worktree: worktree, command: trimmedCommand)
   }
 
   private func confirmationAlertForRepositoryRemoval(
@@ -3254,11 +3799,14 @@ extension RepositoriesFeature.State {
   }
 
   func orderedRepositoryRoots() -> [URL] {
-    let rootsByID = Dictionary(
-      uniqueKeysWithValues: repositoryRoots.map {
-        ($0.standardizedFileURL.path(percentEncoded: false), $0.standardizedFileURL)
+    var rootsByID: [Repository.ID: URL] = [:]
+    for rootURL in repositoryRoots {
+      let standardizedRootURL = rootURL.standardizedFileURL
+      let id = standardizedRootURL.path(percentEncoded: false)
+      if rootsByID[id] == nil {
+        rootsByID[id] = standardizedRootURL
       }
-    )
+    }
     var ordered: [URL] = []
     var seen: Set<Repository.ID> = []
     for id in repositoryOrderIDs {
@@ -3465,7 +4013,10 @@ extension RepositoriesFeature.State {
   }
 
   func orderedWorktreeRows(includingRepositoryIDs: Set<Repository.ID>) -> [WorktreeRowModel] {
-    let repositoriesByID = Dictionary(uniqueKeysWithValues: repositories.map { ($0.id, $0) })
+    var repositoriesByID: [Repository.ID: Repository] = [:]
+    for repository in repositories where repositoriesByID[repository.id] == nil {
+      repositoriesByID[repository.id] = repository
+    }
     return orderedRepositoryIDs()
       .filter { includingRepositoryIDs.contains($0) }
       .compactMap { repositoriesByID[$0] }
@@ -3529,6 +4080,8 @@ private func insertWorktree(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
+    kind: repository.kind,
+    endpoint: repository.endpoint,
     worktrees: worktrees
   )
 }
@@ -3548,6 +4101,8 @@ private func removeWorktree(
     id: repository.id,
     rootURL: repository.rootURL,
     name: repository.name,
+    kind: repository.kind,
+    endpoint: repository.endpoint,
     worktrees: worktrees
   )
   return true
@@ -3589,7 +4144,8 @@ private func cleanupFailedWorktree(
       name: name,
       detail: "",
       workingDirectory: worktreeURL,
-      repositoryRootURL: repositoryRootURL
+      repositoryRootURL: repositoryRootURL,
+      endpoint: state.repositories[id: repositoryID]?.endpoint ?? .local
     )
   let cleanup = cleanupWorktreeState(
     worktreeID,
@@ -3718,12 +4274,15 @@ private func updateWorktreeName(
       detail: worktree.detail,
       workingDirectory: worktree.workingDirectory,
       repositoryRootURL: worktree.repositoryRootURL,
+      endpoint: worktree.endpoint,
       createdAt: worktree.createdAt
     )
     repository = Repository(
       id: repository.id,
       rootURL: repository.rootURL,
       name: repository.name,
+      kind: repository.kind,
+      endpoint: repository.endpoint,
       worktrees: worktrees
     )
     state.repositories[index] = repository
@@ -3920,7 +4479,10 @@ private func pruneWorktreeOrderByRepository(
   state: inout RepositoriesFeature.State
 ) -> Bool {
   let rootIDs = Set(roots.map { $0.standardizedFileURL.path(percentEncoded: false) })
-  let repositoriesByID = Dictionary(uniqueKeysWithValues: state.repositories.map { ($0.id, $0) })
+  var repositoriesByID: [Repository.ID: Repository] = [:]
+  for repository in state.repositories where repositoriesByID[repository.id] == nil {
+    repositoriesByID[repository.id] = repository
+  }
   let pinnedSet = Set(state.pinnedWorktreeIDs)
   let archivedSet = state.archivedWorktreeIDSet
   var pruned: [Repository.ID: [Worktree.ID]] = [:]
@@ -3966,6 +4528,26 @@ private func pruneArchivedWorktreeIDs(
     return true
   }
   return false
+}
+
+private func mergedLoadFailuresByID(
+  _ failures: [RepositoriesFeature.LoadFailure]
+) -> [Repository.ID: String] {
+  var mergedMessages: [Repository.ID: [String]] = [:]
+  for failure in failures {
+    let message = failure.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedMessage = message.isEmpty ? failure.message : message
+    var messages = mergedMessages[failure.rootID] ?? []
+    if !messages.contains(normalizedMessage) {
+      messages.append(normalizedMessage)
+    }
+    mergedMessages[failure.rootID] = messages
+  }
+  var mergedFailuresByID: [Repository.ID: String] = [:]
+  for (rootID, messages) in mergedMessages {
+    mergedFailuresByID[rootID] = messages.joined(separator: "\n")
+  }
+  return mergedFailuresByID
 }
 
 private func firstAvailableWorktreeID(

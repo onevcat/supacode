@@ -17,6 +17,29 @@ struct RepositorySettingsView: View {
     )
     let exampleWorktreePath = store.exampleWorktreePath
     Form {
+      if let remotePath = store.remotePath {
+        Section {
+          VStack(alignment: .leading, spacing: 6) {
+            Text(store.remoteHostDisplayName ?? "Remote Host Profile Missing")
+              .font(.headline)
+            if let destination = store.remoteHostDestination {
+              Text(destination)
+                .foregroundStyle(.secondary)
+                .monospaced()
+            } else if let hostProfileID = store.remoteHostProfileID {
+              Text("Missing profile id: \(hostProfileID)")
+                .foregroundStyle(.secondary)
+                .monospaced()
+            }
+            Text(remotePath)
+              .foregroundStyle(.secondary)
+              .monospaced()
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        } header: {
+          Text("Remote Repository")
+        }
+      }
       if store.showsWorktreeSettings {
         Section {
           if store.isBranchDataLoaded {

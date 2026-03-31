@@ -960,7 +960,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   static func moveFocus(
     to view: GhosttySurfaceView,
     from previous: GhosttySurfaceView? = nil,
-    delay: TimeInterval? = nil
+    delay: TimeInterval? = nil,
+    respectsActiveTextInput: Bool = false
   ) {
     let maxDelay: TimeInterval = 0.5
     let currentDelay = delay ?? 0
@@ -971,7 +972,19 @@ final class GhosttySurfaceView: NSView, Identifiable {
         try? await ContinuousClock().sleep(for: .seconds(delay))
       }
       guard let window = view.window else {
-        moveFocus(to: view, from: previous, delay: nextDelay)
+        moveFocus(
+          to: view,
+          from: previous,
+          delay: nextDelay,
+          respectsActiveTextInput: respectsActiveTextInput
+        )
+        return
+      }
+      if respectsActiveTextInput,
+        let firstResponder = window.firstResponder,
+        firstResponder is NSTextView,
+        !(firstResponder is GhosttySurfaceView)
+      {
         return
       }
       if let previous, previous !== view {
@@ -1749,7 +1762,7 @@ final class GhosttySurfaceScrollView: NSView {
   /// When set, the surface renders at this fixed size regardless of the hosting
   /// view's bounds. Used in canvas mode to prevent `.scaleEffect()` from causing
   /// terminal reflow.
-  var pinnedSize: CGSize?
+  private(set) var pinnedSize: CGSize?
 
   init(surfaceView: GhosttySurfaceView) {
     self.surfaceView = surfaceView
@@ -1853,6 +1866,14 @@ final class GhosttySurfaceScrollView: NSView {
     documentView.frame.size.width = effectiveSize.width
     synchronizeScrollView()
     synchronizeSurfaceView()
+    surfaceView.updateSurfaceSize()
+  }
+
+  func setPinnedSize(_ pinnedSize: CGSize?) {
+    guard self.pinnedSize != pinnedSize else { return }
+    self.pinnedSize = pinnedSize
+    needsLayout = true
+    layoutSubtreeIfNeeded()
     surfaceView.updateSurfaceSize()
   }
 

@@ -187,6 +187,758 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func loadPersistedRepositoriesUsesEndpointAwareGitClientForRemoteEntries() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = {
+          [PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpoint)]
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository load to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { rootURL, requestedEndpoint, hostProfile in
+          #expect(rootURL.path(percentEncoded: false) == repoRoot)
+          #expect(requestedEndpoint == endpoint)
+          #expect(hostProfile == profile)
+          return [worktree]
+        }
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func addRemoteRepositoryButtonTappedPresentsRemoteConnectSheet() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let profile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Build Box",
+      host: "example.com",
+      user: "deploy",
+      authMethod: .publicKey
+    )
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      }
+    }
+
+    await store.send(.addRemoteRepositoryButtonTapped) {
+      $0.remoteConnect = RemoteConnectFeature.State(savedHostProfiles: [profile])
+    }
+  }
+
+  @Test(.dependencies) func remoteConnectCompletedUpsertsHostProfileAndPersistsRemoteRepository() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let createdAt = Date(timeIntervalSince1970: 10)
+    let updatedAt = Date(timeIntervalSince1970: 20)
+    let originalProfile = SSHHostProfile(
+      id: "host-1",
+      displayName: "Old Name",
+      host: "old.example.com",
+      user: "deploy",
+      authMethod: .publicKey,
+      createdAt: createdAt,
+      updatedAt: createdAt
+    )
+    let submittedProfile = SSHHostProfile(
+      id: originalProfile.id,
+      displayName: "Build Box",
+      host: "example.com",
+      user: "deploy",
+      port: 2222,
+      authMethod: .publicKey,
+      createdAt: createdAt,
+      updatedAt: updatedAt
+    )
+    let submission = RemoteConnectFeature.Submission(
+      hostProfile: submittedProfile,
+      remotePath: repoRoot
+    )
+    let endpoint = RepositoryEndpoint.remote(
+      hostProfileID: submittedProfile.id,
+      remotePath: repoRoot
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var initialState = RepositoriesFeature.State()
+    initialState.remoteConnect = RemoteConnectFeature.State(savedHostProfiles: [originalProfile])
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [originalProfile] }
+      return TestStore(initialState: initialState) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = { [] }
+        $0.repositoryPersistence.saveRepositoryEntries = { entries in
+          savedEntries.withValue { $0.append(entries) }
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository add not to use local git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { rootURL, requestedEndpoint, hostProfile in
+          #expect(rootURL.path(percentEncoded: false) == repoRoot)
+          #expect(requestedEndpoint == endpoint)
+          #expect(hostProfile == submittedProfile)
+          return [worktree]
+        }
+      }
+    }
+
+    await store.send(.remoteConnect(.presented(.delegate(.completed(submission))))) {
+      $0.remoteConnect = nil
+    }
+    await store.receive(\.openRepositoriesFinished) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      #expect(settingsFile.sshHostProfiles == [submittedProfile])
+    }
+    #expect(
+      savedEntries.value == [[
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpoint)
+      ]]
+    )
+  }
+
+  @Test(.dependencies) func loadPersistedRepositoriesUsesLatestDuplicateRemoteEndpointPath() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1-\(testID)", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2-\(testID)", remotePath: repoRoot)
+    let profileA = SSHHostProfile(
+      id: "h1-\(testID)",
+      displayName: "Server A",
+      host: "a.example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let profileB = SSHHostProfile(
+      id: "h2-\(testID)",
+      displayName: "Server B",
+      host: "b.example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktreeA = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpointA
+    )
+    let worktreeB = makeWorktree(
+      id: repoRoot,
+      name: "main-b",
+      repoRoot: repoRoot,
+      endpoint: endpointB
+    )
+    let expectedRepository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpointB,
+      worktrees: [worktreeB]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profileA, profileB] }
+      return TestStore(initialState: RepositoriesFeature.State()) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.repositoryPersistence.loadRepositoryEntries = {
+          [
+            PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+            PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+          ]
+        }
+        $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected duplicate remote repository load not to use local git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, requestedEndpoint, _ in
+          switch requestedEndpoint {
+          case endpointA:
+            return [worktreeA]
+          case endpointB:
+            return [worktreeB]
+          default:
+            Issue.record("Unexpected endpoint requested: \(requestedEndpoint)")
+            return []
+          }
+        }
+      }
+    }
+
+    await store.send(.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [expectedRepository]
+      $0.repositoryRoots = [
+        URL(fileURLWithPath: repoRoot),
+        URL(fileURLWithPath: repoRoot),
+      ]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func selectingRemoteWorktreeWithSessionsAlwaysPresentsPicker() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      $repositorySettings.withLock {
+        $0.lastAttachedRemoteTmuxSessionName = "ops"
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { requestedProfile, timeoutSeconds in
+          #expect(requestedProfile == profile)
+          #expect(timeoutSeconds == 8)
+          return ["dev", "ops"]
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: "ops",
+        suggestedManagedSessionName: nil
+      )
+    }
+  }
+
+  @Test(.dependencies) func pickerAttachSelectionPersistsLastAttachedSessionNameAndRunsAttachCommand() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildAttachCommand = { profile, sessionName, remotePath in
+          #expect(profile.id == hostProfileID)
+          "attach:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: nil,
+        suggestedManagedSessionName: nil
+      )
+    }
+    await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops"))))) {
+      $0.attachedRemoteTmuxSessionByWorktreeID[worktree.id] = "ops"
+      $0.remoteSessionPicker = nil
+    }
+    await store.finish()
+
+    withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
+      #expect(repositorySettings.lastAttachedRemoteTmuxSessionName == "ops")
+    }
+
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          worktree,
+          input: "attach:ops:\(repoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func pickerCreateAndAttachRunsManagedSessionCommand() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let worktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [worktree]
+    )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildCreateAndAttachCommand = { profile, sessionName, remotePath in
+          #expect(profile.id == hostProfileID)
+          "create:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+
+    await store.send(.selectWorktree(worktree.id)) {
+      $0.selection = .worktree(worktree.id)
+      $0.sidebarSelectedWorktreeIDs = [worktree.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded) {
+      $0.remoteSessionPicker = RemoteSessionPickerFeature.State(
+        worktreeID: worktree.id,
+        repositoryRootURL: worktree.repositoryRootURL,
+        remotePath: repoRoot,
+        sessions: ["dev", "ops"],
+        preferredSessionName: nil,
+        suggestedManagedSessionName: nil
+      )
+    }
+    await store.send(.remoteSessionPicker(.presented(.delegate(.createAndAttach("managed"))))) {
+      $0.attachedRemoteTmuxSessionByWorktreeID[worktree.id] = "managed"
+      $0.remoteSessionPicker = nil
+    }
+    await store.finish()
+
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          worktree,
+          input: "create:managed:\(repoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func reselectingRemoteWorktreeAfterAttachDoesNotPromptAgain() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let remoteRepoRoot = "/srv/\(testID)/repo"
+    let localRepoRoot = "/tmp/\(testID)/local"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: remoteRepoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let remoteWorktree = makeWorktree(
+      id: remoteRepoRoot,
+      name: "main",
+      repoRoot: remoteRepoRoot,
+      endpoint: endpoint
+    )
+    let localWorktree = makeWorktree(
+      id: "\(localRepoRoot)/main",
+      name: "main",
+      repoRoot: localRepoRoot
+    )
+    let remoteRepository = makeRepository(
+      id: remoteRepoRoot,
+      name: "remote",
+      endpoint: endpoint,
+      worktrees: [remoteWorktree]
+    )
+    let localRepository = makeRepository(
+      id: localRepoRoot,
+      name: "local",
+      worktrees: [localWorktree]
+    )
+    let terminalCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock { $0.sshHostProfiles = [profile] }
+      return TestStore(initialState: makeState(repositories: [remoteRepository, localRepository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.remoteTmuxClient.listSessions = { _, _ in
+          ["dev", "ops"]
+        }
+        $0.remoteTmuxClient.buildAttachCommand = { _, sessionName, remotePath in
+          "attach:\(sessionName):\(remotePath)"
+        }
+        $0.terminalClient.send = { command in
+          terminalCommands.withValue { $0.append(command) }
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.selectWorktree(remoteWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded)
+    #expect(store.state.remoteSessionPicker != nil)
+
+    await store.send(.remoteSessionPicker(.presented(.delegate(.attachExisting("ops")))))
+    #expect(store.state.remoteSessionPicker == nil)
+    #expect(store.state.attachedRemoteTmuxSessionByWorktreeID[remoteWorktree.id] == "ops")
+
+    await store.send(.selectWorktree(localWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+
+    await store.send(.selectWorktree(remoteWorktree.id))
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.remoteSessionsLoaded)
+    #expect(store.state.remoteSessionPicker == nil)
+    #expect(
+      terminalCommands.value == [
+        .createTabWithInput(
+          remoteWorktree,
+          input: "attach:ops:\(remoteRepoRoot)",
+          runSetupScriptIfNew: false
+        )
+      ]
+    )
+  }
+
+  @Test(.dependencies) func removeFailedRepositoryPreservesLoadedEndpointVariantForSamePath() async {
+    let repoRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2", remotePath: repoRoot)
+    let remainingEntries = RepositoriesFeature.removeFailedRepositoryEntries(
+      [
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+        PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+      ],
+      repositoryID: repoRoot,
+      preservedEndpoint: endpointA
+    )
+
+    #expect(remainingEntries == [PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA)])
+  }
+
+  @Test(.dependencies) func repositoryRemovedPreservesOtherEndpointVariantForSamePath() async {
+    let repoRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpointA = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: repoRoot)
+    let endpointB = RepositoryEndpoint.remote(hostProfileID: "h2", remotePath: repoRoot)
+    let worktreeA = makeWorktree(
+      id: repoRoot,
+      name: "main-a",
+      repoRoot: repoRoot,
+      endpoint: endpointA
+    )
+    let worktreeB = makeWorktree(
+      id: repoRoot,
+      name: "main-b",
+      repoRoot: repoRoot,
+      endpoint: endpointB
+    )
+    let repositoryA = makeRepository(
+      id: repoRoot,
+      name: URL(fileURLWithPath: repoRoot).lastPathComponent,
+      endpoint: endpointA,
+      worktrees: [worktreeA]
+    )
+    let repositoryB = makeRepository(
+      id: repoRoot,
+      name: URL(fileURLWithPath: repoRoot).lastPathComponent,
+      endpoint: endpointB,
+      worktrees: [worktreeB]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var state = RepositoriesFeature.State()
+    state.repositories = [repositoryA]
+    state.repositoryRoots = [
+      URL(fileURLWithPath: repoRoot),
+      URL(fileURLWithPath: repoRoot),
+    ]
+    state.removingRepositoryIDs = [repoRoot]
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = {
+        [
+          PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointA),
+          PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB),
+        ]
+      }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { _ in
+        Issue.record("Expected remote repository reload not to use local git client")
+        return []
+      }
+      $0.gitClient.worktreesForEndpoint = { _, endpoint, _ in
+        #expect(endpoint == endpointB)
+        return [worktreeB]
+      }
+    }
+
+    await store.send(.repositoryRemoved(repoRoot, selectionWasRemoved: false)) {
+      $0.removingRepositoryIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [repositoryB]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: repoRoot, kind: .git, endpoint: endpointB)]])
+  }
+
+  @Test(.dependencies) func repositoryRemovedUsesEndpointAwareFallbackEntriesWhenPersistenceIsEmpty() async {
+    let localRoot = "/tmp/\(UUID().uuidString)-local"
+    let remoteRoot = "/srv/\(UUID().uuidString)/repo"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: "h1", remotePath: remoteRoot)
+    let localWorktree = makeWorktree(id: localRoot, name: "main", repoRoot: localRoot)
+    let remoteWorktree = makeWorktree(
+      id: remoteRoot,
+      name: "main",
+      repoRoot: remoteRoot,
+      endpoint: endpoint
+    )
+    let localRepository = makeRepository(
+      id: localRoot,
+      name: URL(fileURLWithPath: localRoot).lastPathComponent,
+      worktrees: [localWorktree]
+    )
+    let remoteRepository = makeRepository(
+      id: remoteRoot,
+      name: URL(fileURLWithPath: remoteRoot).lastPathComponent,
+      endpoint: endpoint,
+      worktrees: [remoteWorktree]
+    )
+    let savedEntries = LockIsolated<[[PersistedRepositoryEntry]]>([])
+    var state = makeState(repositories: [localRepository, remoteRepository])
+    state.removingRepositoryIDs = [localRoot]
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadRepositoryEntries = { [] }
+      $0.repositoryPersistence.loadRoots = { [] }
+      $0.repositoryPersistence.saveRepositoryEntries = { entries in
+        savedEntries.withValue { $0.append(entries) }
+      }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { root in
+        Issue.record("Expected fallback remote reload not to use local git client: \(root.path(percentEncoded: false))")
+        return []
+      }
+      $0.gitClient.worktreesForEndpoint = { root, requestedEndpoint, _ in
+        #expect(root.path(percentEncoded: false) == remoteRoot)
+        #expect(requestedEndpoint == endpoint)
+        return [remoteWorktree]
+      }
+    }
+
+    await store.send(.repositoryRemoved(localRoot, selectionWasRemoved: false)) {
+      $0.removingRepositoryIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.repositoriesLoaded) {
+      $0.repositories = [remoteRepository]
+      $0.repositoryRoots = [URL(fileURLWithPath: remoteRoot)]
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedEntries.value == [[PersistedRepositoryEntry(path: remoteRoot, kind: .git, endpoint: endpoint)]])
+  }
+
   @Test func loadPersistedRepositoriesAutoUpgradesPlainFolderWhenItBecomesGitRoot() async {
     let root = "/tmp/folder"
     let worktree = makeWorktree(id: root, name: "folder", repoRoot: root)
@@ -1092,6 +1844,112 @@ struct RepositoriesFeatureTests {
     #expect(store.state.alert == nil)
   }
 
+  @Test(.dependencies) func createRandomWorktreeInRemoteRepositoryUsesEndpointAwareStream() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let mainWorktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [mainWorktree]
+    )
+    let createdWorktree = makeWorktree(
+      id: "/srv/worktrees/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let requestedEndpoint = LockIsolated<RepositoryEndpoint?>(nil)
+    let requestedHostProfile = LockIsolated<SSHHostProfile?>(nil)
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.global.promptForWorktreeCreation = false
+        $0.sshHostProfiles = [profile]
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.uuid = .incrementing
+        $0.gitClient.localBranchNames = { _ in
+          struct UnexpectedLocalBranchRequest: Error {}
+          throw UnexpectedLocalBranchRequest()
+        }
+        $0.gitClient.isBareRepository = { _ in
+          struct UnexpectedBareRepositoryRequest: Error {}
+          throw UnexpectedBareRepositoryRequest()
+        }
+        $0.gitClient.automaticWorktreeBaseRef = { _ in
+          Issue.record("Expected remote repository create not to resolve local automatic base refs")
+          return nil
+        }
+        $0.gitClient.ignoredFileCount = { _ in
+          struct UnexpectedIgnoredFileRequest: Error {}
+          throw UnexpectedIgnoredFileRequest()
+        }
+        $0.gitClient.untrackedFileCount = { _ in
+          struct UnexpectedUntrackedFileRequest: Error {}
+          throw UnexpectedUntrackedFileRequest()
+        }
+        $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+          Issue.record("Expected remote repository create to use endpoint-aware stream")
+          return AsyncThrowingStream { continuation in
+            continuation.finish()
+          }
+        }
+        $0.gitClient.createWorktreeStreamForEndpoint = {
+          _, _, _, copyIgnored, copyUntracked, baseRef, endpointValue, hostProfile in
+          #expect(copyIgnored == false)
+          #expect(copyUntracked == false)
+          #expect(baseRef.isEmpty)
+          requestedEndpoint.withValue { $0 = endpointValue }
+          requestedHostProfile.withValue { $0 = hostProfile }
+          return AsyncThrowingStream { continuation in
+            continuation.yield(.finished(createdWorktree))
+            continuation.finish()
+          }
+        }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository reload to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, endpointValue, hostProfile in
+          requestedEndpoint.withValue { $0 = endpointValue }
+          requestedHostProfile.withValue { $0 = hostProfile }
+          return [createdWorktree, mainWorktree]
+        }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.finish()
+
+    #expect(requestedEndpoint.value == endpoint)
+    #expect(requestedHostProfile.value == profile)
+  }
+
   @Test(.dependencies) func createRandomWorktreeUsesRepositoryWorktreeBaseDirectoryOverride() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
@@ -1449,6 +2307,81 @@ struct RepositoriesFeatureTests {
       $0.alert = expectedAlert
     }
   }
+
+  @Test(.dependencies) func deleteWorktreeConfirmedUsesEndpointAwareRemovalForRemoteRepository() async {
+    let testID = UUID().uuidString
+    let settingsStorage = SettingsTestStorage()
+    let settingsFileURL = URL(fileURLWithPath: "/tmp/supacode-settings-\(testID).json")
+    let repoRoot = "/srv/\(testID)/repo"
+    let hostProfileID = "h1-\(testID)"
+    let endpoint = RepositoryEndpoint.remote(hostProfileID: hostProfileID, remotePath: repoRoot)
+    let profile = SSHHostProfile(
+      id: hostProfileID,
+      displayName: "Server",
+      host: "example.com",
+      user: "dev",
+      authMethod: .publicKey
+    )
+    let mainWorktree = makeWorktree(
+      id: repoRoot,
+      name: "main",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let featureWorktree = makeWorktree(
+      id: "/srv/worktrees/feature",
+      name: "feature",
+      repoRoot: repoRoot,
+      endpoint: endpoint
+    )
+    let repository = makeRepository(
+      id: repoRoot,
+      name: "repo",
+      endpoint: endpoint,
+      worktrees: [mainWorktree, featureWorktree]
+    )
+    let removedEndpoint = LockIsolated<RepositoryEndpoint?>(nil)
+    let removedHostProfile = LockIsolated<SSHHostProfile?>(nil)
+    let store = withDependencies {
+      $0.settingsFileStorage = settingsStorage.storage
+      $0.settingsFileURL = settingsFileURL
+    } operation: {
+      @Shared(.settingsFile) var settingsFile
+      $settingsFile.withLock {
+        $0.global.deleteBranchOnDeleteWorktree = true
+        $0.sshHostProfiles = [profile]
+      }
+      return TestStore(initialState: makeState(repositories: [repository])) {
+        RepositoriesFeature()
+      } withDependencies: {
+        $0.gitClient.removeWorktree = { _, _ in
+          Issue.record("Expected remote repository delete to use endpoint-aware git client")
+          return URL(fileURLWithPath: "/tmp/unexpected")
+        }
+        $0.gitClient.removeWorktreeForEndpoint = { _, _, endpointValue, hostProfile in
+          removedEndpoint.withValue { $0 = endpointValue }
+          removedHostProfile.withValue { $0 = hostProfile }
+          return featureWorktree.workingDirectory
+        }
+        $0.gitClient.worktrees = { _ in
+          Issue.record("Expected remote repository reload to use endpoint-aware git client")
+          return []
+        }
+        $0.gitClient.worktreesForEndpoint = { _, _, _ in [mainWorktree] }
+      }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.deleteWorktreeConfirmed(featureWorktree.id, repository.id)) {
+      $0.deletingWorktreeIDs = [featureWorktree.id]
+    }
+    await store.receive(\.worktreeDeleted)
+    await store.finish()
+
+    #expect(removedEndpoint.value == endpoint)
+    #expect(removedHostProfile.value == profile)
+  }
+
   @Test func requestDeleteWorktreesShowsBatchConfirmation() async {
     let worktree1 = makeWorktree(id: "/tmp/repo/wt1", name: "owl", repoRoot: "/tmp/repo")
     let worktree2 = makeWorktree(id: "/tmp/repo/wt2", name: "hawk", repoRoot: "/tmp/repo")
@@ -2161,6 +3094,43 @@ struct RepositoriesFeatureTests {
 
     await store.receive(\.delegate.repositoriesChanged)
     #expect(store.state.archivedWorktreeIDs == [worktree.id])
+  }
+
+  @Test func repositoriesLoadedCoalescesDuplicateFailureIDs() async {
+    let repoRoot = "/tmp/repo"
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [],
+        failures: [
+          RepositoriesFeature.LoadFailure(rootID: repoRoot, message: "permission denied"),
+          RepositoriesFeature.LoadFailure(rootID: repoRoot, message: "duplicate repository identity"),
+        ],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.loadFailuresByID = [repoRoot: "permission denied\nduplicate repository identity"]
+      $0.isInitialLoadComplete = true
+    }
+    await store.finish()
+  }
+
+  @Test func orderedRepositoryRootsDeduplicatesSamePathRoots() {
+    let repoRoot = "/home/momoai/workspace/kyc-nexis"
+    let repository = makeRepository(id: repoRoot, worktrees: [])
+    var state = makeState(repositories: [repository])
+    state.repositoryRoots = [
+      URL(fileURLWithPath: repoRoot),
+      URL(fileURLWithPath: repoRoot),
+    ]
+
+    let ordered = state.orderedRepositoryRoots()
+    #expect(ordered == [URL(fileURLWithPath: repoRoot)])
   }
 
   @Test func repositoriesLoadedSkipsSelectionChangeWhenOnlyDisplayDataChanges() async {
@@ -3034,6 +4004,7 @@ struct RepositoriesFeatureTests {
     id: String,
     name: String,
     repoRoot: String = "/tmp/repo",
+    endpoint: RepositoryEndpoint = .local,
     createdAt: Date? = nil
   ) -> Worktree {
     Worktree(
@@ -3042,6 +4013,7 @@ struct RepositoriesFeatureTests {
       detail: "detail",
       workingDirectory: URL(fileURLWithPath: id),
       repositoryRootURL: URL(fileURLWithPath: repoRoot),
+      endpoint: endpoint,
       createdAt: createdAt
     )
   }
@@ -3075,6 +4047,7 @@ struct RepositoriesFeatureTests {
     id: String,
     name: String = "repo",
     kind: Repository.Kind = .git,
+    endpoint: RepositoryEndpoint = .local,
     worktrees: [Worktree]
   ) -> Repository {
     Repository(
@@ -3082,6 +4055,7 @@ struct RepositoriesFeatureTests {
       rootURL: URL(fileURLWithPath: id),
       name: name,
       kind: kind,
+      endpoint: endpoint,
       worktrees: IdentifiedArray(uniqueElements: worktrees)
     )
   }

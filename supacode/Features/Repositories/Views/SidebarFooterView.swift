@@ -5,22 +5,29 @@ struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
   @Environment(\.surfaceBottomChromeBackgroundOpacity) private var surfaceBottomChromeBackgroundOpacity
   @Environment(\.openURL) private var openURL
-  @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
   var body: some View {
     HStack {
-      Button {
-        store.send(.setOpenPanelPresented(true))
-      } label: {
-        HStack(spacing: 6) {
+      Menu {
+        Button {
+          store.send(.setOpenPanelPresented(true))
+        } label: {
           Label("Add Repository", systemImage: "folder.badge.plus")
-            .font(.callout)
-          if commandKeyObserver.isPressed {
-            ShortcutHintView(text: AppShortcuts.openRepository.display, color: .secondary)
-          }
         }
-      }
-      .help("Add Repository (\(AppShortcuts.openRepository.display))")
+        .keyboardShortcut(AppShortcuts.openRepository.keyboardShortcut)
+        .help("Add Repository (\(AppShortcuts.openRepository.display))")
+
+        Button {
+          store.send(.addRemoteRepositoryButtonTapped)
+        } label: {
+          Label("Add Remote Repository", systemImage: "server.rack")
+        }
+        .help("Connect Remote Repository")
+        } label: {
+          Label("Add", systemImage: "plus")
+            .font(.callout)
+        }
+      .help("Add Repository or Remote Repository")
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {

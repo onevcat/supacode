@@ -87,7 +87,10 @@ final class WorktreeInfoWatcherManager {
 
   private func setWorktrees(_ worktrees: [Worktree]) {
     let isInitialWorktreeLoad = !hasCompletedInitialWorktreeLoad && self.worktrees.isEmpty && !worktrees.isEmpty
-    let worktreesByID = Dictionary(uniqueKeysWithValues: worktrees.map { ($0.id, $0) })
+    var worktreesByID: [Worktree.ID: Worktree] = [:]
+    for worktree in worktrees where worktreesByID[worktree.id] == nil {
+      worktreesByID[worktree.id] = worktree
+    }
     let desiredIDs = Set(worktreesByID.keys)
     let currentIDs = Set(self.worktrees.keys)
     let removedIDs = currentIDs.subtracting(desiredIDs)

@@ -5,18 +5,40 @@ import Foundation
 nonisolated struct ShellClient: Sendable {
   var run: @Sendable (URL, [String], URL?) async throws -> ShellOutput
   var runLoginImpl: @Sendable (URL, [String], URL?, Bool) async throws -> ShellOutput
+  var runWithTimeoutImpl: @Sendable (URL, [String], URL?, Int) async throws -> ShellOutput
+  var runWithTimeoutEnvironmentImpl: @Sendable (URL, [String], URL?, [String: String], Int) async throws -> ShellOutput
   var runStream: @Sendable (URL, [String], URL?) -> AsyncThrowingStream<ShellStreamEvent, Error>
   var runLoginStreamImpl: @Sendable (URL, [String], URL?, Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>
 
   init(
     run: @escaping @Sendable (URL, [String], URL?) async throws -> ShellOutput,
     runLoginImpl: @escaping @Sendable (URL, [String], URL?, Bool) async throws -> ShellOutput,
+    runWithTimeoutImpl: (@Sendable (URL, [String], URL?, Int) async throws -> ShellOutput)? = nil,
+    runWithTimeoutEnvironmentImpl:
+      (@Sendable (URL, [String], URL?, [String: String], Int) async throws -> ShellOutput)? = nil,
     runStream: (@Sendable (URL, [String], URL?) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil,
     runLoginStreamImpl:
       (@Sendable (URL, [String], URL?, Bool) -> AsyncThrowingStream<ShellStreamEvent, Error>)? = nil
   ) {
+    let resolvedRunWithTimeoutImpl =
+      runWithTimeoutImpl
+      ?? { executableURL, arguments, currentDirectoryURL, _ in
+        try await run(executableURL, arguments, currentDirectoryURL)
+      }
     self.run = run
     self.runLoginImpl = runLoginImpl
+    self.runWithTimeoutImpl = resolvedRunWithTimeoutImpl
+    self.runWithTimeoutEnvironmentImpl =
+      runWithTimeoutEnvironmentImpl
+      ?? { executableURL, arguments, currentDirectoryURL, environment, timeoutSeconds in
+        _ = environment
+        return try await resolvedRunWithTimeoutImpl(
+          executableURL,
+          arguments,
+          currentDirectoryURL,
+          timeoutSeconds
+        )
+      }
     self.runStream =
       runStream
       ?? { executableURL, arguments, currentDirectoryURL in
@@ -58,6 +80,22 @@ nonisolated struct ShellClient: Sendable {
     try await runLoginImpl(executableURL, arguments, currentDirectoryURL, log)
   }
 
+  func runWithTimeout(
+    _ executableURL: URL,
+    _ arguments: [String],
+    _ currentDirectoryURL: URL?,
+    environment: [String: String] = [:],
+    timeoutSeconds: Int
+  ) async throws -> ShellOutput {
+    try await runWithTimeoutEnvironmentImpl(
+      executableURL,
+      arguments,
+      currentDirectoryURL,
+      environment,
+      timeoutSeconds
+    )
+  }
+
   func runLoginStream(
     _ executableURL: URL,
     _ arguments: [String],
@@ -94,6 +132,24 @@ extension ShellClient: DependencyKey {
       )
       return result
     },
+    runWithTimeoutImpl: { executableURL, arguments, currentDirectoryURL, timeoutSeconds in
+      try await runProcessWithTimeout(
+        executableURL: executableURL,
+        arguments: arguments,
+        currentDirectoryURL: currentDirectoryURL,
+        environment: [:],
+        timeoutSeconds: timeoutSeconds
+      )
+    },
+    runWithTimeoutEnvironmentImpl: { executableURL, arguments, currentDirectoryURL, environment, timeoutSeconds in
+      try await runProcessWithTimeout(
+        executableURL: executableURL,
+        arguments: arguments,
+        currentDirectoryURL: currentDirectoryURL,
+        environment: environment,
+        timeoutSeconds: timeoutSeconds
+      )
+    },
     runStream: { executableURL, arguments, currentDirectoryURL in
       runProcessStream(
         executableURL: executableURL,
@@ -124,6 +180,8 @@ extension ShellClient: DependencyKey {
   static let testValue = ShellClient(
     run: { _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
     runLoginImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+    runWithTimeoutImpl: { _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
+    runWithTimeoutEnvironmentImpl: { _, _, _, _, _ in ShellOutput(stdout: "", stderr: "", exitCode: 0) },
     runStream: { _, _, _ in
       AsyncThrowingStream { continuation in
         continuation.yield(.finished(ShellOutput(stdout: "", stderr: "", exitCode: 0)))
@@ -151,21 +209,68 @@ private nonisolated let shellLogger = SupaLogger("Shell")
 nonisolated private func runProcess(
   executableURL: URL,
   arguments: [String],
-  currentDirectoryURL: URL?
+  currentDirectoryURL: URL?,
+  environment: [String: String]? = nil
 ) async throws -> ShellOutput {
   let stream = runProcessStream(
     executableURL: executableURL,
     arguments: arguments,
-    currentDirectoryURL: currentDirectoryURL
+    currentDirectoryURL: currentDirectoryURL,
+    environment: environment
   )
   let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
   return try await collectOutput(from: stream, command: command)
 }
 
+nonisolated private func runProcessWithTimeout(
+  executableURL: URL,
+  arguments: [String],
+  currentDirectoryURL: URL?,
+  environment: [String: String]? = nil,
+  timeoutSeconds: Int
+) async throws -> ShellOutput {
+  guard timeoutSeconds > 0 else {
+    return try await runProcess(
+      executableURL: executableURL,
+      arguments: arguments,
+      currentDirectoryURL: currentDirectoryURL,
+      environment: environment
+    )
+  }
+
+  let command = ([executableURL.path(percentEncoded: false)] + arguments).joined(separator: " ")
+  return try await withThrowingTaskGroup(of: ShellOutput.self) { group in
+    group.addTask {
+      try await runProcess(
+        executableURL: executableURL,
+        arguments: arguments,
+        currentDirectoryURL: currentDirectoryURL,
+        environment: environment
+      )
+    }
+    group.addTask {
+      try await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
+      throw ShellClientError(
+        command: command,
+        stdout: "",
+        stderr: "Command timed out after \(timeoutSeconds) seconds",
+        exitCode: -1
+      )
+    }
+
+    guard let firstResult = try await group.next() else {
+      throw ShellClientError(command: command, stdout: "", stderr: "", exitCode: -1)
+    }
+    group.cancelAll()
+    return firstResult
+  }
+}
+
 nonisolated private func runProcessStream(
   executableURL: URL,
   arguments: [String],
-  currentDirectoryURL: URL?
+  currentDirectoryURL: URL?,
+  environment: [String: String]? = nil
 ) -> AsyncThrowingStream<ShellStreamEvent, Error> {
   AsyncThrowingStream { continuation in
     Task.detached {
@@ -174,6 +279,11 @@ nonisolated private func runProcessStream(
       process.executableURL = executableURL
       process.arguments = arguments
       process.currentDirectoryURL = currentDirectoryURL
+      if let environment {
+        var merged = ProcessInfo.processInfo.environment
+        merged.merge(environment, uniquingKeysWith: { _, new in new })
+        process.environment = merged
+      }
       let outputPipe = Pipe()
       let errorPipe = Pipe()
       process.standardInput = FileHandle.nullDevice
