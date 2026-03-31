@@ -1,5 +1,5 @@
-import DependenciesTestSupport
 import ConcurrencyExtras
+import DependenciesTestSupport
 import Foundation
 import Testing
 

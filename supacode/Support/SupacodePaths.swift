@@ -22,7 +22,8 @@ nonisolated enum SupacodePaths {
     let appSupport =
       FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
       ?? baseDirectory
-    return appSupport
+    return
+      appSupport
       .appending(path: "com.onevcat.prowl", directoryHint: .isDirectory)
       .standardizedFileURL
   }

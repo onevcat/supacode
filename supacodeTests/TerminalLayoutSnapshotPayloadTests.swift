@@ -118,7 +118,7 @@ struct TerminalLayoutSnapshotPayloadTests {
           worktreeID: "wt-1",
           selectedTabID: "tab-missing",
           tabs: [
-            makeTab(tabID: "tab-1"),
+            makeTab(tabID: "tab-1")
           ]
         ),
       ]
@@ -155,27 +155,27 @@ struct TerminalLayoutSnapshotPayloadTests {
 
   @Test func decodeValidatedRejectsTypeMismatchInFields() {
     let invalidJSON = #"""
-    {
-      "version": 1,
-      "worktrees": [
-        {
-          "worktreeID": "wt-1",
-          "selectedTabID": "tab-1",
-          "tabs": [
-            {
-              "tabID": "tab-1",
-              "splitRoot": {
-                "kind": "split",
-                "direction": "horizontal",
-                "ratio": "bad",
-                "children": []
+      {
+        "version": 1,
+        "worktrees": [
+          {
+            "worktreeID": "wt-1",
+            "selectedTabID": "tab-1",
+            "tabs": [
+              {
+                "tabID": "tab-1",
+                "splitRoot": {
+                  "kind": "split",
+                  "direction": "horizontal",
+                  "ratio": "bad",
+                  "children": []
+                }
               }
-            }
-          ]
-        }
-      ]
-    }
-    """#
+            ]
+          }
+        ]
+      }
+      """#
     let data = Data(invalidJSON.utf8)
 
     #expect(TerminalLayoutSnapshotPayload.decodeValidated(from: data) == nil)
@@ -195,7 +195,7 @@ private func makePayload(
         worktreeID: worktreeID,
         selectedTabID: tabID,
         tabs: [
-          makeTab(tabID: tabID, splitRoot: splitRoot),
+          makeTab(tabID: tabID, splitRoot: splitRoot)
         ]
       ),
     ]
@@ -209,7 +209,7 @@ private func makeWorktree(
     worktreeID: worktreeID,
     selectedTabID: "tab-1",
     tabs: [
-      makeTab(tabID: "tab-1"),
+      makeTab(tabID: "tab-1")
     ]
   )
 }

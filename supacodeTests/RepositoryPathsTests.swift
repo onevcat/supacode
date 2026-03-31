@@ -137,10 +137,12 @@ struct SupacodePathsTests {
       cacheDirectory: cacheDirectory
     )
 
-    let migratedRepositorySnapshotPath = cacheDirectory
+    let migratedRepositorySnapshotPath =
+      cacheDirectory
       .appending(path: "repository-snapshot.json")
       .path(percentEncoded: false)
-    let migratedTerminalSnapshotPath = cacheDirectory
+    let migratedTerminalSnapshotPath =
+      cacheDirectory
       .appending(path: "terminal-layout-snapshot.json")
       .path(percentEncoded: false)
     #expect(FileManager.default.fileExists(atPath: migratedRepositorySnapshotPath))

@@ -2,8 +2,8 @@ import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
-import Testing
 import SwiftUI
+import Testing
 
 @testable import supacode
 
