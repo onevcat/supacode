@@ -22,7 +22,7 @@ struct TerminalSplitTreeView: View {
   }
 
   var body: some View {
-    if let node = tree.zoomed ?? tree.root {
+    if let node = tree.visibleNode {
       SubtreeView(node: node, isRoot: node == tree.root, pinnedSize: pinnedSize, action: action)
         .id(node.structuralIdentity)
     }
@@ -306,11 +306,9 @@ struct TerminalSplitTreeAXContainer: NSViewRepresentable {
   }
 
   func updateNSView(_ nsView: TerminalSplitAXContainerView, context: Context) {
-    let visibleNode = tree.zoomed ?? tree.root
-    let visiblePanes = visibleNode?.leaves() ?? []
     nsView.update(
       rootView: AnyView(TerminalSplitTreeView(tree: tree, action: action)),
-      panes: visiblePanes
+      panes: tree.visibleLeaves()
     )
   }
 }

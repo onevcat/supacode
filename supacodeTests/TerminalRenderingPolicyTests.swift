@@ -8,6 +8,7 @@ struct TerminalRenderingPolicyTests {
   @Test func surfaceActivityForSelectedVisibleFocusedSurfaceIsFocused() {
     let focusedID = UUID()
     let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: true,
       isSelectedTab: true,
       windowIsVisible: true,
       windowIsKey: true,
@@ -20,6 +21,7 @@ struct TerminalRenderingPolicyTests {
 
   @Test func surfaceActivityForSelectedVisibleUnfocusedSurfaceIsNotFocused() {
     let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: true,
       isSelectedTab: true,
       windowIsVisible: true,
       windowIsKey: true,
@@ -33,6 +35,7 @@ struct TerminalRenderingPolicyTests {
   @Test func surfaceActivityForSelectedTabInBackgroundWindowIsVisibleButNotFocused() {
     let surfaceID = UUID()
     let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: true,
       isSelectedTab: true,
       windowIsVisible: true,
       windowIsKey: false,
@@ -46,6 +49,7 @@ struct TerminalRenderingPolicyTests {
   @Test func surfaceActivityForOccludedWindowIsHiddenAndUnfocused() {
     let surfaceID = UUID()
     let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: true,
       isSelectedTab: true,
       windowIsVisible: false,
       windowIsKey: true,
@@ -59,7 +63,22 @@ struct TerminalRenderingPolicyTests {
   @Test func surfaceActivityForUnselectedTabIsHiddenAndUnfocused() {
     let surfaceID = UUID()
     let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: true,
       isSelectedTab: false,
+      windowIsVisible: true,
+      windowIsKey: true,
+      focusedSurfaceID: surfaceID,
+      surfaceID: surfaceID
+    )
+    #expect(!activity.isVisible)
+    #expect(!activity.isFocused)
+  }
+
+  @Test func surfaceActivityForZoomHiddenSurfaceIsHiddenAndUnfocused() {
+    let surfaceID = UUID()
+    let activity = WorktreeTerminalState.surfaceActivity(
+      isSurfaceVisibleInTree: false,
+      isSelectedTab: true,
       windowIsVisible: true,
       windowIsKey: true,
       focusedSurfaceID: surfaceID,
