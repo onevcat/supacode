@@ -283,19 +283,20 @@ struct WorktreeDetailView: View {
     }
 
     func fontSizeAction(_ bindingAction: String) -> (() -> Void)? {
-      if bindingAction == "reset_font_size" {
-        guard hasActiveWorktree else { return nil }
+      if repositories.isShowingCanvas {
         return {
-          terminalManager.resetFontSizeAcrossStates()
+          guard let worktreeID = terminalManager.canvasFocusedWorktreeID,
+            let state = terminalManager.stateIfExists(for: worktreeID)
+          else { return }
+          _ = state.performBindingActionOnFocusedSurface(bindingAction)
+          terminalManager.syncPreferredFontSize(from: worktreeID)
         }
-      }
-      if let action = canvasAction({ $0.performBindingActionOnFocusedSurface(bindingAction) }) {
-        return action
       }
       guard hasActiveWorktree, let selectedWorktree = repositories.selectedTerminalWorktree else { return nil }
       return {
         guard let state = terminalManager.stateIfExists(for: selectedWorktree.id) else { return }
         _ = state.performBindingActionOnFocusedSurface(bindingAction)
+        terminalManager.syncPreferredFontSize(from: selectedWorktree.id)
       }
     }
 

@@ -21,7 +21,7 @@ struct AppShortcutsTests {
   @Test func worktreeSelectionUsesControlNumberShortcuts() {
     expectNoDifference(
       AppShortcuts.worktreeSelection.map(\.display),
-      ["⌃1", "⌃2", "⌃3", "⌃4", "⌃5", "⌃6", "⌃7", "⌃8", "⌃9", "⌃0"]
+      ["⌃1", "⌃2", "⌃3", "⌃4", "⌃5", "⌃6", "⌃7", "⌃8", "⌃9"]
     )
 
     for shortcut in AppShortcuts.worktreeSelection {
@@ -32,12 +32,8 @@ struct AppShortcutsTests {
   @Test func terminalTabSelectionUsesCommandNumberShortcuts() {
     expectNoDifference(
       AppShortcuts.terminalTabSelection.map(\.display),
-      ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9", "⌘0"]
+      ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9"]
     )
-
-    for shortcut in AppShortcuts.terminalTabSelection {
-      #expect(shortcut.modifiers == .command)
-    }
   }
 
   @Test func selectionDisplayUsesResolvedOverrides() {
@@ -111,7 +107,6 @@ struct AppShortcutsTests {
         "selectTerminalTab7=\(AppShortcuts.selectTerminalTab7.display)",
         "selectTerminalTab8=\(AppShortcuts.selectTerminalTab8.display)",
         "selectTerminalTab9=\(AppShortcuts.selectTerminalTab9.display)",
-        "selectTerminalTab0=\(AppShortcuts.selectTerminalTab0.display)",
         "selectPreviousTerminalTab=\(AppShortcuts.selectPreviousTerminalTab.display)",
         "selectNextTerminalTab=\(AppShortcuts.selectNextTerminalTab.display)",
         "selectPreviousTerminalPane=\(AppShortcuts.selectPreviousTerminalPane.display)",
@@ -139,7 +134,6 @@ struct AppShortcutsTests {
         "selectTerminalTab7=⌘7",
         "selectTerminalTab8=⌘8",
         "selectTerminalTab9=⌘9",
-        "selectTerminalTab0=⌘0",
         "selectPreviousTerminalTab=⌘⇧[",
         "selectNextTerminalTab=⌘⇧]",
         "selectPreviousTerminalPane=⌘[",

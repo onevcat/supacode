@@ -388,8 +388,6 @@ struct ShortcutsSettingsView: View {
       return 9
     case AppShortcuts.CommandID.selectTerminalTab9:
       return 10
-    case AppShortcuts.CommandID.selectTerminalTab0:
-      return 11
     default:
       return nil
     }
@@ -917,8 +915,7 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.selectWorktree6,
       AppShortcuts.CommandID.selectWorktree7,
       AppShortcuts.CommandID.selectWorktree8,
-      AppShortcuts.CommandID.selectWorktree9,
-      AppShortcuts.CommandID.selectWorktree0:
+      AppShortcuts.CommandID.selectWorktree9:
       return .navigation
 
     case AppShortcuts.CommandID.runScript,
@@ -938,7 +935,6 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.selectTerminalTab7,
       AppShortcuts.CommandID.selectTerminalTab8,
       AppShortcuts.CommandID.selectTerminalTab9,
-      AppShortcuts.CommandID.selectTerminalTab0,
       AppShortcuts.CommandID.selectPreviousTerminalTab,
       AppShortcuts.CommandID.selectNextTerminalTab,
       AppShortcuts.CommandID.selectPreviousTerminalPane,

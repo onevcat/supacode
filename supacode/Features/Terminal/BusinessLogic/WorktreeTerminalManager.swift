@@ -217,8 +217,8 @@ final class WorktreeTerminalManager {
     state.onSetupScriptConsumed = { [weak self] in
       self?.emit(.setupScriptConsumed(worktreeID: worktree.id))
     }
-    state.onFontSizeChanged = { [weak self] fontSize in
-      self?.applyFontSize(fontSize)
+    state.onFontSizeAdjusted = { [weak self] in
+      self?.syncPreferredFontSize(from: worktree.id)
     }
     states[worktree.id] = state
     terminalLogger.info("Created terminal state for worktree \(worktree.id)")
@@ -347,24 +347,14 @@ final class WorktreeTerminalManager {
     runtime.backgroundOpacity()
   }
 
-  func resetFontSizeAcrossStates() {
-    let shouldEmit = preferredFontSize != nil
-    preferredFontSize = nil
-    for state in states.values {
-      state.setDefaultFontSize(nil)
-      _ = state.performBindingActionOnFocusedSurface("reset_font_size")
-    }
-    if shouldEmit {
-      emit(.fontSizeChanged(nil))
-    }
-  }
-
-  private func applyFontSize(_ fontSize: Float32?) {
+  func syncPreferredFontSize(from worktreeID: Worktree.ID) {
+    guard let state = states[worktreeID] else { return }
+    let fontSize = state.focusedFontSize()
     let normalized = normalizedFontSize(fontSize)
     guard preferredFontSize != normalized else { return }
     preferredFontSize = normalized
-    for state in states.values {
-      state.setDefaultFontSize(normalized)
+    for worktreeState in states.values {
+      worktreeState.setDefaultFontSize(normalized)
     }
     emit(.fontSizeChanged(normalized))
   }

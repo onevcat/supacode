@@ -111,7 +111,6 @@ enum AppShortcuts {
     static let selectWorktree7 = "select_worktree_7"
     static let selectWorktree8 = "select_worktree_8"
     static let selectWorktree9 = "select_worktree_9"
-    static let selectWorktree0 = "select_worktree_0"
     static let selectTerminalTab1 = "select_terminal_tab_1"
     static let selectTerminalTab2 = "select_terminal_tab_2"
     static let selectTerminalTab3 = "select_terminal_tab_3"
@@ -121,7 +120,6 @@ enum AppShortcuts {
     static let selectTerminalTab7 = "select_terminal_tab_7"
     static let selectTerminalTab8 = "select_terminal_tab_8"
     static let selectTerminalTab9 = "select_terminal_tab_9"
-    static let selectTerminalTab0 = "select_terminal_tab_0"
     static let renameBranch = "rename_branch"
     static let selectAllCanvasCards = "select_all_canvas_cards"
     static let selectPreviousTerminalTab = "select_previous_terminal_tab"
@@ -192,7 +190,6 @@ enum AppShortcuts {
   static let selectWorktree7 = AppShortcut(key: "7", modifiers: [.control])
   static let selectWorktree8 = AppShortcut(key: "8", modifiers: [.control])
   static let selectWorktree9 = AppShortcut(key: "9", modifiers: [.control])
-  static let selectWorktree0 = AppShortcut(key: "0", modifiers: [.control])
   static let selectTerminalTab1 = AppShortcut(key: "1", modifiers: [.command])
   static let selectTerminalTab2 = AppShortcut(key: "2", modifiers: [.command])
   static let selectTerminalTab3 = AppShortcut(key: "3", modifiers: [.command])
@@ -202,7 +199,6 @@ enum AppShortcuts {
   static let selectTerminalTab7 = AppShortcut(key: "7", modifiers: [.command])
   static let selectTerminalTab8 = AppShortcut(key: "8", modifiers: [.command])
   static let selectTerminalTab9 = AppShortcut(key: "9", modifiers: [.command])
-  static let selectTerminalTab0 = AppShortcut(key: "0", modifiers: [.command])
   static let selectPreviousTerminalTab = AppShortcut(key: "[", modifiers: [.command, .shift])
   static let selectNextTerminalTab = AppShortcut(key: "]", modifiers: [.command, .shift])
   static let selectPreviousTerminalPane = AppShortcut(key: "[", modifiers: [.command])
@@ -231,7 +227,6 @@ enum AppShortcuts {
     selectWorktree7,
     selectWorktree8,
     selectWorktree9,
-    selectWorktree0,
   ]
 
   static let worktreeSelectionCommandIDs: [String] = [
@@ -244,7 +239,6 @@ enum AppShortcuts {
     CommandID.selectWorktree7,
     CommandID.selectWorktree8,
     CommandID.selectWorktree9,
-    CommandID.selectWorktree0,
   ]
 
   static let terminalTabSelection: [AppShortcut] = [
@@ -257,7 +251,6 @@ enum AppShortcuts {
     selectTerminalTab7,
     selectTerminalTab8,
     selectTerminalTab9,
-    selectTerminalTab0,
   ]
 
   static let terminalTabSelectionCommandIDs: [String] = [
@@ -270,7 +263,6 @@ enum AppShortcuts {
     CommandID.selectTerminalTab7,
     CommandID.selectTerminalTab8,
     CommandID.selectTerminalTab9,
-    CommandID.selectTerminalTab0,
   ]
 
   private static let reservedCustomCommandBindings: [ReservedCustomCommandBinding] = [
@@ -291,7 +283,6 @@ enum AppShortcuts {
     .init(actionTitle: "Select Terminal Tab 7", shortcut: selectTerminalTab7),
     .init(actionTitle: "Select Terminal Tab 8", shortcut: selectTerminalTab8),
     .init(actionTitle: "Select Terminal Tab 9", shortcut: selectTerminalTab9),
-    .init(actionTitle: "Select Terminal Tab 0", shortcut: selectTerminalTab0),
     .init(actionTitle: "Select Previous Tab", shortcut: selectPreviousTerminalTab),
     .init(actionTitle: "Select Next Tab", shortcut: selectNextTerminalTab),
     .init(actionTitle: "Select Previous Pane", shortcut: selectPreviousTerminalPane),
@@ -454,12 +445,6 @@ enum AppShortcuts {
       shortcut: selectWorktree9
     ),
     .init(
-      id: CommandID.selectWorktree0,
-      title: "Select Worktree 0",
-      scope: .configurableAppAction,
-      shortcut: selectWorktree0
-    ),
-    .init(
       id: CommandID.selectTerminalTab1,
       title: "Select Terminal Tab 1",
       scope: .configurableAppAction,
@@ -512,12 +497,6 @@ enum AppShortcuts {
       title: "Select Terminal Tab 9",
       scope: .configurableAppAction,
       shortcut: selectTerminalTab9
-    ),
-    .init(
-      id: CommandID.selectTerminalTab0,
-      title: "Select Terminal Tab 0",
-      scope: .configurableAppAction,
-      shortcut: selectTerminalTab0
     ),
     .init(
       id: CommandID.selectPreviousTerminalTab,
@@ -674,7 +653,6 @@ enum AppShortcuts {
     (CommandID.selectTerminalTab7, "goto_tab:7"),
     (CommandID.selectTerminalTab8, "goto_tab:8"),
     (CommandID.selectTerminalTab9, "goto_tab:9"),
-    (CommandID.selectTerminalTab0, "goto_tab:10"),
     (CommandID.selectPreviousTerminalTab, "previous_tab"),
     (CommandID.selectNextTerminalTab, "next_tab"),
     (CommandID.selectPreviousTerminalPane, "goto_split:previous"),
@@ -745,7 +723,6 @@ enum AppShortcuts {
     selectWorktree7,
     selectWorktree8,
     selectWorktree9,
-    selectWorktree0,
     selectTerminalTab1,
     selectTerminalTab2,
     selectTerminalTab3,
@@ -755,7 +732,6 @@ enum AppShortcuts {
     selectTerminalTab7,
     selectTerminalTab8,
     selectTerminalTab9,
-    selectTerminalTab0,
     selectPreviousTerminalTab,
     selectNextTerminalTab,
     selectPreviousTerminalPane,

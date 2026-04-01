@@ -143,7 +143,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var onKeyInput: (() -> Void)?
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
-  var onResetFontSizeShortcut: (() -> Void)?
+  var onFontSizeShortcut: (() -> Void)?
 
   private var accessibilityPaneIndexHelp: String?
 
@@ -1014,7 +1014,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     guard event.type == .keyDown else { return false }
-    let isResetFontSizeShortcut = matchesBindingShortcut(event: event, action: "reset_font_size")
+    let isFontSizeShortcut = matchesFontSizeShortcut(event: event)
     guard let surface else { return false }
     guard focused else { return false }
 
@@ -1033,8 +1033,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
         return true
       }
       keyDown(with: event)
-      if isResetFontSizeShortcut {
-        onResetFontSizeShortcut?()
+      if isFontSizeShortcut {
+        onFontSizeShortcut?()
       }
       // Ghostty handled paste internally; broadcast the pasted text to followers.
       if onCommittedText != nil,
@@ -1067,10 +1067,16 @@ final class GhosttySurfaceView: NSView, Identifiable {
       return false
     }
     keyDown(with: finalEvent)
-    if isResetFontSizeShortcut {
-      onResetFontSizeShortcut?()
+    if isFontSizeShortcut {
+      onFontSizeShortcut?()
     }
     return true
+  }
+
+  private func matchesFontSizeShortcut(event: NSEvent) -> Bool {
+    matchesBindingShortcut(event: event, action: "reset_font_size")
+      || matchesBindingShortcut(event: event, action: "increase_font_size:1")
+      || matchesBindingShortcut(event: event, action: "decrease_font_size:1")
   }
 
   private func matchesBindingShortcut(event: NSEvent, action: String) -> Bool {
