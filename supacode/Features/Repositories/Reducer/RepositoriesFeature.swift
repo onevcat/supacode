@@ -461,7 +461,7 @@ struct RepositoriesFeature {
           selectedWorktree: selectedWorktree
         )
         var allEffects: [Effect<Action>] = []
-        if repositoriesChanged {
+        if repositoriesChanged || wasRestoringSnapshot {
           allEffects.append(.send(.delegate(.repositoriesChanged(state.repositories))))
         }
         if selectionChanged {

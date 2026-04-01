@@ -67,6 +67,34 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func repositoriesLoadedEmitsChangedDelegateWhenTransitioningFromRestoring() async {
+    let worktree = makeWorktree(id: "/tmp/repo/main", name: "main")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.snapshotPersistencePhase = .restoring
+
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [repository.rootURL],
+        animated: false
+      )
+    ) {
+      $0.isRefreshingWorktrees = false
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    // Even though repos didn't change, the delegate must fire because we
+    // transitioned from .restoring → .active. Layout restore depends on
+    // receiving repositoriesChanged while phase is .active.
+    await store.receive(\.delegate.repositoriesChanged)
+  }
+
   @Test func taskRestoresRepositorySnapshotBeforeLiveRefreshCompletes() async {
     let repoRoot = "/tmp/repo"
     let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
@@ -114,6 +142,9 @@ struct RepositoriesFeatureTests {
     await store.receive(\.repositoriesLoaded) {
       $0.snapshotPersistencePhase = .active
     }
+    // After the fix, repositoriesLoaded also emits repositoriesChanged
+    // when transitioning from .restoring → .active (even if repos are identical).
+    await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
   }
 

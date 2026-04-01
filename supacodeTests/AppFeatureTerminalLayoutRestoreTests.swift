@@ -43,6 +43,45 @@ struct AppFeatureTerminalLayoutRestoreTests {
     )
   }
 
+  @Test(.dependencies) func repositoriesChangedDuringRestoringPhaseDoesNotTriggerRestore() async {
+    let worktree = makeWorktree()
+    let repository = makeRepository(worktrees: [worktree])
+    var repositoriesState = RepositoriesFeature.State(repositories: [repository])
+    repositoriesState.snapshotPersistencePhase = .restoring
+    var settings = SettingsFeature.State()
+    settings.restoreTerminalLayoutOnLaunch = true
+    let sentCommands = LockIsolated<[TerminalClient.Command]>([])
+
+    let store = TestStore(
+      initialState: AppFeature.State(repositories: repositoriesState, settings: settings)
+    ) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sentCommands.withValue { $0.append(command) }
+      }
+      $0.worktreeInfoWatcher.send = { _ in }
+    }
+    store.exhaustivity = .off
+
+    // repositoriesChanged arrives while phase is still .restoring (from snapshot load).
+    // Layout restore must NOT trigger yet — only after phase becomes .active.
+    await store.send(.repositories(.delegate(.repositoriesChanged([repository]))))
+    await store.finish()
+
+    #expect(
+      sentCommands.value.contains {
+        if case .restoreLayoutSnapshot = $0 {
+          return true
+        }
+        return false
+      } == false
+    )
+    // launchRestoreMode should remain .restoreLayout so the next repositoriesChanged
+    // (after phase → .active) still has a chance to trigger the restore.
+    #expect(store.state.launchRestoreMode == .restoreLayout)
+  }
+
   @Test(.dependencies) func repositoriesChangedSkipsRestoreWhenDisabled() async {
     let worktree = makeWorktree()
     let repository = makeRepository(worktrees: [worktree])
