@@ -26,6 +26,8 @@ struct TerminalClient {
     case setCommandFinishedNotification(enabled: Bool, threshold: Int)
     case setCanvasMode(Bool)
     case setSelectedWorktreeID(Worktree.ID?)
+    case saveLayoutSnapshot
+    case restoreLayoutSnapshot(worktrees: [Worktree])
   }
 
   enum Event: Equatable {
@@ -39,6 +41,7 @@ struct TerminalClient {
     case commandPaletteToggleRequested(worktreeID: Worktree.ID)
     case setupScriptConsumed(worktreeID: Worktree.ID)
     case fontSizeChanged(Float32?)
+    case layoutRestored(selectedWorktreeID: Worktree.ID?)
   }
 }
 

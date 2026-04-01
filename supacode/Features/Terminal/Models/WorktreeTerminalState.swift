@@ -5,6 +5,8 @@ import GhosttyKit
 import Observation
 import Sharing
 
+private let terminalStateLogger = SupaLogger("TerminalState")
+
 @MainActor
 @Observable
 final class WorktreeTerminalState {
@@ -554,6 +556,148 @@ final class WorktreeTerminalState {
     tabManager.closeAll()
   }
 
+  func makeLayoutSnapshotWorktree() -> TerminalLayoutSnapshotPayload.SnapshotWorktree? {
+    terminalStateLogger.info(
+      "[LayoutRestore] makeSnapshot: worktree=\(worktree.id) tabs=\(tabManager.tabs.count)"
+    )
+    guard !tabManager.tabs.isEmpty else {
+      terminalStateLogger.info("[LayoutRestore] makeSnapshot: no tabs, returning nil")
+      return nil
+    }
+
+    var snapshotTabs: [TerminalLayoutSnapshotPayload.SnapshotTab] = []
+    snapshotTabs.reserveCapacity(tabManager.tabs.count)
+    for tab in tabManager.tabs {
+      guard let tree = trees[tab.id], let root = tree.root else {
+        terminalStateLogger.warning(
+          "[LayoutRestore] makeSnapshot: no tree/root for tab \(tab.id.rawValue.uuidString)"
+        )
+        return nil
+      }
+      guard let splitRoot = makeLayoutSnapshotNode(from: root) else {
+        terminalStateLogger.warning(
+          "[LayoutRestore] makeSnapshot: failed to snapshot split tree for tab \(tab.id.rawValue.uuidString)"
+        )
+        return nil
+      }
+      snapshotTabs.append(
+        TerminalLayoutSnapshotPayload.SnapshotTab(
+          tabID: tab.id.rawValue.uuidString,
+          splitRoot: splitRoot
+        )
+      )
+    }
+
+    let result = TerminalLayoutSnapshotPayload.SnapshotWorktree(
+      worktreeID: worktree.id,
+      selectedTabID: tabManager.selectedTabId?.rawValue.uuidString,
+      tabs: snapshotTabs
+    )
+    terminalStateLogger.info(
+      "[LayoutRestore] makeSnapshot: success, \(snapshotTabs.count) tab(s) captured"
+    )
+    return result
+  }
+
+  func applyLayoutSnapshot(_ snapshot: TerminalLayoutSnapshotPayload.SnapshotWorktree) -> Bool {
+    terminalStateLogger.info(
+      "[LayoutRestore] applySnapshot: worktree=\(worktree.id)"
+        + " snapshotWorktreeID=\(snapshot.worktreeID) tabs=\(snapshot.tabs.count)"
+    )
+    guard snapshot.worktreeID == worktree.id else {
+      terminalStateLogger.warning("[LayoutRestore] applySnapshot: worktreeID mismatch")
+      return false
+    }
+
+    // Validate snapshot structure before creating any surfaces.
+    var validatedTabs: [(tabID: TerminalTabID, snapshotTab: TerminalLayoutSnapshotPayload.SnapshotTab)] = []
+    var seenTabIDs: Set<TerminalTabID> = []
+    for snapshotTab in snapshot.tabs {
+      guard let tabUUID = UUID(uuidString: snapshotTab.tabID) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: invalid tab UUID \(snapshotTab.tabID)")
+        return false
+      }
+      let tabID = TerminalTabID(rawValue: tabUUID)
+      guard seenTabIDs.insert(tabID).inserted else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: duplicate tab ID \(snapshotTab.tabID)")
+        return false
+      }
+      validatedTabs.append((tabID: tabID, snapshotTab: snapshotTab))
+    }
+
+    let selectedTabID: TerminalTabID?
+    if let selectedTabRaw = snapshot.selectedTabID {
+      guard let selectedUUID = UUID(uuidString: selectedTabRaw) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: invalid selectedTab UUID \(selectedTabRaw)")
+        return false
+      }
+      let candidate = TerminalTabID(rawValue: selectedUUID)
+      guard seenTabIDs.contains(candidate) else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: selectedTab not in restored tabs")
+        return false
+      }
+      selectedTabID = candidate
+    } else {
+      selectedTabID = validatedTabs.first?.tabID
+    }
+
+    // Close existing surfaces BEFORE creating new ones so new surfaces
+    // don't get destroyed by closeAllSurfaces().
+    terminalStateLogger.info("[LayoutRestore] applySnapshot: closing existing surfaces before restore")
+    closeAllSurfaces()
+
+    // Now create new surfaces into the clean state.
+    var restoredTabs: [TerminalTabItem] = []
+    var restoredTrees: [TerminalTabID: SplitTree<GhosttySurfaceView>] = [:]
+    var restoredFocusedSurfaceIDs: [TerminalTabID: UUID] = [:]
+
+    for (index, entry) in validatedTabs.enumerated() {
+      terminalStateLogger.info(
+        "[LayoutRestore] applySnapshot: restoring tab[\(index)] id=\(entry.snapshotTab.tabID)"
+      )
+      guard
+        let rootNode = restoreSplitNode(from: entry.snapshotTab.splitRoot, tabID: entry.tabID, isRoot: true)
+      else {
+        terminalStateLogger.warning("[LayoutRestore] applySnapshot: restoreSplitNode failed for tab[\(index)]")
+        closeAllSurfaces()
+        return false
+      }
+      let tree = SplitTree<GhosttySurfaceView>.restored(root: rootNode)
+      restoredTrees[entry.tabID] = tree
+      restoredFocusedSurfaceIDs[entry.tabID] = rootNode.leftmostLeaf().id
+      restoredTabs.append(
+        TerminalTabItem(
+          id: entry.tabID,
+          title: "\(worktree.name) \(index + 1)",
+          icon: "terminal"
+        )
+      )
+    }
+
+    trees = restoredTrees
+    focusedSurfaceIdByTab = restoredFocusedSurfaceIDs
+    tabIsRunningById = Dictionary(uniqueKeysWithValues: restoredTabs.map { ($0.id, false) })
+    tabManager.tabs = restoredTabs
+    tabManager.selectedTabId = selectedTabID
+    setRunScriptTabId(nil)
+
+    // Explicitly unfocus all restored surfaces so only the focused one blinks.
+    for surface in surfaces.values {
+      surface.focusDidChange(false)
+    }
+    if let selectedTabID {
+      focusSurface(in: selectedTabID)
+    } else {
+      lastEmittedFocusSurfaceId = nil
+    }
+    emitTaskStatusIfChanged()
+    terminalStateLogger.info(
+      "[LayoutRestore] applySnapshot: success, restored \(restoredTabs.count) tab(s)"
+        + " selectedTab=\(selectedTabID?.rawValue.uuidString ?? "nil")"
+    )
+    return true
+  }
+
   func setNotificationsEnabled(_ enabled: Bool) {
     notificationsEnabled = enabled
     if !enabled {
@@ -647,6 +791,7 @@ final class WorktreeTerminalState {
     tabId: TerminalTabID,
     initialInput: String?,
     inheritingFromSurfaceId: UUID?,
+    workingDirectoryOverride: URL? = nil,
     context: ghostty_surface_context_e
   ) -> GhosttySurfaceView {
     let inherited = inheritedSurfaceConfig(fromSurfaceId: inheritingFromSurfaceId, context: context)
@@ -657,7 +802,7 @@ final class WorktreeTerminalState {
     )
     let view = GhosttySurfaceView(
       runtime: runtime,
-      workingDirectory: inherited.workingDirectory ?? worktree.workingDirectory,
+      workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
       context: context
@@ -756,6 +901,28 @@ final class WorktreeTerminalState {
       return inheritedFontSize ?? defaultFontSize
     }
     return defaultFontSize
+  }
+
+  static func resolveSnapshotWorkingDirectory(
+    from snapshotPath: String?,
+    worktreeRoot: URL,
+    fileManager: FileManager = .default
+  ) -> URL? {
+    guard let snapshotPath,
+      let normalizedPath = PathPolicy.normalizePath(snapshotPath, relativeTo: worktreeRoot)
+    else {
+      return nil
+    }
+
+    let normalizedURL = URL(fileURLWithPath: normalizedPath).standardizedFileURL
+    var isDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: normalizedPath, isDirectory: &isDirectory), isDirectory.boolValue else {
+      return nil
+    }
+    guard PathPolicy.contains(normalizedURL, in: worktreeRoot) else {
+      return nil
+    }
+    return normalizedURL
   }
 
   private struct InheritedSurfaceConfig: Equatable {
@@ -907,6 +1074,105 @@ final class WorktreeTerminalState {
 
   /// How recently the user must have typed for us to consider the exit user-initiated.
   static let recentInteractionWindow: Duration = .seconds(3)
+
+  private func makeLayoutSnapshotNode(
+    from node: SplitTree<GhosttySurfaceView>.Node
+  ) -> TerminalLayoutSnapshotPayload.SnapshotSplitNode? {
+    switch node {
+    case .leaf(let view):
+      let cwdPath = inheritedSurfaceConfig(
+        fromSurfaceId: view.id,
+        context: GHOSTTY_SURFACE_CONTEXT_TAB
+      ).workingDirectory?.path(percentEncoded: false)
+      return .leaf(surfaceID: view.id.uuidString, cwdPath: cwdPath)
+    case .split(let split):
+      guard let left = makeLayoutSnapshotNode(from: split.left) else {
+        return nil
+      }
+      guard let right = makeLayoutSnapshotNode(from: split.right) else {
+        return nil
+      }
+      return .split(
+        direction: snapshotSplitDirection(from: split.direction),
+        ratio: split.ratio,
+        children: [left, right]
+      )
+    }
+  }
+
+  private func restoreSplitNode(
+    from snapshotNode: TerminalLayoutSnapshotPayload.SnapshotSplitNode,
+    tabID: TerminalTabID,
+    isRoot: Bool
+  ) -> SplitTree<GhosttySurfaceView>.Node? {
+    switch snapshotNode.kind {
+    case .leaf:
+      guard let surfaceID = snapshotNode.surfaceID,
+        !surfaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      else {
+        return nil
+      }
+      let context: ghostty_surface_context_e = isRoot ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
+      let restoredWorkingDirectory = Self.resolveSnapshotWorkingDirectory(
+        from: snapshotNode.cwdPath,
+        worktreeRoot: worktree.workingDirectory
+      )
+      let view = createSurface(
+        tabId: tabID,
+        initialInput: nil,
+        inheritingFromSurfaceId: nil,
+        workingDirectoryOverride: restoredWorkingDirectory,
+        context: context
+      )
+      return .leaf(view: view)
+    case .split:
+      guard let direction = snapshotNode.direction else {
+        return nil
+      }
+      guard let ratio = snapshotNode.ratio, ratio > 0, ratio < 1 else {
+        return nil
+      }
+      guard let children = snapshotNode.children, children.count == 2 else {
+        return nil
+      }
+      guard let left = restoreSplitNode(from: children[0], tabID: tabID, isRoot: false) else {
+        return nil
+      }
+      guard let right = restoreSplitNode(from: children[1], tabID: tabID, isRoot: false) else {
+        return nil
+      }
+      return .split(
+        .init(
+          direction: splitDirection(from: direction),
+          ratio: ratio,
+          left: left,
+          right: right
+        )
+      )
+    }
+  }
+
+  private func snapshotSplitDirection(
+    from direction: SplitTree<GhosttySurfaceView>.Direction
+  ) -> TerminalLayoutSnapshotSplitDirection {
+    switch direction {
+    case .horizontal:
+      .horizontal
+    case .vertical:
+      .vertical
+    }
+  }
+
+  private func splitDirection(
+    from direction: TerminalLayoutSnapshotSplitDirection
+  ) -> SplitTree<GhosttySurfaceView>.Direction {
+    switch direction {
+    case .horizontal:
+      .horizontal
+    case .vertical:
+      .vertical
+    }
+  }
 
   func recordKeyInput(forSurfaceID surfaceId: UUID) {
     lastKeyInputTimeBySurface[surfaceId] = .now

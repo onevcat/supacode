@@ -1,3 +1,5 @@
+import ConcurrencyExtras
+import DependenciesTestSupport
 import Foundation
 import Testing
 
@@ -319,6 +321,63 @@ struct WorktreeTerminalManagerTests {
     #expect(manager.hasUnseenNotifications(for: worktree.id) == false)
   }
 
+  @Test func restoreLayoutSnapshotFailClosedClearsSnapshotWhenWorktreeMissing() async {
+    let clearCount = LockIsolated(0)
+    let snapshot = TerminalLayoutSnapshotPayload(
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: "/tmp/repo/wt-1",
+          selectedTabID: "F96839F5-1371-4841-9E41-49124D918A67",
+          tabs: [
+            TerminalLayoutSnapshotPayload.SnapshotTab(
+              tabID: "F96839F5-1371-4841-9E41-49124D918A67",
+              splitRoot: .leaf(surfaceID: "9B2F6D8C-44A4-42C5-8F9E-962108301901")
+            ),
+          ]
+        ),
+      ]
+    )
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { snapshot },
+        saveSnapshot: { _ in true },
+        clearSnapshot: {
+          clearCount.withValue { $0 += 1 }
+          return true
+        }
+      )
+    )
+
+    await manager.restoreLayoutSnapshot(from: [])
+
+    #expect(clearCount.value == 1)
+  }
+
+  @Test func persistLayoutSnapshotWithoutTabsClearsSnapshot() async {
+    let clearCount = LockIsolated(0)
+    let saveCount = LockIsolated(0)
+    let manager = WorktreeTerminalManager(
+      runtime: GhosttyRuntime(),
+      layoutPersistence: TerminalLayoutPersistenceClient(
+        loadSnapshot: { nil },
+        saveSnapshot: { _ in
+          saveCount.withValue { $0 += 1 }
+          return true
+        },
+        clearSnapshot: {
+          clearCount.withValue { $0 += 1 }
+          return true
+        }
+      )
+    )
+
+    await manager.persistLayoutSnapshot()
+
+    #expect(saveCount.value == 0)
+    #expect(clearCount.value == 1)
+  }
+
   private func makeWorktree() -> Worktree {
     Worktree(
       id: "/tmp/repo/wt-1",
@@ -350,4 +409,5 @@ struct WorktreeTerminalManagerTests {
       isRead: isRead
     )
   }
+
 }

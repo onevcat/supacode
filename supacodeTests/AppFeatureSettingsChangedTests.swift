@@ -100,4 +100,17 @@ struct AppFeatureSettingsChangedTests {
       "⌘;"
     )
   }
+
+  @Test(.dependencies) func clearTerminalLayoutSnapshotShowsSuccessToast() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(.settings(.delegate(.terminalLayoutSnapshotCleared(success: true))))
+    await store.receive(\.repositories.showToast) {
+      $0.repositories.statusToast = .success("Saved terminal layout cleared")
+    }
+    await store.skipInFlightEffects()
+  }
 }

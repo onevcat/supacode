@@ -178,11 +178,7 @@ nonisolated enum RepositoryPathNormalizer {
     var normalized: [String] = []
     normalized.reserveCapacity(paths.count)
     for path in paths {
-      let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { continue }
-      let resolved = URL(fileURLWithPath: trimmed)
-        .standardizedFileURL
-        .path(percentEncoded: false)
+      guard let resolved = PathPolicy.normalizePath(path, resolvingSymlinks: false) else { continue }
       if seen.insert(resolved).inserted {
         normalized.append(resolved)
       }

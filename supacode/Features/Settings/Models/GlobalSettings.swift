@@ -18,6 +18,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var automaticallyArchiveMergedWorktrees: Bool
   var promptForWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
+  var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
   var keybindingUserOverrides: KeybindingUserOverrideStore
 
@@ -41,6 +42,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     automaticallyArchiveMergedWorktrees: false,
     promptForWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
+    restoreTerminalLayoutOnLaunch: false,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty
   )
@@ -65,6 +67,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     automaticallyArchiveMergedWorktrees: Bool,
     promptForWorktreeCreation: Bool,
     defaultWorktreeBaseDirectoryPath: String? = nil,
+    restoreTerminalLayoutOnLaunch: Bool = false,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty
   ) {
@@ -87,6 +90,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
+    self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
   }
@@ -144,6 +148,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     defaultWorktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .defaultWorktreeBaseDirectoryPath)
       ?? Self.default.defaultWorktreeBaseDirectoryPath
+    restoreTerminalLayoutOnLaunch =
+      try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
+      ?? Self.default.restoreTerminalLayoutOnLaunch
     terminalFontSize =
       try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
       ?? Self.default.terminalFontSize

@@ -89,7 +89,7 @@ struct RepositoryPersistenceClientTests {
       repositoryRoots: ["/tmp/repo-a", "/tmp/repo-b/../repo-b"]
     )
 
-    try withDependencies {
+    withDependencies {
       $0.settingsFileStorage = storage.storage
     } operation: {
       @Shared(.settingsFile) var settings: SettingsFile
@@ -156,6 +156,46 @@ struct RepositoryPersistenceClientTests {
     let restored = payload.restoreRepositories { path in
       path == repoRoot
     }
+
+    #expect(restored == nil)
+  }
+
+  @Test func repositorySnapshotPayloadRejectsTooManyRepositories() {
+    let repositories = (0..<RepositorySnapshotCachePayload.maxRepositories + 1).map { index in
+      Repository(
+        id: "/tmp/repo-\(index)",
+        rootURL: URL(fileURLWithPath: "/tmp/repo-\(index)"),
+        name: "repo-\(index)",
+        worktrees: IdentifiedArray()
+      )
+    }
+
+    let payload = RepositorySnapshotCachePayload(repositories: repositories)
+    let restored = payload.restoreRepositories { _ in true }
+
+    #expect(restored == nil)
+  }
+
+  @Test func repositorySnapshotPayloadRejectsTooManyWorktreesPerRepository() {
+    let repoRoot = "/tmp/repo"
+    let worktrees = (0..<RepositorySnapshotCachePayload.maxWorktreesPerRepository + 1).map { index in
+      Worktree(
+        id: "\(repoRoot)/wt-\(index)",
+        name: "wt-\(index)",
+        detail: ".",
+        workingDirectory: URL(fileURLWithPath: "\(repoRoot)/wt-\(index)"),
+        repositoryRootURL: URL(fileURLWithPath: repoRoot)
+      )
+    }
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: URL(fileURLWithPath: repoRoot),
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: worktrees)
+    )
+
+    let payload = RepositorySnapshotCachePayload(repositories: [repository])
+    let restored = payload.restoreRepositories { _ in true }
 
     #expect(restored == nil)
   }

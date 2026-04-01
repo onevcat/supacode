@@ -100,6 +100,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 - Trailing commas are mandatory (enforced by `.swiftlint.yml`)
 - SwiftLint runs in strict mode; never disable lint rules without permission
 - Custom SwiftLint rule: `store_state_mutation_in_views` — do not mutate `store.*` directly in view files; send actions instead
+- Before creating a PR, run `make lint`.
 
 ## UX Standards
 

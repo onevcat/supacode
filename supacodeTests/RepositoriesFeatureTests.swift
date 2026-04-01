@@ -27,6 +27,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.repositoriesLoaded) {
       $0.isRefreshingWorktrees = false
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
   }
 
@@ -62,6 +63,7 @@ struct RepositoriesFeatureTests {
     ) {
       $0.isRefreshingWorktrees = false
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
   }
 
@@ -85,7 +87,9 @@ struct RepositoriesFeatureTests {
       }
     }
 
-    await store.send(.task)
+    await store.send(.task) {
+      $0.snapshotPersistencePhase = .restoring
+    }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreeIDsLoaded)
     await store.receive(\.repositoryOrderIDsLoaded)
@@ -107,7 +111,9 @@ struct RepositoriesFeatureTests {
 
     await liveRefreshGate.resume()
 
-    await store.receive(\.repositoriesLoaded)
+    await store.receive(\.repositoriesLoaded) {
+      $0.snapshotPersistencePhase = .active
+    }
     await store.finish()
   }
 
@@ -125,7 +131,9 @@ struct RepositoriesFeatureTests {
       $0.gitClient.worktrees = { _ in [worktree] }
     }
 
-    await store.send(.task)
+    await store.send(.task) {
+      $0.snapshotPersistencePhase = .restoring
+    }
     await store.receive(\.pinnedWorktreeIDsLoaded)
     await store.receive(\.archivedWorktreeIDsLoaded)
     await store.receive(\.repositoryOrderIDsLoaded)
@@ -140,6 +148,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -182,6 +191,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [gitRepository, plainRepository]
       $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -223,6 +233,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [upgradedRepository]
       $0.repositoryRoots = [URL(fileURLWithPath: root)]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -269,6 +280,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [plainRepository]
       $0.repositoryRoots = [URL(fileURLWithPath: root)]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -312,6 +324,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [downgradedRepository]
       $0.repositoryRoots = [URL(fileURLWithPath: root)]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -352,6 +365,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [repository]
       $0.repositoryRoots = [URL(fileURLWithPath: root)]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -412,6 +426,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [gitRepository, plainRepository]
       $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -479,6 +494,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryRoots = [repoRoot].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
       $0.alert = expectedAlert
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -487,6 +503,41 @@ struct RepositoriesFeatureTests {
       [PersistedRepositoryEntry(path: repoRoot, kind: .git)]
     ]
     #expect(savedEntries.value == expectedSavedEntries)
+  }
+
+  @Test func repositoriesLoadedSkipsRepositorySnapshotPersistenceWhileRestoring() async {
+    let repoRoot = "/tmp/repo"
+    let worktree = makeWorktree(id: "\(repoRoot)/main", name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [worktree])
+    let savedSnapshots = LockIsolated<[[Repository]]>([])
+    var state = RepositoriesFeature.State()
+    state.snapshotPersistencePhase = .restoring
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.saveRepositorySnapshot = { repositories in
+        savedSnapshots.withValue { $0.append(repositories) }
+      }
+    }
+
+    await store.send(
+      .repositoriesLoaded(
+        [repository],
+        failures: [],
+        roots: [URL(fileURLWithPath: repoRoot)],
+        animated: false
+      )
+    ) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
+      $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+
+    #expect(savedSnapshots.value.isEmpty)
   }
 
   @Test func repositoriesLoadedPersistsRepositorySnapshotOnSuccess() async {
@@ -514,6 +565,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [repository]
       $0.repositoryRoots = [URL(fileURLWithPath: repoRoot)]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -2185,6 +2237,7 @@ struct RepositoriesFeatureTests {
     ) {
       $0.repositories = [updatedRepository]
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -2213,6 +2266,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [updatedRepository]
       $0.selection = nil
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)
@@ -2266,6 +2320,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.reloadRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
   }
 
@@ -2301,6 +2356,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.reloadRepositories)
     await store.receive(\.repositoriesLoaded) {
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
   }
 
@@ -2348,6 +2404,7 @@ struct RepositoriesFeatureTests {
     await store.receive(\.delegate.worktreeCreated)
     await store.receive(\.repositoriesLoaded) {
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
   }
 
@@ -3149,6 +3206,7 @@ struct RepositoriesFeatureTests {
       $0.repositories = [repoA, repoB]
       $0.repositoryRoots = [repoRootA, repoRootB].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.finish()
@@ -3199,6 +3257,7 @@ struct RepositoriesFeatureTests {
       $0.selection = .worktree(worktreeB.id)
       $0.shouldRestoreLastFocusedWorktree = false
       $0.isInitialLoadComplete = true
+      $0.snapshotPersistencePhase = .active
     }
     await store.receive(\.delegate.repositoriesChanged)
     await store.receive(\.delegate.selectedWorktreeChanged)

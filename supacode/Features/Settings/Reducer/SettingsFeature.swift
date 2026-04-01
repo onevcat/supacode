@@ -24,6 +24,7 @@ struct SettingsFeature {
     var automaticallyArchiveMergedWorktrees: Bool
     var promptForWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
+    var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var selection: SettingsSection? = .general
@@ -52,6 +53,7 @@ struct SettingsFeature {
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
+      restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
       terminalFontSize = settings.terminalFontSize
       keybindingUserOverrides = settings.keybindingUserOverrides
     }
@@ -79,6 +81,7 @@ struct SettingsFeature {
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
         ),
+        restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides
       )
@@ -92,6 +95,7 @@ struct SettingsFeature {
     case setSystemNotificationsEnabled(Bool)
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
+    case clearTerminalLayoutSnapshotButtonTapped
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
@@ -108,10 +112,12 @@ struct SettingsFeature {
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
+    case terminalLayoutSnapshotCleared(success: Bool)
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
+  @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -157,6 +163,7 @@ struct SettingsFeature {
         state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
+        state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
         state.repositorySettings?.globalDefaultWorktreeBaseDirectoryPath =
@@ -192,6 +199,12 @@ struct SettingsFeature {
           persist(state, captureAnalytics: false, emitSettingsChanged: false),
           .send(.delegate(.terminalFontSizeChanged(fontSize)))
         )
+
+      case .clearTerminalLayoutSnapshotButtonTapped:
+        return .run { send in
+          let success = await terminalLayoutPersistence.clearSnapshot()
+          await send(.delegate(.terminalLayoutSnapshotCleared(success: success)))
+        }
 
       case .showNotificationPermissionAlert(let errorMessage):
         let message: String

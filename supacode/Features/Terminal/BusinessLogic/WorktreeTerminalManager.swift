@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import Sharing
 
@@ -7,6 +8,7 @@ private let terminalLogger = SupaLogger("Terminal")
 @Observable
 final class WorktreeTerminalManager {
   private let runtime: GhosttyRuntime
+  private let layoutPersistence: TerminalLayoutPersistenceClient
   private var states: [Worktree.ID: WorktreeTerminalState] = [:]
   private var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
@@ -21,8 +23,13 @@ final class WorktreeTerminalManager {
   /// Used by toggleCanvas to know which worktree to return to.
   var canvasFocusedWorktreeID: Worktree.ID?
 
-  init(runtime: GhosttyRuntime, preferredFontSize: Float32? = nil) {
+  init(
+    runtime: GhosttyRuntime,
+    preferredFontSize: Float32? = nil,
+    layoutPersistence: TerminalLayoutPersistenceClient = .liveValue
+  ) {
     self.runtime = runtime
+    self.layoutPersistence = layoutPersistence
     self.preferredFontSize = preferredFontSize
     baselineFontSize = runtime.defaultFontSize()
   }
@@ -127,6 +134,12 @@ final class WorktreeTerminalManager {
       }
       selectedWorktreeID = id
       terminalLogger.info("Selected worktree \(id ?? "nil")")
+    case .saveLayoutSnapshot:
+      terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")
+      Task { await persistLayoutSnapshot() }
+    case .restoreLayoutSnapshot(let worktrees):
+      terminalLogger.info("[LayoutRestore] received restoreLayoutSnapshot command, worktrees=\(worktrees.count)")
+      Task { await restoreLayoutSnapshot(from: worktrees) }
     default:
       return
     }
@@ -381,5 +394,126 @@ final class WorktreeTerminalManager {
       lastNotificationIndicatorCount = count
       emit(.notificationIndicatorChanged(count: count))
     }
+  }
+
+  func persistLayoutSnapshot() async {
+    guard let payload = makeLayoutSnapshotPayload() else {
+      terminalLogger.info("[LayoutRestore] persist: no active states, clearing snapshot")
+      _ = await layoutPersistence.clearSnapshot()
+      return
+    }
+    terminalLogger.info("[LayoutRestore] persist: saving \(payload.worktrees.count) worktree(s)")
+    let saved = await layoutPersistence.saveSnapshot(payload)
+    terminalLogger.info("[LayoutRestore] persist: save result=\(saved)")
+  }
+
+  func persistLayoutSnapshotSync() {
+    guard let payload = makeLayoutSnapshotPayload() else {
+      terminalLogger.info("[LayoutRestore] persistSync: no active states, clearing snapshot")
+      discardTerminalLayoutSnapshot(at: SupacodePaths.terminalLayoutSnapshotURL, fileManager: .default)
+      return
+    }
+    terminalLogger.info("[LayoutRestore] persistSync: saving \(payload.worktrees.count) worktree(s)")
+    let saved = saveTerminalLayoutSnapshot(
+      payload,
+      at: SupacodePaths.terminalLayoutSnapshotURL,
+      cacheDirectory: SupacodePaths.cacheDirectory,
+      fileManager: .default
+    )
+    terminalLogger.info("[LayoutRestore] persistSync: save result=\(saved)")
+  }
+
+  func restoreLayoutSnapshot(from worktrees: [Worktree]) async {
+    terminalLogger.info("[LayoutRestore] restore: loading snapshot from disk")
+    guard let payload = await layoutPersistence.loadSnapshot() else {
+      terminalLogger.info("[LayoutRestore] restore: no snapshot found on disk, skipping")
+      return
+    }
+    terminalLogger.info(
+      "[LayoutRestore] restore: loaded snapshot with \(payload.worktrees.count) worktree(s),"
+        + " available worktrees=\(worktrees.count)"
+    )
+    for (index, snapshot) in payload.worktrees.enumerated() {
+      terminalLogger.info(
+        "[LayoutRestore] restore: snapshot[\(index)] worktreeID=\(snapshot.worktreeID)"
+          + " tabs=\(snapshot.tabs.count) selectedTab=\(snapshot.selectedTabID ?? "nil")"
+      )
+    }
+    for (index, worktree) in worktrees.enumerated() {
+      terminalLogger.info("[LayoutRestore] restore: available[\(index)] id=\(worktree.id) name=\(worktree.name)")
+    }
+    let didRestore = applyLayoutSnapshotPayload(payload, availableWorktrees: worktrees)
+    terminalLogger.info("[LayoutRestore] restore: applyResult=\(didRestore)")
+    if didRestore {
+      terminalLogger.info(
+        "[LayoutRestore] restore: emitting layoutRestored selectedWorktreeID=\(payload.selectedWorktreeID ?? "nil")"
+      )
+      emit(.layoutRestored(selectedWorktreeID: payload.selectedWorktreeID))
+    } else {
+      terminalLogger.info("[LayoutRestore] restore: clearing invalid snapshot")
+      _ = await layoutPersistence.clearSnapshot()
+    }
+  }
+
+  private func makeLayoutSnapshotPayload() -> TerminalLayoutSnapshotPayload? {
+    let activeStates = activeWorktreeStates.sorted { $0.worktreeID < $1.worktreeID }
+    terminalLogger.info(
+      "[LayoutRestore] makePayload: activeWorktreeStates=\(activeStates.count)"
+        + " totalStates=\(states.count)"
+    )
+    guard !activeStates.isEmpty else {
+      return nil
+    }
+
+    var snapshotWorktrees: [TerminalLayoutSnapshotPayload.SnapshotWorktree] = []
+    snapshotWorktrees.reserveCapacity(activeStates.count)
+    for state in activeStates {
+      guard let snapshot = state.makeLayoutSnapshotWorktree() else {
+        terminalLogger.warning(
+          "[LayoutRestore] makePayload: failed to snapshot worktree \(state.worktreeID)"
+        )
+        return nil
+      }
+      snapshotWorktrees.append(snapshot)
+    }
+    return TerminalLayoutSnapshotPayload(
+      selectedWorktreeID: selectedWorktreeID,
+      worktrees: snapshotWorktrees
+    )
+  }
+
+  private func applyLayoutSnapshotPayload(
+    _ payload: TerminalLayoutSnapshotPayload,
+    availableWorktrees: [Worktree]
+  ) -> Bool {
+    let worktreeByID = Dictionary(uniqueKeysWithValues: availableWorktrees.map { ($0.id, $0) })
+    var restoredStates: [WorktreeTerminalState] = []
+    restoredStates.reserveCapacity(payload.worktrees.count)
+
+    for snapshot in payload.worktrees {
+      guard let worktree = worktreeByID[snapshot.worktreeID] else {
+        terminalLogger.warning(
+          "[LayoutRestore] apply: worktreeID \(snapshot.worktreeID) not found in available worktrees"
+        )
+        for state in restoredStates {
+          state.closeAllSurfaces()
+        }
+        return false
+      }
+      terminalLogger.info("[LayoutRestore] apply: restoring worktree \(worktree.id)")
+      let state = state(for: worktree)
+      guard state.applyLayoutSnapshot(snapshot) else {
+        terminalLogger.warning("[LayoutRestore] apply: applyLayoutSnapshot failed for \(worktree.id)")
+        state.closeAllSurfaces()
+        for restored in restoredStates {
+          restored.closeAllSurfaces()
+        }
+        return false
+      }
+      restoredStates.append(state)
+    }
+
+    terminalLogger.info("[LayoutRestore] apply: successfully restored \(restoredStates.count) worktree(s)")
+    return true
   }
 }

@@ -4,8 +4,33 @@ import Foundation
 import PostHog
 import SwiftUI
 
+private let appLogger = SupaLogger("App")
+
 private enum CancelID {
   static let periodicRefresh = "app.periodicRefresh"
+}
+
+private func makeTerminalRestorableWorktrees(from repositories: [Repository]) -> [Worktree] {
+  var worktrees: [Worktree] = []
+  worktrees.reserveCapacity(repositories.reduce(0) { $0 + max(1, $1.worktrees.count) })
+  for repository in repositories {
+    if repository.capabilities.supportsWorktrees {
+      worktrees.append(contentsOf: repository.worktrees)
+      continue
+    }
+    if repository.capabilities.supportsRunnableFolderActions {
+      worktrees.append(
+        Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+      )
+    }
+  }
+  return worktrees
 }
 
 @Reducer
@@ -25,6 +50,7 @@ struct AppFeature {
     var runScriptStatusByWorktreeID: [Worktree.ID: Bool] = [:]
     var notificationIndicatorCount: Int = 0
     var lastKnownSystemNotificationsEnabled: Bool
+    var launchRestoreMode: LaunchRestoreMode
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -34,6 +60,7 @@ struct AppFeature {
       self.repositories = repositories
       self.settings = settings
       lastKnownSystemNotificationsEnabled = settings.systemNotificationsEnabled
+      launchRestoreMode = settings.restoreTerminalLayoutOnLaunch ? .restoreLayout : .lastFocusedWorktree
     }
   }
 
@@ -122,6 +149,9 @@ struct AppFeature {
     let core = Reduce<State, Action> { state, action in
       switch action {
       case .appLaunched:
+        try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
+        appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
+        state.repositories.launchRestoreMode = state.launchRestoreMode
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
@@ -158,7 +188,12 @@ struct AppFeature {
             .cancellable(id: CancelID.periodicRefresh, cancelInFlight: true)
           )
         case .inactive, .background:
-          return .cancel(id: CancelID.periodicRefresh)
+          var effects: [Effect<Action>] = [.cancel(id: CancelID.periodicRefresh)]
+          if state.settings.restoreTerminalLayoutOnLaunch {
+            appLogger.info("[LayoutRestore] scenePhase=\(String(describing: phase)), saving layout snapshot")
+            effects.append(.run { _ in await terminalClient.send(.saveLayoutSnapshot) })
+          }
+          return .merge(effects)
         @unknown default:
           return .cancel(id: CancelID.periodicRefresh)
         }
@@ -264,11 +299,25 @@ struct AppFeature {
         let ids = state.repositories.terminalStateIDs.subtracting(archivedIDs)
         let recencyIDs = CommandPaletteFeature.recencyRetentionIDs(from: repositories)
         let worktrees = state.repositories.worktreesForInfoWatcher()
+        let shouldRestoreLayout =
+          state.launchRestoreMode == .restoreLayout
+          && state.repositories.snapshotPersistencePhase == .active
+        appLogger.info(
+          "[LayoutRestore] repositoriesChanged: mode=\(String(describing: state.launchRestoreMode))"
+            + " phase=\(String(describing: state.repositories.snapshotPersistencePhase))"
+            + " → shouldRestore=\(shouldRestoreLayout)"
+        )
+        if shouldRestoreLayout {
+          state.launchRestoreMode = .lastFocusedWorktree
+          state.repositories.selection = nil
+        }
         state.runScriptStatusByWorktreeID = state.runScriptStatusByWorktreeID.filter { ids.contains($0.key) }
+        let restorableWorktrees = makeTerminalRestorableWorktrees(from: Array(repositories))
+        appLogger.info("[LayoutRestore] restorableWorktrees count=\(restorableWorktrees.count)")
         if case .repository(let repositoryID)? = state.settings.selection,
           !repositories.contains(where: { $0.id == repositoryID })
         {
-          return .merge(
+          var effects: [Effect<Action>] = [
             .send(.settings(.setSelection(.general))),
             .send(.commandPalette(.pruneRecency(recencyIDs))),
             .run { _ in
@@ -276,18 +325,34 @@ struct AppFeature {
             },
             .run { _ in
               await worktreeInfoWatcher.send(.setWorktrees(worktrees))
-            }
-          )
+            },
+          ]
+          if shouldRestoreLayout {
+            effects.append(
+              .run { _ in
+                await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+              }
+            )
+          }
+          return .merge(effects)
         }
-        return .merge(
+        var effects: [Effect<Action>] = [
           .send(.commandPalette(.pruneRecency(recencyIDs))),
           .run { _ in
             await terminalClient.send(.prune(ids))
           },
           .run { _ in
             await worktreeInfoWatcher.send(.setWorktrees(worktrees))
-          }
-        )
+          },
+        ]
+        if shouldRestoreLayout {
+          effects.append(
+            .run { _ in
+              await terminalClient.send(.restoreLayoutSnapshot(worktrees: restorableWorktrees))
+            }
+          )
+        }
+        return .merge(effects)
 
       case .repositories(.delegate(.openRepositorySettings(let repositoryID))):
         guard state.repositories.repositories.contains(where: { $0.id == repositoryID }) else {
@@ -401,6 +466,19 @@ struct AppFeature {
 
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
+
+      case .settings(.delegate(.terminalLayoutSnapshotCleared(let success))):
+        if success {
+          return .send(.repositories(.showToast(.success("Saved terminal layout cleared"))))
+        }
+        return .send(
+          .repositories(
+            .presentAlert(
+              title: "Unable to clear saved terminal layout",
+              message: "Please check file permissions and try again."
+            )
+          )
+        )
 
       case .openActionSelectionChanged(let action):
         state.openActionSelection = action
@@ -846,6 +924,13 @@ struct AppFeature {
 
       case .terminalEvent(.fontSizeChanged(let fontSize)):
         return .send(.settings(.setTerminalFontSize(fontSize)))
+
+      case .terminalEvent(.layoutRestored(let selectedWorktreeID)):
+        appLogger.info("[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")")
+        if let selectedWorktreeID {
+          return .send(.repositories(.selectWorktree(selectedWorktreeID)))
+        }
+        return .none
 
       case .terminalEvent:
         return .none

@@ -30,6 +30,7 @@ private enum GhosttyCLI {
 @MainActor
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   var appStore: StoreOf<AppFeature>?
+  var terminalManager: WorktreeTerminalManager?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
@@ -48,6 +49,11 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if flag { return true }
     return showMainWindow(from: sender) ? false : true
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
+    terminalManager?.persistLayoutSnapshotSync()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -169,6 +175,7 @@ struct SupacodeApp: App {
       appStore?.send(.requestQuit)
     }
     appDelegate.appStore = appStore
+    appDelegate.terminalManager = terminalManager
     SettingsWindowManager.shared.configure(
       store: appStore,
       ghosttyShortcuts: shortcuts,
