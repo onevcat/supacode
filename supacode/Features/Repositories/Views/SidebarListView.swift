@@ -1,8 +1,10 @@
 import ComposableArchitecture
+import Foundation
 import SwiftUI
 
 struct SidebarListView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
+  @Bindable var remoteGroupsStore: StoreOf<RemoteGroupsFeature>
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
   let terminalManager: WorktreeTerminalManager
@@ -10,11 +12,15 @@ struct SidebarListView: View {
 
   var body: some View {
     let state = store.state
+    let remoteState = remoteGroupsStore.state
     let hotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
     let orderedRoots = state.orderedRepositoryRoots()
     let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
     let selection = Binding<Set<SidebarSelection>>(
       get: {
+        if let remoteSelection = sidebarSelection(from: remoteState.selection) {
+          return [remoteSelection]
+        }
         var nextSelections = sidebarSelections
         if state.isShowingCanvas {
           nextSelections = [.canvas]
@@ -32,20 +38,42 @@ struct SidebarListView: View {
         return nextSelections
       },
       set: { newValue in
-        var nextSelections = newValue
+        let nextSelections = newValue
+        let remoteGroups: [(UUID, String)] = nextSelections.compactMap { selection in
+          guard case .remoteGroup(let endpointID, let group) = selection else { return nil }
+          return (endpointID, group)
+        }
+        let remoteEndpoints: [UUID] = nextSelections.compactMap { selection in
+          guard case .remoteEndpoint(let endpointID) = selection else { return nil }
+          return endpointID
+        }
         let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
           guard case .repository(let repositoryID) = selection else { return nil }
           return repositoryID
         }
 
+        if let (endpointID, group) = remoteGroups.first {
+          sidebarSelections = [.remoteGroup(endpointID: endpointID, group: group)]
+          remoteGroupsStore.send(.selectGroup(endpointID: endpointID, group: group))
+          return
+        }
+
+        if let endpointID = remoteEndpoints.first {
+          sidebarSelections = [.remoteEndpoint(endpointID)]
+          remoteGroupsStore.send(.selectOverview(endpointID))
+          return
+        }
+
         if nextSelections.contains(.canvas) {
           sidebarSelections = [.canvas]
+          remoteGroupsStore.send(.clearSelection)
           store.send(.selectCanvas)
           return
         }
 
         if nextSelections.contains(.archivedWorktrees) {
           sidebarSelections = [.archivedWorktrees]
+          remoteGroupsStore.send(.clearSelection)
           store.send(.selectArchivedWorktrees)
           return
         }
@@ -62,9 +90,11 @@ struct SidebarListView: View {
                 expandedRepoIDs.insert(repositoryID)
               }
             }
+            remoteGroupsStore.send(.clearSelection)
             sidebarSelections = []
           } else {
             sidebarSelections = [.repository(repositoryID)]
+            remoteGroupsStore.send(.clearSelection)
             store.send(.selectRepository(repositoryID))
           }
           return
@@ -73,10 +103,12 @@ struct SidebarListView: View {
         let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
         guard !worktreeIDs.isEmpty else {
           sidebarSelections = []
+          remoteGroupsStore.send(.clearSelection)
           store.send(.selectWorktree(nil))
           return
         }
         sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
+        remoteGroupsStore.send(.clearSelection)
         if let selectedWorktreeID = state.selectedWorktreeID, worktreeIDs.contains(selectedWorktreeID) {
           return
         }
@@ -158,6 +190,7 @@ struct SidebarListView: View {
           store.send(.repositoriesMoved(offsets, destination))
         }
       }
+      RemoteGroupsSectionView(store: remoteGroupsStore)
     }
     .listStyle(.sidebar)
     .scrollIndicators(.never)
@@ -191,7 +224,7 @@ struct SidebarListView: View {
       }
     }
     .safeAreaInset(edge: .bottom) {
-      SidebarFooterView(store: store)
+      SidebarFooterView(store: store, remoteGroupsStore: remoteGroupsStore)
     }
     .dropDestination(for: URL.self) { urls, _ in
       let fileURLs = urls.filter(\.isFileURL)
@@ -220,6 +253,17 @@ struct SidebarListView: View {
       else { return .ignored }
       terminalState.focusAndInsertText(keyPress.characters)
       return .handled
+    }
+  }
+
+  private func sidebarSelection(from remoteSelection: RemoteSelection) -> SidebarSelection? {
+    switch remoteSelection {
+    case .none:
+      return nil
+    case .overview(let endpointID):
+      return .remoteEndpoint(endpointID)
+    case .group(let endpointID, let group):
+      return .remoteGroup(endpointID: endpointID, group: group)
     }
   }
 }

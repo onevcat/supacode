@@ -13,6 +13,7 @@ struct AppFeature {
   @ObservableState
   struct State: Equatable {
     var repositories: RepositoriesFeature.State
+    var remoteGroups = RemoteGroupsFeature.State()
     var settings: SettingsFeature.State
     var updates = UpdatesFeature.State()
     var commandPalette = CommandPaletteFeature.State()
@@ -40,6 +41,7 @@ struct AppFeature {
     case appLaunched
     case scenePhaseChanged(ScenePhase)
     case repositories(RepositoriesFeature.Action)
+    case remoteGroups(RemoteGroupsFeature.Action)
     case settings(SettingsFeature.Action)
     case updates(UpdatesFeature.Action)
     case commandPalette(CommandPaletteFeature.Action)
@@ -660,7 +662,20 @@ struct AppFeature {
       case .alert:
         return .none
 
+      case .repositories(.selectWorktree),
+        .repositories(.selectRepository),
+        .repositories(.selectArchivedWorktrees),
+        .repositories(.selectCanvas),
+        .repositories(.toggleCanvas):
+        guard state.remoteGroups.selection != .none else {
+          return .none
+        }
+        return .send(.remoteGroups(.clearSelection))
+
       case .repositories:
+        return .none
+
+      case .remoteGroups:
         return .none
 
       case .settings:
@@ -804,6 +819,9 @@ struct AppFeature {
     core
     Scope(state: \.repositories, action: \.repositories) {
       RepositoriesFeature()
+    }
+    Scope(state: \.remoteGroups, action: \.remoteGroups) {
+      RemoteGroupsFeature()
     }
     Scope(state: \.settings, action: \.settings) {
       SettingsFeature()

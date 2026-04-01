@@ -3,6 +3,11 @@ import ComposableArchitecture
 import SwiftUI
 
 struct WorktreeDetailView: View {
+  private struct RemoteDetailContext {
+    let endpoint: RemoteEndpoint
+    let group: String?
+  }
+
   private struct ToolbarStateInput {
     let repositories: RepositoriesFeature.State
     let selectedWorktree: Worktree?
@@ -25,6 +30,8 @@ struct WorktreeDetailView: View {
 
   private func detailBody(state: AppFeature.State) -> some View {
     let repositories = state.repositories
+    let remoteDetailContext = resolvedRemoteDetailContext(from: state.remoteGroups)
+    let hasRemoteSelection = remoteDetailContext != nil
     let selectedRow = repositories.selectedRow(for: repositories.selectedWorktreeID)
     let selectedWorktree = repositories.worktree(for: repositories.selectedWorktreeID)
     let selectedTerminalWorktree = repositories.selectedTerminalWorktree
@@ -39,7 +46,8 @@ struct WorktreeDetailView: View {
       repositories: repositories
     )
     let hasActiveTerminalTarget =
-      selectedTerminalWorktree != nil
+      !hasRemoteSelection
+      && selectedTerminalWorktree != nil
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
@@ -52,8 +60,8 @@ struct WorktreeDetailView: View {
     }
     let content = detailContent(
       repositories: repositories,
+      remoteDetailContext: remoteDetailContext,
       loadingInfo: loadingInfo,
-      selectedWorktree: selectedWorktree,
       selectedTerminalWorktree: selectedTerminalWorktree,
       selectedWorktreeSummaries: selectedWorktreeSummaries
     )
@@ -121,10 +129,12 @@ struct WorktreeDetailView: View {
   }
 
   private func toolbarState(input: ToolbarStateInput) -> WorktreeToolbarState? {
-    guard let title = DetailToolbarTitle.forSelection(
-      worktree: input.selectedWorktree,
-      repository: input.repositories.selectedRepository
-    ) else {
+    guard
+      let title = DetailToolbarTitle.forSelection(
+        worktree: input.selectedWorktree,
+        repository: input.repositories.selectedRepository
+      )
+    else {
       return nil
     }
     let pullRequest = input.selectedWorktree.flatMap { input.repositories.worktreeInfo(for: $0.id)?.pullRequest }
@@ -183,15 +193,22 @@ struct WorktreeDetailView: View {
   @ViewBuilder
   private func detailContent(
     repositories: RepositoriesFeature.State,
+    remoteDetailContext: RemoteDetailContext?,
     loadingInfo: WorktreeLoadingInfo?,
-    selectedWorktree: Worktree?,
     selectedTerminalWorktree: Worktree?,
     selectedWorktreeSummaries: [MultiSelectedWorktreeSummary]
   ) -> some View {
-    if repositories.isShowingCanvas {
-      CanvasView(terminalManager: terminalManager, onExitToTab: {
-        store.send(.repositories(.toggleCanvas))
-      })
+    if let remoteDetailContext {
+      RemoteGroupDetailView(
+        endpoint: remoteDetailContext.endpoint,
+        group: remoteDetailContext.group
+      )
+    } else if repositories.isShowingCanvas {
+      CanvasView(
+        terminalManager: terminalManager,
+        onExitToTab: {
+          store.send(.repositories(.toggleCanvas))
+        })
     } else if repositories.isShowingArchivedWorktrees {
       ArchivedWorktreesDetailView(
         store: store.scope(state: \.repositories, action: \.repositories)
@@ -224,6 +241,25 @@ struct WorktreeDetailView: View {
       RepositoryDetailView(repository: selectedRepository)
     } else {
       EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
+    }
+  }
+
+  private func resolvedRemoteDetailContext(
+    from remoteState: RemoteGroupsFeature.State
+  ) -> RemoteDetailContext? {
+    switch remoteState.selection {
+    case .none:
+      return nil
+    case .overview(let endpointID):
+      guard let endpoint = remoteState.endpoints.first(where: { $0.id == endpointID }) else {
+        return nil
+      }
+      return RemoteDetailContext(endpoint: endpoint, group: nil)
+    case .group(let endpointID, let group):
+      guard let endpoint = remoteState.endpoints.first(where: { $0.id == endpointID }) else {
+        return nil
+      }
+      return RemoteDetailContext(endpoint: endpoint, group: group)
     }
   }
 

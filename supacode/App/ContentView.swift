@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
   @Bindable var store: StoreOf<AppFeature>
   @Bindable var repositoriesStore: StoreOf<RepositoriesFeature>
+  @Bindable var remoteGroupsStore: StoreOf<RemoteGroupsFeature>
   let terminalManager: WorktreeTerminalManager
   @Environment(\.scenePhase) private var scenePhase
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
@@ -20,6 +21,7 @@ struct ContentView: View {
   init(store: StoreOf<AppFeature>, terminalManager: WorktreeTerminalManager) {
     self.store = store
     repositoriesStore = store.scope(state: \.repositories, action: \.repositories)
+    remoteGroupsStore = store.scope(state: \.remoteGroups, action: \.remoteGroups)
     self.terminalManager = terminalManager
   }
 
@@ -35,8 +37,12 @@ struct ContentView: View {
     Group {
       if store.repositories.isInitialLoadComplete {
         NavigationSplitView(columnVisibility: $leftSidebarVisibility) {
-          SidebarView(store: repositoriesStore, terminalManager: terminalManager)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+          SidebarView(
+            store: repositoriesStore,
+            remoteGroupsStore: remoteGroupsStore,
+            terminalManager: terminalManager
+          )
+          .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } detail: {
           WorktreeDetailView(store: store, terminalManager: terminalManager)
         }
@@ -75,6 +81,14 @@ struct ContentView: View {
     .sheet(store: repositoriesStore.scope(state: \.$worktreeCreationPrompt, action: \.worktreeCreationPrompt)) {
       promptStore in
       WorktreeCreationPromptView(store: promptStore)
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { remoteGroupsStore.isAddPromptPresented },
+        set: { remoteGroupsStore.send(.setAddPromptPresented($0)) }
+      )
+    ) {
+      RemoteGroupAddPromptView(store: remoteGroupsStore)
     }
     .sheet(isPresented: isRunScriptPromptPresented) {
       RunScriptPromptView(

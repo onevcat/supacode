@@ -4,12 +4,14 @@ import SwiftUI
 
 struct SidebarView: View {
   @Bindable var store: StoreOf<RepositoriesFeature>
+  @Bindable var remoteGroupsStore: StoreOf<RemoteGroupsFeature>
   let terminalManager: WorktreeTerminalManager
   @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) private var collapsedRepositoryIDs: [Repository.ID] = []
   @State private var sidebarSelections: Set<SidebarSelection> = []
 
   var body: some View {
     let state = store.state
+    let remoteState = remoteGroupsStore.state
     let repositoryIDs = Set(state.repositories.map(\.id))
     let expandedRepoIDs = state.expandedRepositoryIDs
     let expandedRepoIDsBinding = expandedRepoIDsBinding(
@@ -25,6 +27,7 @@ struct SidebarView: View {
 
     return SidebarListView(
       store: store,
+      remoteGroupsStore: remoteGroupsStore,
       expandedRepoIDs: expandedRepoIDsBinding,
       sidebarSelections: $sidebarSelections,
       terminalManager: terminalManager
@@ -33,12 +36,40 @@ struct SidebarView: View {
     .focusedValue(\.archiveWorktreeAction, archiveWorktreeAction)
     .focusedValue(\.deleteWorktreeAction, deleteWorktreeAction)
     .focusedSceneValue(\.visibleHotkeyWorktreeRows, visibleHotkeyRows)
-    .onAppear { syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs) }
+    .onAppear {
+      syncSidebarSelections(
+        state: state,
+        remoteState: remoteState,
+        visibleWorktreeIDs: visibleWorktreeIDs
+      )
+    }
     .onChange(of: state.selection) { _, _ in
-      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
+      syncSidebarSelections(
+        state: state,
+        remoteState: remoteState,
+        visibleWorktreeIDs: visibleWorktreeIDs
+      )
     }
     .onChange(of: visibleHotkeyRows.map(\.id)) { _, _ in
-      syncSidebarSelections(state: state, visibleWorktreeIDs: visibleWorktreeIDs)
+      syncSidebarSelections(
+        state: state,
+        remoteState: remoteState,
+        visibleWorktreeIDs: visibleWorktreeIDs
+      )
+    }
+    .onChange(of: remoteState.selection) { _, _ in
+      syncSidebarSelections(
+        state: state,
+        remoteState: remoteState,
+        visibleWorktreeIDs: visibleWorktreeIDs
+      )
+    }
+    .onChange(of: remoteState.endpoints.map(\.id)) { _, _ in
+      syncSidebarSelections(
+        state: state,
+        remoteState: remoteState,
+        visibleWorktreeIDs: visibleWorktreeIDs
+      )
     }
     .onChange(of: sidebarSelections) { _, newValue in
       store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: newValue)))
@@ -128,10 +159,12 @@ struct SidebarView: View {
 
   private func syncSidebarSelections(
     state: RepositoriesFeature.State,
+    remoteState: RemoteGroupsFeature.State,
     visibleWorktreeIDs: Set<Worktree.ID>
   ) {
     sidebarSelections = normalizedSidebarSelections(
       state: state,
+      remoteState: remoteState,
       visibleWorktreeIDs: visibleWorktreeIDs
     )
     store.send(.setSidebarSelectedWorktreeIDs(selectedWorktreeIDs(from: sidebarSelections)))
@@ -139,8 +172,24 @@ struct SidebarView: View {
 
   private func normalizedSidebarSelections(
     state: RepositoriesFeature.State,
+    remoteState: RemoteGroupsFeature.State,
     visibleWorktreeIDs: Set<Worktree.ID>
   ) -> Set<SidebarSelection> {
+    switch remoteState.selection {
+    case .none:
+      break
+    case .overview(let endpointID):
+      if remoteState.endpoints.contains(where: { $0.id == endpointID }) {
+        return [.remoteEndpoint(endpointID)]
+      }
+      return []
+    case .group(let endpointID, let group):
+      if remoteState.endpoints.contains(where: { $0.id == endpointID }) {
+        return [.remoteGroup(endpointID: endpointID, group: group)]
+      }
+      return []
+    }
+
     if state.isShowingCanvas {
       return [.canvas]
     }

@@ -3,24 +3,19 @@ import SwiftUI
 
 struct SidebarFooterView: View {
   let store: StoreOf<RepositoriesFeature>
+  let remoteGroupsStore: StoreOf<RemoteGroupsFeature>
   @Environment(\.surfaceBottomChromeBackgroundOpacity) private var surfaceBottomChromeBackgroundOpacity
   @Environment(\.openURL) private var openURL
-  @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
   var body: some View {
     HStack {
       Button {
-        store.send(.setOpenPanelPresented(true))
+        remoteGroupsStore.send(.setAddPromptPresented(true))
       } label: {
-        HStack(spacing: 6) {
-          Label("Add Repository", systemImage: "folder.badge.plus")
-            .font(.callout)
-          if commandKeyObserver.isPressed {
-            ShortcutHintView(text: AppShortcuts.openRepository.display, color: .secondary)
-          }
-        }
+        Image(systemName: "link.badge.plus")
+          .accessibilityLabel("Add Remote Endpoint")
       }
-      .help("Add Repository (\(AppShortcuts.openRepository.display))")
+      .help("Add Remote Endpoint")
       Spacer()
       Menu {
         Button("Submit GitHub issue", systemImage: "exclamationmark.bubble") {
