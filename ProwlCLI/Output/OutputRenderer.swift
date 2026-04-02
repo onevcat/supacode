@@ -2,6 +2,7 @@
 // Renders command responses for terminal output.
 
 import Foundation
+import ProwlCLIShared
 
 enum OutputRenderer {
   static func render(_ response: CommandResponse, mode: OutputMode) {

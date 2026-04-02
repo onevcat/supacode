@@ -2,6 +2,7 @@
 // Shared target selector options for commands that support them.
 
 import ArgumentParser
+import ProwlCLIShared
 
 struct SelectorOptions: ParsableArguments {
   @Option(name: .long, help: "Target worktree by id, name, or path.")
@@ -17,8 +18,9 @@ struct SelectorOptions: ParsableArguments {
   func resolve() throws -> TargetSelector {
     let provided = [worktree, tab, pane].compactMap { $0 }
     guard provided.count <= 1 else {
-      throw ValidationError(
-        "At most one target selector (--worktree, --tab, --pane) is allowed."
+      throw ExitError(
+        code: CLIErrorCode.invalidArgument,
+        message: "At most one target selector (--worktree, --tab, --pane) is allowed."
       )
     }
     if let w = worktree { return .worktree(w) }

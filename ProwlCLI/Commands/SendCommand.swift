@@ -1,7 +1,13 @@
 // ProwlCLI/Commands/SendCommand.swift
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import ArgumentParser
 import Foundation
+import ProwlCLIShared
 
 struct SendCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -19,47 +25,49 @@ struct SendCommand: ParsableCommand {
   var text: String?
 
   mutating func run() throws {
-    let sel = try selector.resolve()
+    try CLIExecution.run(command: "send", output: options.outputMode) {
+      let sel = try selector.resolve()
 
-    // Resolve input source: argv xor stdin
-    let inputText: String
-    if let argText = text {
-      // Check stdin is not also provided
-      if !isatty(fileno(stdin)) {
-        // stdin has data too — ambiguous
-        throw ExitError(
-          code: CLIErrorCode.invalidArgument,
-          message: "Cannot provide text as both argument and stdin."
-        )
-      }
-      inputText = argText
-    } else if !isatty(fileno(stdin)) {
-      // Read from stdin
-      guard let stdinData = try? FileHandle.standardInput.readToEnd(),
-            let stdinText = String(data: stdinData, encoding: .utf8),
-            !stdinText.isEmpty
-      else {
+      // Resolve input source: argv xor stdin
+      let inputText: String
+      if let argText = text {
+        // Check stdin is not also provided
+        if isatty(fileno(stdin)) == 0 {
+          // stdin has data too — ambiguous
+          throw ExitError(
+            code: CLIErrorCode.invalidArgument,
+            message: "Cannot provide text as both argument and stdin."
+          )
+        }
+        inputText = argText
+      } else if isatty(fileno(stdin)) == 0 {
+        // Read from stdin
+        guard let stdinData = try? FileHandle.standardInput.readToEnd(),
+              let stdinText = String(data: stdinData, encoding: .utf8),
+              !stdinText.isEmpty
+        else {
+          throw ExitError(
+            code: CLIErrorCode.emptyInput,
+            message: "No input provided via argument or stdin."
+          )
+        }
+        inputText = stdinText
+      } else {
         throw ExitError(
           code: CLIErrorCode.emptyInput,
-          message: "No input provided via argument or stdin."
+          message: "No input provided. Pass text as argument or pipe via stdin."
         )
       }
-      inputText = stdinText
-    } else {
-      throw ExitError(
-        code: CLIErrorCode.emptyInput,
-        message: "No input provided. Pass text as argument or pipe via stdin."
-      )
-    }
 
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .send(SendInput(
-        selector: sel,
-        text: inputText,
-        trailingEnter: !noEnter
-      ))
-    )
-    try CLIRunner.execute(envelope)
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .send(SendInput(
+          selector: sel,
+          text: inputText,
+          trailingEnter: !noEnter
+        ))
+      )
+      try CLIRunner.execute(envelope)
+    }
   }
 }

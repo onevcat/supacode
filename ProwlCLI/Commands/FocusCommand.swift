@@ -1,6 +1,7 @@
 // ProwlCLI/Commands/FocusCommand.swift
 
 import ArgumentParser
+import ProwlCLIShared
 
 struct FocusCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -12,11 +13,13 @@ struct FocusCommand: ParsableCommand {
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
-    let sel = try selector.resolve()
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .focus(FocusInput(selector: sel))
-    )
-    try CLIRunner.execute(envelope)
+    try CLIExecution.run(command: "focus", output: options.outputMode) {
+      let sel = try selector.resolve()
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .focus(FocusInput(selector: sel))
+      )
+      try CLIRunner.execute(envelope)
+    }
   }
 }

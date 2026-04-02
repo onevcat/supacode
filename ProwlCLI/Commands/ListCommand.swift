@@ -1,6 +1,7 @@
 // ProwlCLI/Commands/ListCommand.swift
 
 import ArgumentParser
+import ProwlCLIShared
 
 struct ListCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -11,10 +12,12 @@ struct ListCommand: ParsableCommand {
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .list(ListInput())
-    )
-    try CLIRunner.execute(envelope)
+    try CLIExecution.run(command: "list", output: options.outputMode) {
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .list(ListInput())
+      )
+      try CLIRunner.execute(envelope)
+    }
   }
 }

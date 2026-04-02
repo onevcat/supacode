@@ -1,6 +1,7 @@
 // ProwlCLI/Commands/KeyCommand.swift
 
 import ArgumentParser
+import ProwlCLIShared
 
 struct KeyCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -18,25 +19,27 @@ struct KeyCommand: ParsableCommand {
   var token: String
 
   mutating func run() throws {
-    let sel = try selector.resolve()
+    try CLIExecution.run(command: "key", output: options.outputMode) {
+      let sel = try selector.resolve()
 
-    guard (1...100).contains(self.repeat) else {
-      throw ExitError(
-        code: CLIErrorCode.invalidRepeat,
-        message: "Repeat count must be between 1 and 100, got \(self.repeat)."
+      guard (1...100).contains(self.repeat) else {
+        throw ExitError(
+          code: CLIErrorCode.invalidRepeat,
+          message: "Repeat count must be between 1 and 100, got \(self.repeat)."
+        )
+      }
+
+      let normalized = token.lowercased()
+
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .key(KeyInput(
+          selector: sel,
+          token: normalized,
+          repeatCount: self.repeat
+        ))
       )
+      try CLIRunner.execute(envelope)
     }
-
-    let normalized = token.lowercased()
-
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .key(KeyInput(
-        selector: sel,
-        token: normalized,
-        repeatCount: self.repeat
-      ))
-    )
-    try CLIRunner.execute(envelope)
   }
 }

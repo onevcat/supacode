@@ -1,7 +1,9 @@
 // ProwlCLI/CLIRunner.swift
 // Central execution point: send envelope to app, render response.
 
+import ArgumentParser
 import Foundation
+import ProwlCLIShared
 
 enum CLIRunner {
   /// Execute a command envelope by sending it to the running app

@@ -7,6 +7,7 @@ import Darwin
 import Glibc
 #endif
 import Foundation
+import ProwlCLIShared
 
 enum SocketTransportClient {
   /// Send a command envelope to the Prowl app and receive a response.

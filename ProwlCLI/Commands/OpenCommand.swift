@@ -2,6 +2,7 @@
 
 import ArgumentParser
 import Foundation
+import ProwlCLIShared
 
 struct OpenCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -15,21 +16,39 @@ struct OpenCommand: ParsableCommand {
   var path: String?
 
   mutating func run() throws {
-    let resolvedPath: String? = try path.map { try normalizePath($0) }
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .open(OpenInput(path: resolvedPath))
-    )
-    try CLIRunner.execute(envelope)
+    try CLIExecution.run(command: "open", output: options.outputMode) {
+      let resolvedPath: String? = try path.map { try normalizePath($0) }
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .open(OpenInput(path: resolvedPath))
+      )
+      try CLIRunner.execute(envelope)
+    }
   }
 
   private func normalizePath(_ raw: String) throws -> String {
-    let expanded = NSString(string: raw).expandingTildeInPath
-    let url = URL(fileURLWithPath: expanded).standardized
-    let abs = url.path
+    let path: String
+    if raw.hasPrefix("file://") {
+      guard let fileURL = URL(string: raw), fileURL.isFileURL else {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "Invalid file URL: \(raw)"
+        )
+      }
+      path = fileURL.standardizedFileURL.path
+    } else {
+      let expanded = NSString(string: raw).expandingTildeInPath
+      if expanded.hasPrefix("/") {
+        path = URL(fileURLWithPath: expanded).standardizedFileURL.path
+      } else {
+        let cwdURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        path = URL(fileURLWithPath: expanded, relativeTo: cwdURL).standardizedFileURL.path
+      }
+    }
+
     let fm = FileManager.default
     var isDir: ObjCBool = false
-    guard fm.fileExists(atPath: abs, isDirectory: &isDir) else {
+    guard fm.fileExists(atPath: path, isDirectory: &isDir) else {
       throw ExitError(
         code: CLIErrorCode.pathNotFound,
         message: "Path not found: \(raw)"
@@ -41,6 +60,6 @@ struct OpenCommand: ParsableCommand {
         message: "Not a directory: \(raw)"
       )
     }
-    return abs
+    return path
   }
 }

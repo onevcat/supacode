@@ -1,6 +1,7 @@
 // ProwlCLI/Commands/ReadCommand.swift
 
 import ArgumentParser
+import ProwlCLIShared
 
 struct ReadCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
@@ -15,19 +16,21 @@ struct ReadCommand: ParsableCommand {
   var last: Int?
 
   mutating func run() throws {
-    let sel = try selector.resolve()
+    try CLIExecution.run(command: "read", output: options.outputMode) {
+      let sel = try selector.resolve()
 
-    if let n = last, n < 1 {
-      throw ExitError(
-        code: CLIErrorCode.invalidArgument,
-        message: "--last requires a positive integer, got \(n)."
+      if let n = last, n < 1 {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "--last requires a positive integer, got \(n)."
+        )
+      }
+
+      let envelope = CommandEnvelope(
+        output: options.outputMode,
+        command: .read(ReadInput(selector: sel, last: last))
       )
+      try CLIRunner.execute(envelope)
     }
-
-    let envelope = CommandEnvelope(
-      output: options.outputMode,
-      command: .read(ReadInput(selector: sel, last: last))
-    )
-    try CLIRunner.execute(envelope)
   }
 }
