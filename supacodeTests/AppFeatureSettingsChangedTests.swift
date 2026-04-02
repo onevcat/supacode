@@ -111,6 +111,5 @@ struct AppFeatureSettingsChangedTests {
     await store.receive(\.repositories.showToast) {
       $0.repositories.statusToast = .success("Saved terminal layout cleared")
     }
-    await store.skipInFlightEffects()
   }
 }
