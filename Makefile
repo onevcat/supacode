@@ -18,7 +18,7 @@ VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework build-app run-app install-dev-build install-release archive export-archive format lint check test bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework build-app build-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -41,6 +41,9 @@ $(GHOSTTY_BUILD_OUTPUTS):
 
 build-app: build-ghostty-xcframework # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -qw --format toon'
+
+build-cli: # Build Swift CLI binary (SPM)
+	swift build --product prowl
 
 run-app: build-app # Build then launch (Debug) with log streaming
 	@set -euo pipefail; \
@@ -196,6 +199,20 @@ export-archive: # Export xarchive
 
 test: build-ghostty-xcframework
 	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1
+
+test-cli-smoke: build-cli # Smoke test CLI executable
+	@set -euo pipefail; \
+	bin="$$(swift build --show-bin-path)/prowl"; \
+	help_output="$$("$$bin" --help)"; \
+	version_output="$$("$$bin" --version)"; \
+	echo "$$help_output" | grep -q "USAGE:"; \
+	echo "$$version_output" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$$'; \
+	socket="/tmp/prowl-cli-smoke-$$RANDOM.sock"; \
+	PROWL_CLI_SOCKET="$$socket" "$$bin" list --json >/tmp/prowl-cli-smoke.json || true; \
+	jq -e '.error.code == "APP_NOT_RUNNING"' /tmp/prowl-cli-smoke.json >/dev/null
+
+test-cli-integration: # Run CLI integration tests via SwiftPM
+	swift test --filter ProwlCLIIntegrationTests
 
 format: # Format code with swift-format (local only)
 	swift-format -p --in-place --recursive --configuration ./.swift-format.json supacode supacodeTests

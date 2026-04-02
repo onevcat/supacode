@@ -23,9 +23,12 @@ make run-app                     # Build and launch
 ## Development
 
 ```bash
-make check     # Run swiftformat and swiftlint
-make test      # Run tests
-make format    # Run swift-format
+make check                 # Run swiftformat and swiftlint
+make test                  # Run app/unit tests (xcodebuild)
+make build-cli             # Build `prowl` CLI via SwiftPM
+make test-cli-smoke        # Quick CLI smoke checks
+make test-cli-integration  # End-to-end CLI socket integration tests
+make format                # Run swift-format
 ```
 
 ## Contributing

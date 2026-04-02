@@ -42,6 +42,7 @@ struct TerminalClient {
     case setupScriptConsumed(worktreeID: Worktree.ID)
     case fontSizeChanged(Float32?)
     case layoutRestored(selectedWorktreeID: Worktree.ID?)
+    case layoutRestoreFailed(message: String)
   }
 }
 

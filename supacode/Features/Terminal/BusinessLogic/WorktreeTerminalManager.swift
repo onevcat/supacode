@@ -3,6 +3,7 @@ import Observation
 import Sharing
 
 private let terminalLogger = SupaLogger("Terminal")
+private let layoutRestoreFailureMessage = "Saved terminal layout was invalid and has been reset"
 
 @MainActor
 @Observable
@@ -440,8 +441,9 @@ final class WorktreeTerminalManager {
       )
       emit(.layoutRestored(selectedWorktreeID: payload.selectedWorktreeID))
     } else {
-      terminalLogger.info("[LayoutRestore] restore: clearing invalid snapshot")
+      terminalLogger.warning("[LayoutRestore] restore: clearing invalid snapshot and emitting failure toast")
       _ = await layoutPersistence.clearSnapshot()
+      emit(.layoutRestoreFailed(message: layoutRestoreFailureMessage))
     }
   }
 

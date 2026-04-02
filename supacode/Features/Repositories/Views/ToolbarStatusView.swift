@@ -26,6 +26,16 @@ struct ToolbarStatusView: View {
             .foregroundStyle(.secondary)
         }
         .transition(.opacity)
+      case .warning(let message):
+        HStack(spacing: 6) {
+          Image(systemName: "exclamationmark.triangle.fill")
+            .foregroundStyle(.orange)
+            .accessibilityHidden(true)
+          Text(message)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .transition(.opacity)
       case nil:
         if let model = PullRequestStatusModel(pullRequest: pullRequest) {
           PullRequestStatusButton(model: model)

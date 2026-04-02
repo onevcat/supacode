@@ -940,6 +940,10 @@ struct AppFeature {
         }
         return .none
 
+      case .terminalEvent(.layoutRestoreFailed(let message)):
+        appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
+        return .send(.repositories(.showToast(.warning(message))))
+
       case .terminalEvent:
         return .none
       }
