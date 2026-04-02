@@ -14,7 +14,7 @@ final class CLISocketServer {
   private let socketPath: String
   private var serverFD: Int32 = -1
   private var isRunning = false
-  private var acceptTask: Task<Void, Never>?
+  private let acceptQueue = DispatchQueue(label: "com.onevcat.prowl.cli-accept", qos: .userInitiated)
 
   init(router: CLICommandRouter, socketPath: String = ProwlSocket.defaultPath) {
     self.router = router
@@ -64,17 +64,18 @@ final class CLISocketServer {
 
     isRunning = true
 
-    // Capture fd value for the nonisolated accept loop
+    // Run the blocking accept loop on a dedicated dispatch queue so it does
+    // not occupy a Swift cooperative-thread-pool thread (which would starve
+    // the concurrency runtime and hang the app – especially during testing).
     let listeningFD = serverFD
-    acceptTask = Task.detached { [weak self] in
-      await Self.acceptLoop(serverFD: listeningFD, server: self)
+    acceptQueue.async { [weak self] in
+      Self.acceptLoop(serverFD: listeningFD, server: self)
     }
   }
 
   /// Stop the server and clean up.
   func stop() {
     isRunning = false
-    acceptTask?.cancel()
     if serverFD >= 0 {
       close(serverFD)
       serverFD = -1
@@ -82,18 +83,15 @@ final class CLISocketServer {
     unlink(socketPath)
   }
 
-  // MARK: - Accept loop (static + nonisolated to avoid actor isolation issues)
+  // MARK: - Accept loop (runs on acceptQueue, NOT in Swift concurrency)
 
-  private static func acceptLoop(serverFD: Int32, server: CLISocketServer?) async {
-    while !Task.isCancelled {
+  private nonisolated static func acceptLoop(serverFD: Int32, server: CLISocketServer?) {
+    while true {
       let clientFD = Darwin.accept(serverFD, nil, nil)
       guard clientFD >= 0 else {
-        if !Task.isCancelled {
-          try? await Task.sleep(for: .milliseconds(100))
-        }
-        continue
+        // serverFD was closed (stop() called) or an error occurred – exit.
+        return
       }
-      // Dispatch to MainActor for routing
       if let server {
         Task { @MainActor in
           await server.handleClient(clientFD: clientFD)
