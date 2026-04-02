@@ -31,6 +31,7 @@ private enum GhosttyCLI {
 final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   var appStore: StoreOf<AppFeature>?
   var terminalManager: WorktreeTerminalManager?
+  var cliSocketServer: CLISocketServer?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Disable press-and-hold accent menu so that key repeat works in the terminal.
@@ -52,6 +53,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    defer { cliSocketServer?.stop() }
     guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
     guard appStore?.state.suppressLayoutSaveUntilRelaunch != true else { return }
     terminalManager?.persistLayoutSnapshotSync()
@@ -91,6 +93,7 @@ struct SupacodeApp: App {
   @State private var terminalManager: WorktreeTerminalManager
   @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
   @State private var commandKeyObserver: CommandKeyObserver
+  @State private var cliSocketServer: CLISocketServer
   @State private var store: StoreOf<AppFeature>
 
   @MainActor init() {
@@ -172,11 +175,24 @@ struct SupacodeApp: App {
       )
     }
     _store = State(initialValue: appStore)
+
+    let cliRouter = CLICommandRouter()
+    let cliServer = CLISocketServer(router: cliRouter)
+    let cliLogger = SupaLogger("CLIService")
+    do {
+      try cliServer.start()
+      cliLogger.info("CLI socket server started at \(ProwlSocket.defaultPath)")
+    } catch {
+      cliLogger.warning("Failed to start CLI socket server: \(String(describing: error))")
+    }
+    _cliSocketServer = State(initialValue: cliServer)
+
     runtime.onQuit = { [weak appStore] in
       appStore?.send(.requestQuit)
     }
     appDelegate.appStore = appStore
     appDelegate.terminalManager = terminalManager
+    appDelegate.cliSocketServer = cliServer
     SettingsWindowManager.shared.configure(
       store: appStore,
       ghosttyShortcuts: shortcuts,
