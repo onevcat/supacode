@@ -206,7 +206,7 @@ test-cli-smoke: build-cli # Smoke test CLI executable
 	help_output="$$("$$bin" --help)"; \
 	version_output="$$("$$bin" --version)"; \
 	echo "$$help_output" | grep -q "USAGE:"; \
-	echo "$$version_output" | grep -q "1.0.0"; \
+	echo "$$version_output" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$$'; \
 	socket="/tmp/prowl-cli-smoke-$$RANDOM.sock"; \
 	PROWL_CLI_SOCKET="$$socket" "$$bin" list --json >/tmp/prowl-cli-smoke.json || true; \
 	jq -e '.error.code == "APP_NOT_RUNNING"' /tmp/prowl-cli-smoke.json >/dev/null
