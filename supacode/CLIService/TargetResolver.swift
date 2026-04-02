@@ -9,14 +9,13 @@ final class TargetResolver {
   /// Resolve a target selector to concrete worktree/tab/pane IDs.
   /// Returns nil if the target cannot be found.
   func resolve(_ selector: TargetSelector) -> ResolvedTarget? {
-    // TODO: Wire to WorktreeTerminalManager to resolve against live state.
-    // For now, return nil (target not found) for any non-none selector.
+    // Scaffold: resolution not yet wired to WorktreeTerminalManager.
+    // Will be implemented when command handlers are built out.
     switch selector {
     case .none:
-      // Return current focused target
-      return nil // TODO: implement
+      return nil
     case .worktree, .tab, .pane:
-      return nil // TODO: implement
+      return nil
     }
   }
 }
