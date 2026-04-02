@@ -51,7 +51,7 @@ private struct GitCommandError: Error {
 private func runGit(_ arguments: [String]) throws -> String {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-  process.arguments = arguments
+  process.arguments = ["-c", "core.hooksPath=/dev/null"] + arguments
   let pipe = Pipe()
   process.standardOutput = pipe
   process.standardError = pipe

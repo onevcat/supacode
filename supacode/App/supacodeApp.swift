@@ -176,21 +176,7 @@ struct SupacodeApp: App {
     }
     _store = State(initialValue: appStore)
 
-    let listHandler = ListCommandHandler {
-      ListRuntimeSnapshotBuilder.makeSnapshot(
-        repositoriesState: appStore.state.repositories,
-        terminalManager: terminalManager
-      )
-    }
-    let cliRouter = CLICommandRouter(listHandler: listHandler)
-    let cliServer = CLISocketServer(router: cliRouter)
-    let cliLogger = SupaLogger("CLIService")
-    do {
-      try cliServer.start()
-      cliLogger.info("CLI socket server started at \(ProwlSocket.defaultPath)")
-    } catch {
-      cliLogger.warning("Failed to start CLI socket server: \(String(describing: error))")
-    }
+    let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
     _cliSocketServer = State(initialValue: cliServer)
 
     runtime.onQuit = { [weak appStore] in
@@ -204,6 +190,28 @@ struct SupacodeApp: App {
       ghosttyShortcuts: shortcuts,
       commandKeyObserver: keyObserver
     )
+  }
+
+  private static func makeCLISocketServer(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> CLISocketServer {
+    let listHandler = ListCommandHandler {
+      ListRuntimeSnapshotBuilder.makeSnapshot(
+        repositoriesState: appStore.state.repositories,
+        terminalManager: terminalManager
+      )
+    }
+    let cliRouter = CLICommandRouter(listHandler: listHandler)
+    let cliServer = CLISocketServer(router: cliRouter)
+    let logger = SupaLogger("CLIService")
+    do {
+      try cliServer.start()
+      logger.info("CLI socket server started at \(ProwlSocket.defaultPath)")
+    } catch {
+      logger.warning("Failed to start CLI socket server: \(String(describing: error))")
+    }
+    return cliServer
   }
 
   var body: some Scene {

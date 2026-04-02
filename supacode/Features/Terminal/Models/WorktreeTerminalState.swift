@@ -1478,7 +1478,7 @@ extension WorktreeTerminalState {
       }
 
       return CLITerminalTabSnapshot(
-        id: tab.id,
+        id: tab.id.rawValue,
         title: tab.title,
         selected: tab.id == selectedTabID,
         focusedPaneID: focusedSurfaceIdByTab[tab.id],
@@ -1488,7 +1488,7 @@ extension WorktreeTerminalState {
 
     return CLIWorktreeTerminalSnapshot(
       tabs: tabs,
-      taskStatus: taskStatus.map { $0 == .running ? .running : .idle }
+      taskStatus: taskStatus == .running ? .running : .idle
     )
   }
 

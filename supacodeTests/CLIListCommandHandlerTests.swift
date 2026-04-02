@@ -35,7 +35,7 @@ struct CLIListCommandHandlerTests {
                     cwd: "/Users/onevcat/Projects/Prowl"
                   ),
                 ]
-              )
+              ),
             ]
           ),
           .init(
@@ -56,9 +56,9 @@ struct CLIListCommandHandlerTests {
                     id: UUID(uuidString: "EF65FF31-1B72-40B2-80DA-3AA87B7B6858")!,
                     title: "notes",
                     cwd: "/Users/onevcat/Projects/Notes"
-                  )
+                  ),
                 ]
-              )
+              ),
             ]
           ),
         ],
@@ -74,7 +74,7 @@ struct CLIListCommandHandlerTests {
     #expect(response.command == "list")
     #expect(response.schemaVersion == "prowl.cli.list.v1")
 
-    let payload = try #require(response.data?.decode(as: ListCommandPayload.self))
+    let payload = try #require(try response.data?.decode(as: ListCommandPayload.self))
     #expect(payload.count == 3)
     #expect(payload.items.count == 3)
 

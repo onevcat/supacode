@@ -21,12 +21,12 @@ enum ListRuntimeSnapshotBuilder {
     let orderedContexts = orderedWorktreeContexts(from: repositoriesState)
     let focusedWorktreeID = terminalManager.selectedWorktreeID ?? terminalManager.canvasFocusedWorktreeID
 
-    let worktrees = orderedContexts.compactMap { context in
+    let worktrees: [ListRuntimeSnapshot.Worktree] = orderedContexts.compactMap { context in
       guard let terminalSnapshot = activeSnapshots[context.id] else {
         return nil
       }
 
-      let tabs = terminalSnapshot.tabs.compactMap { tabSnapshot in
+      let tabs: [ListRuntimeSnapshot.Tab] = terminalSnapshot.tabs.compactMap { tabSnapshot in
         let panes = tabSnapshot.panes.map { paneSnapshot in
           ListRuntimeSnapshot.Pane(
             id: paneSnapshot.id,
@@ -68,9 +68,10 @@ enum ListRuntimeSnapshotBuilder {
 
   private static func orderedWorktreeContexts(from repositoriesState: RepositoriesFeature.State) -> [WorktreeContext] {
     var contexts: [WorktreeContext] = []
+    let repositoriesByID = Dictionary(uniqueKeysWithValues: repositoriesState.repositories.map { ($0.id, $0) })
 
-    for repositoryID in repositoriesState.orderedRepositoryIDs {
-      guard let repository = repositoriesState.repositoriesByID[repositoryID] else {
+    for repositoryID in repositoriesState.orderedRepositoryIDs() {
+      guard let repository = repositoriesByID[repositoryID] else {
         continue
       }
 
@@ -82,7 +83,7 @@ enum ListRuntimeSnapshotBuilder {
               name: worktree.name,
               path: worktree.workingDirectory.path(percentEncoded: false),
               rootPath: worktree.repositoryRootURL.path(percentEncoded: false),
-              kind: repository.kind == .git ? .git : .plain
+              kind: repository.kind == .git ? ListCommandWorktree.Kind.git : .plain
             )
           )
         }
@@ -97,7 +98,7 @@ enum ListRuntimeSnapshotBuilder {
             name: repository.name,
             path: rootPath,
             rootPath: rootPath,
-            kind: repository.kind == .git ? .git : .plain
+            kind: repository.kind == .git ? ListCommandWorktree.Kind.git : .plain
           )
         )
       }

@@ -38,6 +38,7 @@ final class ListCommandHandler: CommandHandler {
     self.snapshotProvider = snapshotProvider
   }
 
+  // swiftlint:disable:next async_without_await
   func handle(envelope _: CommandEnvelope) async -> CommandResponse {
     do {
       let snapshot = try snapshotProvider()
@@ -49,12 +50,14 @@ final class ListCommandHandler: CommandHandler {
         data: RawJSON(encoding: payload)
       )
     } catch {
-      return CommandResponse.error(
+      return CommandResponse(
+        ok: false,
         command: "list",
         schemaVersion: "prowl.cli.list.v1",
-        code: .listFailed,
-        message: "Failed to list panes.",
-        details: nil
+        error: CommandError(
+          code: CLIErrorCode.listFailed,
+          message: "Failed to list panes."
+        )
       )
     }
   }
