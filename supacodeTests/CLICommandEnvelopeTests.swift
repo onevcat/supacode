@@ -8,34 +8,55 @@ import Testing
 
 struct CLICommandEnvelopeTests {
 
-  // MARK: - CommandEnvelope encoding stability
+  // MARK: - CommandEnvelope round-trip
 
-  @Test func envelopeOpenEncodesCorrectly() throws {
+  @Test func envelopeOpenRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .json,
       command: .open(OpenInput(path: "/Users/test/project"))
     )
     let data = try JSONEncoder().encode(envelope)
-    let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
 
-    #expect(json["output"] as? String == "json")
-    let command = try #require(json["command"] as? [String: Any])
-    let open = try #require(command["open"] as? [String: Any])
-    #expect(open["path"] as? String == "/Users/test/project")
+    #expect(decoded.output == .json)
+    if case .open(let input) = decoded.command {
+      #expect(input.path == "/Users/test/project")
+    } else {
+      Issue.record("Expected .open command")
+    }
   }
 
-  @Test func envelopeListEncodesCorrectly() throws {
+  @Test func envelopeOpenNilPathRoundTrips() throws {
+    let envelope = CommandEnvelope(
+      output: .text,
+      command: .open(OpenInput(path: nil))
+    )
+    let data = try JSONEncoder().encode(envelope)
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+
+    if case .open(let input) = decoded.command {
+      #expect(input.path == nil)
+    } else {
+      Issue.record("Expected .open command")
+    }
+  }
+
+  @Test func envelopeListRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .text,
       command: .list(ListInput())
     )
     let data = try JSONEncoder().encode(envelope)
-    let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    #expect(json["output"] as? String == "text")
-    #expect(json["command"] != nil)
+    let decoded = try JSONDecoder().decode(CommandEnvelope.self, from: data)
+    #expect(decoded.output == .text)
+    if case .list = decoded.command {
+      // expected
+    } else {
+      Issue.record("Expected .list command")
+    }
   }
 
-  @Test func envelopeSendWithSelectorEncodesCorrectly() throws {
+  @Test func envelopeSendWithSelectorRoundTrips() throws {
     let envelope = CommandEnvelope(
       output: .json,
       command: .send(SendInput(
@@ -117,6 +138,26 @@ struct CLICommandEnvelopeTests {
     ]
     for (command, expected) in commands {
       #expect(command.name == expected)
+    }
+  }
+
+  // MARK: - Encoding produces valid JSON
+
+  @Test func allCommandsEncodeToValidJSON() throws {
+    let commands: [Command] = [
+      .open(OpenInput(path: "/tmp")),
+      .list(ListInput()),
+      .focus(FocusInput()),
+      .send(SendInput(text: "test")),
+      .key(KeyInput(token: "enter")),
+      .read(ReadInput()),
+    ]
+    for cmd in commands {
+      let envelope = CommandEnvelope(output: .json, command: cmd)
+      let data = try JSONEncoder().encode(envelope)
+      let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      #expect(json["output"] as? String == "json")
+      #expect(json["command"] != nil)
     }
   }
 }
