@@ -1137,6 +1137,7 @@ final class WorktreeTerminalState {
       guard let ratio = snapshotNode.ratio, ratio > 0, ratio < 1 else {
         return nil
       }
+      let clampedRatio = max(0.1, min(0.9, ratio))
       guard let children = snapshotNode.children, children.count == 2 else {
         return nil
       }
@@ -1149,7 +1150,7 @@ final class WorktreeTerminalState {
       return .split(
         .init(
           direction: splitDirection(from: direction),
-          ratio: ratio,
+          ratio: clampedRatio,
           left: left,
           right: right
         )

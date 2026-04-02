@@ -251,10 +251,19 @@ struct WorktreeTerminalManagerTests {
         }
       )
     )
+    let stream = manager.eventStream()
 
     await manager.restoreLayoutSnapshot(from: [])
 
+    let event = await nextEvent(stream) { event in
+      if case .layoutRestoreFailed = event {
+        return true
+      }
+      return false
+    }
+
     #expect(clearCount.value == 1)
+    #expect(event == .layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
   }
 
   @Test func persistLayoutSnapshotWithoutTabsClearsSnapshot() async {

@@ -271,6 +271,7 @@ struct RepositoriesFeature {
   enum StatusToast: Equatable {
     case inProgress(String)
     case success(String)
+    case warning(String)
   }
 
   enum SnapshotPersistencePhase: Equatable {
@@ -2035,7 +2036,7 @@ struct RepositoriesFeature {
         switch toast {
         case .inProgress:
           return .cancel(id: CancelID.toastAutoDismiss)
-        case .success:
+        case .success, .warning:
           return .run { send in
             try? await ContinuousClock().sleep(for: .seconds(2.5))
             await send(.dismissToast)

@@ -153,6 +153,24 @@ struct TerminalLayoutSnapshotPayloadTests {
     #expect(TerminalLayoutSnapshotPayload.decodeValidated(from: data) == nil)
   }
 
+  @Test func decodeValidatedRoundTripsExtremeSplitRatioForRestoreClamping() throws {
+    let payload = makePayload(
+      splitRoot: .split(
+        direction: .horizontal,
+        ratio: 0.02,
+        children: [
+          .leaf(surfaceID: "surface-1"),
+          .leaf(surfaceID: "surface-2"),
+        ]
+      )
+    )
+    let data = try JSONEncoder().encode(payload)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    #expect(decoded == payload)
+    #expect(decoded?.worktrees.first?.tabs.first?.splitRoot.ratio == 0.02)
+  }
+
   @Test func decodeValidatedRejectsTypeMismatchInFields() {
     let invalidJSON = #"""
       {

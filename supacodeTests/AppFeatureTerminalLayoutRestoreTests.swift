@@ -182,6 +182,20 @@ struct AppFeatureTerminalLayoutRestoreTests {
     await store.receive(\.repositories.selectRepository)
   }
 
+  @Test(.dependencies) func layoutRestoreFailedEventShowsWarningToast() async {
+    let store = TestStore(initialState: AppFeature.State()) {
+      AppFeature()
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .terminalEvent(.layoutRestoreFailed(message: "Saved terminal layout was invalid and has been reset"))
+    )
+    await store.receive(\.repositories.showToast) {
+      $0.repositories.statusToast = .warning("Saved terminal layout was invalid and has been reset")
+    }
+  }
+
   @Test(.dependencies) func scenePhaseInactiveSavesLayoutSnapshot() async {
     let sentCommands = LockIsolated<[TerminalClient.Command]>([])
     var settings = SettingsFeature.State()
