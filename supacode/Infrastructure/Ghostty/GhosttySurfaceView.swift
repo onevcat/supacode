@@ -5,6 +5,8 @@ import GhosttyKit
 import QuartzCore
 import SwiftUI
 
+private let surfaceLogger = SupaLogger("Surface")
+
 final class GhosttySurfaceView: NSView, Identifiable {
   struct OcclusionState {
     private(set) var desired: Bool?
@@ -90,6 +92,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   private let runtime: GhosttyRuntime
   let id = UUID()
+  private var debugID: String {
+    String(id.uuidString.prefix(8))
+  }
   let bridge: GhosttySurfaceBridge
   private(set) var surface: ghostty_surface_t?
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
@@ -959,10 +964,24 @@ final class GhosttySurfaceView: NSView, Identifiable {
     ghostty_surface_set_occlusion(surface, visible)
   }
 
+  func invalidateOcclusionCache(reason: String) {
+    surfaceLogger.info(
+      "[CanvasExit] invalidateOcclusionCache surface=\(debugID) "
+        + "reason=\(reason) desired=\(String(describing: occlusionState.desired)) "
+        + "attached=\(superview != nil) window=\(window != nil)"
+    )
+    _ = occlusionState.invalidateForAttachmentChange()
+  }
+
   private func handleAttachmentChange() {
     // Re-parenting can temporarily detach the Metal layer from the visible
     // tree and pause Ghostty's renderer. Invalidate the applied cache so the
     // currently desired occlusion value is sent again after reattachment.
+    surfaceLogger.info(
+      "[CanvasExit] attachmentChange surface=\(debugID) "
+        + "desired=\(String(describing: occlusionState.desired)) "
+        + "attached=\(superview != nil) window=\(window != nil)"
+    )
     _ = occlusionState.invalidateForAttachmentChange()
     guard superview != nil else { return }
     DispatchQueue.main.async { [weak self] in
@@ -972,6 +991,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   private func reapplyOcclusionIfNeeded() {
     guard superview != nil, let desired = occlusionState.desired else { return }
+    surfaceLogger.info(
+      "[CanvasExit] reapplyOcclusion surface=\(debugID) desired=\(desired) "
+        + "attached=\(superview != nil) window=\(window != nil)"
+    )
     setOcclusion(desired)
   }
 
