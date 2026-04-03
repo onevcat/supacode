@@ -24,19 +24,33 @@ public struct FocusInput: Codable, Sendable {
   }
 }
 
+public enum InputSource: String, Codable, Sendable {
+  case argv
+  case stdin
+}
+
 public struct SendInput: Codable, Sendable {
   public let selector: TargetSelector
   public let text: String
   public let trailingEnter: Bool
+  public let source: InputSource
+  public let wait: Bool
+  public let timeoutSeconds: Int?
 
   public init(
     selector: TargetSelector = .none,
     text: String,
-    trailingEnter: Bool = true
+    trailingEnter: Bool = true,
+    source: InputSource = .argv,
+    wait: Bool = true,
+    timeoutSeconds: Int? = nil
   ) {
     self.selector = selector
     self.text = text
     self.trailingEnter = trailingEnter
+    self.source = source
+    self.wait = wait
+    self.timeoutSeconds = timeoutSeconds
   }
 }
 
