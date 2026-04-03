@@ -121,19 +121,29 @@ final class WorktreeTerminalManager {
       setCommandFinishedNotification(enabled: enabled, threshold: threshold)
     case .setCanvasMode(let enabled):
       if enabled {
+        terminalLogger.info("[CanvasExit] enteringCanvas previousSelectedWorktree=\(selectedWorktreeID ?? "nil")")
         selectedWorktreeID = nil
       }
     case .setSelectedWorktreeID(let id):
       guard id != selectedWorktreeID else { return }
-      if let previousID = selectedWorktreeID, let previousState = states[previousID] {
+      let previousSelectedWorktreeID = selectedWorktreeID
+      let leavingCanvas = previousSelectedWorktreeID == nil
+      if let previousID = previousSelectedWorktreeID, let previousState = states[previousID] {
         previousState.setAllSurfacesOccluded()
-      } else if selectedWorktreeID == nil {
+      } else if leavingCanvas {
         // Leaving canvas mode: occlude all worktrees except the newly selected one.
         for (wid, state) in states where wid != id {
           state.setAllSurfacesOccluded()
         }
       }
       selectedWorktreeID = id
+      terminalLogger.info(
+        "[CanvasExit] setSelectedWorktreeID previous=\(previousSelectedWorktreeID ?? "nil") "
+          + "next=\(id ?? "nil") leavingCanvas=\(leavingCanvas) states=\(states.count)"
+      )
+      if leavingCanvas, let id, let state = states[id] {
+        state.refreshSurfaceActivity(reason: "canvas-exit-selected-worktree")
+      }
       terminalLogger.info("Selected worktree \(id ?? "nil")")
     case .saveLayoutSnapshot:
       terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")

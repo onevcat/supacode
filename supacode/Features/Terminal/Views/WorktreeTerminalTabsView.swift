@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let terminalTabsLogger = SupaLogger("TerminalTabs")
+
 struct WorktreeTerminalTabsView: View {
   let worktree: Worktree
   let manager: WorktreeTerminalManager
@@ -57,13 +59,25 @@ struct WorktreeTerminalTabsView: View {
         state.focusSelectedTab()
       }
       let activity = resolvedWindowActivity
+      terminalTabsLogger.info(
+        "[CanvasExit] onAppear worktree=\(worktree.id) "
+          + "selectedTab=\(state.tabManager.selectedTabId?.rawValue.uuidString ?? "nil") "
+          + "autoFocus=\(shouldAutoFocusTerminal) "
+          + "windowKey=\(activity.isKeyWindow) windowVisible=\(activity.isVisible)"
+      )
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
-    .onChange(of: state.tabManager.selectedTabId) { _, _ in
+    .onChange(of: state.tabManager.selectedTabId) { _, newValue in
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
       }
       let activity = resolvedWindowActivity
+      terminalTabsLogger.info(
+        "[CanvasExit] selectedTabChanged worktree=\(worktree.id) "
+          + "selectedTab=\(newValue?.rawValue.uuidString ?? "nil") "
+          + "autoFocus=\(shouldAutoFocusTerminal) "
+          + "windowKey=\(activity.isKeyWindow) windowVisible=\(activity.isVisible)"
+      )
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
   }
