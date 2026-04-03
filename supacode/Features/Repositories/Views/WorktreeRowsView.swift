@@ -64,7 +64,7 @@ struct WorktreeRowsView: View {
       )
     }
     .onMove { offsets, destination in
-      store.send(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination))
+      store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
     }
     ForEach(sections.pending) { row in
       rowView(
@@ -83,7 +83,7 @@ struct WorktreeRowsView: View {
       )
     }
     .onMove { offsets, destination in
-      store.send(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination))
+      store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
     }
   }
 
@@ -295,15 +295,15 @@ struct WorktreeRowsView: View {
   private func togglePin(for worktreeID: Worktree.ID, isPinned: Bool) {
     _ = withAnimation(.easeOut(duration: 0.2)) {
       if isPinned {
-        store.send(.unpinWorktree(worktreeID))
+        store.send(.worktreeOrdering(.unpinWorktree(worktreeID)))
       } else {
-        store.send(.pinWorktree(worktreeID))
+        store.send(.worktreeOrdering(.pinWorktree(worktreeID)))
       }
     }
   }
 
   private func archiveWorktree(_ worktreeID: Worktree.ID) {
-    store.send(.requestArchiveWorktree(worktreeID, repository.id))
+    store.send(.worktreeLifecycle(.requestArchiveWorktree(worktreeID, repository.id)))
   }
 
   private func contextActionRows(for row: WorktreeRowModel) -> [WorktreeRowModel] {
@@ -317,18 +317,18 @@ struct WorktreeRowsView: View {
   private func archiveWorktrees(_ targets: [RepositoriesFeature.ArchiveWorktreeTarget]) {
     guard !targets.isEmpty else { return }
     if targets.count == 1, let target = targets.first {
-      store.send(.requestArchiveWorktree(target.worktreeID, target.repositoryID))
+      store.send(.worktreeLifecycle(.requestArchiveWorktree(target.worktreeID, target.repositoryID)))
     } else {
-      store.send(.requestArchiveWorktrees(targets))
+      store.send(.worktreeLifecycle(.requestArchiveWorktrees(targets)))
     }
   }
 
   private func deleteWorktrees(_ targets: [RepositoriesFeature.DeleteWorktreeTarget]) {
     guard !targets.isEmpty else { return }
     if targets.count == 1, let target = targets.first {
-      store.send(.requestDeleteWorktree(target.worktreeID, target.repositoryID))
+      store.send(.worktreeLifecycle(.requestDeleteWorktree(target.worktreeID, target.repositoryID)))
     } else {
-      store.send(.requestDeleteWorktrees(targets))
+      store.send(.worktreeLifecycle(.requestDeleteWorktrees(targets)))
     }
   }
 

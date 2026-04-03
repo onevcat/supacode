@@ -97,9 +97,9 @@ struct SidebarView: View {
     guard !targets.isEmpty else { return nil }
     return {
       if targets.count == 1, let target = targets.first {
-        store.send(.requestArchiveWorktree(target.worktreeID, target.repositoryID))
+        store.send(.worktreeLifecycle(.requestArchiveWorktree(target.worktreeID, target.repositoryID)))
       } else {
-        store.send(.requestArchiveWorktrees(targets))
+        store.send(.worktreeLifecycle(.requestArchiveWorktrees(targets)))
       }
     }
   }
@@ -119,9 +119,9 @@ struct SidebarView: View {
     guard !targets.isEmpty else { return nil }
     return {
       if targets.count == 1, let target = targets.first {
-        store.send(.requestDeleteWorktree(target.worktreeID, target.repositoryID))
+        store.send(.worktreeLifecycle(.requestDeleteWorktree(target.worktreeID, target.repositoryID)))
       } else {
-        store.send(.requestDeleteWorktrees(targets))
+        store.send(.worktreeLifecycle(.requestDeleteWorktrees(targets)))
       }
     }
   }

@@ -406,18 +406,22 @@ struct AppFeature {
           customCommands: state.selectedCustomCommands
         )
         return .merge(
-          .send(.repositories(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled))),
+          .send(.repositories(.githubIntegration(.setGithubIntegrationEnabled(settings.githubIntegrationEnabled)))),
           .send(
             .repositories(
-              .setAutomaticallyArchiveMergedWorktrees(
-                settings.automaticallyArchiveMergedWorktrees
+              .githubIntegration(
+                .setAutomaticallyArchiveMergedWorktrees(
+                  settings.automaticallyArchiveMergedWorktrees
+                )
               )
             )
           ),
           .send(
             .repositories(
-              .setMoveNotifiedWorktreeToTop(
-                settings.moveNotifiedWorktreeToTop
+              .worktreeOrdering(
+                .setMoveNotifiedWorktreeToTop(
+                  settings.moveNotifiedWorktreeToTop
+                )
               )
             )
           ),
@@ -814,16 +818,16 @@ struct AppFeature {
         )
 
       case .commandPalette(.delegate(.newWorktree)):
-        return .send(.repositories(.createRandomWorktree))
+        return .send(.repositories(.worktreeCreation(.createRandomWorktree)))
 
       case .commandPalette(.delegate(.openRepository)):
         return .send(.repositories(.setOpenPanelPresented(true)))
 
       case .commandPalette(.delegate(.removeWorktree(let worktreeID, let repositoryID))):
-        return .send(.repositories(.requestDeleteWorktree(worktreeID, repositoryID)))
+        return .send(.repositories(.worktreeLifecycle(.requestDeleteWorktree(worktreeID, repositoryID))))
 
       case .commandPalette(.delegate(.archiveWorktree(let worktreeID, let repositoryID))):
-        return .send(.repositories(.requestArchiveWorktree(worktreeID, repositoryID)))
+        return .send(.repositories(.worktreeLifecycle(.requestArchiveWorktree(worktreeID, repositoryID))))
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
@@ -837,28 +841,28 @@ struct AppFeature {
         }
 
       case .commandPalette(.delegate(.openPullRequest(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .openOnGithub)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openOnGithub))))
 
       case .commandPalette(.delegate(.markPullRequestReady(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .markReadyForReview)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .markReadyForReview))))
 
       case .commandPalette(.delegate(.mergePullRequest(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .merge)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .merge))))
 
       case .commandPalette(.delegate(.closePullRequest(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .close)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .close))))
 
       case .commandPalette(.delegate(.copyFailingJobURL(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .copyFailingJobURL)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .copyFailingJobURL))))
 
       case .commandPalette(.delegate(.copyCiFailureLogs(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .copyCiFailureLogs)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .copyCiFailureLogs))))
 
       case .commandPalette(.delegate(.rerunFailedJobs(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .rerunFailedJobs)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .rerunFailedJobs))))
 
       case .commandPalette(.delegate(.openFailingCheckDetails(let worktreeID))):
-        return .send(.repositories(.pullRequestAction(worktreeID, .openFailingCheckDetails)))
+        return .send(.repositories(.githubIntegration(.pullRequestAction(worktreeID, .openFailingCheckDetails))))
 
       #if DEBUG
         case .commandPalette(.delegate(.debugTestToast(let toast))):
@@ -870,7 +874,7 @@ struct AppFeature {
 
       case .terminalEvent(.notificationReceived(let worktreeID, let title, let body)):
         var effects: [Effect<Action>] = [
-          .send(.repositories(.worktreeNotificationReceived(worktreeID)))
+          .send(.repositories(.worktreeOrdering(.worktreeNotificationReceived(worktreeID))))
         ]
         if state.settings.systemNotificationsEnabled {
           effects.append(
@@ -922,7 +926,7 @@ struct AppFeature {
         }
         return .send(.commandPalette(.setPresented(true)))
       case .terminalEvent(.setupScriptConsumed(let worktreeID)):
-        return .send(.repositories(.consumeSetupScript(worktreeID)))
+        return .send(.repositories(.worktreeCreation(.consumeSetupScript(worktreeID))))
 
       case .terminalEvent(.fontSizeChanged(let fontSize)):
         return .send(.settings(.setTerminalFontSize(fontSize)))

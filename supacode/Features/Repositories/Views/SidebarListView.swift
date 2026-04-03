@@ -126,7 +126,7 @@ struct SidebarListView: View {
                 store.send(.presentAlert(title: "Unable to load \(name)", message: message))
               },
               removeRepository: {
-                store.send(.removeFailedRepository(repositoryID))
+                store.send(.repositoryManagement(.removeFailedRepository(repositoryID)))
               }
             )
             .padding(.horizontal, 12)
@@ -155,7 +155,7 @@ struct SidebarListView: View {
           }
         }
         .onMove { offsets, destination in
-          store.send(.repositoriesMoved(offsets, destination))
+          store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
         }
       }
     }
@@ -196,7 +196,7 @@ struct SidebarListView: View {
     .dropDestination(for: URL.self) { urls, _ in
       let fileURLs = urls.filter(\.isFileURL)
       guard !fileURLs.isEmpty else { return false }
-      store.send(.openRepositories(fileURLs))
+      store.send(.repositoryManagement(.openRepositories(fileURLs)))
       return true
     }
     .onKeyPress { keyPress in

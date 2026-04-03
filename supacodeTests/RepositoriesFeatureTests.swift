@@ -826,7 +826,7 @@ struct RepositoriesFeatureTests {
       TextState("Open a repository to create a worktree.")
     }
 
-    await store.send(.createRandomWorktree) {
+    await store.send(.worktreeCreation(.createRandomWorktree)) {
       $0.alert = expectedAlert
     }
   }
@@ -857,7 +857,7 @@ struct RepositoriesFeatureTests {
       TextState("This folder doesn't support worktrees.")
     }
 
-    await store.send(.createRandomWorktree) {
+    await store.send(.worktreeCreation(.createRandomWorktree)) {
       $0.alert = expectedAlert
     }
   }
@@ -873,7 +873,7 @@ struct RepositoriesFeatureTests {
       $0.gitClient.branchRefs = { _ in ["origin/main", "origin/dev"] }
     }
 
-    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.promptedWorktreeCreationDataLoaded) {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
@@ -992,9 +992,9 @@ struct RepositoriesFeatureTests {
       $0.gitClient.branchRefs = { _ in ["origin/main"] }
     }
 
-    await store.send(.createRandomWorktreeInRepository(repoA.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repoA.id)))
     await promptLoadGate.waitUntilArmed()
-    await store.send(.createRandomWorktreeInRepository(repoB.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repoB.id)))
     await promptLoadGate.resume()
     await store.receive(\.worktreeCreation.promptedWorktreeCreationDataLoaded) {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
@@ -1164,7 +1164,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
@@ -1216,7 +1216,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
@@ -1267,7 +1267,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
@@ -1303,7 +1303,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.createRandomWorktreeInRepository(repository.id))
+    await store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
     await store.receive(\.worktreeCreation.createRandomWorktreeFailed)
     await store.finish()
 
@@ -1507,7 +1507,7 @@ struct RepositoriesFeatureTests {
       TextState("Delete \(worktree.name)? This deletes the worktree directory and its local branch.")
     }
 
-    await store.send(.requestDeleteWorktree(worktree.id, repository.id)) {
+    await store.send(.worktreeLifecycle(.requestDeleteWorktree(worktree.id, repository.id))) {
       $0.alert = expectedAlert
     }
   }
@@ -1530,7 +1530,7 @@ struct RepositoriesFeatureTests {
       TextState("Deleting the main worktree is not allowed.")
     }
 
-    await store.send(.requestDeleteWorktree(mainWorktree.id, repository.id)) {
+    await store.send(.worktreeLifecycle(.requestDeleteWorktree(mainWorktree.id, repository.id))) {
       $0.alert = expectedAlert
     }
   }
@@ -1559,7 +1559,7 @@ struct RepositoriesFeatureTests {
       TextState("Delete 2 worktrees? This deletes the worktree directories and their local branches.")
     }
 
-    await store.send(.requestDeleteWorktrees(targets)) {
+    await store.send(.worktreeLifecycle(.requestDeleteWorktrees(targets))) {
       $0.alert = expectedAlert
     }
   }
@@ -1584,7 +1584,7 @@ struct RepositoriesFeatureTests {
       TextState("Archive \(worktree.name)?")
     }
 
-    await store.send(.requestArchiveWorktree(worktree.id, repository.id)) {
+    await store.send(.worktreeLifecycle(.requestArchiveWorktree(worktree.id, repository.id))) {
       $0.alert = expectedAlert
     }
   }
@@ -1614,7 +1614,7 @@ struct RepositoriesFeatureTests {
       TextState("Archive 2 worktrees?")
     }
 
-    await store.send(.requestArchiveWorktrees(targets)) {
+    await store.send(.worktreeLifecycle(.requestArchiveWorktrees(targets))) {
       $0.alert = expectedAlert
     }
   }
@@ -1643,7 +1643,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.requestArchiveWorktree(featureWorktree.id, repository.id))
+    await store.send(.worktreeLifecycle(.requestArchiveWorktree(featureWorktree.id, repository.id)))
     await store.receive(\.worktreeLifecycle.archiveWorktreeConfirmed)
     await store.receive(\.worktreeLifecycle.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
@@ -1683,7 +1683,7 @@ struct RepositoriesFeatureTests {
       }
     }
 
-    await store.send(.archiveWorktreeConfirmed(featureWorktree.id, repository.id)) {
+    await store.send(.worktreeLifecycle(.archiveWorktreeConfirmed(featureWorktree.id, repository.id))) {
       $0.archivingWorktreeIDs = [featureWorktree.id]
       $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
         titleText: "Running archive script",
@@ -1757,7 +1757,7 @@ struct RepositoriesFeatureTests {
       TextState("Command failed: bash -lc exit 7\nstderr:\nfail")
     }
 
-    await store.send(.archiveWorktreeConfirmed(featureWorktree.id, repository.id)) {
+    await store.send(.worktreeLifecycle(.archiveWorktreeConfirmed(featureWorktree.id, repository.id))) {
       $0.archivingWorktreeIDs = [featureWorktree.id]
       $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
         titleText: "Running archive script",
@@ -1786,7 +1786,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id))
+    await store.send(.worktreeLifecycle(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id)))
     #expect(store.state.archivedWorktreeIDs.isEmpty)
   }
 
@@ -1803,7 +1803,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "late failure"))
+    await store.send(.worktreeLifecycle(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "late failure")))
     #expect(store.state.alert == nil)
     #expect(store.state.archivedWorktreeIDs.isEmpty)
   }
@@ -1840,7 +1840,7 @@ struct RepositoriesFeatureTests {
     #expect(store.state.archivingWorktreeIDs.contains(featureWorktree.id))
     #expect(store.state.archiveScriptProgressByWorktreeID[featureWorktree.id] != nil)
 
-    await store.send(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id))
+    await store.send(.worktreeLifecycle(.archiveScriptSucceeded(worktreeID: featureWorktree.id, repositoryID: repository.id)))
     #expect(store.state.archivingWorktreeIDs.isEmpty)
     #expect(store.state.archiveScriptProgressByWorktreeID.isEmpty)
   }
@@ -1877,7 +1877,7 @@ struct RepositoriesFeatureTests {
     #expect(store.state.archivingWorktreeIDs.contains(featureWorktree.id))
     #expect(store.state.archiveScriptProgressByWorktreeID[featureWorktree.id] != nil)
 
-    await store.send(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "script failed"))
+    await store.send(.worktreeLifecycle(.archiveScriptFailed(worktreeID: featureWorktree.id, message: "script failed")))
     #expect(store.state.archivingWorktreeIDs.isEmpty)
     #expect(store.state.archiveScriptProgressByWorktreeID.isEmpty)
     #expect(store.state.alert != nil)
@@ -1938,7 +1938,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.worktreeNotificationReceived(featureWorktree.id))
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureWorktree.id)))
     #expect(store.state.statusToast == nil)
   }
 
@@ -1954,7 +1954,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.worktreeNotificationReceived(featureB.id)) {
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureB.id))) {
       $0.worktreeOrderByRepository[repoRoot] = [featureB.id, featureA.id]
     }
     #expect(store.state.statusToast == nil)
@@ -1973,7 +1973,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.worktreeNotificationReceived(featureB.id))
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureB.id)))
     #expect(store.state.worktreeOrderByRepository[repoRoot] == [featureA.id, featureB.id])
     #expect(store.state.statusToast == nil)
   }
@@ -1985,7 +1985,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.setMoveNotifiedWorktreeToTop(false)) {
+    await store.send(.worktreeOrdering(.setMoveNotifiedWorktreeToTop(false))) {
       $0.moveNotifiedWorktreeToTop = false
     }
   }
@@ -2142,7 +2142,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.unpinnedWorktreesMoved(repositoryID: repoRoot, IndexSet(integer: 0), 3)) {
+    await store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repoRoot, IndexSet(integer: 0), 3))) {
       $0.worktreeOrderByRepository[repoRoot] = [worktree2.id, worktree3.id, worktree1.id]
     }
   }
@@ -2161,7 +2161,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.pinnedWorktreesMoved(repositoryID: repoA, IndexSet(integer: 1), 0)) {
+    await store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repoA, IndexSet(integer: 1), 0))) {
       $0.pinnedWorktreeIDs = [worktreeA2.id, worktreeB1.id, worktreeA1.id]
     }
   }
@@ -2531,7 +2531,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.pullRequestAction(featureWorktree.id, .merge))
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .merge)))
     await store.receive(\.showToast) {
       $0.statusToast = .inProgress("Merging pull request…")
     }
@@ -2573,7 +2573,7 @@ struct RepositoriesFeatureTests {
     }
     store.exhaustivity = .off
 
-    await store.send(.pullRequestAction(featureWorktree.id, .close))
+    await store.send(.githubIntegration(.pullRequestAction(featureWorktree.id, .close)))
     await store.receive(\.showToast) {
       $0.statusToast = .inProgress("Closing pull request…")
     }
@@ -2668,7 +2668,7 @@ struct RepositoriesFeatureTests {
       $0.queuedPullRequestRefreshByRepositoryID = [:]
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
-    await store.send(.setGithubIntegrationEnabled(false)) {
+    await store.send(.githubIntegration(.setGithubIntegrationEnabled(false))) {
       $0.githubIntegrationAvailability = .disabled
       $0.pendingPullRequestRefreshByRepositoryID = [:]
       $0.queuedPullRequestRefreshByRepositoryID = [:]
@@ -2734,7 +2734,7 @@ struct RepositoriesFeatureTests {
       }
     }
 
-    await store.send(.githubIntegrationAvailabilityUpdated(true)) {
+    await store.send(.githubIntegration(.githubIntegrationAvailabilityUpdated(true))) {
       $0.githubIntegrationAvailability = .available
       $0.pendingPullRequestRefreshByRepositoryID = [:]
     }
@@ -2768,7 +2768,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.githubIntegrationAvailabilityUpdated(false)) {
+    await store.send(.githubIntegration(.githubIntegrationAvailabilityUpdated(false))) {
       $0.githubIntegrationAvailability = .unavailable
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: URL(fileURLWithPath: repoRoot),
@@ -2777,7 +2777,7 @@ struct RepositoriesFeatureTests {
       $0.queuedPullRequestRefreshByRepositoryID = [:]
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
-    await store.send(.setGithubIntegrationEnabled(false)) {
+    await store.send(.githubIntegration(.setGithubIntegrationEnabled(false))) {
       $0.githubIntegrationAvailability = .disabled
       $0.pendingPullRequestRefreshByRepositoryID = [:]
       $0.queuedPullRequestRefreshByRepositoryID = [:]
@@ -2798,8 +2798,8 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.githubIntegrationAvailabilityUpdated(false))
-    await store.send(.githubIntegrationAvailabilityUpdated(true))
+    await store.send(.githubIntegration(.githubIntegrationAvailabilityUpdated(false)))
+    await store.send(.githubIntegration(.githubIntegrationAvailabilityUpdated(true)))
     #expect(store.state == expectedState)
     await store.finish()
   }
@@ -2914,7 +2914,7 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.unarchiveWorktree(worktree.id))
+    await store.send(.worktreeLifecycle(.unarchiveWorktree(worktree.id)))
     expectNoDifference(store.state.archivedWorktreeIDs, [])
   }
 

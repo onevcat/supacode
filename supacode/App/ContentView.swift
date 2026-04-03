@@ -58,7 +58,7 @@ struct ContentView: View {
     ) { result in
       switch result {
       case .success(let urls):
-        store.send(.repositories(.openRepositories(urls)))
+        store.send(.repositories(.repositoryManagement(.openRepositories(urls))))
       case .failure:
         store.send(
           .repositories(

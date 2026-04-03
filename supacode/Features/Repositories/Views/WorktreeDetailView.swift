@@ -221,7 +221,7 @@ struct WorktreeDetailView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .onAppear {
         if shouldFocusTerminal {
-          store.send(.repositories(.consumeTerminalFocus(selectedTerminalWorktree.id)))
+          store.send(.repositories(.worktreeCreation(.consumeTerminalFocus(selectedTerminalWorktree.id))))
         }
       }
     } else if let selectedRepository = repositories.selectedRepository {

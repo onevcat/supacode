@@ -23,7 +23,7 @@ struct RepositorySectionView: View {
       repository.kind == .plain
       && state.selectedRepositoryID == repository.id
     let openRepoSettings = {
-      _ = store.send(.openRepositorySettings(repository.id))
+      _ = store.send(.repositoryManagement(.openRepositorySettings(repository.id)))
     }
     let toggleExpanded = {
       guard !isRemovingRepository else { return }
@@ -78,7 +78,7 @@ struct RepositorySectionView: View {
           }
           .help("Repo Settings ")
           Button("Remove Repository") {
-            store.send(.requestRemoveRepository(repository.id))
+            store.send(.repositoryManagement(.requestRemoveRepository(repository.id)))
           }
           .help("Remove repository ")
           .disabled(isRemovingRepository)
@@ -104,7 +104,7 @@ struct RepositorySectionView: View {
         .disabled(isRemovingRepository)
         if repository.capabilities.supportsWorktrees {
           Button {
-            store.send(.createRandomWorktreeInRepository(repository.id))
+            store.send(.worktreeCreation(.createRandomWorktreeInRepository(repository.id)))
           } label: {
             Label("New Worktree", systemImage: "plus")
               .labelStyle(.iconOnly)
@@ -193,7 +193,7 @@ struct RepositorySectionView: View {
       }
       .help("Repo Settings ")
       Button("Remove Repository") {
-        store.send(.requestRemoveRepository(repository.id))
+        store.send(.repositoryManagement(.requestRemoveRepository(repository.id)))
       }
       .help("Remove repository ")
       .disabled(isRemovingRepository)

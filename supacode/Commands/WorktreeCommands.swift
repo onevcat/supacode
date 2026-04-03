@@ -78,7 +78,7 @@ struct WorktreeCommands: Commands {
       .help(helpText(title: "Open Pull Request on GitHub", commandID: AppShortcuts.CommandID.openPullRequest))
       .disabled(pullRequestURL == nil || !githubIntegrationEnabled)
       Button("New Worktree", systemImage: "plus") {
-        store.send(.repositories(.createRandomWorktree))
+        store.send(.repositories(.worktreeCreation(.createRandomWorktree)))
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.newWorktree)))
       .help(helpText(title: "New Worktree", commandID: AppShortcuts.CommandID.newWorktree))
