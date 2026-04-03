@@ -93,6 +93,10 @@ final class WorktreeTerminalState {
     return surfaces[surfaceId]
   }
 
+  func surfaceView(for surfaceID: UUID) -> GhosttySurfaceView? {
+    surfaces[surfaceID]
+  }
+
   @discardableResult
   func insertCommittedText(_ text: String, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }
@@ -101,9 +105,22 @@ final class WorktreeTerminalState {
   }
 
   @discardableResult
+  func insertCommittedText(_ text: String, in surfaceID: UUID) -> Bool {
+    guard let surface = surfaceView(for: surfaceID) else { return false }
+    surface.insertCommittedTextForBroadcast(text)
+    return true
+  }
+
+  @discardableResult
   func applyMirroredKey(_ key: MirroredTerminalKey, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }
     return surface.applyMirroredKeyForBroadcast(key)
+  }
+
+  @discardableResult
+  func submitLine(in surfaceID: UUID) -> Bool {
+    guard let surface = surfaceView(for: surfaceID) else { return false }
+    return surface.submitLine()
   }
 
   var taskStatus: WorktreeTaskStatus {

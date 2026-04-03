@@ -214,11 +214,15 @@ struct SupacodeApp: App {
       },
       textDelivery: { target, text, trailingEnter in
         guard let state = terminalManager.stateIfExists(for: target.worktreeID) else { return }
-        let tabID = TerminalTabID(rawValue: target.tabID)
-        state.insertCommittedText(text, in: tabID)
-        if trailingEnter {
-          state.surfaceView(for: tabID)?.submitLine()
-        }
+        let delivery = CLISendTextDelivery(
+          insertText: { paneID, payload in
+            state.insertCommittedText(payload, in: paneID)
+          },
+          submitLine: { paneID in
+            state.submitLine(in: paneID)
+          }
+        )
+        delivery.deliver(to: target, text: text, trailingEnter: trailingEnter)
       },
       waiterProvider: { worktreeID, surfaceID in
         terminalManager.stateIfExists(for: worktreeID)?

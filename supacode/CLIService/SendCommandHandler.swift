@@ -39,6 +39,22 @@ extension SendResolvedTarget {
 }
 
 @MainActor
+struct CLISendTextDelivery {
+  typealias InsertText = @MainActor (UUID, String) -> Bool
+  typealias SubmitLine = @MainActor (UUID) -> Bool
+
+  let insertText: InsertText
+  let submitLine: SubmitLine
+
+  func deliver(to target: SendResolvedTarget, text: String, trailingEnter: Bool) {
+    _ = insertText(target.paneID, text)
+    if trailingEnter {
+      _ = submitLine(target.paneID)
+    }
+  }
+}
+
+@MainActor
 final class SendCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<SendResolvedTarget, TargetResolverError>
   typealias TextDelivery = @MainActor (SendResolvedTarget, String, Bool) -> Void
@@ -73,6 +89,8 @@ final class SendCommandHandler: CommandHandler {
       return mapResolverError(error)
     }
 
+    let waitStream = input.wait ? waiterProvider(target.worktreeID, target.paneID) : nil
+
     // Deliver text (and optional Enter)
     textDelivery(target, input.text, input.trailingEnter)
 
@@ -80,8 +98,7 @@ final class SendCommandHandler: CommandHandler {
     let waitResult: SendWaitResult?
     if input.wait {
       waitResult = await waitForCompletion(
-        worktreeID: target.worktreeID,
-        surfaceID: target.paneID,
+        stream: waitStream,
         timeoutSeconds: input.timeoutSeconds ?? 30
       )
       if waitResult == nil {
@@ -124,11 +141,10 @@ final class SendCommandHandler: CommandHandler {
   // MARK: - Wait
 
   private func waitForCompletion(
-    worktreeID: String,
-    surfaceID: UUID,
+    stream: AsyncStream<(exitCode: Int?, durationMs: Int)>?,
     timeoutSeconds: Int
   ) async -> SendWaitResult? {
-    guard let stream = waiterProvider(worktreeID, surfaceID) else {
+    guard let stream else {
       return nil
     }
 

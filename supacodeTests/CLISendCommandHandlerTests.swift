@@ -225,6 +225,30 @@ struct CLISendCommandHandlerTests {
     #expect(payload.wait?.exitCode == nil)
   }
 
+  @Test func waitRegistrationHappensBeforeTextDelivery() async throws {
+    var continuation: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation?
+
+    let handler = SendCommandHandler(
+      resolveProvider: { _ in .success(Self.makeTarget()) },
+      textDelivery: { _, _, _ in
+        continuation?.yield((exitCode: 0, durationMs: 1))
+        continuation?.finish()
+      },
+      waiterProvider: { _, _ in
+        AsyncStream { streamContinuation in
+          continuation = streamContinuation
+        }
+      }
+    )
+
+    let response = await handler.handle(envelope: Self.makeEnvelope(timeoutSeconds: 1))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    #expect(payload.wait?.exitCode == 0)
+    #expect(payload.wait?.durationMs == 1)
+  }
+
   @Test func textDeliveryReceivesCorrectArguments() async throws {
     var deliveredText: String?
     var deliveredTrailingEnter: Bool?
@@ -240,5 +264,25 @@ struct CLISendCommandHandlerTests {
 
     #expect(deliveredText == "git status")
     #expect(deliveredTrailingEnter == false)
+  }
+
+  @Test func deliveryTargetsResolvedPane() {
+    var insertedPaneID: UUID?
+    var submittedPaneID: UUID?
+    let delivery = CLISendTextDelivery(
+      insertText: { paneID, _ in
+        insertedPaneID = paneID
+        return true
+      },
+      submitLine: { paneID in
+        submittedPaneID = paneID
+        return true
+      }
+    )
+
+    delivery.deliver(to: Self.makeTarget(), text: "echo hi", trailingEnter: true)
+
+    #expect(insertedPaneID == Self.testPaneID)
+    #expect(submittedPaneID == Self.testPaneID)
   }
 }
