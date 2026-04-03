@@ -77,8 +77,8 @@ final class TargetResolver {
     _ value: String,
     _ snapshot: TargetResolutionSnapshot
   ) -> Result<ResolvedTarget, TargetResolverError> {
-    let matches = snapshot.worktrees.filter { wt in
-      wt.id == value || wt.name == value || wt.path == value
+    let matches = snapshot.worktrees.filter { worktree in
+      worktree.id == value || worktree.name == value || worktree.path == value
     }
     guard !matches.isEmpty else {
       return .failure(.notFound("Worktree '\(value)' not found."))
@@ -110,12 +110,13 @@ final class TargetResolver {
         guard let pane = tab.focusedPane ?? tab.panes.first else {
           return .failure(.notFound("No panes in tab '\(value)'."))
         }
-        return .success(makeTarget(
-          worktree: worktree,
-          tab: tab,
-          pane: pane,
-          focusedWorktreeID: snapshot.focusedWorktreeID
-        ))
+        return .success(
+          makeTarget(
+            worktree: worktree,
+            tab: tab,
+            pane: pane,
+            focusedWorktreeID: snapshot.focusedWorktreeID
+          ))
       }
     }
     return .failure(.notFound("Tab '\(value)' not found."))
@@ -133,12 +134,13 @@ final class TargetResolver {
     for worktree in snapshot.worktrees {
       for tab in worktree.tabs {
         for pane in tab.panes where pane.id == uuid {
-          return .success(makeTarget(
-            worktree: worktree,
-            tab: tab,
-            pane: pane,
-            focusedWorktreeID: snapshot.focusedWorktreeID
-          ))
+          return .success(
+            makeTarget(
+              worktree: worktree,
+              tab: tab,
+              pane: pane,
+              focusedWorktreeID: snapshot.focusedWorktreeID
+            ))
         }
       }
     }

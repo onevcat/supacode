@@ -64,14 +64,15 @@ struct CLISendCommandHandlerTests {
   ) -> CommandEnvelope {
     CommandEnvelope(
       output: .json,
-      command: .send(SendInput(
-        selector: .none,
-        text: text,
-        trailingEnter: trailingEnter,
-        source: source,
-        wait: wait,
-        timeoutSeconds: timeoutSeconds
-      ))
+      command: .send(
+        SendInput(
+          selector: .none,
+          text: text,
+          trailingEnter: trailingEnter,
+          source: source,
+          wait: wait,
+          timeoutSeconds: timeoutSeconds
+        ))
     )
   }
 
