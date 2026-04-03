@@ -354,6 +354,182 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(result.stdout.contains("App:main (running)"), "Missing header: \(result.stdout)")
   }
 
+  // MARK: - Send command tests
+
+  func testSendCommandRoundTripsOverSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "send")
+    let response = try CommandResponse(
+      ok: true,
+      command: "send",
+      schemaVersion: "prowl.cli.send.v1",
+      data: RawJSON(encoding: SendResponseData(
+        target: SendResponseTarget(
+          worktree: ListWorktree(
+            id: "Prowl:/Projects/Prowl", name: "Prowl",
+            path: "/Projects/Prowl", rootPath: "/Projects/Prowl", kind: "git"
+          ),
+          tab: SendResponseTab(id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0", title: "Prowl 1", selected: true),
+          pane: SendResponsePane(
+            id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+            title: "zsh", cwd: "/Projects/Prowl", focused: true
+          )
+        ),
+        input: SendResponseInput(source: "argv", characters: 10, bytes: 10, trailingEnterSent: true),
+        createdTab: false,
+        wait: SendResponseWait(exitCode: 0, durationMs: 1234)
+      ))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["send", "echo hello", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .send(let input) = envelope.command {
+      XCTAssertEqual(input.text, "echo hello")
+      XCTAssertEqual(input.source, .argv)
+      XCTAssertTrue(input.trailingEnter)
+      XCTAssertTrue(input.wait)
+    } else {
+      XCTFail("Expected send command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, true)
+    XCTAssertEqual(payload["command"] as? String, "send")
+    let data = try XCTUnwrap(payload["data"] as? [String: Any])
+    let wait = try XCTUnwrap(data["wait"] as? [String: Any])
+    XCTAssertEqual(wait["exit_code"] as? Int, 0)
+    XCTAssertEqual(wait["duration_ms"] as? Int, 1234)
+  }
+
+  func testSendNoWaitJsonShowsNullWait() throws {
+    let socketPath = temporarySocketPath(suffix: "send-no-wait")
+    let response = try CommandResponse(
+      ok: true,
+      command: "send",
+      schemaVersion: "prowl.cli.send.v1",
+      data: RawJSON(encoding: SendResponseData(
+        target: SendResponseTarget(
+          worktree: ListWorktree(
+            id: "wt-1", name: "main",
+            path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+          ),
+          tab: SendResponseTab(id: "t1", title: "Tab 1", selected: true),
+          pane: SendResponsePane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true)
+        ),
+        input: SendResponseInput(source: "argv", characters: 5, bytes: 5, trailingEnterSent: true),
+        createdTab: false,
+        wait: nil
+      ))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["send", "hello", "--no-wait", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .send(let input) = envelope.command {
+      XCTAssertFalse(input.wait)
+    } else {
+      XCTFail("Expected send command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    let data = try XCTUnwrap(payload["data"] as? [String: Any])
+    XCTAssertTrue(data["wait"] is NSNull, "wait should be null: \(data["wait"] ?? "missing")")
+  }
+
+  func testSendTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "send-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "send",
+      schemaVersion: "prowl.cli.send.v1",
+      data: RawJSON(encoding: SendResponseData(
+        target: SendResponseTarget(
+          worktree: ListWorktree(
+            id: "wt-1", name: "main",
+            path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+          ),
+          tab: SendResponseTab(id: "t1", title: "Tab 1", selected: true),
+          pane: SendResponsePane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true)
+        ),
+        input: SendResponseInput(source: "argv", characters: 10, bytes: 10, trailingEnterSent: true),
+        createdTab: false,
+        wait: SendResponseWait(exitCode: 0, durationMs: 350)
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["send", "echo hello"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Sent to"), "Missing 'Sent to' header: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("App:main"), "Missing worktree: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("zsh"), "Missing pane title: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("chars:"), "Missing chars label: \(result.stdout)")
+  }
+
+  func testSendNoColorProducesCleanOutput() throws {
+    let socketPath = temporarySocketPath(suffix: "send-no-color")
+    let response = try CommandResponse(
+      ok: true,
+      command: "send",
+      schemaVersion: "prowl.cli.send.v1",
+      data: RawJSON(encoding: SendResponseData(
+        target: SendResponseTarget(
+          worktree: ListWorktree(
+            id: "wt-1", name: "main",
+            path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+          ),
+          tab: SendResponseTab(id: "t1", title: "Tab 1", selected: true),
+          pane: SendResponsePane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true)
+        ),
+        input: SendResponseInput(source: "argv", characters: 5, bytes: 5, trailingEnterSent: true),
+        createdTab: false,
+        wait: SendResponseWait(exitCode: 0, durationMs: 100)
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["send", "hello", "--no-color"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertFalse(result.stdout.contains("\u{1B}["), "Should not contain ANSI escape codes: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Sent to"), "Missing header: \(result.stdout)")
+  }
+
+  func testSendEmptyInputReturnsError() throws {
+    let result = try runProwl(args: ["send", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, "EMPTY_INPUT")
+  }
+
+  func testSendTimeoutValidation() throws {
+    let result = try runProwl(args: ["send", "hello", "--timeout", "0", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, "INVALID_ARGUMENT")
+  }
+
   // MARK: - Helpers
 
   private func runWithMockServer(
@@ -378,7 +554,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
 
   private func runProwl(
     args: [String],
-    environment: [String: String] = [:]
+    environment: [String: String] = [:],
+    stdinData: Data? = nil
   ) throws -> CommandResult {
     let binaryPath = try ensureProwlBinary()
     var mergedEnvironment = ProcessInfo.processInfo.environment
@@ -389,7 +566,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       executable: binaryPath,
       arguments: args,
       currentDirectory: repoRoot.path,
-      environment: mergedEnvironment
+      environment: mergedEnvironment,
+      stdinData: stdinData
     )
   }
 
@@ -417,7 +595,8 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     executable: String,
     arguments: [String],
     currentDirectory: String,
-    environment: [String: String]? = nil
+    environment: [String: String]? = nil,
+    stdinData: Data? = nil
   ) throws -> CommandResult {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
@@ -431,6 +610,16 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let stderrPipe = Pipe()
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
+
+    if let stdinData {
+      let stdinPipe = Pipe()
+      process.standardInput = stdinPipe
+      stdinPipe.fileHandleForWriting.write(stdinData)
+      stdinPipe.fileHandleForWriting.closeFile()
+    } else {
+      // Use /dev/null so isatty(stdin) doesn't incorrectly report stdin data.
+      process.standardInput = FileHandle.nullDevice
+    }
 
     try process.run()
     process.waitUntilExit()
@@ -508,6 +697,85 @@ private struct ListPane: Encodable {
 
 private struct ListTask: Encodable {
   let status: String?
+}
+
+private struct SendResponseData: Encodable {
+  let target: SendResponseTarget
+  let input: SendResponseInput
+
+  enum CodingKeys: String, CodingKey {
+    case target
+    case input
+    case createdTab = "created_tab"
+    case wait
+  }
+
+  let createdTab: Bool
+  let wait: SendResponseWait?
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(target, forKey: .target)
+    try container.encode(input, forKey: .input)
+    try container.encode(createdTab, forKey: .createdTab)
+    if let wait {
+      try container.encode(wait, forKey: .wait)
+    } else {
+      try container.encodeNil(forKey: .wait)
+    }
+  }
+}
+
+private struct SendResponseTarget: Encodable {
+  let worktree: ListWorktree
+  let tab: SendResponseTab
+  let pane: SendResponsePane
+}
+
+private struct SendResponseTab: Encodable {
+  let id: String
+  let title: String
+  let selected: Bool
+}
+
+private struct SendResponsePane: Encodable {
+  let id: String
+  let title: String
+  let cwd: String?
+  let focused: Bool
+}
+
+private struct SendResponseInput: Encodable {
+  let source: String
+  let characters: Int
+  let bytes: Int
+
+  enum CodingKeys: String, CodingKey {
+    case source
+    case characters
+    case bytes
+    case trailingEnterSent = "trailing_enter_sent"
+  }
+
+  let trailingEnterSent: Bool
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(source, forKey: .source)
+    try container.encode(characters, forKey: .characters)
+    try container.encode(bytes, forKey: .bytes)
+    try container.encode(trailingEnterSent, forKey: .trailingEnterSent)
+  }
+}
+
+private struct SendResponseWait: Encodable {
+  let exitCode: Int?
+  let durationMs: Int
+
+  enum CodingKeys: String, CodingKey {
+    case exitCode = "exit_code"
+    case durationMs = "duration_ms"
+  }
 }
 
 private struct CommandResult {

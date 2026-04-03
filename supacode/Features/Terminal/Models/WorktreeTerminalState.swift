@@ -37,6 +37,7 @@ final class WorktreeTerminalState {
   private var commandFinishedNotificationEnabled = true
   private var commandFinishedNotificationThreshold = 10
   private var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
+  private var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -92,6 +93,10 @@ final class WorktreeTerminalState {
     return surfaces[surfaceId]
   }
 
+  func surfaceView(for surfaceID: UUID) -> GhosttySurfaceView? {
+    surfaces[surfaceID]
+  }
+
   @discardableResult
   func insertCommittedText(_ text: String, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }
@@ -100,9 +105,22 @@ final class WorktreeTerminalState {
   }
 
   @discardableResult
+  func insertCommittedText(_ text: String, in surfaceID: UUID) -> Bool {
+    guard let surface = surfaceView(for: surfaceID) else { return false }
+    surface.insertCommittedTextForBroadcast(text)
+    return true
+  }
+
+  @discardableResult
   func applyMirroredKey(_ key: MirroredTerminalKey, in tabId: TerminalTabID) -> Bool {
     guard let surface = surfaceView(for: tabId) else { return false }
     return surface.applyMirroredKeyForBroadcast(key)
+  }
+
+  @discardableResult
+  func submitLine(in surfaceID: UUID) -> Bool {
+    guard let surface = surfaceView(for: surfaceID) else { return false }
+    return surface.submitLine()
   }
 
   var taskStatus: WorktreeTaskStatus {
@@ -1199,6 +1217,13 @@ final class WorktreeTerminalState {
   }
 
   func handleCommandFinished(exitCode: Int?, durationNs: UInt64, surfaceId: UUID) {
+    // Notify CLI waiters unconditionally before applying notification filters.
+    if let continuation = commandFinishedWaiters.removeValue(forKey: surfaceId) {
+      let durationMs = Int(durationNs / 1_000_000)
+      continuation.yield((exitCode: exitCode, durationMs: durationMs))
+      continuation.finish()
+    }
+
     guard commandFinishedNotificationEnabled else { return }
     let durationSeconds = Int(durationNs / 1_000_000_000)
     guard durationSeconds >= commandFinishedNotificationThreshold else { return }
@@ -1516,6 +1541,60 @@ extension WorktreeTerminalState {
     }
 
     return fallbackTabTitle
+  }
+}
+
+// MARK: - CLI Command Finished Waiting
+
+extension WorktreeTerminalState {
+  /// Returns an `AsyncStream` that yields exactly once when the command finishes
+  /// on the given surface. The caller should race this against a timeout.
+  func waitForCommandFinished(surfaceID: UUID) -> AsyncStream<(exitCode: Int?, durationMs: Int)> {
+    // Cancel any existing waiter for this surface.
+    commandFinishedWaiters[surfaceID]?.finish()
+    commandFinishedWaiters.removeValue(forKey: surfaceID)
+
+    return AsyncStream { continuation in
+      commandFinishedWaiters[surfaceID] = continuation
+      continuation.onTermination = { [weak self] _ in
+        Task { @MainActor in
+          self?.commandFinishedWaiters.removeValue(forKey: surfaceID)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - CLI Send Snapshot
+
+struct CLISendTabSnapshot {
+  let focusedPaneID: UUID?
+  let panes: [TargetResolutionSnapshot.Pane]
+}
+
+extension WorktreeTerminalState {
+  func makeCLISendSnapshot(for tabId: TerminalTabID) -> CLISendTabSnapshot? {
+    let paneIDs = trees[tabId]?.leaves().map(\.id) ?? []
+    guard !paneIDs.isEmpty else { return nil }
+
+    let focusedPaneID = focusedSurfaceIdByTab[tabId]
+    let panes: [TargetResolutionSnapshot.Pane] = paneIDs.compactMap { paneID in
+      guard let surfaceView = surfaces[paneID] else { return nil }
+      let cwd = inheritedSurfaceConfig(
+        fromSurfaceId: paneID,
+        context: GHOSTTY_SURFACE_CONTEXT_TAB
+      ).workingDirectory?.path(percentEncoded: false)
+      let title = paneTitle(surfaceID: paneID, fallbackTabTitle: "")
+      return TargetResolutionSnapshot.Pane(
+        id: paneID,
+        title: title,
+        cwd: cwd,
+        isFocusedInTab: paneID == focusedPaneID,
+        surfaceView: surfaceView
+      )
+    }
+
+    return CLISendTabSnapshot(focusedPaneID: focusedPaneID, panes: panes)
   }
 }
 

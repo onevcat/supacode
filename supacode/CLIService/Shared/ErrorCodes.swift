@@ -26,6 +26,7 @@ public enum CLIErrorCode {
   // Send
   public static let emptyInput = "EMPTY_INPUT"
   public static let sendFailed = "SEND_FAILED"
+  public static let waitTimeout = "WAIT_TIMEOUT"
 
   // Key
   public static let invalidRepeat = "INVALID_REPEAT"

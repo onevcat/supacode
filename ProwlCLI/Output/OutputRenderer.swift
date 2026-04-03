@@ -49,6 +49,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "send",
+         let data = response.data,
+         let payload = try? data.decode(as: SendCommandPayload.self)
+      {
+        print(renderSend(payload))
+        return
+      }
+
       print("ok: \(response.command)")
       return
     }
@@ -141,6 +149,56 @@ enum OutputRenderer {
     }
 
     return lines.joined(separator: "\n")
+  }
+
+  private static func renderSend(_ payload: SendCommandPayload) -> String {
+    let wt = payload.target.worktree
+    let pane = payload.target.pane
+    let input = payload.input
+
+    let projectName = projectName(from: wt.path)
+    var lines: [String] = []
+
+    lines.append(
+      "Sent to \(projectName.cyan.bold)\(":".dim)\(wt.name) → \(pane.title.green)"
+      + "  \(pane.id.dim)"
+    )
+
+    let enterLabel = input.trailingEnterSent ? "yes".green : "no".dim
+    lines.append(
+      "  \("source:".dim) \(input.source)"
+      + "  \("chars:".dim) \(input.characters)"
+      + "  \("bytes:".dim) \(input.bytes)"
+      + "  \("enter:".dim) \(enterLabel)"
+    )
+
+    if let wait = payload.wait {
+      let exitLabel: String
+      if let code = wait.exitCode {
+        exitLabel = code == 0 ? "0".green : "\(code)".red.bold
+      } else {
+        exitLabel = "n/a".dim
+      }
+      let durationLabel = formatDurationMs(wait.durationMs)
+      lines.append("  \("exit:".dim) \(exitLabel)  \("duration:".dim) \(durationLabel)")
+    } else {
+      lines.append("  \("wait:".dim) \("none (fire-and-forget)".dim)")
+    }
+
+    return lines.joined(separator: "\n")
+  }
+
+  private static func formatDurationMs(_ ms: Int) -> String {
+    if ms < 1000 {
+      return "\(ms)ms"
+    }
+    let seconds = ms / 1000
+    if seconds < 60 {
+      return "\(seconds).\(String(format: "%03d", ms % 1000))s"
+    }
+    let minutes = seconds / 60
+    let remainingSeconds = seconds % 60
+    return remainingSeconds > 0 ? "\(minutes)m \(remainingSeconds)s" : "\(minutes)m"
   }
 
   private static func projectName(from path: String) -> String {
