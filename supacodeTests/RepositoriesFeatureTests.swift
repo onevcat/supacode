@@ -448,10 +448,10 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .openRepositories([
+      .repositoryManagement(.openRepositories([
         URL(fileURLWithPath: repoSelection),
         URL(fileURLWithPath: plainRoot),
-      ])
+      ]))
     )
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [gitRepository, plainRepository]
@@ -515,10 +515,10 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .openRepositories([
+      .repositoryManagement(.openRepositories([
         URL(fileURLWithPath: repoSelection),
         URL(fileURLWithPath: blockedRoot),
-      ])
+      ]))
     )
     await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [repository]
@@ -932,11 +932,11 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .startPromptedWorktreeCreation(
+      .worktreeCreation(.startPromptedWorktreeCreation(
         repositoryID: repository.id,
         branchName: "feature/existing",
         baseRef: nil
-      )
+      ))
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
       $0.worktreeCreationPrompt?.isValidating = true
@@ -1035,11 +1035,11 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .startPromptedWorktreeCreation(
+      .worktreeCreation(.startPromptedWorktreeCreation(
         repositoryID: repository.id,
         branchName: "feature/new-branch",
         baseRef: nil
-      )
+      ))
     ) {
       $0.worktreeCreationPrompt?.validationMessage = nil
       $0.worktreeCreationPrompt?.isValidating = true
@@ -1076,11 +1076,11 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .createWorktreeInRepository(
+      .worktreeCreation(.createWorktreeInRepository(
         repositoryID: repository.id,
         nameSource: .explicit("../../Desktop"),
         baseRefSource: .repositorySetting
-      )
+      ))
     )
     await store.receive(\.worktreeCreation.createRandomWorktreeFailed) {
       $0.alert = expectedAlert
@@ -1116,7 +1116,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .createRandomWorktreeFailed(
+      .worktreeCreation(.createRandomWorktreeFailed(
         title: "Unable to create worktree",
         message: "boom",
         pendingID: "pending:1",
@@ -1124,7 +1124,7 @@ struct RepositoriesFeatureTests {
         repositoryID: repository.id,
         name: "../../Desktop",
         baseDirectory: URL(fileURLWithPath: "/tmp/repo/.worktrees")
-      )
+      ))
     ) {
       $0.alert = expectedAlert
     }
@@ -1365,7 +1365,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .createRandomWorktreeFailed(
+      .worktreeCreation(.createRandomWorktreeFailed(
         title: "Unable to create worktree",
         message: "boom",
         pendingID: "pending:test",
@@ -1373,7 +1373,7 @@ struct RepositoriesFeatureTests {
         repositoryID: repository.id,
         name: "new-branch",
         baseDirectory: createTimeBaseDirectory
-      )
+      ))
     ) {
       $0.alert = expectedAlert
     }
@@ -1423,10 +1423,10 @@ struct RepositoriesFeatureTests {
       copyUntracked: true
     )
     await store.send(
-      .pendingWorktreeProgressUpdated(
+      .worktreeCreation(.pendingWorktreeProgressUpdated(
         id: pendingID,
         progress: nextProgress
-      )
+      ))
     ) {
       $0.pendingWorktrees[0].progress = nextProgress
     }
@@ -1463,7 +1463,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .createRandomWorktreeFailed(
+      .worktreeCreation(.createRandomWorktreeFailed(
         title: "Unable to create worktree",
         message: "boom",
         pendingID: pendingID,
@@ -1471,7 +1471,7 @@ struct RepositoriesFeatureTests {
         repositoryID: repository.id,
         name: nil,
         baseDirectory: URL(fileURLWithPath: "/tmp/repo/.worktrees")
-      )
+      ))
     ) {
       $0.pendingWorktrees = []
       $0.selection = nil
@@ -1479,10 +1479,10 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .pendingWorktreeProgressUpdated(
+      .worktreeCreation(.pendingWorktreeProgressUpdated(
         id: pendingID,
         progress: WorktreeCreationProgress(stage: .creatingWorktree)
-      )
+      ))
     )
     #expect(store.state.pendingWorktrees.isEmpty)
   }
@@ -2334,12 +2334,12 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .worktreeDeleted(
+      .worktreeLifecycle(.worktreeDeleted(
         removedWorktree.id,
         repositoryID: repository.id,
         selectionWasRemoved: false,
         nextSelection: nil
-      )
+      ))
     ) {
       $0.deletingWorktreeIDs = []
       $0.pendingSetupScriptWorktreeIDs = []
@@ -2373,12 +2373,12 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .worktreeDeleted(
+      .worktreeLifecycle(.worktreeDeleted(
         removedWorktree.id,
         repositoryID: repository.id,
         selectionWasRemoved: false,
         nextSelection: nil
-      )
+      ))
     ) {
       $0.deletingWorktreeIDs = []
       $0.repositories = [updatedRepository]
@@ -2417,11 +2417,11 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .createRandomWorktreeSucceeded(
+      .worktreeCreation(.createRandomWorktreeSucceeded(
         newWorktree,
         repositoryID: repository.id,
         pendingID: pendingID
-      )
+      ))
     ) {
       $0.pendingSetupScriptWorktreeIDs.insert(newWorktree.id)
       $0.pendingTerminalFocusWorktreeIDs.insert(newWorktree.id)
@@ -2458,10 +2458,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: featureWorktree.name)
 
     await store.send(
-      .repositoryPullRequestsLoaded(
+      .githubIntegration(.repositoryPullRequestsLoaded(
         repositoryID: repository.id,
         pullRequestsByWorktreeID: [featureWorktree.id: mergedPullRequest]
-      )
+      ))
     ) {
       $0.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -2488,10 +2488,10 @@ struct RepositoriesFeatureTests {
     let mergedPullRequest = makePullRequest(state: "MERGED", headRefName: mainWorktree.name)
 
     await store.send(
-      .repositoryPullRequestsLoaded(
+      .githubIntegration(.repositoryPullRequestsLoaded(
         repositoryID: repository.id,
         pullRequestsByWorktreeID: [mainWorktree.id: mergedPullRequest]
-      )
+      ))
     ) {
       $0.worktreeInfoByID[mainWorktree.id] = WorktreeInfoEntry(
         addedLines: nil,
@@ -2833,7 +2833,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .repositoryPullRequestRefreshCompleted(repository.id)
+      .githubIntegration(.repositoryPullRequestRefreshCompleted(repository.id))
     ) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
       $0.queuedPullRequestRefreshByRepositoryID = [:]
@@ -2869,10 +2869,10 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(
-      .repositoryPullRequestsLoaded(
+      .githubIntegration(.repositoryPullRequestsLoaded(
         repositoryID: repository.id,
         pullRequestsByWorktreeID: [featureWorktree.id: pullRequest]
-      )
+      ))
     )
     await store.finish()
   }
@@ -2898,10 +2898,10 @@ struct RepositoriesFeatureTests {
     let pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?] = [featureWorktree.id: nil]
 
     await store.send(
-      .repositoryPullRequestsLoaded(
+      .githubIntegration(.repositoryPullRequestsLoaded(
         repositoryID: repository.id,
         pullRequestsByWorktreeID: pullRequestsByWorktreeID
-      )
+      ))
     ) {
       $0.worktreeInfoByID.removeValue(forKey: featureWorktree.id)
     }
