@@ -343,6 +343,7 @@ struct SupacodeApp: App {
         appStore.send(.repositories(.repositoryManagement(.openRepositories([url]))))
       },
       createTabAtPath: { worktreeID, path in
+        // Find the Worktree object by ID to create a tab cd'd to the subpath.
         let repositories = appStore.state.repositories
         for repository in repositories.repositories {
           if let worktree = repository.worktrees.first(where: { $0.id == worktreeID }) {

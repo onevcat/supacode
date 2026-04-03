@@ -19,12 +19,14 @@ struct OpenCommandHandlerTests {
     },
     selectWorktree: @escaping OpenCommandHandler.SelectAction = { _ in },
     addAndOpen: @escaping OpenCommandHandler.AddAndOpenAction = { _ in },
+    createTabAtPath: @escaping OpenCommandHandler.CreateTabAtPathAction = { _, _ in },
     terminalSnapshot: @escaping OpenCommandHandler.TerminalSnapshotProvider = { _ in nil }
   ) -> OpenCommandHandler {
     OpenCommandHandler(
       resolver: resolver,
       selectWorktree: selectWorktree,
       addAndOpen: addAndOpen,
+      createTabAtPath: createTabAtPath,
       terminalSnapshot: terminalSnapshot
     )
   }
@@ -112,8 +114,10 @@ struct OpenCommandHandlerTests {
   // MARK: - Inside root
 
   @MainActor
-  @Test func openInsideRootResolvesToParentWorktree() async throws {
+  @Test func openInsideRootSelectsWorktreeAndCreatesTab() async throws {
     var selectedID: String?
+    var tabCreatedForWorktree: String?
+    var tabCreatedAtPath: String?
 
     let handler = makeHandler(
       resolver: { _ in
@@ -127,7 +131,11 @@ struct OpenCommandHandlerTests {
           resolvedPath: "/Users/test/Projects/Prowl/supacode"
         )
       },
-      selectWorktree: { id in selectedID = id }
+      selectWorktree: { id in selectedID = id },
+      createTabAtPath: { worktreeID, path in
+        tabCreatedForWorktree = worktreeID
+        tabCreatedAtPath = path
+      }
     )
 
     let envelope = CommandEnvelope(
@@ -138,6 +146,8 @@ struct OpenCommandHandlerTests {
 
     #expect(response.ok == true)
     #expect(selectedID == "Prowl:/Users/test/Projects/Prowl")
+    #expect(tabCreatedForWorktree == "Prowl:/Users/test/Projects/Prowl")
+    #expect(tabCreatedAtPath == "/Users/test/Projects/Prowl/supacode")
 
     let data = try #require(response.data)
     let payload = try data.decode(as: OpenCommandData.self)

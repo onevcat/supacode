@@ -104,22 +104,28 @@ final class OpenCommandHandler: CommandHandler {
   typealias Resolver = @MainActor (String?) -> OpenResolverResult
   typealias SelectAction = @MainActor (String) -> Void
   typealias AddAndOpenAction = @MainActor (URL) -> Void
+  /// Creates a new tab in the given worktree and `cd`s to the specified path.
+  /// Parameters: worktreeID, absolutePath.
+  typealias CreateTabAtPathAction = @MainActor (String, String) -> Void
   typealias TerminalSnapshotProvider = @MainActor (String) -> OpenTerminalSnapshot?
 
   private let resolver: Resolver
   private let selectWorktree: SelectAction
   private let addAndOpen: AddAndOpenAction
+  private let createTabAtPath: CreateTabAtPathAction
   private let terminalSnapshot: TerminalSnapshotProvider
 
   init(
     resolver: @escaping Resolver,
     selectWorktree: @escaping SelectAction,
     addAndOpen: @escaping AddAndOpenAction,
+    createTabAtPath: @escaping CreateTabAtPathAction = { _, _ in },
     terminalSnapshot: @escaping TerminalSnapshotProvider
   ) {
     self.resolver = resolver
     self.selectWorktree = selectWorktree
     self.addAndOpen = addAndOpen
+    self.createTabAtPath = createTabAtPath
     self.terminalSnapshot = terminalSnapshot
   }
 
@@ -167,6 +173,10 @@ final class OpenCommandHandler: CommandHandler {
     case .insideRoot:
       if let worktreeID = result.worktreeID {
         selectWorktree(worktreeID)
+        // Open a new tab cd'd to the exact requested subpath.
+        if let subpath = result.resolvedPath ?? input.path {
+          createTabAtPath(worktreeID, subpath)
+        }
       }
       bringAppToFront()
       let snapshot = result.worktreeID.flatMap { terminalSnapshot($0) }
