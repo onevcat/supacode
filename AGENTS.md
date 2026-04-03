@@ -13,6 +13,9 @@ make lint                        # Run swiftlint only (fix + lint)
 make check                       # Run both format and lint
 make test                        # Run all tests
 make log-stream                  # Stream app logs (subsystem: com.onevcat.prowl)
+make build-cli                   # Build CLI (prowl) via SwiftPM
+make test-cli-smoke              # Run CLI smoke tests (unit-level)
+make test-cli-integration        # Run CLI integration tests (socket round-trip)
 make bump-version                # Bump version (date-based YYYY.M.DD) and create git tag
 make bump-and-release            # Bump version and push to trigger release
 ```
@@ -113,6 +116,7 @@ Reducer ← .terminalEvent(Event) ← AsyncStream<Event>
 ## Rules
 
 - After a task, ensure the app builds: `make build-app`
+- When working on CLI code (`ProwlCLI/`, `ProwlCLITests/`, `Package.swift`), run `make build-cli`, `make test-cli-smoke`, and `make test-cli-integration` before committing.
 - Automatically commit your changes and your changes only. Do not use `git add .`
 - Before you go on your task, check the current git branch name, if it's something generic like an animal name, name it accordingly. Do not do this for main branch
 - After implementing an execplan, always submit a PR if you're not in the main branch

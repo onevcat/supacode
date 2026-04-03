@@ -3,9 +3,11 @@
 
 import ArgumentParser
 import ProwlCLIShared
+@preconcurrency import Rainbow
 
 enum CLIExecution {
-  static func run(command: String, output: OutputMode, _ body: () throws -> Void) throws {
+  static func run(command: String, output: OutputMode, colorEnabled: Bool = true, _ body: () throws -> Void) throws {
+    Rainbow.enabled = colorEnabled
     do {
       try body()
     } catch let error as ExitError {

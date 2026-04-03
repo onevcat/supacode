@@ -1456,6 +1456,69 @@ final class WorktreeTerminalState {
   }
 }
 
+struct CLIWorktreeTerminalSnapshot: Sendable {
+  let tabs: [CLITerminalTabSnapshot]
+  let taskStatus: ListCommandTask.Status?
+}
+
+struct CLITerminalTabSnapshot: Sendable {
+  let id: UUID
+  let title: String
+  let selected: Bool
+  let focusedPaneID: UUID?
+  let panes: [CLITerminalPaneSnapshot]
+}
+
+struct CLITerminalPaneSnapshot: Sendable {
+  let id: UUID
+  let title: String
+  let cwd: String?
+}
+
+extension WorktreeTerminalState {
+  func makeCLIListSnapshot() -> CLIWorktreeTerminalSnapshot {
+    let selectedTabID = tabManager.selectedTabId
+
+    let tabs: [CLITerminalTabSnapshot] = tabManager.tabs.map { tab in
+      let paneIDs = trees[tab.id]?.leaves().map(\.id) ?? []
+      let panes = paneIDs.map { paneID in
+        let cwd = inheritedSurfaceConfig(
+          fromSurfaceId: paneID,
+          context: GHOSTTY_SURFACE_CONTEXT_TAB
+        ).workingDirectory?.path(percentEncoded: false)
+
+        let title = paneTitle(surfaceID: paneID, fallbackTabTitle: tab.title)
+        return CLITerminalPaneSnapshot(id: paneID, title: title, cwd: cwd)
+      }
+
+      return CLITerminalTabSnapshot(
+        id: tab.id.rawValue,
+        title: tab.title,
+        selected: tab.id == selectedTabID,
+        focusedPaneID: focusedSurfaceIdByTab[tab.id],
+        panes: panes
+      )
+    }
+
+    return CLIWorktreeTerminalSnapshot(
+      tabs: tabs,
+      taskStatus: taskStatus == .running ? .running : .idle
+    )
+  }
+
+  private func paneTitle(surfaceID: UUID, fallbackTabTitle: String) -> String {
+    let rawTitle = surfaces[surfaceID]?.bridge.state.title?.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+
+    if let rawTitle, !rawTitle.isEmpty {
+      return rawTitle
+    }
+
+    return fallbackTabTitle
+  }
+}
+
 nonisolated func makeCommandInput(
   script: String,
   environmentExportPrefix: String

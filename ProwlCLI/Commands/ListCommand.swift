@@ -12,7 +12,7 @@ struct ListCommand: ParsableCommand {
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
-    try CLIExecution.run(command: "list", output: options.outputMode) {
+    try CLIExecution.run(command: "list", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .list(ListInput())
