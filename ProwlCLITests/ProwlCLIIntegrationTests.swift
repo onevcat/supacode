@@ -59,7 +59,11 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(result.exitCode, 0)
     let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
     if case .open(let input) = envelope.command {
-      XCTAssertEqual(input.path, repoRoot.path)
+      let openedPath = try XCTUnwrap(input.path)
+      XCTAssertEqual(
+        URL(fileURLWithPath: openedPath).resolvingSymlinksInPath().path,
+        repoRoot.resolvingSymlinksInPath().path
+      )
     } else {
       XCTFail("Expected open command envelope")
     }

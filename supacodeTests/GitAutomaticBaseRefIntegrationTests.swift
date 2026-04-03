@@ -52,6 +52,9 @@ private func runGit(_ arguments: [String]) throws -> String {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
   process.arguments = arguments
+  var environment = ProcessInfo.processInfo.environment
+  environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+  process.environment = environment
   let pipe = Pipe()
   process.standardOutput = pipe
   process.standardError = pipe

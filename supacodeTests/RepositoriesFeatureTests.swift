@@ -453,7 +453,7 @@ struct RepositoriesFeatureTests {
         URL(fileURLWithPath: plainRoot),
       ])
     )
-    await store.receive(\.openRepositoriesFinished) {
+    await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [gitRepository, plainRepository]
       $0.repositoryRoots = [repoRoot, plainRoot].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
@@ -520,7 +520,7 @@ struct RepositoriesFeatureTests {
         URL(fileURLWithPath: blockedRoot),
       ])
     )
-    await store.receive(\.openRepositoriesFinished) {
+    await store.receive(\.repositoryManagement.openRepositoriesFinished) {
       $0.repositories = [repository]
       $0.repositoryRoots = [repoRoot].map { URL(fileURLWithPath: $0) }
       $0.isInitialLoadComplete = true
@@ -874,7 +874,7 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.createRandomWorktreeInRepository(repository.id))
-    await store.receive(\.promptedWorktreeCreationDataLoaded) {
+    await store.receive(\.worktreeCreation.promptedWorktreeCreationDataLoaded) {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repository.id,
         repositoryName: repository.name,
@@ -905,7 +905,8 @@ struct RepositoriesFeatureTests {
       RepositoriesFeature()
     }
 
-    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
+    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel))))
+    await store.receive(\.worktreeCreation.promptCanceled) {
       $0.worktreeCreationPrompt = nil
     }
   }
@@ -940,7 +941,7 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt?.validationMessage = nil
       $0.worktreeCreationPrompt?.isValidating = true
     }
-    await store.receive(\.promptedWorktreeCreationChecked) {
+    await store.receive(\.worktreeCreation.promptedWorktreeCreationChecked) {
       $0.worktreeCreationPrompt?.validationMessage = "Branch name already exists."
       $0.worktreeCreationPrompt?.isValidating = false
     }
@@ -995,7 +996,7 @@ struct RepositoriesFeatureTests {
     await promptLoadGate.waitUntilArmed()
     await store.send(.createRandomWorktreeInRepository(repoB.id))
     await promptLoadGate.resume()
-    await store.receive(\.promptedWorktreeCreationDataLoaded) {
+    await store.receive(\.worktreeCreation.promptedWorktreeCreationDataLoaded) {
       $0.worktreeCreationPrompt = WorktreeCreationPromptFeature.State(
         repositoryID: repoB.id,
         repositoryName: repoB.name,
@@ -1043,7 +1044,8 @@ struct RepositoriesFeatureTests {
       $0.worktreeCreationPrompt?.validationMessage = nil
       $0.worktreeCreationPrompt?.isValidating = true
     }
-    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel)))) {
+    await store.send(.worktreeCreationPrompt(.presented(.delegate(.cancel))))
+    await store.receive(\.worktreeCreation.promptCanceled) {
       $0.worktreeCreationPrompt = nil
     }
     await validationClock.advance(by: .seconds(1))
@@ -1080,7 +1082,7 @@ struct RepositoriesFeatureTests {
         baseRefSource: .repositorySetting
       )
     )
-    await store.receive(\.createRandomWorktreeFailed) {
+    await store.receive(\.worktreeCreation.createRandomWorktreeFailed) {
       $0.alert = expectedAlert
     }
     #expect(store.state.pendingWorktrees.isEmpty)
@@ -1163,7 +1165,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(.createRandomWorktreeInRepository(repository.id))
-    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
     #expect(store.state.pendingWorktrees.isEmpty)
@@ -1215,7 +1217,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(.createRandomWorktreeInRepository(repository.id))
-    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
     let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
@@ -1266,7 +1268,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(.createRandomWorktreeInRepository(repository.id))
-    await store.receive(\.createRandomWorktreeSucceeded)
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
     await store.finish()
 
     let expectedBaseDirectory = SupacodePaths.worktreeBaseDirectory(
@@ -1302,7 +1304,7 @@ struct RepositoriesFeatureTests {
     store.exhaustivity = .off
 
     await store.send(.createRandomWorktreeInRepository(repository.id))
-    await store.receive(\.createRandomWorktreeFailed)
+    await store.receive(\.worktreeCreation.createRandomWorktreeFailed)
     await store.finish()
 
     let expectedAlert = AlertState<RepositoriesFeature.Alert> {
@@ -1642,8 +1644,8 @@ struct RepositoriesFeatureTests {
     }
 
     await store.send(.requestArchiveWorktree(featureWorktree.id, repository.id))
-    await store.receive(\.archiveWorktreeConfirmed)
-    await store.receive(\.archiveWorktreeApply) {
+    await store.receive(\.worktreeLifecycle.archiveWorktreeConfirmed)
+    await store.receive(\.worktreeLifecycle.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
       $0.pinnedWorktreeIDs = []
       $0.worktreeOrderByRepository = [:]
@@ -1689,7 +1691,7 @@ struct RepositoriesFeatureTests {
         commandText: "bash -lc 'echo syncing\\necho done'"
       )
     }
-    await store.receive(\.archiveScriptProgressUpdated) {
+    await store.receive(\.worktreeLifecycle.archiveScriptProgressUpdated) {
       $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
         titleText: "Running archive script",
         detailText: "syncing",
@@ -1697,7 +1699,7 @@ struct RepositoriesFeatureTests {
         outputLines: ["syncing"]
       )
     }
-    await store.receive(\.archiveScriptProgressUpdated) {
+    await store.receive(\.worktreeLifecycle.archiveScriptProgressUpdated) {
       $0.archiveScriptProgressByWorktreeID[featureWorktree.id] = ArchiveScriptProgress(
         titleText: "Running archive script",
         detailText: "done",
@@ -1705,11 +1707,11 @@ struct RepositoriesFeatureTests {
         outputLines: ["syncing", "done"]
       )
     }
-    await store.receive(\.archiveScriptSucceeded) {
+    await store.receive(\.worktreeLifecycle.archiveScriptSucceeded) {
       $0.archivingWorktreeIDs = []
       $0.archiveScriptProgressByWorktreeID = [:]
     }
-    await store.receive(\.archiveWorktreeApply) {
+    await store.receive(\.worktreeLifecycle.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -1763,7 +1765,7 @@ struct RepositoriesFeatureTests {
         commandText: "bash -lc 'exit 7'"
       )
     }
-    await store.receive(\.archiveScriptFailed) {
+    await store.receive(\.worktreeLifecycle.archiveScriptFailed) {
       $0.archivingWorktreeIDs = []
       $0.archiveScriptProgressByWorktreeID = [:]
       $0.alert = expectedAlert
@@ -2467,8 +2469,8 @@ struct RepositoriesFeatureTests {
         pullRequest: mergedPullRequest
       )
     }
-    await store.receive(\.archiveWorktreeConfirmed)
-    await store.receive(\.archiveWorktreeApply) {
+    await store.receive(\.worktreeLifecycle.archiveWorktreeConfirmed)
+    await store.receive(\.worktreeLifecycle.archiveWorktreeApply) {
       $0.archivedWorktreeIDs = [featureWorktree.id]
     }
     await store.receive(\.delegate.repositoriesChanged)
@@ -2611,10 +2613,11 @@ struct RepositoriesFeatureTests {
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )
-    ) {
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
     }
-    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
     await store.finish()
@@ -2650,16 +2653,17 @@ struct RepositoriesFeatureTests {
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )
-    ) {
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: URL(fileURLWithPath: repoRoot),
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
       )
     }
-    await store.receive(\.refreshGithubIntegrationAvailability) {
+    await store.receive(\.githubIntegration.refreshGithubIntegrationAvailability) {
       $0.githubIntegrationAvailability = .checking
     }
-    await store.receive(\.githubIntegrationAvailabilityUpdated) {
+    await store.receive(\.githubIntegration.githubIntegrationAvailabilityUpdated) {
       $0.githubIntegrationAvailability = .unavailable
       $0.queuedPullRequestRefreshByRepositoryID = [:]
       $0.inFlightPullRequestRefreshRepositoryIDs = []
@@ -2695,7 +2699,8 @@ struct RepositoriesFeatureTests {
           worktreeIDs: [mainWorktree.id, featureWorktree.id]
         )
       )
-    ) {
+    )
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.pendingPullRequestRefreshByRepositoryID[repository.id] = RepositoriesFeature.PendingPullRequestRefresh(
         repositoryRootURL: URL(fileURLWithPath: repoRoot),
         worktreeIDs: [mainWorktree.id, featureWorktree.id]
@@ -2733,10 +2738,11 @@ struct RepositoriesFeatureTests {
       $0.githubIntegrationAvailability = .available
       $0.pendingPullRequestRefreshByRepositoryID = [:]
     }
-    await store.receive(\.worktreeInfoEvent) {
+    await store.receive(\.worktreeInfoEvent)
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
     }
-    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
     await store.finish()
@@ -2832,10 +2838,11 @@ struct RepositoriesFeatureTests {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
       $0.queuedPullRequestRefreshByRepositoryID = [:]
     }
-    await store.receive(\.worktreeInfoEvent) {
+    await store.receive(\.worktreeInfoEvent)
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshRequested) {
       $0.inFlightPullRequestRefreshRepositoryIDs = [repository.id]
     }
-    await store.receive(\.repositoryPullRequestRefreshCompleted) {
+    await store.receive(\.githubIntegration.repositoryPullRequestRefreshCompleted) {
       $0.inFlightPullRequestRefreshRepositoryIDs = []
     }
     await store.finish()

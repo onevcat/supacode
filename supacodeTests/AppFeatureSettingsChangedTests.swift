@@ -17,13 +17,13 @@ struct AppFeatureSettingsChangedTests {
     }
 
     await store.send(.settings(.delegate(.settingsChanged(settings))))
-    await store.receive(\.repositories.setGithubIntegrationEnabled) {
+    await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled) {
       $0.repositories.githubIntegrationAvailability = .disabled
     }
-    await store.receive(\.repositories.setAutomaticallyArchiveMergedWorktrees) {
+    await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees) {
       $0.repositories.automaticallyArchiveMergedWorktrees = true
     }
-    await store.receive(\.repositories.setMoveNotifiedWorktreeToTop) {
+    await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop) {
       $0.repositories.moveNotifiedWorktreeToTop = false
     }
     await store.receive(\.updates.applySettings) {
@@ -80,16 +80,16 @@ struct AppFeatureSettingsChangedTests {
       $0.settings.keybindingUserOverrides = settings.keybindingUserOverrides
       $0.resolvedKeybindings = expectedResolved
     }
-    await store.receive(\.repositories.setGithubIntegrationEnabled)
-    await store.receive(\.repositories.setAutomaticallyArchiveMergedWorktrees)
-    await store.receive(\.repositories.setMoveNotifiedWorktreeToTop)
+    await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled)
+    await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees)
+    await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop)
     await store.receive(\.updates.applySettings) {
       $0.updates.didConfigureUpdates = true
     }
-    await store.receive(\.repositories.refreshGithubIntegrationAvailability) {
+    await store.receive(\.repositories.githubIntegration.refreshGithubIntegrationAvailability) {
       $0.repositories.githubIntegrationAvailability = .checking
     }
-    await store.receive(\.repositories.githubIntegrationAvailabilityUpdated) {
+    await store.receive(\.repositories.githubIntegration.githubIntegrationAvailabilityUpdated) {
       $0.repositories.githubIntegrationAvailability = .available
       $0.repositories.queuedPullRequestRefreshByRepositoryID = [:]
       $0.repositories.inFlightPullRequestRefreshRepositoryIDs = []

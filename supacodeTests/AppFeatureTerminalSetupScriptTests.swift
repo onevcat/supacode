@@ -31,7 +31,7 @@ struct AppFeatureTerminalSetupScriptTests {
 
     await store.send(.newTerminal)
     await store.send(.terminalEvent(.setupScriptConsumed(worktreeID: worktree.id)))
-    await store.receive(\.repositories.consumeSetupScript) {
+    await store.receive(\.repositories.worktreeCreation.consumeSetupScript) {
       $0.repositories.pendingSetupScriptWorktreeIDs.remove(worktree.id)
     }
     await store.finish()
@@ -102,7 +102,7 @@ struct AppFeatureTerminalSetupScriptTests {
     }
 
     await store.send(.terminalEvent(.setupScriptConsumed(worktreeID: worktree.id)))
-    await store.receive(\.repositories.consumeSetupScript) {
+    await store.receive(\.repositories.worktreeCreation.consumeSetupScript) {
       $0.repositories.pendingSetupScriptWorktreeIDs.remove(worktree.id)
     }
     await store.finish()

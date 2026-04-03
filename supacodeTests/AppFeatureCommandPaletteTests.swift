@@ -44,7 +44,7 @@ struct AppFeatureCommandPaletteTests {
     }
 
     await store.send(.commandPalette(.delegate(.newWorktree)))
-    await store.receive(\.repositories.createRandomWorktree) {
+    await store.receive(\.repositories.worktreeCreation.createRandomWorktree) {
       $0.repositories.alert = expectedAlert
     }
   }
@@ -120,7 +120,7 @@ struct AppFeatureCommandPaletteTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.closePullRequest("/tmp/repo/wt-close"))))
-    await store.receive(\.repositories.pullRequestAction)
+    await store.receive(\.repositories.githubIntegration.pullRequestAction)
   }
 
   @Test(.dependencies) func removeWorktreeDispatchesRequest() async {
@@ -155,7 +155,7 @@ struct AppFeatureCommandPaletteTests {
     }
 
     await store.send(.commandPalette(.delegate(.removeWorktree(worktree.id, repository.id))))
-    await store.receive(\.repositories.requestDeleteWorktree) {
+    await store.receive(\.repositories.worktreeLifecycle.requestDeleteWorktree) {
       $0.repositories.alert = expectedAlert
     }
   }
@@ -192,7 +192,7 @@ struct AppFeatureCommandPaletteTests {
     }
 
     await store.send(.commandPalette(.delegate(.archiveWorktree(worktree.id, repository.id))))
-    await store.receive(\.repositories.requestArchiveWorktree) {
+    await store.receive(\.repositories.worktreeLifecycle.requestArchiveWorktree) {
       $0.repositories.alert = expectedAlert
     }
   }

@@ -60,6 +60,7 @@ nonisolated struct WorktreeCreationProgressUpdateThrottle {
 
 @Reducer
 struct RepositoriesFeature {
+  @CasePathable
   enum WorktreeCreationAction: Equatable {
     case promptCanceled
     case promptDismissed
@@ -106,6 +107,7 @@ struct RepositoriesFeature {
     case consumeTerminalFocus(Worktree.ID)
   }
 
+  @CasePathable
   enum WorktreeLifecycleAction: Equatable {
     case requestArchiveWorktree(Worktree.ID, Repository.ID)
     case requestArchiveWorktrees([ArchiveWorktreeTarget])
@@ -127,6 +129,7 @@ struct RepositoriesFeature {
     case deleteWorktreeFailed(String, worktreeID: Worktree.ID)
   }
 
+  @CasePathable
   enum WorktreeOrderingAction: Equatable {
     case repositoriesMoved(IndexSet, Int)
     case pinnedWorktreesMoved(repositoryID: Repository.ID, IndexSet, Int)
@@ -137,6 +140,7 @@ struct RepositoriesFeature {
     case setMoveNotifiedWorktreeToTop(Bool)
   }
 
+  @CasePathable
   enum GithubIntegrationAction: Equatable {
     case delayedPullRequestRefresh(Worktree.ID)
     case repositoryPullRequestRefreshRequested(repositoryRootURL: URL, worktreeIDs: [Worktree.ID])
@@ -152,6 +156,7 @@ struct RepositoriesFeature {
     case pullRequestAction(Worktree.ID, PullRequestAction)
   }
 
+  @CasePathable
   enum RepositoryManagementAction: Equatable {
     case openRepositories([URL])
     case openRepositoriesFinished(
