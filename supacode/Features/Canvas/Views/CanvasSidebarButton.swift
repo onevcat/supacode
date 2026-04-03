@@ -21,10 +21,11 @@ struct CanvasSidebarButton: View {
           ShortcutHintView(text: shortcut, color: .secondary)
         }
       }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .padding(.horizontal, 12)
-    .padding(.vertical, 6)
     .background(isSelected ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
     .help(
       AppShortcuts.helpText(
