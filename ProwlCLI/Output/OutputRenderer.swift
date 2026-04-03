@@ -57,6 +57,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "focus",
+         let data = response.data,
+         let payload = try? data.decode(as: FocusCommandPayload.self)
+      {
+        print(renderFocus(payload))
+        return
+      }
+
       print("ok: \(response.command)")
       return
     }
@@ -185,6 +193,32 @@ enum OutputRenderer {
       lines.append("  \("wait:".dim) \("none (fire-and-forget)".dim)")
     }
 
+    return lines.joined(separator: "\n")
+  }
+
+  private static func renderFocus(_ payload: FocusCommandPayload) -> String {
+    let wt = payload.target.worktree
+    let tab = payload.target.tab
+    let pane = payload.target.pane
+
+    let projectName = projectName(from: wt.path)
+    let frontLabel = payload.broughtToFront ? "yes".green : "no".red.bold
+    let requestedValue = payload.requested.value ?? "current"
+
+    var lines: [String] = []
+    lines.append(
+      "Focused \(projectName.cyan.bold)\(":".dim)\(wt.name) → \(pane.title.green)"
+      + "  \(pane.id.dim)"
+    )
+    lines.append(
+      "  \("requested:".dim) \(payload.requested.selector.rawValue)=\(requestedValue)"
+      + "  \("resolved:".dim) \(payload.resolvedVia.rawValue)"
+      + "  \("front:".dim) \(frontLabel)"
+    )
+    lines.append("  \("tab:".dim) \(tab.title)  \(tab.id.dim)")
+    if let cwd = pane.cwd {
+      lines.append("  \("cwd:".dim) \(cwd)")
+    }
     return lines.joined(separator: "\n")
   }
 

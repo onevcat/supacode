@@ -229,7 +229,36 @@ struct SupacodeApp: App {
           .waitForCommandFinished(surfaceID: surfaceID)
       }
     )
-    let cliRouter = CLICommandRouter(listHandler: listHandler, sendHandler: sendHandler)
+    let focusHandler = FocusCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { FocusResolvedTarget(from: $0) }
+      },
+      focusPerformer: { target in
+        selectCLIWorktreeContext(
+          worktreeID: target.worktreeID,
+          appStore: appStore,
+          terminalManager: terminalManager
+        )
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else {
+          return false
+        }
+        return state.focusSurface(id: target.paneID)
+      },
+      bringToFront: {
+        bringMainWindowToFront()
+      }
+    )
+    let cliRouter = CLICommandRouter(
+      listHandler: listHandler,
+      focusHandler: focusHandler,
+      sendHandler: sendHandler
+    )
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {
@@ -239,6 +268,45 @@ struct SupacodeApp: App {
       logger.warning("Failed to start CLI socket server: \(String(describing: error))")
     }
     return cliServer
+  }
+
+  private static func selectCLIWorktreeContext(
+    worktreeID: Worktree.ID,
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) {
+    let repositories = appStore.state.repositories
+    if repositories.worktree(for: worktreeID) != nil {
+      appStore.send(.repositories(.selectWorktree(worktreeID)))
+    } else if let repository = repositories.repositories[id: worktreeID],
+      repository.capabilities.supportsRunnableFolderActions
+    {
+      appStore.send(.repositories(.selectRepository(worktreeID)))
+    }
+    terminalManager.handleCommand(.setSelectedWorktreeID(worktreeID))
+  }
+
+  private static func bringMainWindowToFront() -> Bool {
+    let app = NSApplication.shared
+    guard let window = mainWindow(from: app) else {
+      return false
+    }
+    if window.isMiniaturized {
+      window.deminiaturize(nil)
+    }
+    app.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+    return true
+  }
+
+  private static func mainWindow(from app: NSApplication) -> NSWindow? {
+    if let window = app.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+      return window
+    }
+    if let window = app.windows.first(where: { $0.identifier?.rawValue != "settings" }) {
+      return window
+    }
+    return app.windows.first
   }
 
   var body: some Scene {

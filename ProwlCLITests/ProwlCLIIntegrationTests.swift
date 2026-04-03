@@ -100,6 +100,86 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(payload["command"] as? String, "focus")
   }
 
+  func testFocusCommandWithoutSelectorSendsCurrentTarget() throws {
+    let socketPath = temporarySocketPath(suffix: "focus-current")
+    let response = CommandResponse(
+      ok: true,
+      command: "focus",
+      schemaVersion: "prowl.cli.focus.v1"
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["focus", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .focus(let input) = envelope.command {
+      XCTAssertEqual(input.selector, .none)
+    } else {
+      XCTFail("Expected focus command envelope")
+    }
+  }
+
+  func testFocusRejectsMultipleSelectorsBeforeTransport() throws {
+    let result = try runProwl(args: ["focus", "--worktree", "Prowl", "--pane", "pane-123", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "focus")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+  }
+
+  func testFocusCommandTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "focus-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "focus",
+      schemaVersion: "prowl.cli.focus.v1",
+      data: RawJSON(encoding: FocusResponseData(
+        requested: FocusRequested(selector: "pane", value: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764"),
+        resolvedVia: "pane",
+        broughtToFront: true,
+        target: FocusResponseTarget(
+          worktree: ListWorktree(
+            id: "Prowl:/Users/onevcat/Projects/Prowl",
+            name: "Prowl",
+            path: "/Users/onevcat/Projects/Prowl",
+            rootPath: "/Users/onevcat/Projects/Prowl",
+            kind: "git"
+          ),
+          tab: FocusResponseTab(
+            id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0",
+            title: "Prowl 1",
+            selected: true
+          ),
+          pane: FocusResponsePane(
+            id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+            title: "zsh",
+            cwd: "/Users/onevcat/Projects/Prowl",
+            focused: true
+          )
+        )
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["focus"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Focused Prowl:Prowl"), "Missing focus header: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("requested: pane"), "Missing requested field: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("resolved: pane"), "Missing resolved field: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("tab: Prowl 1"), "Missing tab field: \(result.stdout)")
+  }
+
 
   func testListCommandTextRenderingFromSocket() throws {
     let socketPath = temporarySocketPath(suffix: "list-text")
@@ -697,6 +777,45 @@ private struct ListPane: Encodable {
 
 private struct ListTask: Encodable {
   let status: String?
+}
+
+private struct FocusResponseData: Encodable {
+  let requested: FocusRequested
+
+  enum CodingKeys: String, CodingKey {
+    case requested
+    case resolvedVia = "resolved_via"
+    case broughtToFront = "brought_to_front"
+    case target
+  }
+
+  let resolvedVia: String
+  let broughtToFront: Bool
+  let target: FocusResponseTarget
+}
+
+private struct FocusRequested: Encodable {
+  let selector: String
+  let value: String?
+}
+
+private struct FocusResponseTarget: Encodable {
+  let worktree: ListWorktree
+  let tab: FocusResponseTab
+  let pane: FocusResponsePane
+}
+
+private struct FocusResponseTab: Encodable {
+  let id: String
+  let title: String
+  let selected: Bool
+}
+
+private struct FocusResponsePane: Encodable {
+  let id: String
+  let title: String
+  let cwd: String?
+  let focused: Bool
 }
 
 private struct SendResponseData: Encodable {

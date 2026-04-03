@@ -13,7 +13,7 @@ struct FocusCommand: ParsableCommand {
   @OptionGroup var options: GlobalOptions
 
   mutating func run() throws {
-    try CLIExecution.run(command: "focus", output: options.outputMode) {
+    try CLIExecution.run(command: "focus", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let sel = try selector.resolve()
       let envelope = CommandEnvelope(
         output: options.outputMode,
