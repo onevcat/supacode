@@ -23,7 +23,6 @@ struct CLIInstallClient: Sendable {
 }
 
 extension CLIInstallClient: DependencyKey {
-  // swiftlint:disable:next closure_body_length
   static let liveValue = CLIInstallClient(
     bundledCLIURL: {
       Bundle.main.resourceURL?.appendingPathComponent("prowl-cli/prowl")
@@ -56,16 +55,6 @@ extension CLIInstallClient: DependencyKey {
       guard fileManager.fileExists(atPath: bundledPath) else {
         throw CLIInstallError(message: "Bundled CLI binary not found at \(bundledPath).")
       }
-      let installDir = installPath.deletingLastPathComponent().path(percentEncoded: false)
-      if !fileManager.fileExists(atPath: installDir) {
-        do {
-          try fileManager.createDirectory(atPath: installDir, withIntermediateDirectories: true)
-        } catch {
-          throw CLIInstallError(
-            message: permissionErrorMessage(for: installDir, action: "create directory", underlying: error)
-          )
-        }
-      }
       let destination = installPath.path(percentEncoded: false)
       if fileManager.fileExists(atPath: destination) {
         let attrs = try? fileManager.attributesOfItem(atPath: destination)
@@ -73,24 +62,11 @@ extension CLIInstallClient: DependencyKey {
         guard isSymlink else {
           throw CLIInstallError(
             message: "A file already exists at \(destination) and is not a symlink. "
-              + "Remove it manually before installing: sudo rm \(destination)"
-          )
-        }
-        do {
-          try fileManager.removeItem(atPath: destination)
-        } catch {
-          throw CLIInstallError(
-            message: "Could not remove existing symlink at \(destination): \(error.localizedDescription)"
+              + "Remove it manually before installing."
           )
         }
       }
-      do {
-        try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: bundledPath)
-      } catch {
-        throw CLIInstallError(
-          message: permissionErrorMessage(for: destination, action: "create symlink", underlying: error)
-        )
-      }
+      try cliSymlinkInstall(source: bundledPath, destination: destination)
     },
     uninstall: { installPath in
       let fileManager = FileManager.default
@@ -103,11 +79,7 @@ extension CLIInstallClient: DependencyKey {
       else {
         throw CLIInstallError(message: "File at \(path) is not a symlink. Refusing to remove for safety.")
       }
-      do {
-        try fileManager.removeItem(atPath: path)
-      } catch {
-        throw CLIInstallError(message: "Could not remove \(path): \(error.localizedDescription)")
-      }
+      try cliSymlinkUninstall(path: path)
     }
   )
 
@@ -119,17 +91,78 @@ extension CLIInstallClient: DependencyKey {
   )
 }
 
-private nonisolated func permissionErrorMessage(for path: String, action: String, underlying: any Error) -> String {
-  let nsError = underlying as NSError
-  if nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileWriteNoPermissionError
-    || nsError.domain == NSPOSIXErrorDomain && nsError.code == 13
-  {
-    let dir = (path as NSString).deletingLastPathComponent
-    return "Permission denied when trying to \(action) at \(path).\n\n"
-      + "To fix, run in Terminal:\n"
-      + "sudo mkdir -p \(dir) && sudo chown $(whoami) \(dir)"
+// MARK: - Symlink operations with privilege escalation
+
+/// Attempts to create the CLI symlink. Falls back to osascript privilege escalation on permission failure.
+private nonisolated func cliSymlinkInstall(source: String, destination: String) throws {
+  let fileManager = FileManager.default
+  let dir = (destination as NSString).deletingLastPathComponent
+
+  // Try direct approach first
+  do {
+    if !fileManager.fileExists(atPath: dir) {
+      try fileManager.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    }
+    if fileManager.fileExists(atPath: destination) {
+      try fileManager.removeItem(atPath: destination)
+    }
+    try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: source)
+    return
+  } catch let error as NSError where isPermissionError(error) {
+    // Fall through to privilege escalation
   }
-  return "Could not \(action) at \(path): \(underlying.localizedDescription)"
+
+  // Privilege escalation via osascript
+  let script = "mkdir -p '\(shellEscape(dir))' && "
+    + "rm -f '\(shellEscape(destination))' && "
+    + "ln -s '\(shellEscape(source))' '\(shellEscape(destination))'"
+  try runPrivileged(script: script)
+}
+
+/// Attempts to remove the CLI symlink. Falls back to osascript privilege escalation on permission failure.
+private nonisolated func cliSymlinkUninstall(path: String) throws {
+  let fileManager = FileManager.default
+
+  do {
+    try fileManager.removeItem(atPath: path)
+    return
+  } catch let error as NSError where isPermissionError(error) {
+    // Fall through to privilege escalation
+  }
+
+  let script = "rm -f '\(shellEscape(path))'"
+  try runPrivileged(script: script)
+}
+
+private nonisolated func isPermissionError(_ error: NSError) -> Bool {
+  (error.domain == NSCocoaErrorDomain && error.code == NSFileWriteNoPermissionError)
+    || (error.domain == NSPOSIXErrorDomain && error.code == 13)
+}
+
+/// Runs a shell command with administrator privileges via osascript.
+private nonisolated func runPrivileged(script: String) throws {
+  let osa = Process()
+  osa.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+  osa.arguments = ["-e", "do shell script \"\(script)\" with administrator privileges"]
+  let pipe = Pipe()
+  osa.standardError = pipe
+  do {
+    try osa.run()
+  } catch {
+    throw CLIInstallError(message: "Failed to launch authorization prompt: \(error.localizedDescription)")
+  }
+  osa.waitUntilExit()
+  guard osa.terminationStatus == 0 else {
+    let stderr = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    if stderr.contains("User canceled") || stderr.contains("-128") {
+      throw CLIInstallError(message: "Installation was canceled.")
+    }
+    throw CLIInstallError(message: "Installation failed: \(stderr)")
+  }
+}
+
+private nonisolated func shellEscape(_ value: String) -> String {
+  value.replacing("'", with: "'\\''")
 }
 
 extension DependencyValues {
