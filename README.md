@@ -34,7 +34,6 @@ make format                # Run swift-format
 ### Local Ghostty sync (avoid submodule/XCFramework drift)
 
 ```bash
-make setup-local-hooks     # one-time: enable .githooks/post-checkout + post-merge
 make ensure-ghostty        # fast SHA check, rebuilds only when ThirdParty/ghostty changed
 make sync-ghostty          # force rebuild + clear DerivedData
 ```
