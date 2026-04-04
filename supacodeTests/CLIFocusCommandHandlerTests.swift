@@ -28,7 +28,7 @@ struct CLIFocusCommandHandlerTests {
     )
   }
 
-  @Test func successfulFocusReturnsSchemaConformantPayload() async throws {
+  @Test func successfulFocusReturnsSchemaConformantPayload() throws {
     var focusedTarget: FocusResolvedTarget?
     let handler = FocusCommandHandler(
       resolveProvider: { selector in
@@ -50,7 +50,7 @@ struct CLIFocusCommandHandlerTests {
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(
         output: .json,
         command: .focus(FocusInput(selector: .pane(Self.paneID.uuidString)))
@@ -74,7 +74,7 @@ struct CLIFocusCommandHandlerTests {
     #expect(payload.target.pane.focused == true)
   }
 
-  @Test func currentSelectorUsesNilRequestedValue() async throws {
+  @Test func currentSelectorUsesNilRequestedValue() throws {
     var resolveNoneCount = 0
     let handler = FocusCommandHandler(
       resolveProvider: { selector in
@@ -89,7 +89,7 @@ struct CLIFocusCommandHandlerTests {
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(output: .json, command: .focus(FocusInput(selector: .none)))
     )
 
@@ -101,14 +101,14 @@ struct CLIFocusCommandHandlerTests {
     #expect(payload.resolvedVia == .pane)
   }
 
-  @Test func targetNotFoundMapsToContractCode() async {
+  @Test func targetNotFoundMapsToContractCode() {
     let handler = FocusCommandHandler(
       resolveProvider: { _ in .failure(.notFound("Pane missing")) },
       focusPerformer: { _ in true },
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(
         output: .json,
         command: .focus(FocusInput(selector: .pane("missing")))
@@ -119,14 +119,14 @@ struct CLIFocusCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.targetNotFound)
   }
 
-  @Test func targetNotUniqueMapsToContractCode() async {
+  @Test func targetNotUniqueMapsToContractCode() {
     let handler = FocusCommandHandler(
       resolveProvider: { _ in .failure(.notUnique("Ambiguous worktree")) },
       focusPerformer: { _ in true },
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(
         output: .json,
         command: .focus(FocusInput(selector: .worktree("Prowl")))
@@ -137,14 +137,14 @@ struct CLIFocusCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.targetNotUnique)
   }
 
-  @Test func focusFailureReturnsFocusFailedCode() async {
+  @Test func focusFailureReturnsFocusFailedCode() {
     let handler = FocusCommandHandler(
       resolveProvider: { _ in .success(Self.makeTarget()) },
       focusPerformer: { _ in false },
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(output: .json, command: .focus(FocusInput(selector: .none)))
     )
 
@@ -152,14 +152,14 @@ struct CLIFocusCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.focusFailed)
   }
 
-  @Test func bringToFrontFailureReturnsFocusFailedCode() async {
+  @Test func bringToFrontFailureReturnsFocusFailedCode() {
     let handler = FocusCommandHandler(
       resolveProvider: { _ in .success(Self.makeTarget()) },
       focusPerformer: { _ in true },
       bringToFront: { false }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(output: .json, command: .focus(FocusInput(selector: .none)))
     )
 
@@ -167,7 +167,7 @@ struct CLIFocusCommandHandlerTests {
     #expect(response.error?.code == CLIErrorCode.focusFailed)
   }
 
-  @Test func finalTargetMustBeActiveOrFocusFails() async {
+  @Test func finalTargetMustBeActiveOrFocusFails() {
     var resolveNoneCount = 0
     let handler = FocusCommandHandler(
       resolveProvider: { selector in
@@ -186,7 +186,7 @@ struct CLIFocusCommandHandlerTests {
       bringToFront: { true }
     )
 
-    let response = await handler.handle(
+    let response = handler.handle(
       envelope: CommandEnvelope(output: .json, command: .focus(FocusInput(selector: .none)))
     )
 
