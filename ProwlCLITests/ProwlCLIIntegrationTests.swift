@@ -44,8 +44,12 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       ok: true,
       command: "open",
       schemaVersion: "prowl.cli.open.v1",
-      data: RawJSON(encoding: OpenPayload(
+      data: RawJSON(encoding: OpenResponseData(
+        invocation: "open-subcommand",
+        requestedPath: repoRoot.path,
+        resolvedPath: repoRoot.path,
         resolution: "exact-root",
+        appLaunched: false,
         broughtToFront: true
       ))
     )
@@ -60,6 +64,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
     if case .open(let input) = envelope.command {
       let openedPath = try XCTUnwrap(input.path)
+      XCTAssertEqual(input.invocation, "open-subcommand")
       XCTAssertEqual(
         URL(fileURLWithPath: openedPath).resolvingSymlinksInPath().path,
         repoRoot.resolvingSymlinksInPath().path
@@ -71,6 +76,33 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     let payload = try jsonObject(from: result.stdout)
     XCTAssertEqual(payload["ok"] as? Bool, true)
     XCTAssertEqual(payload["command"] as? String, "open")
+  }
+
+  func testOpenCommandTextSuccessIsSilent() throws {
+    let socketPath = temporarySocketPath(suffix: "open-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "open",
+      schemaVersion: "prowl.cli.open.v1",
+      data: RawJSON(encoding: OpenResponseData(
+        invocation: "implicit-open",
+        requestedPath: repoRoot.path,
+        resolvedPath: repoRoot.path,
+        resolution: "exact-root",
+        appLaunched: false,
+        broughtToFront: true
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["."]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertEqual(result.stdout, "")
+    XCTAssertEqual(result.stderr, "")
   }
 
   func testFocusCommandRoundTripsOverSocket() throws {
@@ -1191,11 +1223,19 @@ final class ProwlCLIIntegrationTests: XCTestCase {
   }
 }
 
-private struct OpenPayload: Encodable {
+private struct OpenResponseData: Encodable {
+  let invocation: String
+  let requestedPath: String?
+  let resolvedPath: String?
   let resolution: String
+  let appLaunched: Bool
 
   enum CodingKeys: String, CodingKey {
+    case invocation
+    case requestedPath = "requested_path"
+    case resolvedPath = "resolved_path"
     case resolution
+    case appLaunched = "app_launched"
     case broughtToFront = "brought_to_front"
   }
 

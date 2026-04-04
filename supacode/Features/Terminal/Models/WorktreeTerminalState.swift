@@ -171,7 +171,8 @@ final class WorktreeTerminalState {
     focusing: Bool = true,
     setupScript: String? = nil,
     initialInput: String? = nil,
-    inheritingFromSurfaceId: UUID? = nil
+    inheritingFromSurfaceId: UUID? = nil,
+    workingDirectoryOverride: URL? = nil
   ) -> TerminalTabID? {
     let context: ghostty_surface_context_e =
       tabManager.tabs.isEmpty
@@ -204,7 +205,8 @@ final class WorktreeTerminalState {
         initialInput: resolvedInput,
         focusing: focusing,
         inheritingFromSurfaceId: resolvedInheritanceSurfaceId,
-        context: context
+        context: context,
+        workingDirectoryOverride: workingDirectoryOverride
       )
     )
     if shouldConsumeSetupScript, tabId != nil {
@@ -227,7 +229,8 @@ final class WorktreeTerminalState {
         initialInput: input,
         focusing: true,
         inheritingFromSurfaceId: currentFocusedSurfaceId(),
-        context: GHOSTTY_SURFACE_CONTEXT_TAB
+        context: GHOSTTY_SURFACE_CONTEXT_TAB,
+        workingDirectoryOverride: nil
       )
     )
     setRunScriptTabId(tabId)
@@ -249,6 +252,7 @@ final class WorktreeTerminalState {
     let focusing: Bool
     let inheritingFromSurfaceId: UUID?
     let context: ghostty_surface_context_e
+    let workingDirectoryOverride: URL?
   }
 
   private func createTab(_ creation: TabCreation) -> TerminalTabID? {
@@ -261,6 +265,7 @@ final class WorktreeTerminalState {
       for: tabId,
       inheritingFromSurfaceId: creation.inheritingFromSurfaceId,
       initialInput: creation.initialInput,
+      workingDirectoryOverride: creation.workingDirectoryOverride,
       context: creation.context
     )
     tabIsRunningById[tabId] = false
@@ -465,6 +470,7 @@ final class WorktreeTerminalState {
     for tabId: TerminalTabID,
     inheritingFromSurfaceId: UUID? = nil,
     initialInput: String? = nil,
+    workingDirectoryOverride: URL? = nil,
     context: ghostty_surface_context_e = GHOSTTY_SURFACE_CONTEXT_TAB
   ) -> SplitTree<GhosttySurfaceView> {
     if let existing = trees[tabId] {
@@ -474,6 +480,7 @@ final class WorktreeTerminalState {
       tabId: tabId,
       initialInput: initialInput,
       inheritingFromSurfaceId: inheritingFromSurfaceId,
+      workingDirectoryOverride: workingDirectoryOverride,
       context: context
     )
     let tree = SplitTree(view: surface)

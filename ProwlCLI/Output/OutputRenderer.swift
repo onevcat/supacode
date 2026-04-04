@@ -81,6 +81,10 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "open" {
+        return
+      }
+
       print("ok: \(response.command)")
       return
     }

@@ -424,7 +424,7 @@ struct RepositoriesFeature {
 
         case .lastFocusedWorktreeIDLoaded(let lastFocusedWorktreeID):
           state.lastFocusedWorktreeID = lastFocusedWorktreeID
-          if state.launchRestoreMode != .restoreLayout {
+          if state.launchRestoreMode == .lastFocusedWorktree {
             state.shouldRestoreLastFocusedWorktree = true
           }
           return .none
@@ -1833,13 +1833,7 @@ nonisolated func worktreeCreateCommand(
 }
 
 nonisolated func shellQuote(_ value: String) -> String {
-  let needsQuoting = value.contains { character in
-    character.isWhitespace || character == "\"" || character == "'" || character == "\\"
-  }
-  guard needsQuoting else {
-    return value
-  }
-  return "'\(value.replacing("'", with: "'\"'\"'"))'"
+  "'\(value.replacing("'", with: "'\"'\"'"))'"
 }
 
 private func updateWorktreeName(

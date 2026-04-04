@@ -96,6 +96,17 @@ struct SupacodeApp: App {
   @State private var cliSocketServer: CLISocketServer
   @State private var store: StoreOf<AppFeature>
 
+  private static func cliLaunchOpenPath() -> String? {
+    let args = ProcessInfo.processInfo.arguments
+    guard let flagIndex = args.firstIndex(of: ProwlSocket.cliOpenPathArgument),
+          args.indices.contains(flagIndex + 1)
+    else {
+      return nil
+    }
+    let path = args[flagIndex + 1]
+    return path.isEmpty ? nil : path
+  }
+
   @MainActor init() {
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
@@ -148,8 +159,12 @@ struct SupacodeApp: App {
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
+    var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+    if let cliOpenPath = Self.cliLaunchOpenPath() {
+      initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
+    }
     let appStore = Store(
-      initialState: AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+      initialState: initialAppState
     ) {
       AppFeature()
         .logActions()
@@ -205,10 +220,10 @@ struct SupacodeApp: App {
   }
 
   // swiftlint:disable:next function_body_length
-  private static func makeCLISocketServer(
+  static func makeCLICommandRouter(
     appStore: StoreOf<AppFeature>,
     terminalManager: WorktreeTerminalManager
-  ) -> CLISocketServer {
+  ) -> CLICommandRouter {
     let listHandler = ListCommandHandler {
       ListRuntimeSnapshotBuilder.makeSnapshot(
         repositoriesState: appStore.state.repositories,
@@ -311,7 +326,7 @@ struct SupacodeApp: App {
         return KeyDeliveryResult(attempted: repeatCount, delivered: delivered)
       }
     )
-    let cliRouter = CLICommandRouter(
+    return CLICommandRouter(
       openHandler: openHandler,
       listHandler: listHandler,
       focusHandler: focusHandler,
@@ -319,6 +334,13 @@ struct SupacodeApp: App {
       keyHandler: keyHandler,
       readHandler: readHandler
     )
+  }
+
+  private static func makeCLISocketServer(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> CLISocketServer {
+    let cliRouter = makeCLICommandRouter(appStore: appStore, terminalManager: terminalManager)
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
     do {
@@ -351,39 +373,36 @@ struct SupacodeApp: App {
         appStore.send(.repositories(.repositoryManagement(.openRepositories([url]))))
       },
       createTabAtPath: { worktreeID, path in
-        // Find the Worktree object by ID to create a tab cd'd to the subpath.
-        let repositories = appStore.state.repositories
-        for repository in repositories.repositories {
-          if let worktree = repository.worktrees.first(where: { $0.id == worktreeID }) {
-            let quotedPath = shellQuote(path)
-            terminalManager.handleCommand(
-              .createTabWithInput(
-                worktree,
-                input: "cd -- \(quotedPath)",
-                runSetupScriptIfNew: false
-              )
-            )
-            return
-          }
+        let repositories = Array(appStore.state.repositories.repositories)
+        guard let worktree = resolveCLITerminalWorktree(id: worktreeID, repositories: repositories) else {
+          return
+        }
+        terminalManager.handleCommand(
+          .createTabInDirectory(worktree, directory: URL(fileURLWithPath: path, isDirectory: true))
+        )
+      },
+      resolveTarget: { selector in
+        switch makeTargetResolver(appStore: appStore, terminalManager: terminalManager).resolve(selector) {
+        case .success(let target):
+          return OpenResolvedTarget(
+            worktreeID: target.worktreeID,
+            worktreeName: target.worktreeName,
+            worktreePath: target.worktreePath,
+            worktreeRootPath: target.worktreeRootPath,
+            worktreeKind: target.worktreeKind.rawValue,
+            tabID: target.tabID.uuidString,
+            tabTitle: target.tabTitle,
+            tabCWD: target.paneCWD,
+            paneID: target.paneID.uuidString,
+            paneTitle: target.paneTitle,
+            paneCWD: target.paneCWD
+          )
+        case .failure:
+          return nil
         }
       },
-      terminalSnapshot: { worktreeID in
-        guard let state = terminalManager.activeWorktreeStates.first(
-          where: { $0.worktreeID == worktreeID }
-        ) else { return nil }
-        let snapshot = state.makeCLIListSnapshot()
-        guard let selectedTab = snapshot.tabs.first(where: { $0.selected }) ?? snapshot.tabs.first
-        else { return nil }
-        let focusedPane = selectedTab.panes.first(where: { $0.id == selectedTab.focusedPaneID })
-          ?? selectedTab.panes.first
-        return OpenTerminalSnapshot(
-          tabID: selectedTab.id.uuidString,
-          tabTitle: selectedTab.title,
-          tabCwd: selectedTab.panes.first.flatMap { $0.cwd },
-          paneID: focusedPane?.id.uuidString,
-          paneTitle: focusedPane?.title,
-          paneCwd: focusedPane?.cwd
-        )
+      isRepositoriesReady: {
+        appStore.state.repositories.isInitialLoadComplete
       }
     )
   }
@@ -469,14 +488,28 @@ struct SupacodeApp: App {
     )
   }
 
-  private static func shellQuote(_ value: String) -> String {
-    let needsQuoting = value.contains { character in
-      character.isWhitespace || character == "\"" || character == "'" || character == "\\"
+  static func resolveCLITerminalWorktree(
+    id: Worktree.ID,
+    repositories: [Repository]
+  ) -> Worktree? {
+    for repository in repositories {
+      if let worktree = repository.worktrees[id: id] {
+        return worktree
+      }
+      if repository.id == id,
+         repository.capabilities.supportsRunnableFolderActions,
+         !repository.capabilities.supportsWorktrees
+      {
+        return Worktree(
+          id: repository.id,
+          name: repository.name,
+          detail: repository.rootURL.path(percentEncoded: false),
+          workingDirectory: repository.rootURL,
+          repositoryRootURL: repository.rootURL
+        )
+      }
     }
-    guard needsQuoting else {
-      return value
-    }
-    return "'\(value.replacing("'", with: "'\"'\"'"))'"
+    return nil
   }
 
   private static func selectCLIWorktreeContext(

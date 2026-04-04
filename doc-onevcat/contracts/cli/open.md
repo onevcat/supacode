@@ -17,6 +17,7 @@ The goal is to give later implementation tasks a stable machine-facing contract.
 - Success output must tell an agent **what Prowl actually focused or opened**.
 - Path fields must be normalized to **absolute paths** after CLI parsing.
 - Success output must be stable enough for scripts; human-oriented prose belongs to non-JSON mode.
+- Human-visible success output for `open` should stay silent unless the caller asked for `--json`.
 
 ## Success payload
 
@@ -87,9 +88,12 @@ The goal is to give later implementation tasks a stable machine-facing contract.
 - `created_tab`: boolean.
   - `true` when the operation created a new tab as part of satisfying the request.
   - `false` when Prowl only focused an existing target.
-- `target`: object describing the final focused target.
+- `target`: object or `null`, describing the final focused target.
+  - May be `null` for bare `prowl` when Prowl was only brought to front and there is no resolvable visible surface yet.
 
 ## `target` shape
+
+When present, `target` has the following shape:
 
 ### `target.worktree`
 
@@ -150,7 +154,7 @@ The goal is to give later implementation tasks a stable machine-facing contract.
 
 - Success JSON should report the **resolved target**, not only the input path.
 - `target.tab.cwd` and `target.pane.cwd` should be the exact directory the user lands in when available.
-- `created_tab` may be `false` for `exact-root` and `true` for `inside-root`; `new-root` may do either depending on implementation, so callers must trust the boolean instead of inferring it.
+- `created_tab` may be `false` for `exact-root` and `true` for `inside-root`; callers must trust the boolean instead of inferring it from `resolution`.
 - `prowl` without arguments still returns `command: "open"`; it is the app-entry form of the same capability.
 
 ## Example: exact-root focus

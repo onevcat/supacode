@@ -53,12 +53,36 @@ struct OpenCommandData: Codable {
     case createdTab = "created_tab"
     case target
   }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(invocation, forKey: .invocation)
+    if let requestedPath {
+      try container.encode(requestedPath, forKey: .requestedPath)
+    } else {
+      try container.encodeNil(forKey: .requestedPath)
+    }
+    if let resolvedPath {
+      try container.encode(resolvedPath, forKey: .resolvedPath)
+    } else {
+      try container.encodeNil(forKey: .resolvedPath)
+    }
+    try container.encode(resolution, forKey: .resolution)
+    try container.encode(appLaunched, forKey: .appLaunched)
+    try container.encode(broughtToFront, forKey: .broughtToFront)
+    try container.encode(createdTab, forKey: .createdTab)
+    if let target {
+      try container.encode(target, forKey: .target)
+    } else {
+      try container.encodeNil(forKey: .target)
+    }
+  }
 }
 
 struct OpenTarget: Codable {
   let worktree: OpenTargetWorktree
-  let tab: OpenTargetTab?
-  let pane: OpenTargetPane?
+  let tab: OpenTargetTab
+  let pane: OpenTargetPane
 }
 
 struct OpenTargetWorktree: Codable {
@@ -79,23 +103,60 @@ struct OpenTargetTab: Codable {
   let id: String
   let title: String
   let cwd: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case title
+    case cwd
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encode(title, forKey: .title)
+    if let cwd {
+      try container.encode(cwd, forKey: .cwd)
+    } else {
+      try container.encodeNil(forKey: .cwd)
+    }
+  }
 }
 
 struct OpenTargetPane: Codable {
   let id: String
   let title: String
   let cwd: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case title
+    case cwd
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encode(title, forKey: .title)
+    if let cwd {
+      try container.encode(cwd, forKey: .cwd)
+    } else {
+      try container.encodeNil(forKey: .cwd)
+    }
+  }
 }
 
-// MARK: - Terminal snapshot for open command
-
-struct OpenTerminalSnapshot: Sendable {
-  let tabID: String?
-  let tabTitle: String?
-  let tabCwd: String?
-  let paneID: String?
-  let paneTitle: String?
-  let paneCwd: String?
+struct OpenResolvedTarget: Sendable {
+  let worktreeID: String
+  let worktreeName: String
+  let worktreePath: String
+  let worktreeRootPath: String
+  let worktreeKind: String
+  let tabID: String
+  let tabTitle: String
+  let tabCWD: String?
+  let paneID: String
+  let paneTitle: String
+  let paneCWD: String?
 }
 
 // MARK: - Handler
@@ -107,29 +168,44 @@ final class OpenCommandHandler: CommandHandler {
   /// Creates a new tab in the given worktree and `cd`s to the specified path.
   /// Parameters: worktreeID, absolutePath.
   typealias CreateTabAtPathAction = @MainActor (String, String) -> Void
-  typealias TerminalSnapshotProvider = @MainActor (String) -> OpenTerminalSnapshot?
+  typealias ResolveTargetAction = @MainActor (TargetSelector) -> OpenResolvedTarget?
+  typealias ReadinessProvider = @MainActor () -> Bool
+  typealias SleepAction = @Sendable (UInt64) async -> Void
 
   private let resolver: Resolver
   private let selectWorktree: SelectAction
   private let addAndOpen: AddAndOpenAction
   private let createTabAtPath: CreateTabAtPathAction
-  private let terminalSnapshot: TerminalSnapshotProvider
+  private let resolveTarget: ResolveTargetAction
+  private let isRepositoriesReady: ReadinessProvider
+  private let sleep: SleepAction
+  private let waitTimeoutNanoseconds: UInt64
+  private let pollIntervalNanoseconds: UInt64
 
   init(
     resolver: @escaping Resolver,
     selectWorktree: @escaping SelectAction,
     addAndOpen: @escaping AddAndOpenAction,
     createTabAtPath: @escaping CreateTabAtPathAction = { _, _ in },
-    terminalSnapshot: @escaping TerminalSnapshotProvider
+    resolveTarget: @escaping ResolveTargetAction,
+    isRepositoriesReady: @escaping ReadinessProvider = { true },
+    sleep: @escaping SleepAction = { nanoseconds in
+      try? await Task.sleep(nanoseconds: nanoseconds)
+    },
+    waitTimeoutNanoseconds: UInt64 = 10_000_000_000,
+    pollIntervalNanoseconds: UInt64 = 50_000_000
   ) {
     self.resolver = resolver
     self.selectWorktree = selectWorktree
     self.addAndOpen = addAndOpen
     self.createTabAtPath = createTabAtPath
-    self.terminalSnapshot = terminalSnapshot
+    self.resolveTarget = resolveTarget
+    self.isRepositoriesReady = isRepositoriesReady
+    self.sleep = sleep
+    self.waitTimeoutNanoseconds = waitTimeoutNanoseconds
+    self.pollIntervalNanoseconds = pollIntervalNanoseconds
   }
 
-  // swiftlint:disable:next async_without_await
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
     guard case .open(let input) = envelope.command else {
       return CommandResponse(
@@ -140,70 +216,171 @@ final class OpenCommandHandler: CommandHandler {
       )
     }
 
+    await waitForRepositoriesReadyIfNeeded()
+
+    let appLaunched = input.appLaunched
     let result = resolver(input.path)
     let invocation = deriveInvocation(input: input)
 
+    return await handleResolvedResult(
+      result,
+      input: input,
+      invocation: invocation,
+      appLaunched: appLaunched
+    )
+  }
+
+  private func handleResolvedResult(
+    _ result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
     switch result.resolution {
     case .noArgument:
-      bringAppToFront()
-      return makeSuccess(
-        invocation: invocation,
-        requestedPath: nil,
-        resolvedPath: nil,
-        resolution: .noArgument,
-        createdTab: false,
-        target: nil
-      )
-
+      return handleNoArgument(invocation: invocation, appLaunched: appLaunched)
     case .exactRoot:
-      if let worktreeID = result.worktreeID {
-        selectWorktree(worktreeID)
-      }
-      bringAppToFront()
-      let snapshot = result.worktreeID.flatMap { terminalSnapshot($0) }
-      return makeSuccess(
+      return await handleExactRoot(
+        result: result,
+        input: input,
         invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
-        resolution: .exactRoot,
-        createdTab: false,
-        target: makeTarget(result: result, snapshot: snapshot)
+        appLaunched: appLaunched
       )
-
     case .insideRoot:
-      if let worktreeID = result.worktreeID {
-        selectWorktree(worktreeID)
-        // Open a new tab cd'd to the exact requested subpath.
-        if let subpath = result.resolvedPath ?? input.path {
-          createTabAtPath(worktreeID, subpath)
-        }
-      }
-      bringAppToFront()
-      let snapshot = result.worktreeID.flatMap { terminalSnapshot($0) }
-      return makeSuccess(
+      return await handleInsideRoot(
+        result: result,
+        input: input,
         invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
-        resolution: .insideRoot,
-        createdTab: true,
-        target: makeTarget(result: result, snapshot: snapshot)
+        appLaunched: appLaunched
       )
-
     case .newRoot:
-      if let path = result.resolvedPath ?? input.path {
-        let url = URL(fileURLWithPath: path, isDirectory: true)
-        addAndOpen(url)
-      }
-      bringAppToFront()
-      return makeSuccess(
+      return await handleNewRoot(
+        result: result,
+        input: input,
         invocation: invocation,
-        requestedPath: input.path,
-        resolvedPath: result.resolvedPath ?? input.path,
-        resolution: .newRoot,
-        createdTab: true,
-        target: nil
+        appLaunched: appLaunched
       )
     }
+  }
+
+  private func handleNoArgument(invocation: String, appLaunched: Bool) -> CommandResponse {
+    bringAppToFront()
+    let target = makeTarget(selector: .none)
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: nil,
+      resolvedPath: nil,
+      resolution: .noArgument,
+      appLaunched: appLaunched,
+      createdTab: false,
+      target: target
+    )
+  }
+
+  private func handleExactRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let worktreeID = result.worktreeID else {
+      return makeFailure(message: "Resolved exact-root target is missing a worktree ID.")
+    }
+    let requestedPath = result.resolvedPath ?? input.path
+    selectWorktree(worktreeID)
+    bringAppToFront()
+
+    var createdTab = false
+    var target = makeTarget(selector: .worktree(worktreeID))
+    if target == nil, let requestedPath {
+      createTabAtPath(worktreeID, requestedPath)
+      createdTab = true
+      target = await waitForOpenTarget(
+        selector: .worktree(worktreeID),
+        preferredPaneCWD: requestedPath
+      )
+    }
+    guard let target else {
+      return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
+    }
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: requestedPath,
+      resolution: .exactRoot,
+      appLaunched: appLaunched,
+      createdTab: createdTab,
+      target: target
+    )
+  }
+
+  private func handleInsideRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let worktreeID = result.worktreeID else {
+      return makeFailure(message: "Resolved inside-root target is missing a worktree ID.")
+    }
+    selectWorktree(worktreeID)
+    if let subpath = result.resolvedPath ?? input.path {
+      createTabAtPath(worktreeID, subpath)
+    }
+    bringAppToFront()
+    guard let target = await waitForOpenTarget(
+      selector: .worktree(worktreeID),
+      preferredPaneCWD: result.resolvedPath ?? input.path
+    ) else {
+      return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
+    }
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: result.resolvedPath ?? input.path,
+      resolution: .insideRoot,
+      appLaunched: appLaunched,
+      createdTab: true,
+      target: target
+    )
+  }
+
+  private func handleNewRoot(
+    result: OpenResolverResult,
+    input: OpenInput,
+    invocation: String,
+    appLaunched: Bool
+  ) async -> CommandResponse {
+    guard let path = result.resolvedPath ?? input.path else {
+      return makeFailure(message: "Resolved new-root target is missing a path.")
+    }
+    let url = URL(fileURLWithPath: path, isDirectory: true)
+    addAndOpen(url)
+    bringAppToFront()
+
+    let finalResult = await waitForManagedResult(path: path)
+    guard let worktreeID = finalResult?.worktreeID else {
+      return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
+    }
+
+    selectWorktree(worktreeID)
+    createTabAtPath(worktreeID, path)
+    guard let target = await waitForOpenTarget(
+      selector: .worktree(worktreeID),
+      preferredPaneCWD: path
+    ) else {
+      return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
+    }
+
+    return makeSuccess(
+      invocation: invocation,
+      requestedPath: input.path,
+      resolvedPath: result.resolvedPath ?? input.path,
+      resolution: .newRoot,
+      appLaunched: appLaunched,
+      createdTab: true,
+      target: target
+    )
   }
 
   // MARK: - Private
@@ -225,37 +402,102 @@ final class OpenCommandHandler: CommandHandler {
     }
   }
 
-  private func makeTarget(
-    result: OpenResolverResult,
-    snapshot: OpenTerminalSnapshot?
-  ) -> OpenTarget? {
-    guard let worktreeID = result.worktreeID,
-          let worktreeName = result.worktreeName,
-          let worktreePath = result.worktreePath,
-          let rootPath = result.rootPath
-    else {
+  private func waitForRepositoriesReadyIfNeeded() async {
+    guard !isRepositoriesReady() else { return }
+
+    for attempt in 0..<maxPollAttempts() {
+      if isRepositoriesReady() {
+        return
+      }
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
+    }
+  }
+
+  private func waitForManagedResult(path: String) async -> OpenResolverResult? {
+    var lastResult: OpenResolverResult?
+
+    for attempt in 0..<maxPollAttempts() {
+      let result = resolver(path)
+      lastResult = result
+      if result.resolution != .newRoot, result.worktreeID != nil {
+        return result
+      }
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
+    }
+
+    if let lastResult, lastResult.resolution != .newRoot, lastResult.worktreeID != nil {
+      return lastResult
+    }
+    return nil
+  }
+
+  private func waitForOpenTarget(
+    selector: TargetSelector,
+    preferredPaneCWD: String? = nil
+  ) async -> OpenTarget? {
+    var fallbackTarget: OpenTarget?
+
+    for attempt in 0..<maxPollAttempts() {
+      if let target = makeTarget(selector: selector) {
+        fallbackTarget = target
+        if preferredPaneCWD == nil || target.pane.cwd == preferredPaneCWD {
+          return target
+        }
+      }
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
+    }
+
+    return fallbackTarget
+  }
+
+  private func maxPollAttempts() -> Int {
+    let interval = max(pollIntervalNanoseconds, 1)
+    let attempts = waitTimeoutNanoseconds / interval
+    return max(1, Int(attempts) + 1)
+  }
+
+  private func makeTarget(selector: TargetSelector) -> OpenTarget? {
+    guard let resolved = resolveTarget(selector) else {
       return nil
     }
 
-    let worktreeTarget = OpenTargetWorktree(
-      id: worktreeID,
-      name: worktreeName,
-      path: worktreePath,
-      rootPath: rootPath,
-      kind: result.worktreeKind ?? "git"
+    return OpenTarget(
+      worktree: OpenTargetWorktree(
+        id: resolved.worktreeID,
+        name: resolved.worktreeName,
+        path: resolved.worktreePath,
+        rootPath: resolved.worktreeRootPath,
+        kind: resolved.worktreeKind
+      ),
+      tab: OpenTargetTab(
+        id: resolved.tabID,
+        title: resolved.tabTitle,
+        cwd: resolved.tabCWD
+      ),
+      pane: OpenTargetPane(
+        id: resolved.paneID,
+        title: resolved.paneTitle,
+        cwd: resolved.paneCWD
+      )
     )
+  }
 
-    let tabTarget: OpenTargetTab? = snapshot.flatMap { snap in
-      guard let tabID = snap.tabID, let tabTitle = snap.tabTitle else { return nil }
-      return OpenTargetTab(id: tabID, title: tabTitle, cwd: snap.tabCwd)
-    }
-
-    let paneTarget: OpenTargetPane? = snapshot.flatMap { snap in
-      guard let paneID = snap.paneID, let paneTitle = snap.paneTitle else { return nil }
-      return OpenTargetPane(id: paneID, title: paneTitle, cwd: snap.paneCwd)
-    }
-
-    return OpenTarget(worktree: worktreeTarget, tab: tabTarget, pane: paneTarget)
+  private func makeFailure(message: String) -> CommandResponse {
+    CommandResponse(
+      ok: false,
+      command: "open",
+      schemaVersion: "prowl.cli.open.v1",
+      error: CommandError(
+        code: CLIErrorCode.openFailed,
+        message: message
+      )
+    )
   }
 
   // swiftlint:disable:next function_parameter_count
@@ -264,6 +506,7 @@ final class OpenCommandHandler: CommandHandler {
     requestedPath: String?,
     resolvedPath: String?,
     resolution: OpenResolution,
+    appLaunched: Bool,
     createdTab: Bool,
     target: OpenTarget?
   ) -> CommandResponse {
@@ -272,7 +515,7 @@ final class OpenCommandHandler: CommandHandler {
       requestedPath: requestedPath,
       resolvedPath: resolvedPath,
       resolution: resolution.rawValue,
-      appLaunched: false,
+      appLaunched: appLaunched,
       broughtToFront: true,
       createdTab: createdTab,
       target: target

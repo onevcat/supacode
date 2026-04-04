@@ -56,6 +56,10 @@ final class WorktreeTerminalManager {
       Task {
         createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew, initialInput: input)
       }
+    case .createTabInDirectory(let worktree, let directory):
+      Task {
+        createTabAsync(in: worktree, runSetupScriptIfNew: false, workingDirectory: directory)
+      }
     case .ensureInitialTab(let worktree, let runSetupScriptIfNew, let focusing):
       let state = state(for: worktree) { runSetupScriptIfNew }
       state.ensureInitialTab(focusing: focusing)
@@ -239,7 +243,8 @@ final class WorktreeTerminalManager {
   private func createTabAsync(
     in worktree: Worktree,
     runSetupScriptIfNew: Bool,
-    initialInput: String? = nil
+    initialInput: String? = nil,
+    workingDirectory: URL? = nil
   ) {
     let state = state(for: worktree) { runSetupScriptIfNew }
     let setupScript: String?
@@ -250,7 +255,11 @@ final class WorktreeTerminalManager {
     } else {
       setupScript = nil
     }
-    _ = state.createTab(setupScript: setupScript, initialInput: initialInput)
+    _ = state.createTab(
+      setupScript: setupScript,
+      initialInput: initialInput,
+      workingDirectoryOverride: workingDirectory
+    )
   }
 
   @discardableResult

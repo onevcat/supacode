@@ -18,18 +18,40 @@ struct OpenCommand: ParsableCommand {
   mutating func run() throws {
     try CLIExecution.run(command: "open", output: options.outputMode) {
       let resolvedPath: String? = try path.map { try normalizePath($0) }
+      let invocation = Self.deriveInvocation(path: resolvedPath)
+
+      if let resolvedPath {
+        setenv(ProwlSocket.cliOpenPathEnvironmentKey, resolvedPath, 1)
+      } else {
+        unsetenv(ProwlSocket.cliOpenPathEnvironmentKey)
+      }
+
+      // If the app is not running, launch it first.
+      let appLaunched = try Self.ensureAppRunning()
+
       let envelope = CommandEnvelope(
         output: options.outputMode,
-        command: .open(OpenInput(path: resolvedPath, invocation: Self.deriveInvocation(path: resolvedPath)))
+        command: .open(OpenInput(
+          path: resolvedPath,
+          invocation: invocation,
+          appLaunched: appLaunched
+        ))
       )
       try CLIRunner.execute(envelope)
     }
   }
 
+  /// Check if Prowl is reachable via socket; if not, launch it.
+  /// Returns `true` only when the app was not running and had to be launched.
+  private static func ensureAppRunning() throws -> Bool {
+    try AppLauncher.ensureAppRunning()
+  }
+
   private static func deriveInvocation(path: String?) -> String {
     guard path != nil else { return "bare" }
-    let args = CommandLine.arguments.dropFirst()
-    if args.first == "open" {
+    let args = ProcessInfo.processInfo.arguments.dropFirst()
+    let firstPositional = args.first { !$0.hasPrefix("-") }
+    if firstPositional == "open" {
       return "open-subcommand"
     }
     return "implicit-open"

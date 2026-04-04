@@ -11,9 +11,14 @@ public struct OpenInput: Codable, Sendable {
   /// Optional — handler derives a default if absent.
   public let invocation: String?
 
-  public init(path: String? = nil, invocation: String? = nil) {
+  /// `true` when the CLI had to launch Prowl before sending this command.
+  /// The handler copies this value into the response's `app_launched` field.
+  public let appLaunched: Bool
+
+  public init(path: String? = nil, invocation: String? = nil, appLaunched: Bool = false) {
     self.path = path
     self.invocation = invocation
+    self.appLaunched = appLaunched
   }
 }
 
