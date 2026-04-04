@@ -190,8 +190,9 @@ final class SendCommandHandler: CommandHandler {
     let preText = pre.screenText ?? pre.viewportText
     let postText = post.screenText ?? post.viewportText
 
-    let preLines = splitLines(preText)
-    let postLines = splitLines(postText)
+    // Trim trailing whitespace-only lines from both snapshots (screen buffer padding)
+    var preLines = trimTrailingBlankLines(splitLines(preText))
+    let postLines = trimTrailingBlankLines(splitLines(postText))
 
     // If post has fewer lines than pre, the screen was cleared — return all of post as truncated
     if postLines.count < preLines.count {
@@ -215,9 +216,14 @@ final class SendCommandHandler: CommandHandler {
       }
     }
 
-    // Strip trailing empty lines and repeated prompt lines (last line of pre repeated at end)
-    let lastPreLine = preLines.last
-    while let last = newLines.last, String(last).isEmpty || (lastPreLine.map { last == $0 } ?? false) {
+    // Strip trailing prompt line: if the last new line matches the last line of pre (e.g. "$ "),
+    // remove it once — it's the new prompt after the command finished.
+    if let lastPre = preLines.last, let lastNew = newLines.last, lastNew == lastPre {
+      newLines = Array(newLines.dropLast())
+    }
+
+    // Trim trailing empty lines (screen buffer padding / blank lines after output)
+    while let last = newLines.last, String(last).trimmingCharacters(in: .whitespaces).isEmpty {
       newLines = Array(newLines.dropLast())
     }
 
@@ -232,6 +238,14 @@ final class SendCommandHandler: CommandHandler {
   private func splitLines(_ text: String) -> [Substring] {
     guard !text.isEmpty else { return [] }
     return text.split(separator: "\n", omittingEmptySubsequences: false)
+  }
+
+  private func trimTrailingBlankLines(_ lines: [Substring]) -> [Substring] {
+    var result = lines
+    while let last = result.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+      result.removeLast()
+    }
+    return result
   }
 
   // MARK: - Wait

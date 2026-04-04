@@ -456,4 +456,34 @@ struct CLISendCommandHandlerTests {
     #expect(response.ok == false)
     #expect(response.error?.code == CLIErrorCode.captureUnsupported)
   }
+
+  @Test func captureMultilineOutputWithScreenPadding() async throws {
+    // Simulates `ls` output with screen buffer padding (trailing blank lines)
+    let pre = ReadCaptureInput(
+      viewportText: "$ \n\n\n\n\n",
+      screenText: "$ \n\n\n\n\n"
+    )
+    let post = ReadCaptureInput(
+      viewportText: "$ \nls\nfile1.txt\nfile2.txt\ndir1\n$ \n\n\n",
+      screenText: "$ \nls\nfile1.txt\nfile2.txt\ndir1\n$ \n\n\n"
+    )
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(text: "ls", captureOutput: true)
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.text == "file1.txt\nfile2.txt\ndir1")
+    #expect(capture.lineCount == 3)
+    #expect(capture.truncated == false)
+  }
 }
