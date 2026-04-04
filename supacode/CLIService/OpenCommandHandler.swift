@@ -108,28 +108,32 @@ final class OpenCommandHandler: CommandHandler {
   /// Parameters: worktreeID, absolutePath.
   typealias CreateTabAtPathAction = @MainActor (String, String) -> Void
   typealias TerminalSnapshotProvider = @MainActor (String) -> OpenTerminalSnapshot?
+  /// Returns when app state is ready for command execution (repositories loaded).
+  typealias ReadinessWaiter = @MainActor () async -> Void
 
   private let resolver: Resolver
   private let selectWorktree: SelectAction
   private let addAndOpen: AddAndOpenAction
   private let createTabAtPath: CreateTabAtPathAction
   private let terminalSnapshot: TerminalSnapshotProvider
+  private let waitForReady: ReadinessWaiter
 
   init(
     resolver: @escaping Resolver,
     selectWorktree: @escaping SelectAction,
     addAndOpen: @escaping AddAndOpenAction,
     createTabAtPath: @escaping CreateTabAtPathAction = { _, _ in },
-    terminalSnapshot: @escaping TerminalSnapshotProvider
+    terminalSnapshot: @escaping TerminalSnapshotProvider,
+    waitForReady: @escaping ReadinessWaiter = {}
   ) {
     self.resolver = resolver
     self.selectWorktree = selectWorktree
     self.addAndOpen = addAndOpen
     self.createTabAtPath = createTabAtPath
     self.terminalSnapshot = terminalSnapshot
+    self.waitForReady = waitForReady
   }
 
-  // swiftlint:disable:next async_without_await
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
     guard case .open(let input) = envelope.command else {
       return CommandResponse(
@@ -140,9 +144,16 @@ final class OpenCommandHandler: CommandHandler {
       )
     }
 
+    let appLaunched = input.appLaunched
+
+    // When the app was just launched by this CLI command, wait for
+    // repositories to finish loading before resolving the path.
+    if appLaunched {
+      await waitForReady()
+    }
+
     let result = resolver(input.path)
     let invocation = deriveInvocation(input: input)
-    let appLaunched = input.appLaunched
 
     switch result.resolution {
     case .noArgument:
