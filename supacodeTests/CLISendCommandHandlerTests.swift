@@ -32,7 +32,8 @@ struct CLISendCommandHandlerTests {
     resolveResult: Result<SendResolvedTarget, TargetResolverError> = .success(makeTarget()),
     waiterResult: (exitCode: Int?, durationMs: Int)? = nil,
     waiterDelay: Duration? = nil,
-    textDelivery: (@MainActor (SendResolvedTarget, String, Bool) -> Void)? = nil
+    textDelivery: (@MainActor (SendResolvedTarget, String, Bool) -> Void)? = nil,
+    captureProvider: (@MainActor (SendResolvedTarget) -> ReadCaptureInput?)? = nil
   ) -> SendCommandHandler {
     SendCommandHandler(
       resolveProvider: { _ in resolveResult },
@@ -51,7 +52,8 @@ struct CLISendCommandHandlerTests {
             continuation.finish()
           }
         }
-      }
+      },
+      captureProvider: captureProvider
     )
   }
 
@@ -60,7 +62,8 @@ struct CLISendCommandHandlerTests {
     trailingEnter: Bool = true,
     source: InputSource = .argv,
     wait: Bool = true,
-    timeoutSeconds: Int? = nil
+    timeoutSeconds: Int? = nil,
+    captureOutput: Bool = false
   ) -> CommandEnvelope {
     CommandEnvelope(
       output: .json,
@@ -71,7 +74,8 @@ struct CLISendCommandHandlerTests {
           trailingEnter: trailingEnter,
           source: source,
           wait: wait,
-          timeoutSeconds: timeoutSeconds
+          timeoutSeconds: timeoutSeconds,
+          captureOutput: captureOutput
         ))
     )
   }
@@ -284,5 +288,202 @@ struct CLISendCommandHandlerTests {
 
     #expect(insertedPaneID == Self.testPaneID)
     #expect(submittedPaneID == Self.testPaneID)
+  }
+
+  // MARK: - Capture Tests
+
+  @Test func captureReturnsScreenDiff() async throws {
+    let pre = ReadCaptureInput(viewportText: "line1\nline2", screenText: nil)
+    let post = ReadCaptureInput(viewportText: "line1\nline2\noutput1\noutput2", screenText: nil)
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(envelope: Self.makeEnvelope(captureOutput: true))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.lineCount == 2)
+    #expect(capture.source == .screenDiff)
+    #expect(capture.text == "output1\noutput2")
+    #expect(capture.truncated == false)
+  }
+
+  @Test func captureStripsEchoedCommand() async throws {
+    let pre = ReadCaptureInput(viewportText: "$ ", screenText: nil)
+    let post = ReadCaptureInput(viewportText: "$ \necho hello\nhello\n$ ", screenText: nil)
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(text: "echo hello", captureOutput: true)
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.text == "hello")
+    #expect(capture.lineCount == 1)
+  }
+
+  @Test func captureWithEmptyOutput() async throws {
+    let snap = ReadCaptureInput(viewportText: "line1\nline2", screenText: nil)
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return snap
+      }
+    )
+    let response = await handler.handle(envelope: Self.makeEnvelope(captureOutput: true))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.text == "")
+    #expect(capture.lineCount == 0)
+    #expect(capture.truncated == false)
+  }
+
+  @Test func captureWithTruncation() async throws {
+    let pre = ReadCaptureInput(viewportText: "line1\nline2\nline3", screenText: nil)
+    let post = ReadCaptureInput(viewportText: "line1\nline2", screenText: nil)
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(envelope: Self.makeEnvelope(captureOutput: true))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.truncated == true)
+  }
+
+  @Test func captureNilWhenProviderFails() async throws {
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in nil }
+    )
+    let response = await handler.handle(envelope: Self.makeEnvelope(captureOutput: true))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    #expect(payload.capture == nil)
+  }
+
+  @Test func captureNullWhenNotRequested() async throws {
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10)
+    )
+    let response = await handler.handle(envelope: Self.makeEnvelope(captureOutput: false))
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    #expect(payload.capture == nil)
+  }
+
+  @Test func captureRequiresWaitValidation() async throws {
+    let handler = Self.makeHandler()
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(wait: false, captureOutput: true)
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+  }
+
+  @Test func captureRequiresEnterValidation() async throws {
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10)
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(trailingEnter: false, captureOutput: true)
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.invalidArgument)
+  }
+
+  @Test func captureWithRepeatedPromptLines() async throws {
+    let pre = ReadCaptureInput(viewportText: "$ ", screenText: nil)
+    let post = ReadCaptureInput(viewportText: "$ \n$ echo hello\nhello\n$ ", screenText: nil)
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(text: "echo hello", captureOutput: true)
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    // "$ echo hello" is echoed command, stripped; "hello" is the output; "$ " is trailing prompt (stripped)
+    #expect(capture.text == "hello")
+    #expect(capture.lineCount == 1)
+  }
+
+  @Test func captureUnsupportedWhenNoShellIntegration() async throws {
+    // waiterProvider returns nil (no shell integration) → CAPTURE_UNSUPPORTED, not WAIT_TIMEOUT
+    let handler = Self.makeHandler(
+      waiterResult: nil,  // nil means waiterProvider returns nil stream
+      captureProvider: { _ in ReadCaptureInput(viewportText: "$ ", screenText: nil) }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(captureOutput: true)
+    )
+
+    #expect(response.ok == false)
+    #expect(response.error?.code == CLIErrorCode.captureUnsupported)
+  }
+
+  @Test func captureMultilineOutputWithScreenPadding() async throws {
+    // Simulates `ls` output with screen buffer padding (trailing blank lines)
+    let pre = ReadCaptureInput(
+      viewportText: "$ \n\n\n\n\n",
+      screenText: "$ \n\n\n\n\n"
+    )
+    let post = ReadCaptureInput(
+      viewportText: "$ \nls\nfile1.txt\nfile2.txt\ndir1\n$ \n\n\n",
+      screenText: "$ \nls\nfile1.txt\nfile2.txt\ndir1\n$ \n\n\n"
+    )
+    var callCount = 0
+    let handler = Self.makeHandler(
+      waiterResult: (exitCode: 0, durationMs: 10),
+      captureProvider: { _ in
+        defer { callCount += 1 }
+        return callCount == 0 ? pre : post
+      }
+    )
+    let response = await handler.handle(
+      envelope: Self.makeEnvelope(text: "ls", captureOutput: true)
+    )
+
+    #expect(response.ok)
+    let payload = try #require(try response.data?.decode(as: SendCommandPayload.self))
+    let capture = try #require(payload.capture)
+    #expect(capture.text == "file1.txt\nfile2.txt\ndir1")
+    #expect(capture.lineCount == 3)
+    #expect(capture.truncated == false)
   }
 }

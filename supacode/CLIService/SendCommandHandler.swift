@@ -59,24 +59,44 @@ final class SendCommandHandler: CommandHandler {
   typealias ResolveProvider = @MainActor (TargetSelector) -> Result<SendResolvedTarget, TargetResolverError>
   typealias TextDelivery = @MainActor (SendResolvedTarget, String, Bool) -> Void
   typealias WaiterProvider = @MainActor (String, UUID) -> AsyncStream<(exitCode: Int?, durationMs: Int)>?
+  typealias CaptureProvider = @MainActor (SendResolvedTarget) -> ReadCaptureInput?
 
   private let resolveProvider: ResolveProvider
   private let textDelivery: TextDelivery
   private let waiterProvider: WaiterProvider
+  private let captureProvider: CaptureProvider?
 
   init(
     resolveProvider: @escaping ResolveProvider,
     textDelivery: @escaping TextDelivery,
-    waiterProvider: @escaping WaiterProvider
+    waiterProvider: @escaping WaiterProvider,
+    captureProvider: CaptureProvider? = nil
   ) {
     self.resolveProvider = resolveProvider
     self.textDelivery = textDelivery
     self.waiterProvider = waiterProvider
+    self.captureProvider = captureProvider
   }
 
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
     guard case .send(let input) = envelope.command else {
       return errorResponse(code: CLIErrorCode.sendFailed, message: "Invalid command.")
+    }
+
+    // Validate capture constraints
+    if input.captureOutput {
+      if !input.wait {
+        return errorResponse(
+          code: CLIErrorCode.invalidArgument,
+          message: "--capture requires waiting for command completion."
+        )
+      }
+      if !input.trailingEnter {
+        return errorResponse(
+          code: CLIErrorCode.invalidArgument,
+          message: "--capture requires a trailing Enter to run the command."
+        )
+      }
     }
 
     // Resolve target
@@ -90,6 +110,19 @@ final class SendCommandHandler: CommandHandler {
     }
 
     let waitStream = input.wait ? waiterProvider(target.worktreeID, target.paneID) : nil
+
+    // If capture is requested but the pane has no shell integration (no wait stream),
+    // reject early with CAPTURE_UNSUPPORTED — do not send text and fall through to timeout.
+    if input.captureOutput && waitStream == nil {
+      return errorResponse(
+        code: CLIErrorCode.captureUnsupported,
+        message: "--capture requires shell integration (OSC 133) on the target pane. "
+          + "This pane does not appear to support it."
+      )
+    }
+
+    // Pre-capture snapshot (before text delivery)
+    let preCapture: ReadCaptureInput? = input.captureOutput ? captureProvider?(target) : nil
 
     // Deliver text (and optional Enter)
     textDelivery(target, input.text, input.trailingEnter)
@@ -112,6 +145,18 @@ final class SendCommandHandler: CommandHandler {
       waitResult = nil
     }
 
+    // Post-capture snapshot (after completion) and diff
+    let capturedOutput: CapturedOutput?
+    if input.captureOutput {
+      if let pre = preCapture, let post = captureProvider?(target) {
+        capturedOutput = diffCapture(pre: pre, post: post, commandText: input.text)
+      } else {
+        capturedOutput = nil
+      }
+    } else {
+      capturedOutput = nil
+    }
+
     // Build payload
     let payload = SendCommandPayload(
       target: makePayloadTarget(from: target),
@@ -122,7 +167,8 @@ final class SendCommandHandler: CommandHandler {
         trailingEnterSent: input.trailingEnter
       ),
       createdTab: false,
-      wait: waitResult
+      wait: waitResult,
+      capture: capturedOutput
     )
 
     do {
@@ -136,6 +182,70 @@ final class SendCommandHandler: CommandHandler {
       sendLogger.warning("Failed to encode send payload: \(error)")
       return errorResponse(code: CLIErrorCode.sendFailed, message: "Failed to encode response.")
     }
+  }
+
+  // MARK: - Capture Diff
+
+  private func diffCapture(pre: ReadCaptureInput, post: ReadCaptureInput, commandText: String) -> CapturedOutput {
+    let preText = pre.screenText ?? pre.viewportText
+    let postText = post.screenText ?? post.viewportText
+
+    // Trim trailing whitespace-only lines from both snapshots (screen buffer padding)
+    let preLines = trimTrailingBlankLines(splitLines(preText))
+    let postLines = trimTrailingBlankLines(splitLines(postText))
+
+    // If post has fewer lines than pre, the screen was cleared — return all of post as truncated
+    if postLines.count < preLines.count {
+      let text = postText
+      let count = postLines.isEmpty ? 0 : postLines.count
+      return CapturedOutput(text: text, lineCount: count, source: .screenDiff, truncated: true)
+    }
+
+    // Find common prefix length
+    let commonPrefixLength = zip(preLines, postLines).prefix(while: { $0 == $1 }).count
+
+    // New lines are everything after the common prefix in post
+    var newLines = Array(postLines.dropFirst(commonPrefixLength))
+
+    // Strip echoed command line: if first new line matches command (trimmed) or ends with it (e.g. "$ cmd")
+    let trimmedCommand = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let first = newLines.first {
+      let firstStr = String(first).trimmingCharacters(in: .whitespacesAndNewlines)
+      if firstStr == trimmedCommand || firstStr.hasSuffix(trimmedCommand) {
+        newLines = Array(newLines.dropFirst())
+      }
+    }
+
+    // Strip trailing prompt line: if the last new line matches the last line of pre (e.g. "$ "),
+    // remove it once — it's the new prompt after the command finished.
+    if let lastPre = preLines.last, let lastNew = newLines.last, lastNew == lastPre {
+      newLines = Array(newLines.dropLast())
+    }
+
+    // Trim trailing empty lines (screen buffer padding / blank lines after output)
+    while let last = newLines.last, String(last).trimmingCharacters(in: .whitespaces).isEmpty {
+      newLines = Array(newLines.dropLast())
+    }
+
+    if newLines.isEmpty {
+      return CapturedOutput(text: "", lineCount: 0, source: .screenDiff, truncated: false)
+    }
+
+    let resultText = newLines.map(String.init).joined(separator: "\n")
+    return CapturedOutput(text: resultText, lineCount: newLines.count, source: .screenDiff, truncated: false)
+  }
+
+  private func splitLines(_ text: String) -> [Substring] {
+    guard !text.isEmpty else { return [] }
+    return text.split(separator: "\n", omittingEmptySubsequences: false)
+  }
+
+  private func trimTrailingBlankLines(_ lines: [Substring]) -> [Substring] {
+    var result = lines
+    while let last = result.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+      result.removeLast()
+    }
+    return result
   }
 
   // MARK: - Wait

@@ -255,6 +255,18 @@ struct SupacodeApp: App {
       waiterProvider: { worktreeID, surfaceID in
         terminalManager.stateIfExists(for: worktreeID)?
           .waitForCommandFinished(surfaceID: surfaceID)
+      },
+      captureProvider: { target in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID),
+          let surface = state.surfaceView(for: target.paneID),
+          let viewportText = surface.readViewportContentsForCLI()
+        else {
+          return nil
+        }
+        return ReadCaptureInput(
+          viewportText: viewportText,
+          screenText: surface.readScreenContentsForCLI()
+        )
       }
     )
     let focusHandler = FocusCommandHandler(

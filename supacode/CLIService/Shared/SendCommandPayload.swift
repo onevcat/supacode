@@ -3,29 +3,58 @@
 
 import Foundation
 
+public enum CaptureSource: String, Codable, Sendable {
+  case screenDiff = "screen_diff"
+}
+
+public struct CapturedOutput: Codable, Sendable {
+  public let text: String
+  public let lineCount: Int
+  public let source: CaptureSource
+  public let truncated: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case text
+    case lineCount = "line_count"
+    case source
+    case truncated
+  }
+
+  public init(text: String, lineCount: Int, source: CaptureSource, truncated: Bool) {
+    self.text = text
+    self.lineCount = lineCount
+    self.source = source
+    self.truncated = truncated
+  }
+}
+
 public struct SendCommandPayload: Codable, Sendable {
   public let target: SendTarget
   public let input: SendInputInfo
   public let createdTab: Bool
   public let wait: SendWaitResult?
+  public let capture: CapturedOutput?
 
   enum CodingKeys: String, CodingKey {
     case target
     case input
     case createdTab = "created_tab"
     case wait
+    case capture
   }
 
   public init(
     target: SendTarget,
     input: SendInputInfo,
     createdTab: Bool,
-    wait: SendWaitResult?
+    wait: SendWaitResult?,
+    capture: CapturedOutput? = nil
   ) {
     self.target = target
     self.input = input
     self.createdTab = createdTab
     self.wait = wait
+    self.capture = capture
   }
 }
 

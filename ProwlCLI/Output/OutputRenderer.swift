@@ -213,6 +213,25 @@ enum OutputRenderer {
       lines.append("  \("wait:".dim) \("none (fire-and-forget)".dim)")
     }
 
+    if let capture = payload.capture {
+      let truncLabel = capture.truncated ? " (truncated)".yellow : ""
+      lines.append(
+        "  \("capture:".dim) \(capture.lineCount) lines"
+        + " (\(capture.source.rawValue)\(truncLabel))"
+      )
+      if !capture.text.isEmpty {
+        lines.append("  \("--- output ---".dim)")
+        let outputLines = capture.text.split(separator: "\n", omittingEmptySubsequences: false)
+        let maxDisplay = 100
+        for line in outputLines.prefix(maxDisplay) {
+          lines.append("  \(line)")
+        }
+        if outputLines.count > maxDisplay {
+          lines.append("  \("... (\(outputLines.count - maxDisplay) more lines)".dim)")
+        }
+      }
+    }
+
     return lines.joined(separator: "\n")
   }
 

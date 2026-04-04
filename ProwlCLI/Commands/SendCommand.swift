@@ -30,6 +30,9 @@ struct SendCommand: ParsableCommand {
   @Flag(name: .long, help: "Return immediately without waiting for command completion.")
   var noWait = false
 
+  @Flag(name: .long, help: "Capture screen output produced by the command and include it in the response.")
+  var capture = false
+
   @Option(name: .long, help: "Maximum seconds to wait for completion (1–300, default: 30).")
   var timeout: Int?
 
@@ -44,6 +47,20 @@ struct SendCommand: ParsableCommand {
         throw ExitError(
           code: CLIErrorCode.invalidArgument,
           message: "Timeout must be between 1 and 300 seconds."
+        )
+      }
+
+      if capture && noWait {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "--capture requires waiting for command completion. Remove --no-wait."
+        )
+      }
+
+      if capture && noEnter {
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "--capture requires a trailing Enter to run the command. Remove --no-enter."
         )
       }
 
@@ -87,7 +104,8 @@ struct SendCommand: ParsableCommand {
           trailingEnter: !noEnter,
           source: source,
           wait: !noWait,
-          timeoutSeconds: timeout
+          timeoutSeconds: timeout,
+          captureOutput: capture
         ))
       )
       try CLIRunner.execute(envelope)
