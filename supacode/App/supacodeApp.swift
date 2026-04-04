@@ -254,10 +254,34 @@ struct SupacodeApp: App {
         bringMainWindowToFront()
       }
     )
+    let readHandler = ReadCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { ReadResolvedTarget(from: $0) }
+      },
+      captureProvider: { target in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID),
+          let surface = state.surfaceView(for: target.paneID),
+          let viewportText = surface.readViewportContentsForCLI()
+        else {
+          return nil
+        }
+        return ReadCaptureInput(
+          viewportText: viewportText,
+          screenText: surface.readScreenContentsForCLI()
+        )
+      }
+    )
     let cliRouter = CLICommandRouter(
       listHandler: listHandler,
       focusHandler: focusHandler,
-      sendHandler: sendHandler
+      sendHandler: sendHandler,
+      readHandler: readHandler
     )
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")

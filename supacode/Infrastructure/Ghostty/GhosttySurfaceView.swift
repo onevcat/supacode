@@ -567,27 +567,51 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
   }
 
-  private func readScreenContents() -> String {
-    guard let surface else { return "" }
+  private func readText(
+    topLeftTag: ghostty_point_tag_e,
+    bottomRightTag: ghostty_point_tag_e
+  ) -> String? {
+    guard let surface else { return nil }
     var text = ghostty_text_s()
     let selection = ghostty_selection_s(
       top_left: ghostty_point_s(
-        tag: GHOSTTY_POINT_SCREEN,
+        tag: topLeftTag,
         coord: GHOSTTY_POINT_COORD_TOP_LEFT,
         x: 0,
         y: 0
       ),
       bottom_right: ghostty_point_s(
-        tag: GHOSTTY_POINT_SCREEN,
+        tag: bottomRightTag,
         coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
         x: 0,
         y: 0
       ),
       rectangle: false
     )
-    guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
+    guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
     defer { ghostty_surface_free_text(surface, &text) }
     return String(cString: text.text)
+  }
+
+  private func readScreenContents() -> String {
+    readText(
+      topLeftTag: GHOSTTY_POINT_SCREEN,
+      bottomRightTag: GHOSTTY_POINT_SCREEN
+    ) ?? ""
+  }
+
+  func readViewportContentsForCLI() -> String? {
+    readText(
+      topLeftTag: GHOSTTY_POINT_VIEWPORT,
+      bottomRightTag: GHOSTTY_POINT_VIEWPORT
+    )
+  }
+
+  func readScreenContentsForCLI() -> String? {
+    readText(
+      topLeftTag: GHOSTTY_POINT_SCREEN,
+      bottomRightTag: GHOSTTY_POINT_SCREEN
+    )
   }
 
   override func keyDown(with event: NSEvent) {

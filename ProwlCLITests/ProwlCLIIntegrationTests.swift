@@ -610,6 +610,151 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(error["code"] as? String, "INVALID_ARGUMENT")
   }
 
+  // MARK: - Read command tests
+
+  func testReadCommandRoundTripsOverSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "read")
+    let response = try CommandResponse(
+      ok: true,
+      command: "read",
+      schemaVersion: "prowl.cli.read.v1",
+      data: RawJSON(encoding: ReadResponseData(
+        target: ReadResponseTarget(
+          worktree: ListWorktree(
+            id: "Prowl:/Projects/Prowl",
+            name: "Prowl",
+            path: "/Projects/Prowl",
+            rootPath: "/Projects/Prowl",
+            kind: "git"
+          ),
+          tab: ReadResponseTab(
+            id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0",
+            title: "Prowl 1",
+            selected: true
+          ),
+          pane: ReadResponsePane(
+            id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+            title: "zsh",
+            cwd: "/Projects/Prowl",
+            focused: true
+          )
+        ),
+        mode: "last",
+        last: 5,
+        source: "scrollback",
+        truncated: false,
+        lineCount: 5,
+        text: "1\n2\n3\n4\n5"
+      ))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["read", "--pane", "pane-123", "--last", "5", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .read(let input) = envelope.command {
+      XCTAssertEqual(input.selector, .pane("pane-123"))
+      XCTAssertEqual(input.last, 5)
+    } else {
+      XCTFail("Expected read command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, true)
+    XCTAssertEqual(payload["command"] as? String, "read")
+    XCTAssertEqual(payload["schema_version"] as? String, "prowl.cli.read.v1")
+  }
+
+  func testReadWithoutLastDefaultsToSnapshot() throws {
+    let socketPath = temporarySocketPath(suffix: "read-snapshot")
+    let response = CommandResponse(
+      ok: true,
+      command: "read",
+      schemaVersion: "prowl.cli.read.v1"
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["read", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .read(let input) = envelope.command {
+      XCTAssertEqual(input.selector, .none)
+      XCTAssertNil(input.last)
+    } else {
+      XCTFail("Expected read command envelope")
+    }
+  }
+
+  func testReadRejectsInvalidLastBeforeTransport() throws {
+    let result = try runProwl(args: ["read", "--last", "0", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "read")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+  }
+
+  func testReadRejectsMultipleSelectorsBeforeTransport() throws {
+    let result = try runProwl(args: ["read", "--worktree", "Prowl", "--pane", "pane-123", "--json"])
+
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "read")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+  }
+
+  func testReadTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "read-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "read",
+      schemaVersion: "prowl.cli.read.v1",
+      data: RawJSON(encoding: ReadResponseData(
+        target: ReadResponseTarget(
+          worktree: ListWorktree(
+            id: "wt-1",
+            name: "main",
+            path: "/Projects/App",
+            rootPath: "/Projects/App",
+            kind: "git"
+          ),
+          tab: ReadResponseTab(id: "t1", title: "Tab 1", selected: true),
+          pane: ReadResponsePane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true)
+        ),
+        mode: "last",
+        last: 3,
+        source: "scrollback",
+        truncated: false,
+        lineCount: 3,
+        text: "a\nb\nc"
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["read"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Read from"), "Missing header: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("mode:"), "Missing mode line: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("source:"), "Missing source line: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("a\nb\nc"), "Missing text body: \(result.stdout)")
+  }
+
   // MARK: - Helpers
 
   private func runWithMockServer(
@@ -895,6 +1040,46 @@ private struct SendResponseWait: Encodable {
     case exitCode = "exit_code"
     case durationMs = "duration_ms"
   }
+}
+
+private struct ReadResponseData: Encodable {
+  let target: ReadResponseTarget
+  let mode: String
+  let last: Int?
+  let source: String
+  let truncated: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case target
+    case mode
+    case last
+    case source
+    case truncated
+    case lineCount = "line_count"
+    case text
+  }
+
+  let lineCount: Int
+  let text: String
+}
+
+private struct ReadResponseTarget: Encodable {
+  let worktree: ListWorktree
+  let tab: ReadResponseTab
+  let pane: ReadResponsePane
+}
+
+private struct ReadResponseTab: Encodable {
+  let id: String
+  let title: String
+  let selected: Bool
+}
+
+private struct ReadResponsePane: Encodable {
+  let id: String
+  let title: String
+  let cwd: String?
+  let focused: Bool
 }
 
 private struct CommandResult {

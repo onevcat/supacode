@@ -65,6 +65,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "read",
+         let data = response.data,
+         let payload = try? data.decode(as: ReadCommandPayload.self)
+      {
+        print(renderRead(payload))
+        return
+      }
+
       print("ok: \(response.command)")
       return
     }
@@ -219,6 +227,44 @@ enum OutputRenderer {
     if let cwd = pane.cwd {
       lines.append("  \("cwd:".dim) \(cwd)")
     }
+    return lines.joined(separator: "\n")
+  }
+
+  private static func renderRead(_ payload: ReadCommandPayload) -> String {
+    let wt = payload.target.worktree
+    let pane = payload.target.pane
+    let projectName = projectName(from: wt.path)
+
+    let requestedLabel: String
+    if let last = payload.last {
+      requestedLabel = "last \(last)"
+    } else {
+      requestedLabel = "snapshot"
+    }
+    let truncatedLabel = payload.truncated ? "yes".yellow : "no".green
+
+    var lines: [String] = []
+    lines.append(
+      "Read from \(projectName.cyan.bold)\(":".dim)\(wt.name) → \(pane.title.green)"
+      + "  \(pane.id.dim)"
+    )
+    lines.append(
+      "  \("mode:".dim) \(payload.mode.rawValue)"
+      + " (\(requestedLabel))"
+      + "  \("source:".dim) \(payload.source.rawValue)"
+      + "  \("truncated:".dim) \(truncatedLabel)"
+      + "  \("lines:".dim) \(payload.lineCount)"
+    )
+
+    if let cwd = pane.cwd {
+      lines.append("  \("cwd:".dim) \(cwd)")
+    }
+
+    if !payload.text.isEmpty {
+      lines.append("")
+      lines.append(payload.text)
+    }
+
     return lines.joined(separator: "\n")
   }
 
