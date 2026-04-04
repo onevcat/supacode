@@ -41,6 +41,17 @@ public struct SendInput: Codable, Sendable {
   public let source: InputSource
   public let wait: Bool
   public let timeoutSeconds: Int?
+  public let captureOutput: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case selector
+    case text
+    case trailingEnter = "trailing_enter"
+    case source
+    case wait
+    case timeoutSeconds = "timeout_seconds"
+    case captureOutput = "capture_output"
+  }
 
   public init(
     selector: TargetSelector = .none,
@@ -48,7 +59,8 @@ public struct SendInput: Codable, Sendable {
     trailingEnter: Bool = true,
     source: InputSource = .argv,
     wait: Bool = true,
-    timeoutSeconds: Int? = nil
+    timeoutSeconds: Int? = nil,
+    captureOutput: Bool = false
   ) {
     self.selector = selector
     self.text = text
@@ -56,6 +68,7 @@ public struct SendInput: Codable, Sendable {
     self.source = source
     self.wait = wait
     self.timeoutSeconds = timeoutSeconds
+    self.captureOutput = captureOutput
   }
 }
 
