@@ -65,6 +65,8 @@ fastlane/test_output
 Frameworks/GhosttyKit.xcframework
 Resources/ghostty
 Resources/terminfo
+.ghostty_hash
+.ghostty_build_stamp
 *.profraw
 .env
 build/

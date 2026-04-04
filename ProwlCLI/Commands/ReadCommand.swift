@@ -16,7 +16,7 @@ struct ReadCommand: ParsableCommand {
   var last: Int?
 
   mutating func run() throws {
-    try CLIExecution.run(command: "read", output: options.outputMode) {
+    try CLIExecution.run(command: "read", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let sel = try selector.resolve()
 
       if let n = last, n < 1 {

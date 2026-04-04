@@ -3234,7 +3234,7 @@ struct RepositoriesFeatureTests {
       $0.repositoryPersistence.loadRoots = { [repoRootA, repoRootB] }
       $0.gitClient.worktrees = { root in
         let path = root.path(percentEncoded: false)
-        startedRoots.withValue { $0.insert(path) }
+        _ = startedRoots.withValue { $0.insert(path) }
         if path == repoRootA {
           await gate.wait()
           return [worktreeA]

@@ -329,24 +329,29 @@ final class OpenCommandHandler: CommandHandler {
 
   private func waitForRepositoriesReadyIfNeeded() async {
     guard !isRepositoriesReady() else { return }
-    let deadline = DispatchTime.now().uptimeNanoseconds &+ waitTimeoutNanoseconds
 
-    while !isRepositoriesReady() && DispatchTime.now().uptimeNanoseconds < deadline {
-      await sleep(pollIntervalNanoseconds)
+    for attempt in 0..<maxPollAttempts() {
+      if isRepositoriesReady() {
+        return
+      }
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
     }
   }
 
   private func waitForManagedResult(path: String) async -> OpenResolverResult? {
-    let deadline = DispatchTime.now().uptimeNanoseconds &+ waitTimeoutNanoseconds
     var lastResult: OpenResolverResult?
 
-    while DispatchTime.now().uptimeNanoseconds < deadline {
+    for attempt in 0..<maxPollAttempts() {
       let result = resolver(path)
       lastResult = result
       if result.resolution != .newRoot, result.worktreeID != nil {
         return result
       }
-      await sleep(pollIntervalNanoseconds)
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
     }
 
     if let lastResult, lastResult.resolution != .newRoot, lastResult.worktreeID != nil {
@@ -359,20 +364,27 @@ final class OpenCommandHandler: CommandHandler {
     selector: TargetSelector,
     preferredPaneCWD: String? = nil
   ) async -> OpenTarget? {
-    let deadline = DispatchTime.now().uptimeNanoseconds &+ waitTimeoutNanoseconds
     var fallbackTarget: OpenTarget?
 
-    while DispatchTime.now().uptimeNanoseconds < deadline {
+    for attempt in 0..<maxPollAttempts() {
       if let target = makeTarget(selector: selector) {
         fallbackTarget = target
         if preferredPaneCWD == nil || target.pane.cwd == preferredPaneCWD {
           return target
         }
       }
-      await sleep(pollIntervalNanoseconds)
+      if attempt + 1 < maxPollAttempts() {
+        await sleep(pollIntervalNanoseconds)
+      }
     }
 
     return fallbackTarget
+  }
+
+  private func maxPollAttempts() -> Int {
+    let interval = max(pollIntervalNanoseconds, 1)
+    let attempts = waitTimeoutNanoseconds / interval
+    return max(1, Int(attempts) + 1)
   }
 
   private func makeTarget(selector: TargetSelector) -> OpenTarget? {
