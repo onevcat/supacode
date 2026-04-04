@@ -7,8 +7,13 @@ public struct OpenInput: Codable, Sendable {
   /// Normalized absolute path, or nil for bare `prowl` (bring to front).
   public let path: String?
 
-  public init(path: String? = nil) {
+  /// Invocation kind: "bare", "implicit-open", or "open-subcommand".
+  /// Optional — handler derives a default if absent.
+  public let invocation: String?
+
+  public init(path: String? = nil, invocation: String? = nil) {
     self.path = path
+    self.invocation = invocation
   }
 }
 

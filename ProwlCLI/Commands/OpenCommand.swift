@@ -20,10 +20,19 @@ struct OpenCommand: ParsableCommand {
       let resolvedPath: String? = try path.map { try normalizePath($0) }
       let envelope = CommandEnvelope(
         output: options.outputMode,
-        command: .open(OpenInput(path: resolvedPath))
+        command: .open(OpenInput(path: resolvedPath, invocation: Self.deriveInvocation(path: resolvedPath)))
       )
       try CLIRunner.execute(envelope)
     }
+  }
+
+  private static func deriveInvocation(path: String?) -> String {
+    guard path != nil else { return "bare" }
+    let args = CommandLine.arguments.dropFirst()
+    if args.first == "open" {
+      return "open-subcommand"
+    }
+    return "implicit-open"
   }
 
   private func normalizePath(_ raw: String) throws -> String {
@@ -46,9 +55,9 @@ struct OpenCommand: ParsableCommand {
       }
     }
 
-    let fm = FileManager.default
+    let fileManager = FileManager.default
     var isDir: ObjCBool = false
-    guard fm.fileExists(atPath: path, isDirectory: &isDir) else {
+    guard fileManager.fileExists(atPath: path, isDirectory: &isDir) else {
       throw ExitError(
         code: CLIErrorCode.pathNotFound,
         message: "Path not found: \(raw)"
