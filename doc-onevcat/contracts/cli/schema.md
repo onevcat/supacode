@@ -63,6 +63,22 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
         "title": { "type": "string" }
       }
     },
+    "tabWithCwd": {
+      "allOf": [
+        { "$ref": "#/$defs/tabBasic" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cwd"],
+          "properties": {
+            "cwd": {
+              "type": ["string", "null"],
+              "pattern": "^/.*"
+            }
+          }
+        }
+      ]
+    },
     "paneBasic": {
       "type": "object",
       "additionalProperties": false,
@@ -108,7 +124,7 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
       "required": ["worktree", "tab", "pane"],
       "properties": {
         "worktree": { "$ref": "#/$defs/worktree" },
-        "tab": { "$ref": "#/$defs/tabBasic" },
+        "tab": { "$ref": "#/$defs/tabWithCwd" },
         "pane": { "$ref": "#/$defs/paneBasic" }
       }
     },
