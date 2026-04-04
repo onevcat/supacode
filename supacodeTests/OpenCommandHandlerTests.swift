@@ -162,6 +162,27 @@ struct OpenCommandHandlerTests {
     #expect(json["target"] is NSNull)
   }
 
+  // MARK: - No-argument regression (no spurious polling)
+
+  @MainActor
+  @Test func openWithNoPathDoesNotPollWhenNoTargetExists() async throws {
+    let sleepCount = MutableBox(0)
+
+    let handler = makeHandler(
+      resolveTarget: { _ in nil },
+      sleep: { _ in
+        await MainActor.run { sleepCount.value += 1 }
+      },
+      waitTimeoutNanoseconds: 10_000_000_000
+    )
+
+    let envelope = CommandEnvelope(output: .json, command: .open(OpenInput()))
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+    #expect(sleepCount.value == 0, "Bare prowl must not poll when no target exists")
+  }
+
   // MARK: - Exact root
 
   @MainActor
@@ -274,6 +295,51 @@ struct OpenCommandHandlerTests {
     let target = try #require(json["target"] as? [String: Any])
     let pane = try #require(target["pane"] as? [String: Any])
     #expect(pane["cwd"] as? String == rootPath)
+  }
+
+  @MainActor
+  @Test func openExactRootDoesNotPollBeforeCreatingTab() async throws {
+    let sleepBeforeCreate = MutableBox(0)
+    let created = MutableBox(false)
+    let rootPath = "/Users/test/Projects/Prowl"
+
+    let handler = makeHandler(
+      resolver: { _ in
+        OpenResolverResult(
+          resolution: .exactRoot,
+          worktreeID: "Prowl:/Users/test/Projects/Prowl",
+          worktreeName: "Prowl",
+          worktreePath: rootPath,
+          rootPath: rootPath,
+          worktreeKind: "git",
+          resolvedPath: rootPath
+        )
+      },
+      createTabAtPath: { _, _ in
+        created.value = true
+      },
+      resolveTarget: { selector in
+        guard created.value, case .worktree(let value) = selector else { return nil }
+        return makeResolvedTarget(worktreeID: value, tabCWD: rootPath, paneCWD: rootPath)
+      },
+      sleep: { _ in
+        await MainActor.run {
+          if !created.value {
+            sleepBeforeCreate.value += 1
+          }
+        }
+      },
+      waitTimeoutNanoseconds: 3
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: rootPath, invocation: "open-subcommand"))
+    )
+    let response = await handler.handle(envelope: envelope)
+
+    #expect(response.ok == true)
+    #expect(sleepBeforeCreate.value == 0, "Must not poll before creating tab when worktree has no visible surface")
   }
 
   // MARK: - Inside root

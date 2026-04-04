@@ -238,7 +238,7 @@ final class OpenCommandHandler: CommandHandler {
   ) async -> CommandResponse {
     switch result.resolution {
     case .noArgument:
-      return await handleNoArgument(invocation: invocation, appLaunched: appLaunched)
+      return handleNoArgument(invocation: invocation, appLaunched: appLaunched)
     case .exactRoot:
       return await handleExactRoot(
         result: result,
@@ -263,9 +263,9 @@ final class OpenCommandHandler: CommandHandler {
     }
   }
 
-  private func handleNoArgument(invocation: String, appLaunched: Bool) async -> CommandResponse {
+  private func handleNoArgument(invocation: String, appLaunched: Bool) -> CommandResponse {
     bringAppToFront()
-    let target = await waitForOpenTarget(selector: .none)
+    let target = makeTarget(selector: .none)
     return makeSuccess(
       invocation: invocation,
       requestedPath: nil,
@@ -291,10 +291,7 @@ final class OpenCommandHandler: CommandHandler {
     bringAppToFront()
 
     var createdTab = false
-    var target = await waitForOpenTarget(
-      selector: .worktree(worktreeID),
-      preferredPaneCWD: requestedPath
-    )
+    var target = makeTarget(selector: .worktree(worktreeID))
     if target == nil, let requestedPath {
       createTabAtPath(worktreeID, requestedPath)
       createdTab = true
