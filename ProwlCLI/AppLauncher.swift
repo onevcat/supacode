@@ -23,15 +23,25 @@ enum AppLauncher {
 
   /// Ensure the app is running and the socket is ready.
   /// Returns `true` only when the app was not running and had to be launched.
+  ///
+  /// When `PROWL_CLI_SOCKET` is set (e.g. integration tests), auto-launch is
+  /// disabled — the caller controls the socket endpoint.
   static func ensureAppRunning() throws -> Bool {
-    // Fast path: socket already available, app is running.
+    // If a custom socket path is set, skip auto-launch entirely.
+    if let override = ProcessInfo.processInfo.environment[ProwlSocket.environmentKey],
+       !override.isEmpty
+    {
+      return false
+    }
+
+    // Fast path: socket file exists and is connectable.
     if isSocketAvailable() {
       return false
     }
 
-    // Socket not available — distinguish "app not running" from "app running, socket not ready yet".
+    // Socket not available — check if the app process is running.
     if isAppProcessRunning() {
-      // App is running but socket isn't ready. Wait for it without launching.
+      // App is running but socket isn't ready yet. Wait without launching.
       try waitForSocket()
       return false
     }
