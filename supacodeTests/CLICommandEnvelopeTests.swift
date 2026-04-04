@@ -83,6 +83,7 @@ struct CLICommandEnvelopeTests {
       command: .key(
         KeyInput(
           selector: .tab("tab-1"),
+          rawToken: "enter",
           token: "enter",
           repeatCount: 5
         ))
@@ -135,7 +136,7 @@ struct CLICommandEnvelopeTests {
       (.list(ListInput()), "list"),
       (.focus(FocusInput()), "focus"),
       (.send(SendInput(text: "x")), "send"),
-      (.key(KeyInput(token: "tab")), "key"),
+      (.key(KeyInput(rawToken: "tab", token: "tab")), "key"),
       (.read(ReadInput()), "read"),
     ]
     for (command, expected) in commands {
@@ -151,7 +152,7 @@ struct CLICommandEnvelopeTests {
       .list(ListInput()),
       .focus(FocusInput()),
       .send(SendInput(text: "test")),
-      .key(KeyInput(token: "enter")),
+      .key(KeyInput(rawToken: "enter", token: "enter")),
       .read(ReadInput()),
     ]
     for cmd in commands {

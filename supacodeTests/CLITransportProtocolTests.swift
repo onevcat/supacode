@@ -104,7 +104,7 @@ struct CLITransportProtocolTests {
       .focus(FocusInput(selector: .worktree("wt"))),
       .focus(FocusInput(selector: .none)),
       .send(SendInput(selector: .tab("t1"), text: "cmd", trailingEnter: true)),
-      .key(KeyInput(selector: .pane("p1"), token: "ctrl-c", repeatCount: 100)),
+      .key(KeyInput(selector: .pane("p1"), rawToken: "Ctrl+C", token: "ctrl-c", repeatCount: 100)),
       .read(ReadInput(selector: .none, last: nil)),
       .read(ReadInput(selector: .worktree("w"), last: 1)),
     ]

@@ -56,15 +56,27 @@ public struct SendInput: Codable, Sendable {
 
 public struct KeyInput: Codable, Sendable {
   public let selector: TargetSelector
+  /// The user's original token after trimming (for `requested.token` in response).
+  public let rawToken: String
+  /// The canonical normalized token (for execution and `key.normalized` in response).
   public let token: String
   public let repeatCount: Int
 
+  enum CodingKeys: String, CodingKey {
+    case selector
+    case rawToken = "raw_token"
+    case token
+    case repeatCount = "repeat_count"
+  }
+
   public init(
     selector: TargetSelector = .none,
+    rawToken: String,
     token: String,
     repeatCount: Int = 1
   ) {
     self.selector = selector
+    self.rawToken = rawToken
     self.token = token
     self.repeatCount = repeatCount
   }

@@ -65,6 +65,14 @@ enum OutputRenderer {
         return
       }
 
+      if response.command == "key",
+         let data = response.data,
+         let payload = try? data.decode(as: KeyCommandPayload.self)
+      {
+        print(renderKey(payload))
+        return
+      }
+
       if response.command == "read",
          let data = response.data,
          let payload = try? data.decode(as: ReadCommandPayload.self)
@@ -227,6 +235,33 @@ enum OutputRenderer {
     if let cwd = pane.cwd {
       lines.append("  \("cwd:".dim) \(cwd)")
     }
+    return lines.joined(separator: "\n")
+  }
+
+  private static func renderKey(_ payload: KeyCommandPayload) -> String {
+    let wt = payload.target.worktree
+    let pane = payload.target.pane
+
+    let projectName = projectName(from: wt.path)
+    var lines: [String] = []
+
+    lines.append(
+      "Key sent to \(projectName.cyan.bold)\(":".dim)\(wt.name) → \(pane.title.green)"
+      + "  \(pane.id.dim)"
+    )
+
+    let categoryLabel = payload.key.category.rawValue
+    let deliveredLabel =
+      payload.delivery.delivered == payload.delivery.attempted
+      ? "\(payload.delivery.delivered)".green
+      : "\(payload.delivery.delivered)".red.bold
+    lines.append(
+      "  \("token:".dim) \(payload.key.normalized)"
+      + "  \("category:".dim) \(categoryLabel)"
+      + "  \("repeat:".dim) \(payload.requested.repeat)"
+      + "  \("delivered:".dim) \(deliveredLabel)/\(payload.delivery.attempted)"
+    )
+
     return lines.joined(separator: "\n")
   }
 

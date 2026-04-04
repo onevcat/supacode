@@ -610,6 +610,331 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(error["code"] as? String, "INVALID_ARGUMENT")
   }
 
+  // MARK: - Key command tests
+
+  func testKeyCommandRoundTripsOverSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "key")
+    let response = try CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1",
+      data: RawJSON(encoding: KeyResponseData(
+        requested: KeyResponseRequested(token: "enter", repeat: 1),
+        key: KeyResponseKey(normalized: "enter", category: "editing"),
+        delivery: KeyResponseDelivery(attempted: 1, delivered: 1, mode: "keyDownUp"),
+        target: KeyResponseTarget(
+          worktree: ListWorktree(
+            id: "Prowl:/Projects/Prowl", name: "Prowl",
+            path: "/Projects/Prowl", rootPath: "/Projects/Prowl", kind: "git"
+          ),
+          tab: KeyResponseTab(id: "2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0", title: "Prowl 1", selected: true),
+          pane: KeyResponsePane(
+            id: "6E1A2A10-D99F-4E3F-920C-D93AA3C05764",
+            title: "zsh", cwd: "/Projects/Prowl", focused: true
+          )
+        )
+      ))
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "enter", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .key(let input) = envelope.command {
+      XCTAssertEqual(input.token, "enter")
+      XCTAssertEqual(input.rawToken, "enter")
+      XCTAssertEqual(input.repeatCount, 1)
+      XCTAssertEqual(input.selector, .none)
+    } else {
+      XCTFail("Expected key command envelope")
+    }
+
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, true)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    XCTAssertEqual(payload["schema_version"] as? String, "prowl.cli.key.v1")
+    let data = try XCTUnwrap(payload["data"] as? [String: Any])
+    let key = try XCTUnwrap(data["key"] as? [String: Any])
+    XCTAssertEqual(key["normalized"] as? String, "enter")
+    XCTAssertEqual(key["category"] as? String, "editing")
+  }
+
+  func testKeyCommandAliasNormalization() throws {
+    let socketPath = temporarySocketPath(suffix: "key-alias")
+    let response = CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1"
+    )
+
+    let (requestData, _) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "return", "--json"]
+    )
+
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .key(let input) = envelope.command {
+      XCTAssertEqual(input.token, "enter", "Alias 'return' should normalize to 'enter'")
+      XCTAssertEqual(input.rawToken, "return", "rawToken should preserve original input")
+    } else {
+      XCTFail("Expected key command envelope")
+    }
+  }
+
+  func testKeyCommandCtrlAliasNormalization() throws {
+    let socketPath = temporarySocketPath(suffix: "key-ctrl-alias")
+    let response = CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1"
+    )
+
+    let (requestData, _) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "ctrl+c", "--json"]
+    )
+
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .key(let input) = envelope.command {
+      XCTAssertEqual(input.token, "ctrl-c", "Alias 'ctrl+c' should normalize to 'ctrl-c'")
+      XCTAssertEqual(input.rawToken, "ctrl+c")
+    } else {
+      XCTFail("Expected key command envelope")
+    }
+  }
+
+  func testKeyCommandCaseInsensitive() throws {
+    let socketPath = temporarySocketPath(suffix: "key-case")
+    let response = CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1"
+    )
+
+    let (requestData, _) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "ENTER", "--json"]
+    )
+
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .key(let input) = envelope.command {
+      XCTAssertEqual(input.token, "enter", "Token parsing should be case-insensitive")
+    } else {
+      XCTFail("Expected key command envelope")
+    }
+  }
+
+  func testKeyCommandWithRepeatAndSelector() throws {
+    let socketPath = temporarySocketPath(suffix: "key-repeat")
+    let response = CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1"
+    )
+
+    let (requestData, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "--pane", "pane-abc", "up", "--repeat", "5", "--json"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+    if case .key(let input) = envelope.command {
+      XCTAssertEqual(input.token, "up")
+      XCTAssertEqual(input.repeatCount, 5)
+      XCTAssertEqual(input.selector, .pane("pane-abc"))
+    } else {
+      XCTFail("Expected key command envelope")
+    }
+  }
+
+  func testKeyCommandRejectInvalidRepeatZero() throws {
+    let result = try runProwl(args: ["key", "enter", "--repeat", "0", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidRepeat)
+  }
+
+  func testKeyCommandRejectInvalidRepeatOver100() throws {
+    let result = try runProwl(args: ["key", "enter", "--repeat", "101", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidRepeat)
+  }
+
+  func testKeyCommandRejectUnsupportedKey() throws {
+    let result = try runProwl(args: ["key", "ctrl-z", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.unsupportedKey)
+  }
+
+  func testKeyCommandRejectMultipleSelectors() throws {
+    let result = try runProwl(args: ["key", "enter", "--worktree", "Prowl", "--pane", "pane-123", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.invalidArgument)
+  }
+
+  func testKeyCommandTextRenderingFromSocket() throws {
+    let socketPath = temporarySocketPath(suffix: "key-text")
+    let response = try CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1",
+      data: RawJSON(encoding: KeyResponseData(
+        requested: KeyResponseRequested(token: "Ctrl+C", repeat: 3),
+        key: KeyResponseKey(normalized: "ctrl-c", category: "control"),
+        delivery: KeyResponseDelivery(attempted: 3, delivered: 3, mode: "keyDownUp"),
+        target: KeyResponseTarget(
+          worktree: ListWorktree(
+            id: "Prowl:/Projects/Prowl", name: "Prowl",
+            path: "/Projects/Prowl", rootPath: "/Projects/Prowl", kind: "git"
+          ),
+          tab: KeyResponseTab(id: "t1", title: "Prowl 1", selected: true),
+          pane: KeyResponsePane(id: "p1", title: "Claude", cwd: "/Projects/Prowl", focused: true)
+        )
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "ctrl+c", "--repeat", "3"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertTrue(result.stdout.contains("Key sent to"), "Missing header: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Prowl:Prowl"), "Missing worktree: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Claude"), "Missing pane title: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("token:"), "Missing token label: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("ctrl-c"), "Missing normalized token: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("category:"), "Missing category label: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("control"), "Missing category value: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("repeat:"), "Missing repeat label: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("delivered:"), "Missing delivered label: \(result.stdout)")
+  }
+
+  func testKeyCommandNoColorProducesCleanOutput() throws {
+    let socketPath = temporarySocketPath(suffix: "key-no-color")
+    let response = try CommandResponse(
+      ok: true,
+      command: "key",
+      schemaVersion: "prowl.cli.key.v1",
+      data: RawJSON(encoding: KeyResponseData(
+        requested: KeyResponseRequested(token: "esc", repeat: 1),
+        key: KeyResponseKey(normalized: "esc", category: "control"),
+        delivery: KeyResponseDelivery(attempted: 1, delivered: 1, mode: "keyDownUp"),
+        target: KeyResponseTarget(
+          worktree: ListWorktree(
+            id: "wt-1", name: "main",
+            path: "/Projects/App", rootPath: "/Projects/App", kind: "git"
+          ),
+          tab: KeyResponseTab(id: "t1", title: "Tab 1", selected: true),
+          pane: KeyResponsePane(id: "p1", title: "zsh", cwd: "/Projects/App", focused: true)
+        )
+      ))
+    )
+
+    let (_, result) = try runWithMockServer(
+      socketPath: socketPath,
+      response: response,
+      args: ["key", "esc", "--no-color"]
+    )
+
+    XCTAssertEqual(result.exitCode, 0)
+    XCTAssertFalse(result.stdout.contains("\u{1B}["), "Should not contain ANSI escape codes: \(result.stdout)")
+    XCTAssertTrue(result.stdout.contains("Key sent to"), "Missing header: \(result.stdout)")
+  }
+
+  func testKeyCommandAllCanonicalTokensAccepted() throws {
+    let canonicalTokens = [
+      "enter", "esc", "tab", "backspace",
+      "up", "down", "left", "right",
+      "pageup", "pagedown", "home", "end",
+      "ctrl-c", "ctrl-d", "ctrl-l",
+    ]
+    for token in canonicalTokens {
+      let socketPath = temporarySocketPath(suffix: "key-canonical-\(token)")
+      let response = CommandResponse(
+        ok: true,
+        command: "key",
+        schemaVersion: "prowl.cli.key.v1"
+      )
+
+      let (requestData, result) = try runWithMockServer(
+        socketPath: socketPath,
+        response: response,
+        args: ["key", token, "--json"]
+      )
+
+      XCTAssertEqual(result.exitCode, 0, "Token '\(token)' should be accepted")
+      let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+      if case .key(let input) = envelope.command {
+        XCTAssertEqual(input.token, token, "Canonical token '\(token)' should pass through unchanged")
+      } else {
+        XCTFail("Expected key command envelope for token '\(token)'")
+      }
+    }
+  }
+
+  func testKeyCommandAllAliasesNormalize() throws {
+    let aliasMap: [(alias: String, canonical: String)] = [
+      ("return", "enter"),
+      ("escape", "esc"),
+      ("arrow-up", "up"),
+      ("arrow-down", "down"),
+      ("arrow-left", "left"),
+      ("arrow-right", "right"),
+      ("pgup", "pageup"),
+      ("pgdn", "pagedown"),
+      ("ctrl+c", "ctrl-c"),
+      ("ctrl+d", "ctrl-d"),
+      ("ctrl+l", "ctrl-l"),
+    ]
+    for (alias, canonical) in aliasMap {
+      let socketPath = temporarySocketPath(suffix: "key-alias-\(alias)")
+      let response = CommandResponse(
+        ok: true,
+        command: "key",
+        schemaVersion: "prowl.cli.key.v1"
+      )
+
+      let (requestData, _) = try runWithMockServer(
+        socketPath: socketPath,
+        response: response,
+        args: ["key", alias, "--json"]
+      )
+
+      let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+      if case .key(let input) = envelope.command {
+        XCTAssertEqual(input.token, canonical, "Alias '\(alias)' should normalize to '\(canonical)'")
+        XCTAssertEqual(input.rawToken, alias, "rawToken should preserve '\(alias)'")
+      } else {
+        XCTFail("Expected key command envelope for alias '\(alias)'")
+      }
+    }
+  }
+
   // MARK: - Read command tests
 
   func testReadCommandRoundTripsOverSocket() throws {
@@ -1040,6 +1365,48 @@ private struct SendResponseWait: Encodable {
     case exitCode = "exit_code"
     case durationMs = "duration_ms"
   }
+}
+
+private struct KeyResponseData: Encodable {
+  let requested: KeyResponseRequested
+  let key: KeyResponseKey
+  let delivery: KeyResponseDelivery
+  let target: KeyResponseTarget
+}
+
+private struct KeyResponseRequested: Encodable {
+  let token: String
+  let `repeat`: Int
+}
+
+private struct KeyResponseKey: Encodable {
+  let normalized: String
+  let category: String
+}
+
+private struct KeyResponseDelivery: Encodable {
+  let attempted: Int
+  let delivered: Int
+  let mode: String
+}
+
+private struct KeyResponseTarget: Encodable {
+  let worktree: ListWorktree
+  let tab: KeyResponseTab
+  let pane: KeyResponsePane
+}
+
+private struct KeyResponseTab: Encodable {
+  let id: String
+  let title: String
+  let selected: Bool
+}
+
+private struct KeyResponsePane: Encodable {
+  let id: String
+  let title: String
+  let cwd: String?
+  let focused: Bool
 }
 
 private struct ReadResponseData: Encodable {
