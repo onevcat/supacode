@@ -337,16 +337,6 @@ struct SupacodeApp: App {
           paneTitle: focusedPane?.title,
           paneCwd: focusedPane?.cwd
         )
-      },
-      waitForReady: {
-        // Poll until repositories finish initial load (up to 10s).
-        let deadline = ContinuousClock.now + .seconds(10)
-        while ContinuousClock.now < deadline {
-          if appStore.state.repositories.isInitialLoadComplete {
-            return
-          }
-          try? await Task.sleep(for: .milliseconds(100))
-        }
       }
     )
   }
