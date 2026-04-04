@@ -96,6 +96,17 @@ struct SupacodeApp: App {
   @State private var cliSocketServer: CLISocketServer
   @State private var store: StoreOf<AppFeature>
 
+  private static func cliLaunchOpenPath() -> String? {
+    let args = ProcessInfo.processInfo.arguments
+    guard let flagIndex = args.firstIndex(of: ProwlSocket.cliOpenPathArgument),
+          args.indices.contains(flagIndex + 1)
+    else {
+      return nil
+    }
+    let path = args[flagIndex + 1]
+    return path.isEmpty ? nil : path
+  }
+
   @MainActor init() {
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
@@ -148,8 +159,13 @@ struct SupacodeApp: App {
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let keyObserver = CommandKeyObserver()
     _commandKeyObserver = State(initialValue: keyObserver)
+    var initialAppState = AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+    if let cliOpenPath = Self.cliLaunchOpenPath() {
+      initialAppState.launchRestoreMode = .cliOpenPath(cliOpenPath)
+    }
+
     let appStore = Store(
-      initialState: AppFeature.State(settings: SettingsFeature.State(settings: initialSettings))
+      initialState: initialAppState
     ) {
       AppFeature()
         .logActions()

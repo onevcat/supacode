@@ -3323,6 +3323,73 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func cliOpenLaunchModeSkipsLastFocusedRestoreSelection() async {
+    let testID = UUID().uuidString
+    let repoRootA = "/tmp/\(testID)-repo-a"
+    let repoRootB = "/tmp/\(testID)-repo-b"
+    let worktreeA = makeWorktree(id: "\(repoRootA)/main", name: "main", repoRoot: repoRootA)
+    let worktreeB = makeWorktree(id: "\(repoRootB)/main", name: "main", repoRoot: repoRootB)
+    let repoA = makeRepository(
+      id: repoRootA,
+      name: URL(fileURLWithPath: repoRootA).lastPathComponent,
+      worktrees: [worktreeA]
+    )
+    let repoB = makeRepository(
+      id: repoRootB,
+      name: URL(fileURLWithPath: repoRootB).lastPathComponent,
+      worktrees: [worktreeB]
+    )
+
+    var state = RepositoriesFeature.State()
+    state.launchRestoreMode = .cliOpenPath(repoRootA)
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.repositoryPersistence.loadLastFocusedWorktreeID = { worktreeB.id }
+      $0.repositoryPersistence.loadRepositorySnapshot = { [repoA, repoB] }
+      $0.repositoryPersistence.loadRoots = { [repoRootA, repoRootB] }
+      $0.repositoryPersistence.saveRepositorySnapshot = { _ in }
+      $0.gitClient.worktrees = { root in
+        switch root.path(percentEncoded: false) {
+        case repoRootA:
+          return [worktreeA]
+        case repoRootB:
+          return [worktreeB]
+        default:
+          return []
+        }
+      }
+    }
+
+    await store.send(.task) {
+      $0.snapshotPersistencePhase = .restoring
+    }
+    await store.receive(\.pinnedWorktreeIDsLoaded)
+    await store.receive(\.archivedWorktreeIDsLoaded)
+    await store.receive(\.repositoryOrderIDsLoaded)
+    await store.receive(\.worktreeOrderByRepositoryLoaded)
+    await store.receive(\.lastFocusedWorktreeIDLoaded) {
+      $0.lastFocusedWorktreeID = worktreeB.id
+      $0.shouldRestoreLastFocusedWorktree = false
+    }
+    await store.receive(\.repositorySnapshotLoaded) {
+      $0.repositories = [repoA, repoB]
+      $0.repositoryRoots = [repoRootA, repoRootB].map { URL(fileURLWithPath: $0) }
+      $0.selection = nil
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.loadPersistedRepositories)
+    await store.receive(\.repositoriesLoaded) {
+      $0.snapshotPersistencePhase = .active
+      $0.selection = nil
+      $0.shouldRestoreLastFocusedWorktree = false
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.finish()
+  }
+
   private actor AsyncGate {
     var continuation: CheckedContinuation<Void, Never>?
     var isOpen = false

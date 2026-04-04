@@ -75,7 +75,7 @@ enum AppLauncher {
   private static func launchApp() throws {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-    process.arguments = ["-a", "Prowl"]
+    process.arguments = launchArguments()
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     do {
@@ -93,6 +93,16 @@ enum AppLauncher {
         message: "Failed to launch Prowl (exit code \(process.terminationStatus))."
       )
     }
+  }
+
+  private static func launchArguments() -> [String] {
+    var args = ["-a", "Prowl"]
+    if let openPath = ProcessInfo.processInfo.environment[ProwlSocket.cliOpenPathEnvironmentKey],
+       !openPath.isEmpty
+    {
+      args.append(contentsOf: ["--args", ProwlSocket.cliOpenPathArgument, openPath])
+    }
+    return args
   }
 
   // MARK: - Socket readiness

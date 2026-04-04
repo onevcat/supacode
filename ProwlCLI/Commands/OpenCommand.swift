@@ -20,6 +20,12 @@ struct OpenCommand: ParsableCommand {
       let resolvedPath: String? = try path.map { try normalizePath($0) }
       let invocation = Self.deriveInvocation(path: resolvedPath)
 
+      if let resolvedPath {
+        setenv(ProwlSocket.cliOpenPathEnvironmentKey, resolvedPath, 1)
+      } else {
+        unsetenv(ProwlSocket.cliOpenPathEnvironmentKey)
+      }
+
       // If the app is not running, launch it first.
       let appLaunched = try Self.ensureAppRunning()
 

@@ -424,7 +424,7 @@ struct RepositoriesFeature {
 
         case .lastFocusedWorktreeIDLoaded(let lastFocusedWorktreeID):
           state.lastFocusedWorktreeID = lastFocusedWorktreeID
-          if state.launchRestoreMode != .restoreLayout {
+          if state.launchRestoreMode == .lastFocusedWorktree {
             state.shouldRestoreLastFocusedWorktree = true
           }
           return .none
