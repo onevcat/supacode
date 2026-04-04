@@ -2,6 +2,7 @@
 // Unit tests for OpenCommandHandler — contract-aligned.
 
 import Foundation
+import ConcurrencyExtras
 import Testing
 
 @testable import supacode
@@ -20,14 +21,16 @@ struct OpenCommandHandlerTests {
     selectWorktree: @escaping OpenCommandHandler.SelectAction = { _ in },
     addAndOpen: @escaping OpenCommandHandler.AddAndOpenAction = { _ in },
     createTabAtPath: @escaping OpenCommandHandler.CreateTabAtPathAction = { _, _ in },
-    terminalSnapshot: @escaping OpenCommandHandler.TerminalSnapshotProvider = { _ in nil }
+    terminalSnapshot: @escaping OpenCommandHandler.TerminalSnapshotProvider = { _ in nil },
+    waitForReady: @escaping OpenCommandHandler.ReadinessWaiter = {}
   ) -> OpenCommandHandler {
     OpenCommandHandler(
       resolver: resolver,
       selectWorktree: selectWorktree,
       addAndOpen: addAndOpen,
       createTabAtPath: createTabAtPath,
-      terminalSnapshot: terminalSnapshot
+      terminalSnapshot: terminalSnapshot,
+      waitForReady: waitForReady
     )
   }
 
@@ -298,6 +301,68 @@ struct OpenCommandHandlerTests {
     let payload = try data.decode(as: OpenCommandData.self)
     #expect(payload.appLaunched == true)
     #expect(payload.broughtToFront == true)
+  }
+
+  @MainActor
+  @Test func appLaunchedWaitsForReadyBeforeResolvingPath() async {
+    let events = LockIsolated<[String]>([])
+
+    let handler = makeHandler(
+      resolver: { _ in
+        events.withValue { $0.append("resolver") }
+        return OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil,
+          worktreeName: nil,
+          worktreePath: nil,
+          rootPath: nil,
+          worktreeKind: nil,
+          resolvedPath: "/tmp/project"
+        )
+      },
+      waitForReady: {
+        events.withValue { $0.append("wait") }
+      }
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: "/tmp/project", appLaunched: true))
+    )
+
+    _ = await handler.handle(envelope: envelope)
+    #expect(events.value == ["wait", "resolver"])
+  }
+
+  @MainActor
+  @Test func nonLaunchedOpenDoesNotWaitForReady() async {
+    let events = LockIsolated<[String]>([])
+
+    let handler = makeHandler(
+      resolver: { _ in
+        events.withValue { $0.append("resolver") }
+        return OpenResolverResult(
+          resolution: .newRoot,
+          worktreeID: nil,
+          worktreeName: nil,
+          worktreePath: nil,
+          rootPath: nil,
+          worktreeKind: nil,
+          resolvedPath: "/tmp/project"
+        )
+      },
+      waitForReady: {
+        events.withValue { $0.append("wait") }
+      }
+    )
+
+    let envelope = CommandEnvelope(
+      output: .json,
+      command: .open(OpenInput(path: "/tmp/project", appLaunched: false))
+    )
+
+    _ = await handler.handle(envelope: envelope)
+    #expect(events.value == ["resolver"])
   }
 
   @MainActor

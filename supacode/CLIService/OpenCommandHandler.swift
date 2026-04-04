@@ -108,25 +108,30 @@ final class OpenCommandHandler: CommandHandler {
   /// Parameters: worktreeID, absolutePath.
   typealias CreateTabAtPathAction = @MainActor (String, String) -> Void
   typealias TerminalSnapshotProvider = @MainActor (String) -> OpenTerminalSnapshot?
+  /// Returns when repositories are ready for path resolution.
+  typealias ReadinessWaiter = @MainActor () async -> Void
 
   private let resolver: Resolver
   private let selectWorktree: SelectAction
   private let addAndOpen: AddAndOpenAction
   private let createTabAtPath: CreateTabAtPathAction
   private let terminalSnapshot: TerminalSnapshotProvider
+  private let waitForReady: ReadinessWaiter
 
   init(
     resolver: @escaping Resolver,
     selectWorktree: @escaping SelectAction,
     addAndOpen: @escaping AddAndOpenAction,
     createTabAtPath: @escaping CreateTabAtPathAction = { _, _ in },
-    terminalSnapshot: @escaping TerminalSnapshotProvider
+    terminalSnapshot: @escaping TerminalSnapshotProvider,
+    waitForReady: @escaping ReadinessWaiter = {}
   ) {
     self.resolver = resolver
     self.selectWorktree = selectWorktree
     self.addAndOpen = addAndOpen
     self.createTabAtPath = createTabAtPath
     self.terminalSnapshot = terminalSnapshot
+    self.waitForReady = waitForReady
   }
 
   func handle(envelope: CommandEnvelope) async -> CommandResponse {
@@ -140,6 +145,10 @@ final class OpenCommandHandler: CommandHandler {
     }
 
     let appLaunched = input.appLaunched
+
+    if appLaunched {
+      await waitForReady()
+    }
 
     let result = resolver(input.path)
     let invocation = deriveInvocation(input: input)
