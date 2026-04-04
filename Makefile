@@ -82,7 +82,7 @@ sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds
 	rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
 	@echo "Done. Xcode module cache cleared for fresh compilation."
 
-build-app: ensure-ghostty # Build the macOS app (Debug)
+build-app: ensure-ghostty embed-cli # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 build-cli: # Build Swift CLI binary (SPM)
