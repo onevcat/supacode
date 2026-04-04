@@ -213,6 +213,60 @@ struct CLIInstallClientTests {
     #expect(FileManager.default.fileExists(atPath: installPath.path))
   }
 
+  @Test func installRefusesToOverwriteRegularFile() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let fakeBundled = tmp.appendingPathComponent("source/prowl")
+    try FileManager.default.createDirectory(
+      at: fakeBundled.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(atPath: fakeBundled.path, contents: Data("cli".utf8))
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    FileManager.default.createFile(atPath: installPath.path, contents: Data("existing".utf8))
+
+    let client = CLIInstallClient.liveValue
+
+    do {
+      try await client.install(installPath)
+      Issue.record("Expected install to throw for non-symlink target")
+    } catch let error as CLIInstallError {
+      #expect(error.message.contains("not a symlink"))
+    }
+    // Original file must be preserved
+    let contents = FileManager.default.contents(atPath: installPath.path)
+    #expect(contents == Data("existing".utf8))
+  }
+
+  @Test func installOverwritesExistingSymlink() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let fakeBundled = tmp.appendingPathComponent("source/prowl")
+    try FileManager.default.createDirectory(
+      at: fakeBundled.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(atPath: fakeBundled.path, contents: Data("cli".utf8))
+
+    let oldTarget = tmp.appendingPathComponent("old-prowl")
+    FileManager.default.createFile(atPath: oldTarget.path, contents: nil)
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    try FileManager.default.createSymbolicLink(
+      atPath: installPath.path,
+      withDestinationPath: oldTarget.path
+    )
+
+    let client = makeTestInstallClient(bundledBinary: fakeBundled)
+    try await client.install(installPath)
+
+    let newTarget = try FileManager.default.destinationOfSymbolicLink(atPath: installPath.path)
+    #expect(newTarget == fakeBundled.path)
+  }
+
   @Test func uninstallThrowsWhenNoFileExists() async throws {
     let tmp = try makeTempDir()
     defer { cleanup(tmp) }
@@ -226,5 +280,37 @@ struct CLIInstallClientTests {
     } catch let error as CLIInstallError {
       #expect(error.message.contains("No CLI tool found"))
     }
+  }
+
+  /// Creates a test install client that uses a fake bundled binary path instead of Bundle.main.
+  private func makeTestInstallClient(bundledBinary: URL) -> CLIInstallClient {
+    CLIInstallClient(
+      bundledCLIURL: { bundledBinary },
+      installationStatus: CLIInstallClient.liveValue.installationStatus,
+      install: { installPath in
+        let fileManager = FileManager.default
+        let bundledPath = bundledBinary.path(percentEncoded: false)
+        guard fileManager.fileExists(atPath: bundledPath) else {
+          throw CLIInstallError(message: "Bundled CLI binary not found.")
+        }
+        let installDir = installPath.deletingLastPathComponent().path(percentEncoded: false)
+        if !fileManager.fileExists(atPath: installDir) {
+          try fileManager.createDirectory(atPath: installDir, withIntermediateDirectories: true)
+        }
+        let destination = installPath.path(percentEncoded: false)
+        if fileManager.fileExists(atPath: destination) {
+          let attrs = try? fileManager.attributesOfItem(atPath: destination)
+          let isSymlink = attrs?[.type] as? FileAttributeType == .typeSymbolicLink
+          guard isSymlink else {
+            throw CLIInstallError(
+              message: "A file already exists at \(destination) and is not a symlink."
+            )
+          }
+          try fileManager.removeItem(atPath: destination)
+        }
+        try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: bundledPath)
+      },
+      uninstall: CLIInstallClient.liveValue.uninstall
+    )
   }
 }

@@ -61,16 +61,26 @@ extension CLIInstallClient: DependencyKey {
         do {
           try fileManager.createDirectory(atPath: installDir, withIntermediateDirectories: true)
         } catch {
-          throw CLIInstallError(message: "Could not create directory \(installDir): \(error.localizedDescription)")
+          throw CLIInstallError(
+            message: permissionErrorMessage(for: installDir, action: "create directory", underlying: error)
+          )
         }
       }
       let destination = installPath.path(percentEncoded: false)
       if fileManager.fileExists(atPath: destination) {
+        let attrs = try? fileManager.attributesOfItem(atPath: destination)
+        let isSymlink = attrs?[.type] as? FileAttributeType == .typeSymbolicLink
+        guard isSymlink else {
+          throw CLIInstallError(
+            message: "A file already exists at \(destination) and is not a symlink. "
+              + "Remove it manually before installing: sudo rm \(destination)"
+          )
+        }
         do {
           try fileManager.removeItem(atPath: destination)
         } catch {
           throw CLIInstallError(
-            message: "Could not remove existing file at \(destination): \(error.localizedDescription)"
+            message: "Could not remove existing symlink at \(destination): \(error.localizedDescription)"
           )
         }
       }
@@ -78,7 +88,7 @@ extension CLIInstallClient: DependencyKey {
         try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: bundledPath)
       } catch {
         throw CLIInstallError(
-          message: "Could not create symlink at \(destination): \(error.localizedDescription)"
+          message: permissionErrorMessage(for: destination, action: "create symlink", underlying: error)
         )
       }
     },
@@ -107,6 +117,19 @@ extension CLIInstallClient: DependencyKey {
     install: { _ in },
     uninstall: { _ in }
   )
+}
+
+private nonisolated func permissionErrorMessage(for path: String, action: String, underlying: any Error) -> String {
+  let nsError = underlying as NSError
+  if nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileWriteNoPermissionError
+    || nsError.domain == NSPOSIXErrorDomain && nsError.code == 13
+  {
+    let dir = (path as NSString).deletingLastPathComponent
+    return "Permission denied when trying to \(action) at \(path).\n\n"
+      + "To fix, run in Terminal:\n"
+      + "sudo mkdir -p \(dir) && sudo chown $(whoami) \(dir)"
+  }
+  return "Could not \(action) at \(path): \(underlying.localizedDescription)"
 }
 
 extension DependencyValues {
