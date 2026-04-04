@@ -1,6 +1,7 @@
 // ProwlCLI/Commands/KeyCommand.swift
 
 import ArgumentParser
+import Foundation
 import ProwlCLIShared
 
 struct KeyCommand: ParsableCommand {
@@ -19,7 +20,7 @@ struct KeyCommand: ParsableCommand {
   var token: String
 
   mutating func run() throws {
-    try CLIExecution.run(command: "key", output: options.outputMode) {
+    try CLIExecution.run(command: "key", output: options.outputMode, colorEnabled: options.colorEnabled) {
       let sel = try selector.resolve()
 
       guard (1...100).contains(self.repeat) else {
@@ -29,12 +30,20 @@ struct KeyCommand: ParsableCommand {
         )
       }
 
-      let normalized = token.lowercased()
+      let rawToken = token.trimmingCharacters(in: .whitespaces)
+
+      guard let normalized = KeyTokens.normalize(rawToken) else {
+        throw ExitError(
+          code: CLIErrorCode.unsupportedKey,
+          message: "The key token '\(rawToken.lowercased())' is not supported in v1."
+        )
+      }
 
       let envelope = CommandEnvelope(
         output: options.outputMode,
         command: .key(KeyInput(
           selector: sel,
+          rawToken: rawToken,
           token: normalized,
           repeatCount: self.repeat
         ))

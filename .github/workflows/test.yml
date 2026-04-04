@@ -23,3 +23,11 @@ jobs:
       - run: make test
       - run: make test-cli-smoke
       - run: make test-cli-integration
+      - name: Upload xcresult bundle (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/test-results/**/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

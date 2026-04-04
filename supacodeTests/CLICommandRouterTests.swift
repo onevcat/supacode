@@ -60,7 +60,7 @@ struct CLICommandRouterTests {
     let router = CLICommandRouter()
     let envelope = CommandEnvelope(
       output: .json,
-      command: .key(KeyInput(token: "enter", repeatCount: 3))
+      command: .key(KeyInput(rawToken: "enter", token: "enter", repeatCount: 3))
     )
     let response = await router.route(envelope)
     #expect(response.command == "key")
@@ -104,7 +104,7 @@ struct CLICommandRouterTests {
       .list(ListInput()),
       .focus(FocusInput()),
       .send(SendInput(text: "x")),
-      .key(KeyInput(token: "tab")),
+      .key(KeyInput(rawToken: "tab", token: "tab")),
       .read(ReadInput()),
     ]
     let router = CLICommandRouter()

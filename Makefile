@@ -13,21 +13,25 @@ GHOSTTY_XCFRAMEWORK_PATH := $(CURRENT_MAKEFILE_DIR)/Frameworks/GhosttyKit.xcfram
 GHOSTTY_RESOURCE_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/ghostty
 GHOSTTY_TERMINFO_PATH := $(CURRENT_MAKEFILE_DIR)/Resources/terminfo
 GHOSTTY_BUILD_OUTPUTS := $(GHOSTTY_XCFRAMEWORK_PATH) $(GHOSTTY_RESOURCE_PATH) $(GHOSTTY_TERMINFO_PATH)
+GHOSTTY_BUILD_STAMP := $(CURRENT_MAKEFILE_DIR)/.ghostty_build_stamp
+GHOSTTY_HASH_FILE := $(CURRENT_MAKEFILE_DIR)/.ghostty_hash
 SPM_CACHE_DIR := /tmp/supacode-spm-cache/SourcePackages
 VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework build-app build-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
 	@-+echo
 	@-+grep -Eh "^[a-z-]+:.*#" $(CURRENT_MAKEFILE_PATH) | sed -E 's/^(.*:)(.*#+)(.*)/  \1 @@@ \3 /' | column -t -s "@@@"
 
-build-ghostty-xcframework: $(GHOSTTY_BUILD_OUTPUTS) # Build ghostty framework
+build-ghostty-xcframework: $(GHOSTTY_BUILD_STAMP) # Build ghostty framework
+	@$(MAKE) _record-ghostty-hash
 
-$(GHOSTTY_BUILD_OUTPUTS):
+# Internal: actually rebuild ghostty.
+$(GHOSTTY_BUILD_STAMP):
 	@cd $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty && mise exec -- zig build -Doptimize=ReleaseFast -Demit-xcframework=true -Dsentry=false
 	rsync -a ThirdParty/ghostty/macos/GhosttyKit.xcframework Frameworks
 	@src="$(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty/zig-out/share/ghostty"; \
@@ -38,8 +42,47 @@ $(GHOSTTY_BUILD_OUTPUTS):
 	rsync -a --delete "$$src/" "$$dst/"; \
 	mkdir -p "$$terminfo_dst"; \
 	rsync -a --delete "$$terminfo_src/" "$$terminfo_dst/"
+	touch "$(GHOSTTY_BUILD_STAMP)"
 
-build-app: build-ghostty-xcframework # Build the macOS app (Debug)
+# Public entry point: only rebuilds ghostty if submodule SHA changed (or outputs are missing).
+ensure-ghostty: _check-ghostty-hash # Ensure GhosttyKit is up-to-date (fast path when unchanged)
+
+# Internal: compare current submodule SHA against the recorded one.
+_check-ghostty-hash:
+	@current_sha="$$(git -C $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty rev-parse HEAD)"; \
+	last_sha=""; \
+	if [ -f "$(GHOSTTY_HASH_FILE)" ]; then \
+		last_sha="$$(cat "$(GHOSTTY_HASH_FILE)")"; \
+	fi; \
+	artifacts_ok=1; \
+	for path in "$(GHOSTTY_XCFRAMEWORK_PATH)" "$(GHOSTTY_RESOURCE_PATH)" "$(GHOSTTY_TERMINFO_PATH)"; do \
+		if [ ! -e "$$path" ]; then \
+			artifacts_ok=0; \
+		fi; \
+	done; \
+	if [ "$$current_sha" != "$$last_sha" ] || [ "$$artifacts_ok" -ne 1 ]; then \
+		echo "Syncing GhosttyKit for submodule $$current_sha"; \
+		$(MAKE) -B build-ghostty-xcframework; \
+		if [ "$$current_sha" != "$$last_sha" ]; then \
+			rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*; \
+			echo "Cleared Xcode DerivedData for ghostty header/module changes"; \
+		fi; \
+	else \
+		echo "GhosttyKit up-to-date (SHA unchanged)"; \
+	fi
+
+# Internal: record the current submodule SHA after a successful build.
+_record-ghostty-hash:
+	@git -C $(CURRENT_MAKEFILE_DIR)/ThirdParty/ghostty rev-parse HEAD > "$(GHOSTTY_HASH_FILE)"
+
+# Force a clean rebuild of GhosttyKit (ignores cached SHA, useful after submodule updates).
+sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds)
+	@echo "Forcing GhosttyKit rebuild..."
+	$(MAKE) -B build-ghostty-xcframework
+	rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
+	@echo "Done. Xcode module cache cleared for fresh compilation."
+
+build-app: ensure-ghostty # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 build-cli: # Build Swift CLI binary (SPM)
@@ -197,8 +240,19 @@ archive: build-ghostty-xcframework # Archive Release build for distribution
 export-archive: # Export xarchive
 	bash -o pipefail -c 'xcodebuild -exportArchive -archivePath build/supacode.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist 2>&1 | mise exec -- xcsift -qw --format toon'
 
-test: build-ghostty-xcframework
-	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1
+test: ensure-ghostty
+	@set -euo pipefail; \
+	result_bundle="$(CURRENT_MAKEFILE_DIR)/build/test-results/supacode-tests.xcresult"; \
+	mkdir -p "$$(dirname "$$result_bundle")"; \
+	rm -rf "$$result_bundle"; \
+	set +e; \
+	xcodebuild test -project supacode.xcodeproj -scheme supacode -destination "platform=macOS" -resultBundlePath "$$result_bundle" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -w --format toon; \
+	xcodebuild_status=$${PIPESTATUS[0]}; \
+	set -e; \
+	if [ "$$xcodebuild_status" -ne 0 ]; then \
+		bash "$(CURRENT_MAKEFILE_DIR)/scripts/print-xcresult-failures.sh" "$$result_bundle" || true; \
+	fi; \
+	exit "$$xcodebuild_status"
 
 test-cli-smoke: build-cli # Smoke test CLI executable
 	@set -euo pipefail; \

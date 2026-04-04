@@ -123,6 +123,12 @@ final class WorktreeTerminalState {
     return surface.submitLine()
   }
 
+  @discardableResult
+  func sendKeyToken(_ token: String, in surfaceID: UUID) -> Bool {
+    guard let surface = surfaceView(for: surfaceID) else { return false }
+    return surface.sendCLIKeyToken(token)
+  }
+
   var taskStatus: WorktreeTaskStatus {
     tabIsRunningById.values.contains(true) ? .running : .idle
   }

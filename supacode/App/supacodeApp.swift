@@ -192,6 +192,19 @@ struct SupacodeApp: App {
     )
   }
 
+  private static func makeTargetResolver(
+    appStore: StoreOf<AppFeature>,
+    terminalManager: WorktreeTerminalManager
+  ) -> TargetResolver {
+    TargetResolver {
+      TargetResolutionSnapshotBuilder.makeSnapshot(
+        repositoriesState: appStore.state.repositories,
+        terminalManager: terminalManager
+      )
+    }
+  }
+
+  // swiftlint:disable:next function_body_length
   private static func makeCLISocketServer(
     appStore: StoreOf<AppFeature>,
     terminalManager: WorktreeTerminalManager
@@ -255,11 +268,56 @@ struct SupacodeApp: App {
       }
     )
     let openHandler = Self.makeOpenHandler(appStore: appStore, terminalManager: terminalManager)
+    let readHandler = ReadCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { ReadResolvedTarget(from: $0) }
+      },
+      captureProvider: { target in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID),
+          let surface = state.surfaceView(for: target.paneID),
+          let viewportText = surface.readViewportContentsForCLI()
+        else {
+          return nil
+        }
+        return ReadCaptureInput(
+          viewportText: viewportText,
+          screenText: surface.readScreenContentsForCLI()
+        )
+      }
+    )
+    let keyHandler = KeyCommandHandler(
+      resolveProvider: { selector in
+        let resolver = TargetResolver {
+          TargetResolutionSnapshotBuilder.makeSnapshot(
+            repositoriesState: appStore.state.repositories,
+            terminalManager: terminalManager
+          )
+        }
+        return resolver.resolve(selector).map { KeyResolvedTarget(from: $0) }
+      },
+      keyDelivery: { target, token, repeatCount in
+        guard let state = terminalManager.stateIfExists(for: target.worktreeID) else {
+          return KeyDeliveryResult(attempted: repeatCount, delivered: 0)
+        }
+        let delivered = (0..<repeatCount).count { _ in
+          state.sendKeyToken(token, in: target.paneID)
+        }
+        return KeyDeliveryResult(attempted: repeatCount, delivered: delivered)
+      }
+    )
     let cliRouter = CLICommandRouter(
       openHandler: openHandler,
       listHandler: listHandler,
       focusHandler: focusHandler,
-      sendHandler: sendHandler
+      sendHandler: sendHandler,
+      keyHandler: keyHandler,
+      readHandler: readHandler
     )
     let cliServer = CLISocketServer(router: cliRouter)
     let logger = SupaLogger("CLIService")
@@ -297,8 +355,13 @@ struct SupacodeApp: App {
         let repositories = appStore.state.repositories
         for repository in repositories.repositories {
           if let worktree = repository.worktrees.first(where: { $0.id == worktreeID }) {
+            let quotedPath = shellQuote(path)
             terminalManager.handleCommand(
-              .createTabWithInput(worktree, input: "cd \(path)", runSetupScriptIfNew: false)
+              .createTabWithInput(
+                worktree,
+                input: "cd -- \(quotedPath)",
+                runSetupScriptIfNew: false
+              )
             )
             return
           }
@@ -404,6 +467,16 @@ struct SupacodeApp: App {
       resolution: .newRoot, worktreeID: nil, worktreeName: nil,
       worktreePath: nil, rootPath: nil, worktreeKind: nil, resolvedPath: normalized
     )
+  }
+
+  private static func shellQuote(_ value: String) -> String {
+    let needsQuoting = value.contains { character in
+      character.isWhitespace || character == "\"" || character == "'" || character == "\\"
+    }
+    guard needsQuoting else {
+      return value
+    }
+    return "'\(value.replacing("'", with: "'\"'\"'"))'"
   }
 
   private static func selectCLIWorktreeContext(
