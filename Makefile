@@ -88,6 +88,18 @@ build-app: ensure-ghostty # Build the macOS app (Debug)
 build-cli: # Build Swift CLI binary (SPM)
 	swift build --product prowl
 
+build-cli-release: # Build CLI binary in release mode
+	swift build -c release --product prowl
+
+embed-cli: build-cli-release # Build CLI and copy into Resources for app bundling
+	@set -euo pipefail; \
+	bin="$$(swift build -c release --show-bin-path)/prowl"; \
+	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
+	mkdir -p "$$dst"; \
+	cp "$$bin" "$$dst/prowl"; \
+	chmod +x "$$dst/prowl"; \
+	echo "embedded CLI binary at $$dst/prowl"
+
 run-app: build-app # Build then launch (Debug) with log streaming
 	@set -euo pipefail; \
 	settings="$$(xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug -showBuildSettings -json 2>/dev/null)"; \

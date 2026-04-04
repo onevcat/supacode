@@ -27,6 +27,7 @@ struct SettingsFeature {
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
+    var cliInstallStatus: CLIInstallStatus = .notInstalled
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -96,6 +97,9 @@ struct SettingsFeature {
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
     case clearTerminalLayoutSnapshotButtonTapped
+    case installCLIButtonTapped
+    case uninstallCLIButtonTapped
+    case refreshCLIInstallStatus
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
@@ -113,11 +117,14 @@ struct SettingsFeature {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
+    case installCLIRequested
+    case uninstallCLIRequested
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
+  @Dependency(CLIInstallClient.self) private var cliInstallClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -205,6 +212,16 @@ struct SettingsFeature {
           let success = await terminalLayoutPersistence.clearSnapshot()
           await send(.delegate(.terminalLayoutSnapshotCleared(success: success)))
         }
+
+      case .installCLIButtonTapped:
+        return .send(.delegate(.installCLIRequested))
+
+      case .uninstallCLIButtonTapped:
+        return .send(.delegate(.uninstallCLIRequested))
+
+      case .refreshCLIInstallStatus:
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .none
 
       case .showNotificationPermissionAlert(let errorMessage):
         let message: String

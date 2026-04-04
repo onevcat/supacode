@@ -1,0 +1,230 @@
+import Foundation
+import Testing
+
+@testable import supacode
+
+struct CLIInstallClientTests {
+  private func makeTempDir() throws -> URL {
+    let tmp = FileManager.default.temporaryDirectory
+      .appendingPathComponent("prowl-cli-test-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    return tmp
+  }
+
+  private func cleanup(_ url: URL) {
+    try? FileManager.default.removeItem(at: url)
+  }
+
+  @Test func statusNotInstalledWhenNoFileExists() throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+    let installPath = tmp.appendingPathComponent("prowl")
+
+    let client = CLIInstallClient.liveValue
+    let status = client.installationStatus(installPath)
+
+    #expect(status == .notInstalled)
+  }
+
+  @Test func statusInstalledWhenSymlinkPointsToBundle() throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let fakeBundledBinary = tmp.appendingPathComponent("bundled-prowl")
+    FileManager.default.createFile(atPath: fakeBundledBinary.path, contents: nil)
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    try FileManager.default.createSymbolicLink(
+      atPath: installPath.path,
+      withDestinationPath: fakeBundledBinary.path
+    )
+
+    let client = CLIInstallClient(
+      bundledCLIURL: { fakeBundledBinary },
+      installationStatus: { path in
+        let fileManager = FileManager.default
+        let filePath = path.path(percentEncoded: false)
+        guard fileManager.fileExists(atPath: filePath) else { return .notInstalled }
+        guard let attrs = try? fileManager.attributesOfItem(atPath: filePath),
+          attrs[.type] as? FileAttributeType == .typeSymbolicLink,
+          let destination = try? fileManager.destinationOfSymbolicLink(atPath: filePath)
+        else { return .installedDifferentSource(path: filePath) }
+        if destination == fakeBundledBinary.path(percentEncoded: false) {
+          return .installed(path: filePath)
+        }
+        return .installedDifferentSource(path: filePath)
+      },
+      install: { _ in },
+      uninstall: { _ in }
+    )
+
+    let status = client.installationStatus(installPath)
+    #expect(status == .installed(path: installPath.path))
+  }
+
+  @Test func statusDifferentSourceWhenSymlinkPointsElsewhere() throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let otherBinary = tmp.appendingPathComponent("other-prowl")
+    FileManager.default.createFile(atPath: otherBinary.path, contents: nil)
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    try FileManager.default.createSymbolicLink(
+      atPath: installPath.path,
+      withDestinationPath: otherBinary.path
+    )
+
+    let client = CLIInstallClient.liveValue
+    let status = client.installationStatus(installPath)
+
+    #expect(status == .installedDifferentSource(path: installPath.path))
+  }
+
+  @Test func statusDifferentSourceWhenRegularFileExists() throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    FileManager.default.createFile(atPath: installPath.path, contents: Data("binary".utf8))
+
+    let client = CLIInstallClient.liveValue
+    let status = client.installationStatus(installPath)
+
+    #expect(status == .installedDifferentSource(path: installPath.path))
+  }
+
+  @Test func installCreatesSymlink() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let fakeBundled = tmp.appendingPathComponent("source/prowl")
+    try FileManager.default.createDirectory(
+      at: fakeBundled.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(atPath: fakeBundled.path, contents: Data("cli".utf8))
+
+    let installPath = tmp.appendingPathComponent("bin/prowl")
+    let client = CLIInstallClient(
+      bundledCLIURL: { fakeBundled },
+      installationStatus: CLIInstallClient.liveValue.installationStatus,
+      install: { path in
+        let fileManager = FileManager.default
+        let bundledPath = fakeBundled.path(percentEncoded: false)
+        let installDir = path.deletingLastPathComponent().path(percentEncoded: false)
+        if !fileManager.fileExists(atPath: installDir) {
+          try fileManager.createDirectory(atPath: installDir, withIntermediateDirectories: true)
+        }
+        let destination = path.path(percentEncoded: false)
+        if fileManager.fileExists(atPath: destination) {
+          try fileManager.removeItem(atPath: destination)
+        }
+        do {
+          try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: bundledPath)
+        } catch {
+          throw CLIInstallError(message: error.localizedDescription)
+        }
+      },
+      uninstall: CLIInstallClient.liveValue.uninstall
+    )
+
+    try await client.install(installPath)
+
+    let fileManager = FileManager.default
+    let attrs = try fileManager.attributesOfItem(atPath: installPath.path)
+    #expect(attrs[.type] as? FileAttributeType == .typeSymbolicLink)
+
+    let target = try fileManager.destinationOfSymbolicLink(atPath: installPath.path)
+    #expect(target == fakeBundled.path)
+  }
+
+  @Test func installCreatesParentDirectoryIfNeeded() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let fakeBundled = tmp.appendingPathComponent("source/prowl")
+    try FileManager.default.createDirectory(
+      at: fakeBundled.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    FileManager.default.createFile(atPath: fakeBundled.path, contents: nil)
+
+    let deepPath = tmp.appendingPathComponent("a/b/c/prowl")
+    let client = CLIInstallClient(
+      bundledCLIURL: { fakeBundled },
+      installationStatus: CLIInstallClient.liveValue.installationStatus,
+      install: { path in
+        let fileManager = FileManager.default
+        let bundledPath = fakeBundled.path(percentEncoded: false)
+        let installDir = path.deletingLastPathComponent().path(percentEncoded: false)
+        if !fileManager.fileExists(atPath: installDir) {
+          try fileManager.createDirectory(atPath: installDir, withIntermediateDirectories: true)
+        }
+        let destination = path.path(percentEncoded: false)
+        do {
+          try fileManager.createSymbolicLink(atPath: destination, withDestinationPath: bundledPath)
+        } catch {
+          throw CLIInstallError(message: error.localizedDescription)
+        }
+      },
+      uninstall: CLIInstallClient.liveValue.uninstall
+    )
+
+    try await client.install(deepPath)
+
+    #expect(FileManager.default.fileExists(atPath: deepPath.path))
+  }
+
+  @Test func uninstallRemovesSymlink() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let target = tmp.appendingPathComponent("target")
+    FileManager.default.createFile(atPath: target.path, contents: nil)
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    try FileManager.default.createSymbolicLink(
+      atPath: installPath.path,
+      withDestinationPath: target.path
+    )
+
+    let client = CLIInstallClient.liveValue
+    try await client.uninstall(installPath)
+
+    #expect(!FileManager.default.fileExists(atPath: installPath.path))
+  }
+
+  @Test func uninstallRefusesToRemoveRegularFile() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    FileManager.default.createFile(atPath: installPath.path, contents: Data("binary".utf8))
+
+    let client = CLIInstallClient.liveValue
+
+    do {
+      try await client.uninstall(installPath)
+      Issue.record("Expected uninstall to throw for non-symlink file")
+    } catch let error as CLIInstallError {
+      #expect(error.message.contains("not a symlink"))
+    }
+    #expect(FileManager.default.fileExists(atPath: installPath.path))
+  }
+
+  @Test func uninstallThrowsWhenNoFileExists() async throws {
+    let tmp = try makeTempDir()
+    defer { cleanup(tmp) }
+
+    let installPath = tmp.appendingPathComponent("prowl")
+    let client = CLIInstallClient.liveValue
+
+    do {
+      try await client.uninstall(installPath)
+      Issue.record("Expected uninstall to throw when file does not exist")
+    } catch let error as CLIInstallError {
+      #expect(error.message.contains("No CLI tool found"))
+    }
+  }
+}

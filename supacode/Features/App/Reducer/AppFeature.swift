@@ -93,6 +93,9 @@ struct AppFeature {
     case navigateSearchNext
     case navigateSearchPrevious
     case endSearch
+    case installCLI
+    case uninstallCLI
+    case cliInstallCompleted(Result<String, CLIInstallError>)
     case systemNotificationsPermissionFailed(errorMessage: String?)
     case alert(PresentationAction<Alert>)
     case terminalEvent(TerminalClient.Event)
@@ -112,6 +115,7 @@ struct AppFeature {
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
+  @Dependency(CLIInstallClient.self) private var cliInstallClient
 
   private func resolvedKeybindings(
     settings: SettingsFeature.State,
@@ -472,6 +476,12 @@ struct AppFeature {
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 
+      case .settings(.delegate(.installCLIRequested)):
+        return .send(.installCLI)
+
+      case .settings(.delegate(.uninstallCLIRequested)):
+        return .send(.uninstallCLI)
+
       case .settings(.delegate(.terminalLayoutSnapshotCleared(let success))):
         if success {
           state.suppressLayoutSaveUntilRelaunch = true
@@ -774,6 +784,63 @@ struct AppFeature {
           await customShortcutRegistryClient.setShortcuts(shortcuts)
         }
 
+      case .installCLI:
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.install(installPath)
+            let path = installPath.path(percentEncoded: false)
+            await send(.cliInstallCompleted(.success(path)))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .uninstallCLI:
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.uninstall(installPath)
+            await send(.cliInstallCompleted(.success("")))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .cliInstallCompleted(.success(let path)):
+        if path.isEmpty {
+          state.alert = AlertState {
+            TextState("Command Line Tool Uninstalled")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command line tool has been removed.")
+          }
+        } else {
+          state.alert = AlertState {
+            TextState("Command Line Tool Installed")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command is now available at \(path).")
+          }
+        }
+        return .send(.settings(.refreshCLIInstallStatus))
+
+      case .cliInstallCompleted(.failure(let error)):
+        state.alert = AlertState {
+          TextState("Command Line Tool Error")
+        } actions: {
+          ButtonState(action: .dismiss) { TextState("OK") }
+        } message: {
+          TextState(error.message)
+        }
+        return .send(.settings(.refreshCLIInstallStatus))
+
       case .systemNotificationsPermissionFailed(let errorMessage):
         return .concatenate(
           .send(.settings(.setSystemNotificationsEnabled(false))),
@@ -831,6 +898,9 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
+
+      case .commandPalette(.delegate(.installCLI)):
+        return .send(.installCLI)
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
         guard let worktree = state.repositories.selectedTerminalWorktree else {

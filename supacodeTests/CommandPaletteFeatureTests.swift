@@ -16,6 +16,7 @@ struct CommandPaletteFeatureTests {
       "global.open-repository",
       "global.new-worktree",
       "global.refresh-worktrees",
+      "global.install-cli",
     ]
     #if DEBUG
       expectedIDs.append(contentsOf: [
