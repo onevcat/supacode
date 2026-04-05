@@ -123,6 +123,34 @@ else
   make bump-version VERSION="$VERSION" BUILD="$BUILD"
 fi
 
+# ── Update CHANGELOG ────────────────────────────────────────────────────────
+
+CHANGELOG="CHANGELOG.md"
+ENTRY_HEADER="## [$VERSION](https://github.com/$REPO/releases/tag/$TAG) - $(date +%Y-%m-%d)"
+
+if [[ -f "$CHANGELOG" ]] && grep -qF "$ENTRY_HEADER" "$CHANGELOG"; then
+  log "CHANGELOG already contains entry for $VERSION, skipping"
+else
+  log "updating CHANGELOG.md..."
+  {
+    echo "# Changelog"
+    echo ""
+    echo "$ENTRY_HEADER"
+    echo ""
+    cat "$NOTES_FILE"
+    echo ""
+    if [[ -f "$CHANGELOG" ]]; then
+      # Skip the "# Changelog" header and leading blank line
+      tail -n +3 "$CHANGELOG"
+    fi
+  } > "${CHANGELOG}.tmp"
+  mv "${CHANGELOG}.tmp" "$CHANGELOG"
+  git add "$CHANGELOG"
+  git commit -m "Update CHANGELOG for $VERSION"
+  # Move tag to include the CHANGELOG commit
+  git tag -f "$TAG" HEAD
+fi
+
 # ── Show release notes ───────────────────────────────────────────────────────
 
 echo
@@ -298,6 +326,15 @@ gh release create "$TAG" "${UPLOAD_FILES[@]}" \
 
 RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
 log "release created: $RELEASE_URL"
+
+# ── Trigger Prowl-Site rebuild ───────────────────────────────────────────────
+
+log "triggering Prowl-Site rebuild..."
+gh api repos/onevcat/Prowl-Site/dispatches \
+  -f event_type=changelog-updated \
+  -f "client_payload[version]=$VERSION" 2>/dev/null \
+  && log "Prowl-Site rebuild triggered" \
+  || log "Prowl-Site dispatch failed (non-critical)"
 
 echo
 log "done! Release: $RELEASE_URL"
