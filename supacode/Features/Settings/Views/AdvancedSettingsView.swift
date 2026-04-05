@@ -7,6 +7,62 @@ struct AdvancedSettingsView: View {
   var body: some View {
     VStack(alignment: .leading) {
       Form {
+        Section("Command Line Tool") {
+          VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+              switch store.cliInstallStatus {
+              case .installed(let path):
+                Image(systemName: "checkmark.circle.fill")
+                  .foregroundStyle(.green)
+                  .accessibilityLabel("Installed")
+                Text("Installed at \(path)")
+              case .installedDifferentSource(let path):
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .foregroundStyle(.yellow)
+                  .accessibilityLabel("Different version")
+                Text("A different version exists at \(path)")
+              case .notInstalled:
+                Image(systemName: "xmark.circle")
+                  .foregroundStyle(.secondary)
+                  .accessibilityLabel("Not installed")
+                Text("Not installed")
+              }
+            }
+            .font(.callout)
+
+            Text("Install the prowl command to control Prowl from the terminal.")
+              .foregroundStyle(.secondary)
+              .font(.callout)
+
+            HStack(spacing: 8) {
+              switch store.cliInstallStatus {
+              case .notInstalled:
+                Button("Install") {
+                  store.send(.installCLIButtonTapped)
+                }
+                .help("Install prowl command line tool to /usr/local/bin")
+                .buttonStyle(.bordered)
+              case .installed:
+                Button("Uninstall") {
+                  store.send(.uninstallCLIButtonTapped)
+                }
+                .help("Remove prowl command line tool from /usr/local/bin")
+                .buttonStyle(.bordered)
+              case .installedDifferentSource:
+                Button("Reinstall") {
+                  store.send(.installCLIButtonTapped)
+                }
+                .help("Replace the existing prowl command with the version bundled in this app")
+                .buttonStyle(.bordered)
+              }
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .onAppear {
+            store.send(.refreshCLIInstallStatus)
+          }
+        }
+
         Section("Advanced") {
           VStack(alignment: .leading) {
             Toggle(

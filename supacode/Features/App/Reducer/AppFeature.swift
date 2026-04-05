@@ -472,6 +472,9 @@ struct AppFeature {
       case .settings(.delegate(.terminalFontSizeChanged)):
         return .none
 
+      case .settings(.delegate(.cliInstallStatusChanged)):
+        return .none
+
       case .settings(.delegate(.terminalLayoutSnapshotCleared(let success))):
         if success {
           state.suppressLayoutSaveUntilRelaunch = true
@@ -831,6 +834,9 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))
+
+      case .commandPalette(.delegate(.installCLI)):
+        return .send(.settings(.installCLIButtonTapped))
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
         guard let worktree = state.repositories.selectedTerminalWorktree else {

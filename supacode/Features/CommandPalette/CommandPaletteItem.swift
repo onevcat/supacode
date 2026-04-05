@@ -39,6 +39,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
+    case installCLI
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
     #endif
@@ -46,7 +47,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
 
   var isGlobal: Bool {
     switch kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees:
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees, .installCLI:
       return true
     case .ghosttyCommand:
       return false
@@ -70,7 +71,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
 
   var isRootAction: Bool {
     switch kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees:
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees, .installCLI:
       return true
     case .ghosttyCommand:
       return false
@@ -115,6 +116,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .copyCiFailureLogs,
       .rerunFailedJobs,
       .openFailingCheckDetails,
+      .installCLI,
       .worktreeSelect,
       .removeWorktree,
       .archiveWorktree:

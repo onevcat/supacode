@@ -27,6 +27,7 @@ struct SettingsFeature {
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
+    var cliInstallStatus: CLIInstallStatus = .notInstalled
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -96,6 +97,10 @@ struct SettingsFeature {
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
     case clearTerminalLayoutSnapshotButtonTapped
+    case installCLIButtonTapped
+    case uninstallCLIButtonTapped
+    case cliInstallCompleted(Result<String, CLIInstallError>)
+    case refreshCLIInstallStatus
     case showNotificationPermissionAlert(errorMessage: String?)
     case repositorySettings(RepositorySettingsFeature.Action)
     case alert(PresentationAction<Alert>)
@@ -113,11 +118,13 @@ struct SettingsFeature {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
+    case cliInstallStatusChanged
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(TerminalLayoutPersistenceClient.self) private var terminalLayoutPersistence
+  @Dependency(CLIInstallClient.self) private var cliInstallClient
 
   var body: some Reducer<State, Action> {
     BindingReducer()
@@ -205,6 +212,69 @@ struct SettingsFeature {
           let success = await terminalLayoutPersistence.clearSnapshot()
           await send(.delegate(.terminalLayoutSnapshotCleared(success: success)))
         }
+
+      case .installCLIButtonTapped:
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.install(installPath)
+            let path = installPath.path(percentEncoded: false)
+            await send(.cliInstallCompleted(.success(path)))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .uninstallCLIButtonTapped:
+        let installPath = cliDefaultInstallPath
+        return .run { [cliInstallClient] send in
+          do {
+            try await cliInstallClient.uninstall(installPath)
+            await send(.cliInstallCompleted(.success("")))
+          } catch let error as CLIInstallError {
+            await send(.cliInstallCompleted(.failure(error)))
+          } catch {
+            await send(.cliInstallCompleted(.failure(CLIInstallError(message: error.localizedDescription))))
+          }
+        }
+
+      case .cliInstallCompleted(.success(let path)):
+        if path.isEmpty {
+          state.alert = AlertState {
+            TextState("Command Line Tool Uninstalled")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command line tool has been removed.")
+          }
+        } else {
+          state.alert = AlertState {
+            TextState("Command Line Tool Installed")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState("The prowl command is now available at \(path).")
+          }
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .send(.delegate(.cliInstallStatusChanged))
+
+      case .cliInstallCompleted(.failure(let error)):
+        state.alert = AlertState {
+          TextState("Command Line Tool Error")
+        } actions: {
+          ButtonState(action: .dismiss) { TextState("OK") }
+        } message: {
+          TextState(error.message)
+        }
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .send(.delegate(.cliInstallStatusChanged))
+
+      case .refreshCLIInstallStatus:
+        state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
+        return .none
 
       case .showNotificationPermissionAlert(let errorMessage):
         let message: String

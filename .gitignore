@@ -32,6 +32,9 @@ playground.xcworkspace
 .build/
 .derivedData/
 
+# Embedded CLI binary (built by `make embed-cli`)
+Resources/prowl-cli/prowl
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However

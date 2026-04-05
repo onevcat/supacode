@@ -48,6 +48,7 @@ struct CommandPaletteFeature {
     case copyCiFailureLogs(Worktree.ID)
     case rerunFailedJobs(Worktree.ID)
     case openFailingCheckDetails(Worktree.ID)
+    case installCLI
     #if DEBUG
       case debugTestToast(RepositoriesFeature.StatusToast)
     #endif
@@ -203,6 +204,14 @@ struct CommandPaletteFeature {
         title: "Refresh Worktrees",
         subtitle: nil,
         kind: .refreshWorktrees
+      )
+    )
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.globalInstallCLI,
+        title: "Install Command Line Tool",
+        subtitle: nil,
+        kind: .installCLI
       )
     )
     if repositories.selectedTerminalWorktree != nil {
@@ -429,6 +438,7 @@ private enum CommandPaletteItemID {
   static let globalOpenRepository = "global.open-repository"
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
+  static let globalInstallCLI = "global.install-cli"
 
   static var globalIDs: [CommandPaletteItem.ID] {
     [
@@ -437,6 +447,7 @@ private enum CommandPaletteItemID {
       globalOpenRepository,
       globalNewWorktree,
       globalRefreshWorktrees,
+      globalInstallCLI,
     ]
   }
 
@@ -544,6 +555,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .archiveWorktree(worktreeID, repositoryID)
   case .refreshWorktrees:
     return .refreshWorktrees
+  case .installCLI:
+    return .installCLI
   case .ghosttyCommand(let action):
     return .ghosttyCommand(action)
   case .openPullRequest,
@@ -590,6 +603,7 @@ private func pullRequestDelegateAction(
     .removeWorktree,
     .archiveWorktree,
     .refreshWorktrees,
+    .installCLI,
     .ghosttyCommand:
     return nil
   #if DEBUG

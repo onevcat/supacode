@@ -20,7 +20,7 @@ VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli build-cli-release embed-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -82,11 +82,23 @@ sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds
 	rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
 	@echo "Done. Xcode module cache cleared for fresh compilation."
 
-build-app: ensure-ghostty # Build the macOS app (Debug)
+build-app: ensure-ghostty embed-cli # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 build-cli: # Build Swift CLI binary (SPM)
 	swift build --product prowl
+
+build-cli-release: # Build CLI binary in release mode
+	swift build -c release --product prowl
+
+embed-cli: build-cli-release # Build CLI and copy into Resources for app bundling
+	@set -euo pipefail; \
+	bin="$$(swift build -c release --show-bin-path)/prowl"; \
+	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
+	mkdir -p "$$dst"; \
+	cp "$$bin" "$$dst/prowl"; \
+	chmod +x "$$dst/prowl"; \
+	echo "embedded CLI binary at $$dst/prowl"
 
 run-app: build-app # Build then launch (Debug) with log streaming
 	@set -euo pipefail; \
@@ -234,7 +246,7 @@ install-release: build-ghostty-xcframework # Build Release, sign locally, instal
 	ditto "$$APP_PATH" "$$DST"; \
 	echo "installed $$DST (Release build, locally signed)"
 
-archive: build-ghostty-xcframework # Archive Release build for distribution
+archive: build-ghostty-xcframework embed-cli # Archive Release build for distribution
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Release -archivePath build/supacode.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$$DEVELOPER_ID_IDENTITY_SHA" OTHER_CODE_SIGN_FLAGS="--timestamp" -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) $(XCODEBUILD_FLAGS) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 export-archive: # Export xarchive

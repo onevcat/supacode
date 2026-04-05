@@ -616,6 +616,13 @@ struct SupacodeApp: App {
           )
         )
       }
+      CommandGroup(after: .appSettings) {
+        Button("Install Command Line Tool...") {
+          SettingsWindowManager.shared.show()
+          store.send(.settings(.installCLIButtonTapped))
+        }
+        .help("Install the prowl command line tool to /usr/local/bin")
+      }
       CommandGroup(replacing: .appTermination) {
         Button("Quit Prowl") {
           store.send(.requestQuit)

@@ -15,6 +15,7 @@
 		D64162B02F23CAF100260CA3 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = D64162AD2F23CAF100260CA3 /* ghostty */; };
 		D64162B12F23CAF100260CA3 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = D64162AE2F23CAF100260CA3 /* terminfo */; };
 		D64162B22F23CAF100260CA3 /* git-wt in Resources */ = {isa = PBXBuildFile; fileRef = D64162AF2F23CAF100260CA3 /* git-wt */; };
+		D6CLI0012F99000100000001 /* prowl-cli in Resources */ = {isa = PBXBuildFile; fileRef = D6CLI0022F99000100000001 /* prowl-cli */; };
 		D661760B2F250A60000FC27C /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = D661760A2F250A60000FC27C /* CasePaths */; };
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
@@ -36,6 +37,7 @@
 		D64162AD2F23CAF100260CA3 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = Resources/ghostty; sourceTree = "<group>"; };
 		D64162AE2F23CAF100260CA3 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = terminfo; path = Resources/terminfo; sourceTree = "<group>"; };
 		D64162AF2F23CAF100260CA3 /* git-wt */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "git-wt"; path = "Resources/git-wt"; sourceTree = "<group>"; };
+		D6CLI0022F99000100000001 /* prowl-cli */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prowl-cli"; path = "Resources/prowl-cli"; sourceTree = "<group>"; };
 		D69CE04A2F1F378200584C57 /* Prowl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Prowl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		D6A1CB342F1F4AC2004FDABD /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
@@ -101,6 +103,7 @@
 			children = (
 				D64162AD2F23CAF100260CA3 /* ghostty */,
 				D64162AF2F23CAF100260CA3 /* git-wt */,
+				D6CLI0022F99000100000001 /* prowl-cli */,
 				D64162AE2F23CAF100260CA3 /* terminfo */,
 				D69CE04C2F1F378200584C57 /* supacode */,
 				D6F821022F1FCBC1004B4174 /* supacodeTests */,
@@ -136,6 +139,7 @@
 			buildPhases = (
 				D69CE0462F1F378200584C57 /* Sources */,
 				D67F9B122F33000100A1B2C3 /* Verify git-wt script */,
+				D6CLI0032F99000200000001 /* Verify prowl-cli binary */,
 				D69CE0472F1F378200584C57 /* Frameworks */,
 				D69CE0482F1F378200584C57 /* Resources */,
 			);
@@ -240,6 +244,7 @@
 				D64162B02F23CAF100260CA3 /* ghostty in Resources */,
 				D64162B12F23CAF100260CA3 /* terminfo in Resources */,
 				D64162B22F23CAF100260CA3 /* git-wt in Resources */,
+				D6CLI0012F99000100000001 /* prowl-cli in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -271,6 +276,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "WT_SCRIPT=\"${PROJECT_DIR}/Resources/git-wt/wt\"\nif [ ! -f \"$WT_SCRIPT\" ]; then\n  echo \"error: Missing $WT_SCRIPT. Run: git submodule update --init Resources/git-wt\" >&2\n  exit 1\nfi\nif [ ! -x \"$WT_SCRIPT\" ]; then\n  echo \"error: $WT_SCRIPT is not executable.\" >&2\n  exit 1\nfi\n";
+		};
+		D6CLI0032F99000200000001 /* Verify prowl-cli binary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Verify prowl-cli binary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "CLI_BIN=\"${PROJECT_DIR}/Resources/prowl-cli/prowl\"\nif [ ! -f \"$CLI_BIN\" ]; then\n  echo \"error: Missing $CLI_BIN. Run: make embed-cli\" >&2\n  exit 1\nfi\nif [ ! -x \"$CLI_BIN\" ]; then\n  echo \"error: $CLI_BIN is not executable. Run: make embed-cli\" >&2\n  exit 1\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -467,6 +491,7 @@
 					"$(inherited)",
 					"-lc++",
 				);
+				EXECUTABLE_NAME = ProwlApp;
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
 				PRODUCT_MODULE_NAME = supacode;
@@ -524,6 +549,7 @@
 					"$(inherited)",
 					"-lc++",
 				);
+				EXECUTABLE_NAME = ProwlApp;
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
 				PRODUCT_MODULE_NAME = supacode;
@@ -562,7 +588,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Prowl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Prowl";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Prowl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ProwlApp";
 			};
 			name = Debug;
 		};
@@ -584,7 +610,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Prowl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Prowl";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Prowl.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ProwlApp";
 			};
 			name = Release;
 		};
