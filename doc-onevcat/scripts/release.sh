@@ -198,6 +198,14 @@ if [[ -d "$SENTRY_FRAMEWORK" ]]; then
   codesign -f -s "$IDENTITY_SHA" -o runtime --timestamp -v "$SENTRY_FRAMEWORK"
 fi
 
+# ── Re-sign bundled CLI ─────────────────────────────────────────────────────
+
+PROWL_CLI="$APP_PATH/Contents/Resources/prowl-cli/prowl"
+if [[ -f "$PROWL_CLI" ]]; then
+  log "re-signing bundled prowl CLI with hardened runtime..."
+  codesign -f -s "$IDENTITY_SHA" -o runtime --timestamp -v "$PROWL_CLI"
+fi
+
 # ── Re-sign app ─────────────────────────────────────────────────────────────
 
 log "re-signing app..."
