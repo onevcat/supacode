@@ -18,7 +18,12 @@ struct SendCommand: ParsableCommand {
 
   static let configuration = CommandConfiguration(
     commandName: "send",
-    abstract: "Send text input to a terminal pane."
+    abstract: "Send text input to a terminal pane.",
+    discussion: """
+      With one positional argument, it is treated as text sent to the current pane.
+      With two positional arguments, the first is the target (auto-resolved) and
+      the second is the text.
+      """
   )
 
   @OptionGroup var selector: SelectorOptions
@@ -36,12 +41,38 @@ struct SendCommand: ParsableCommand {
   @Option(name: .long, help: "Maximum seconds to wait for completion (1–300, default: 30).")
   var timeout: Int?
 
-  @Argument(help: "Text to send. Alternatively pipe via stdin.")
-  var text: String?
+  @Argument(
+    help: """
+      Text to send, or target followed by text. \
+      One argument: text sent to current pane. \
+      Two arguments: first is target (auto-resolved), second is text.
+      """
+  )
+  var args: [String] = []
 
   mutating func run() throws {
     try CLIExecution.run(command: "send", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let sel = try selector.resolve()
+      // Parse positional args: 0 = stdin, 1 = text, 2 = target + text
+      let positionalTarget: String?
+      let positionalText: String?
+      switch args.count {
+      case 0:
+        positionalTarget = nil
+        positionalText = nil
+      case 1:
+        positionalTarget = nil
+        positionalText = args[0]
+      case 2:
+        positionalTarget = args[0]
+        positionalText = args[1]
+      default:
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "Expected at most 2 positional arguments (target and text), got \(args.count)."
+        )
+      }
+
+      let sel = try selector.resolve(positionalTarget: positionalTarget)
 
       if let timeout, (timeout < 1 || timeout > 300) {
         throw ExitError(
@@ -68,7 +99,7 @@ struct SendCommand: ParsableCommand {
       let stdinIsPiped = isatty(fileno(stdin)) == 0 && Self.stdinHasData()
       let inputText: String
       let source: InputSource
-      if let argText = text {
+      if let argText = positionalText {
         if stdinIsPiped {
           throw ExitError(
             code: CLIErrorCode.invalidArgument,

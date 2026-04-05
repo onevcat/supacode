@@ -50,6 +50,8 @@ final class TargetResolver {
       return resolveTab(value, snapshot)
     case .pane(let value):
       return resolvePane(value, snapshot)
+    case .auto(let value):
+      return resolveAuto(value, snapshot)
     }
   }
 
@@ -145,6 +147,28 @@ final class TargetResolver {
       }
     }
     return .failure(.notFound("Pane '\(value)' not found."))
+  }
+
+  // MARK: - .auto: try pane → tab → worktree
+
+  private func resolveAuto(
+    _ value: String,
+    _ snapshot: TargetResolutionSnapshot
+  ) -> Result<ResolvedTarget, TargetResolverError> {
+    // Try as pane UUID first (most specific)
+    if UUID(uuidString: value) != nil {
+      if case .success(let target) = resolvePane(value, snapshot) {
+        return .success(target)
+      }
+      if case .success(let target) = resolveTab(value, snapshot) {
+        return .success(target)
+      }
+    }
+    // Fall back to worktree (id / name / path)
+    if case .success(let target) = resolveWorktree(value, snapshot) {
+      return .success(target)
+    }
+    return .failure(.notFound("Target '\(value)' not found as pane, tab, or worktree."))
   }
 
   // MARK: - Helpers

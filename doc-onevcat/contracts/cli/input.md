@@ -77,11 +77,30 @@ Path-like first arg (v1):
 
 ### 3.1 Selector flags
 
-- `--worktree <id|name|path>`
-- `--tab <id>`
-- `--pane <id>`
+- `-t <value>` / `--target <value>` — auto-resolve: try pane UUID → tab UUID → worktree id/name/path.
+- `--worktree <id|name|path>` — explicit worktree selector.
+- `--tab <id>` — explicit tab UUID selector.
+- `--pane <id>` — explicit pane UUID selector.
 
-### 3.2 Mutual exclusivity (hard rule)
+### 3.2 Positional target shorthand
+
+`focus` and `read` accept an optional positional argument as auto-target:
+
+```bash
+prowl focus <target>
+prowl read <target> --last 50
+```
+
+`send` and `key` use argument count to disambiguate:
+
+- `prowl send "text"` — 1 arg → text to current pane.
+- `prowl send <target> "text"` — 2 args → auto-target + text.
+- `prowl key enter` — 1 arg → key token to current pane.
+- `prowl key <target> enter` — 2 args → auto-target + key token.
+
+Positional targets are ignored when flag selectors (`-t`, `--worktree`, `--tab`, `--pane`) are present.
+
+### 3.3 Mutual exclusivity (hard rule)
 
 Exactly **zero or one** selector is allowed.
 
@@ -91,11 +110,12 @@ Exactly **zero or one** selector is allowed.
 
 This is preferred over implicit precedence because it is easier to reason about in scripts.
 
-### 3.3 Resolution rules
+### 3.4 Resolution rules
 
 - `--pane`: exact pane.
 - `--tab`: current focused pane of target tab.
 - `--worktree`: selected tab + focused pane in target worktree.
+- `-t` / `--target` / positional: auto-resolve in order pane → tab → worktree.
 - none: currently focused pane in current context.
 
 If required context does not exist:
@@ -166,12 +186,15 @@ prowl list [--json]
 ### Grammar
 
 ```bash
-prowl focus [--worktree <...> | --tab <...> | --pane <...>] [--json]
+prowl focus [<target>] [--json]
+prowl focus [-t <...> | --worktree <...> | --tab <...> | --pane <...>] [--json]
 ```
 
 ### Rules
 
-- Selectors are optional; no selector means “focus current target and bring app front”.
+- Optional positional `<target>` is auto-resolved (pane → tab → worktree).
+- Flag selectors override positional target.
+- No selector means “focus current target and bring app front”.
 - More than one selector is invalid.
 
 ## 5.4 `send`
@@ -179,18 +202,22 @@ prowl focus [--worktree <...> | --tab <...> | --pane <...>] [--json]
 ### Grammar
 
 ```bash
-prowl send [selector] [--no-enter] [--no-wait] [--timeout <seconds>] [--json] [<text>]
-# or
-printf '...' | prowl send [selector] [--no-enter] [--no-wait] [--timeout <seconds>] [--json]
+prowl send [flags] <text>
+prowl send [flags] <target> <text>
+printf '...' | prowl send [flags]
+printf '...' | prowl send [flags] -t <target>
 ```
+
+Where `[flags]` includes `[--no-enter] [--no-wait] [--capture] [--timeout <seconds>] [--json]` and optional selector flags (`-t`, `--worktree`, `--tab`, `--pane`).
 
 ### Rules
 
-- Input source is exactly one of:
-  - positional `<text>` (`argv`)
-  - stdin (`stdin`)
-- Both provided simultaneously: `INVALID_ARGUMENT`.
-- Neither provided (or empty stdin): `EMPTY_INPUT`.
+- Positional argument count determines interpretation:
+  - 0 args: read text from stdin, send to current pane.
+  - 1 arg: text to current pane.
+  - 2 args: first is auto-resolved target, second is text.
+- Flag selector (`-t`, `--worktree`, `--tab`, `--pane`) overrides positional target.
+- Input source is exactly one of positional text or stdin. Both: `INVALID_ARGUMENT`. Neither: `EMPTY_INPUT`.
 - Default sends trailing Enter; `--no-enter` disables it.
 - Default waits for command completion (requires shell integration); `--no-wait` disables it and returns immediately after delivery.
 - `--timeout <seconds>` sets the maximum wait duration (default: 30, range: 1–300). Ignored when `--no-wait` is used.
@@ -201,12 +228,19 @@ printf '...' | prowl send [selector] [--no-enter] [--no-wait] [--timeout <second
 ### Grammar
 
 ```bash
-prowl key [selector] <token> [--repeat <n>] [--json]
+prowl key [flags] <token>
+prowl key [flags] <target> <token>
 ```
+
+Where `[flags]` includes `[--repeat <n>] [--json]` and optional selector flags (`-t`, `--worktree`, `--tab`, `--pane`).
 
 ### Rules
 
-- Exactly one positional `<token>` required.
+- Positional argument count determines interpretation:
+  - 1 arg: key token to current pane.
+  - 2 args: first is auto-resolved target, second is key token.
+- Flag selector overrides positional target.
+- Exactly one key token required.
 - Token parsing is case-insensitive; canonical output token is lowercase kebab-case.
 - Alias normalization follows `key.md`.
 - `--repeat` default is `1`, range `1...100`.
@@ -217,8 +251,8 @@ prowl key [selector] <token> [--repeat <n>] [--json]
 ### Grammar
 
 ```bash
-prowl read [selector] [--json]
-prowl read [selector] --last <n> [--json]
+prowl read [<target>] [--last <n>] [--json]
+prowl read [-t <...> | --worktree <...> | --tab <...> | --pane <...>] [--last <n>] [--json]
 ```
 
 ### Rules
@@ -279,16 +313,22 @@ Valid:
 ```bash
 prowl .
 prowl open ~/Projects/Prowl
-prowl focus --pane 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 --json
+prowl focus 6E1A2A10-D99F-4E3F-920C-D93AA3C05764          # auto-resolve pane UUID
+prowl focus --pane 6E1A2A10-D99F-4E3F-920C-D93AA3C05764    # explicit pane
+prowl focus main                                            # auto-resolve worktree name
+prowl send "echo hello"                                     # text to current pane
+prowl send 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 "echo hi"  # target + text
 printf 'git status' | prowl send --worktree Prowl --json
-prowl key --pane 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 return --repeat 2 --json
-prowl read --tab 2FC00CF0-3974-4E1B-BEF8-7A08A8E3B7C0 --last 200 --json
+prowl key enter                                             # key to current pane
+prowl key 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 ctrl-c      # target + key
+prowl read 6E1A2A10-D99F-4E3F-920C-D93AA3C05764 --last 200 # positional target + flag
 ```
 
 Invalid:
 
 ```bash
 prowl focus --pane <id> --tab <id>        # multiple selectors
+prowl focus --pane <id> <positional>      # flag + positional (flag wins, positional ignored)
 prowl send "echo hi" < /tmp/input.txt     # two input sources
 prowl key --repeat 0 enter                 # repeat out of range
 prowl list --pane <id>                     # list does not accept selector

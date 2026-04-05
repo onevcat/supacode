@@ -10,4 +10,5 @@ public enum TargetSelector: Codable, Sendable, Equatable {
   case worktree(String)
   case tab(String)
   case pane(String)
+  case auto(String)
 }

@@ -7,7 +7,12 @@ import ProwlCLIShared
 struct KeyCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "key",
-    abstract: "Send a key event to a terminal pane."
+    abstract: "Send a key event to a terminal pane.",
+    discussion: """
+      With one positional argument, the key is sent to the current pane.
+      With two positional arguments, the first is the target (auto-resolved) and
+      the second is the key token.
+      """
   )
 
   @OptionGroup var selector: SelectorOptions
@@ -16,12 +21,35 @@ struct KeyCommand: ParsableCommand {
   @Option(name: .long, help: "Number of times to repeat the key (1-100).")
   var `repeat`: Int = 1
 
-  @Argument(help: "Key token (e.g. enter, esc, tab, ctrl-c, up, down).")
-  var token: String
+  @Argument(
+    help: """
+      Key token, or target followed by key token. \
+      One argument: key token sent to current pane. \
+      Two arguments: first is target (auto-resolved), second is key token.
+      """
+  )
+  var args: [String] = []
 
   mutating func run() throws {
     try CLIExecution.run(command: "key", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let sel = try selector.resolve()
+      // Parse positional args: 1 = token, 2 = target + token
+      let positionalTarget: String?
+      let rawToken: String
+      switch args.count {
+      case 1:
+        positionalTarget = nil
+        rawToken = args[0].trimmingCharacters(in: .whitespaces)
+      case 2:
+        positionalTarget = args[0]
+        rawToken = args[1].trimmingCharacters(in: .whitespaces)
+      default:
+        throw ExitError(
+          code: CLIErrorCode.invalidArgument,
+          message: "Expected 1 or 2 positional arguments (optional target and key token), got \(args.count)."
+        )
+      }
+
+      let sel = try selector.resolve(positionalTarget: positionalTarget)
 
       guard (1...100).contains(self.repeat) else {
         throw ExitError(
@@ -29,8 +57,6 @@ struct KeyCommand: ParsableCommand {
           message: "Repeat count must be between 1 and 100, got \(self.repeat)."
         )
       }
-
-      let rawToken = token.trimmingCharacters(in: .whitespaces)
 
       guard let normalized = KeyTokens.normalize(rawToken) else {
         throw ExitError(

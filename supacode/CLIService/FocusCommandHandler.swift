@@ -124,6 +124,8 @@ final class FocusCommandHandler: CommandHandler {
       return FocusRequestedTarget(selector: .tab, value: value)
     case .pane(let value):
       return FocusRequestedTarget(selector: .pane, value: value)
+    case .auto(let value):
+      return FocusRequestedTarget(selector: .auto, value: value)
     case .none:
       return FocusRequestedTarget(selector: .current, value: nil)
     }
@@ -135,7 +137,7 @@ final class FocusCommandHandler: CommandHandler {
       return .worktree
     case .tab:
       return .tab
-    case .pane, .none:
+    case .pane, .none, .auto:
       return .pane
     }
   }
