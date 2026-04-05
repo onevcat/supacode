@@ -20,7 +20,7 @@ VERSION ?=
 BUILD ?=
 XCODEBUILD_FLAGS ?=
 .DEFAULT_GOAL := help
-.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli build-cli-release embed-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
+.PHONY: build-ghostty-xcframework ensure-ghostty sync-ghostty _check-ghostty-hash _record-ghostty-hash build-app build-cli build-cli-release embed-cli-debug embed-cli run-app install-dev-build install-release archive export-archive format lint check test test-cli-smoke test-cli-integration bump-version bump-and-release log-stream
 
 help:  # Display this help.
 	@-+echo "Run make with one of the following targets:"
@@ -82,7 +82,7 @@ sync-ghostty: # Force sync GhosttyKit to current submodule HEAD (always rebuilds
 	rm -rf ~/Library/Developer/Xcode/DerivedData/supacode-*
 	@echo "Done. Xcode module cache cleared for fresh compilation."
 
-build-app: ensure-ghostty embed-cli # Build the macOS app (Debug)
+build-app: ensure-ghostty embed-cli-debug # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath $(SPM_CACHE_DIR) 2>&1 | mise exec -- xcsift -qw --format toon'
 
 sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.swift
@@ -97,7 +97,16 @@ build-cli: sync-cli-version # Build Swift CLI binary (SPM)
 build-cli-release: sync-cli-version # Build CLI binary in release mode
 	swift build -c release --product prowl
 
-embed-cli: build-cli-release # Build CLI and copy into Resources for app bundling
+embed-cli-debug: build-cli # Build debug CLI and copy into Resources for dev builds
+	@set -euo pipefail; \
+	bin="$$(swift build --show-bin-path)/prowl"; \
+	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
+	mkdir -p "$$dst"; \
+	cp "$$bin" "$$dst/prowl"; \
+	chmod +x "$$dst/prowl"; \
+	echo "embedded CLI binary at $$dst/prowl"
+
+embed-cli: build-cli-release # Build release CLI and copy into Resources for distribution
 	@set -euo pipefail; \
 	bin="$$(swift build -c release --show-bin-path)/prowl"; \
 	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
