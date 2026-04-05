@@ -28,6 +28,7 @@ struct SettingsFeature {
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
     var cliInstallStatus: CLIInstallStatus = .notInstalled
+    var cliInstallShowAlert: Bool = true
     var selection: SettingsSection? = .general
     var repositorySettings: RepositorySettingsFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -97,7 +98,7 @@ struct SettingsFeature {
     case setCommandFinishedNotificationThreshold(String)
     case setTerminalFontSize(Float32?)
     case clearTerminalLayoutSnapshotButtonTapped
-    case installCLIButtonTapped
+    case installCLIButtonTapped(showAlert: Bool = true)
     case uninstallCLIButtonTapped
     case cliInstallCompleted(Result<String, CLIInstallError>)
     case refreshCLIInstallStatus
@@ -113,12 +114,18 @@ struct SettingsFeature {
     case openSystemNotificationSettings
   }
 
+  enum CLIInstallResultMessage: Equatable {
+    case installed(path: String)
+    case uninstalled
+    case failed(message: String)
+  }
+
   @CasePathable
   enum Delegate: Equatable {
     case settingsChanged(GlobalSettings)
     case terminalFontSizeChanged(Float32?)
     case terminalLayoutSnapshotCleared(success: Bool)
-    case cliInstallStatusChanged
+    case cliInstallCompleted(CLIInstallResultMessage)
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -213,7 +220,8 @@ struct SettingsFeature {
           await send(.delegate(.terminalLayoutSnapshotCleared(success: success)))
         }
 
-      case .installCLIButtonTapped:
+      case .installCLIButtonTapped(let showAlert):
+        state.cliInstallShowAlert = showAlert
         let installPath = cliDefaultInstallPath
         return .run { [cliInstallClient] send in
           do {
@@ -241,36 +249,41 @@ struct SettingsFeature {
         }
 
       case .cliInstallCompleted(.success(let path)):
-        if path.isEmpty {
-          state.alert = AlertState {
-            TextState("Command Line Tool Uninstalled")
-          } actions: {
-            ButtonState(action: .dismiss) { TextState("OK") }
-          } message: {
-            TextState("The prowl command line tool has been removed.")
-          }
-        } else {
-          state.alert = AlertState {
-            TextState("Command Line Tool Installed")
-          } actions: {
-            ButtonState(action: .dismiss) { TextState("OK") }
-          } message: {
-            TextState("The prowl command is now available at \(path).")
+        if state.cliInstallShowAlert {
+          if path.isEmpty {
+            state.alert = AlertState {
+              TextState("Command Line Tool Uninstalled")
+            } actions: {
+              ButtonState(action: .dismiss) { TextState("OK") }
+            } message: {
+              TextState("The prowl command line tool has been removed.")
+            }
+          } else {
+            state.alert = AlertState {
+              TextState("Command Line Tool Installed")
+            } actions: {
+              ButtonState(action: .dismiss) { TextState("OK") }
+            } message: {
+              TextState("The prowl command is now available at \(path).")
+            }
           }
         }
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
-        return .send(.delegate(.cliInstallStatusChanged))
+        let result: CLIInstallResultMessage = path.isEmpty ? .uninstalled : .installed(path: path)
+        return .send(.delegate(.cliInstallCompleted(result)))
 
       case .cliInstallCompleted(.failure(let error)):
-        state.alert = AlertState {
-          TextState("Command Line Tool Error")
-        } actions: {
-          ButtonState(action: .dismiss) { TextState("OK") }
-        } message: {
-          TextState(error.message)
+        if state.cliInstallShowAlert {
+          state.alert = AlertState {
+            TextState("Command Line Tool Error")
+          } actions: {
+            ButtonState(action: .dismiss) { TextState("OK") }
+          } message: {
+            TextState(error.message)
+          }
         }
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
-        return .send(.delegate(.cliInstallStatusChanged))
+        return .send(.delegate(.cliInstallCompleted(.failed(message: error.message))))
 
       case .refreshCLIInstallStatus:
         state.cliInstallStatus = cliInstallClient.installationStatus(cliDefaultInstallPath)
