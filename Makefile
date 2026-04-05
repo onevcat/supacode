@@ -94,8 +94,8 @@ sync-cli-version: # Sync app MARKETING_VERSION into ProwlCLIShared/ProwlVersion.
 build-cli: sync-cli-version # Build Swift CLI binary (SPM)
 	swift build --product prowl
 
-build-cli-release: sync-cli-version # Build CLI binary in release mode
-	swift build -c release --product prowl
+build-cli-release: sync-cli-version # Build universal CLI binary in release mode
+	swift build -c release --arch arm64 --arch x86_64 --product prowl
 
 embed-cli-debug: build-cli # Build debug CLI and copy into Resources for dev builds
 	@set -euo pipefail; \
@@ -108,7 +108,7 @@ embed-cli-debug: build-cli # Build debug CLI and copy into Resources for dev bui
 
 embed-cli: build-cli-release # Build release CLI and copy into Resources for distribution
 	@set -euo pipefail; \
-	bin="$$(swift build -c release --show-bin-path)/prowl"; \
+	bin="$$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/prowl"; \
 	dst="$(CURRENT_MAKEFILE_DIR)/Resources/prowl-cli"; \
 	mkdir -p "$$dst"; \
 	cp "$$bin" "$$dst/prowl"; \
