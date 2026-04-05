@@ -126,7 +126,7 @@ fi
 # ── Update CHANGELOG ────────────────────────────────────────────────────────
 
 CHANGELOG="CHANGELOG.md"
-ENTRY_HEADER="## [$VERSION](https://github.com/$REPO/releases/tag/$TAG) - $(date +%Y-%m-%d)"
+ENTRY_HEADER="## [$VERSION](https://github.com/$REPO/releases/tag/$TAG)"
 
 if [[ -f "$CHANGELOG" ]] && grep -qF "$ENTRY_HEADER" "$CHANGELOG"; then
   log "CHANGELOG already contains entry for $VERSION, skipping"
