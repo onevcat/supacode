@@ -843,7 +843,7 @@ struct AppFeature {
         return .send(.repositories(.refreshWorktrees))
 
       case .commandPalette(.delegate(.installCLI)):
-        return .send(.settings(.installCLIButtonTapped))
+        return .send(.settings(.installCLIButtonTapped(showAlert: false)))
 
       case .commandPalette(.delegate(.ghosttyCommand(let action))):
         guard let worktree = state.repositories.selectedTerminalWorktree else {

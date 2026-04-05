@@ -20,7 +20,7 @@ struct SettingsFeatureCLIInstallTests {
       $0.cliInstallClient.installationStatus = { _ in .installed(path: "/usr/local/bin/prowl") }
     }
 
-    await store.send(.installCLIButtonTapped)
+    await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.success) {
       $0.alert = AlertState {
         TextState("Command Line Tool Installed")
@@ -48,7 +48,7 @@ struct SettingsFeatureCLIInstallTests {
       $0.cliInstallClient.installationStatus = { _ in .notInstalled }
     }
 
-    await store.send(.installCLIButtonTapped)
+    await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.failure) {
       $0.alert = AlertState {
         TextState("Command Line Tool Error")
@@ -104,15 +104,10 @@ struct SettingsFeatureCLIInstallTests {
     store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.installCLI)))
-    await store.receive(\.settings.installCLIButtonTapped)
+    await store.receive(\.settings.installCLIButtonTapped) {
+      $0.settings.cliInstallShowAlert = false
+    }
     await store.receive(\.settings.cliInstallCompleted.success) {
-      $0.settings.alert = AlertState {
-        TextState("Command Line Tool Installed")
-      } actions: {
-        ButtonState(action: .dismiss) { TextState("OK") }
-      } message: {
-        TextState("The prowl command is now available at /usr/local/bin/prowl.")
-      }
       $0.settings.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
     }
     await store.receive(\.settings.delegate.cliInstallCompleted)
