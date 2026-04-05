@@ -38,7 +38,7 @@ struct AdvancedSettingsView: View {
               switch store.cliInstallStatus {
               case .notInstalled:
                 Button("Install") {
-                  store.send(.installCLIButtonTapped)
+                  store.send(.installCLIButtonTapped())
                 }
                 .help("Install prowl command line tool to /usr/local/bin")
                 .buttonStyle(.bordered)
@@ -50,7 +50,7 @@ struct AdvancedSettingsView: View {
                 .buttonStyle(.bordered)
               case .installedDifferentSource:
                 Button("Reinstall") {
-                  store.send(.installCLIButtonTapped)
+                  store.send(.installCLIButtonTapped())
                 }
                 .help("Replace the existing prowl command with the version bundled in this app")
                 .buttonStyle(.bordered)

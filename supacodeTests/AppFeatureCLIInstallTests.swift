@@ -20,7 +20,7 @@ struct SettingsFeatureCLIInstallTests {
       $0.cliInstallClient.installationStatus = { _ in .installed(path: "/usr/local/bin/prowl") }
     }
 
-    await store.send(.installCLIButtonTapped)
+    await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.success) {
       $0.alert = AlertState {
         TextState("Command Line Tool Installed")
@@ -31,7 +31,7 @@ struct SettingsFeatureCLIInstallTests {
       }
       $0.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
     }
-    await store.receive(\.delegate.cliInstallStatusChanged)
+    await store.receive(\.delegate.cliInstallCompleted)
 
     #expect(installed.value == true)
   }
@@ -48,7 +48,7 @@ struct SettingsFeatureCLIInstallTests {
       $0.cliInstallClient.installationStatus = { _ in .notInstalled }
     }
 
-    await store.send(.installCLIButtonTapped)
+    await store.send(.installCLIButtonTapped())
     await store.receive(\.cliInstallCompleted.failure) {
       $0.alert = AlertState {
         TextState("Command Line Tool Error")
@@ -58,7 +58,7 @@ struct SettingsFeatureCLIInstallTests {
         TextState("Permission denied")
       }
     }
-    await store.receive(\.delegate.cliInstallStatusChanged)
+    await store.receive(\.delegate.cliInstallCompleted)
   }
 
   @Test(.dependencies) func uninstallShowsSuccessAlert() async {
@@ -84,12 +84,12 @@ struct SettingsFeatureCLIInstallTests {
         TextState("The prowl command line tool has been removed.")
       }
     }
-    await store.receive(\.delegate.cliInstallStatusChanged)
+    await store.receive(\.delegate.cliInstallCompleted)
 
     #expect(uninstalled.value == true)
   }
 
-  @Test(.dependencies) func commandPaletteInstallRoutesToSettings() async {
+  @Test(.dependencies) func commandPaletteInstallRoutesToSettingsAndShowsToast() async {
     let installed = LockIsolated(false)
     let store = TestStore(
       initialState: AppFeature.State(settings: SettingsFeature.State())
@@ -101,20 +101,19 @@ struct SettingsFeatureCLIInstallTests {
       }
       $0.cliInstallClient.installationStatus = { _ in .installed(path: "/usr/local/bin/prowl") }
     }
+    store.exhaustivity = .off
 
     await store.send(.commandPalette(.delegate(.installCLI)))
-    await store.receive(\.settings.installCLIButtonTapped)
+    await store.receive(\.settings.installCLIButtonTapped) {
+      $0.settings.cliInstallShowAlert = false
+    }
     await store.receive(\.settings.cliInstallCompleted.success) {
-      $0.settings.alert = AlertState {
-        TextState("Command Line Tool Installed")
-      } actions: {
-        ButtonState(action: .dismiss) { TextState("OK") }
-      } message: {
-        TextState("The prowl command is now available at /usr/local/bin/prowl.")
-      }
       $0.settings.cliInstallStatus = .installed(path: "/usr/local/bin/prowl")
     }
-    await store.receive(\.settings.delegate.cliInstallStatusChanged)
+    await store.receive(\.settings.delegate.cliInstallCompleted)
+    await store.receive(\.repositories.showToast) {
+      $0.repositories.statusToast = .success("prowl installed at /usr/local/bin/prowl")
+    }
 
     #expect(installed.value == true)
   }
