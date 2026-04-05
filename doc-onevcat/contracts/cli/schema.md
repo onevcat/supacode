@@ -349,7 +349,7 @@ This file provides machine-validatable JSON Schema definitions for the v1 CLI ou
               "properties": {
                 "selector": {
                   "type": "string",
-                  "enum": ["worktree", "tab", "pane", "current"]
+                  "enum": ["worktree", "tab", "pane", "auto", "current"]
                 },
                 "value": {
                   "type": ["string", "null"]

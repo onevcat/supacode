@@ -101,6 +101,74 @@ struct CLIFocusCommandHandlerTests {
     #expect(payload.resolvedVia == .pane)
   }
 
+  @Test func autoSelectorWithTabUUIDResolvesViaTab() throws {
+    var resolveNoneCount = 0
+    let handler = FocusCommandHandler(
+      resolveProvider: { selector in
+        switch selector {
+        case .auto(let value):
+          #expect(value == Self.tabID.uuidString)
+          return .success(Self.makeTarget(tabSelected: true, paneFocused: true))
+        case .none:
+          resolveNoneCount += 1
+          return .success(Self.makeTarget(tabSelected: true, paneFocused: true))
+        default:
+          return .failure(.notFound("Unexpected selector"))
+        }
+      },
+      focusPerformer: { _ in true },
+      bringToFront: { true }
+    )
+
+    let response = handler.handle(
+      envelope: CommandEnvelope(
+        output: .json,
+        command: .focus(FocusInput(selector: .auto(Self.tabID.uuidString)))
+      )
+    )
+
+    #expect(response.ok)
+    #expect(resolveNoneCount == 1)
+    let payload = try #require(try response.data?.decode(as: FocusCommandPayload.self))
+    #expect(payload.requested.selector == .auto)
+    #expect(payload.requested.value == Self.tabID.uuidString)
+    #expect(payload.resolvedVia == .tab)
+  }
+
+  @Test func autoSelectorWithWorktreeNameResolvesViaWorktree() throws {
+    var resolveNoneCount = 0
+    let handler = FocusCommandHandler(
+      resolveProvider: { selector in
+        switch selector {
+        case .auto(let value):
+          #expect(value == "Prowl")
+          return .success(Self.makeTarget(tabSelected: true, paneFocused: true))
+        case .none:
+          resolveNoneCount += 1
+          return .success(Self.makeTarget(tabSelected: true, paneFocused: true))
+        default:
+          return .failure(.notFound("Unexpected selector"))
+        }
+      },
+      focusPerformer: { _ in true },
+      bringToFront: { true }
+    )
+
+    let response = handler.handle(
+      envelope: CommandEnvelope(
+        output: .json,
+        command: .focus(FocusInput(selector: .auto("Prowl")))
+      )
+    )
+
+    #expect(response.ok)
+    #expect(resolveNoneCount == 1)
+    let payload = try #require(try response.data?.decode(as: FocusCommandPayload.self))
+    #expect(payload.requested.selector == .auto)
+    #expect(payload.requested.value == "Prowl")
+    #expect(payload.resolvedVia == .worktree)
+  }
+
   @Test func targetNotFoundMapsToContractCode() {
     let handler = FocusCommandHandler(
       resolveProvider: { _ in .failure(.notFound("Pane missing")) },

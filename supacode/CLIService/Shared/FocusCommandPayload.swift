@@ -43,6 +43,7 @@ public enum FocusRequestedSelector: String, Codable, Sendable {
   case worktree
   case tab
   case pane
+  case auto
   case current
 }
 

@@ -62,7 +62,6 @@ final class FocusCommandHandler: CommandHandler {
     }
 
     let requested = makeRequestedTarget(from: input.selector)
-    let resolvedVia = makeResolvedVia(from: input.selector)
 
     // Resolve requested selector.
     let requestedTarget: FocusResolvedTarget
@@ -99,7 +98,7 @@ final class FocusCommandHandler: CommandHandler {
 
     let payload = FocusCommandPayload(
       requested: requested,
-      resolvedVia: resolvedVia,
+      resolvedVia: makeResolvedVia(from: input.selector, requestedTarget: requestedTarget),
       broughtToFront: true,
       target: makePayloadTarget(from: finalTarget)
     )
@@ -124,12 +123,17 @@ final class FocusCommandHandler: CommandHandler {
       return FocusRequestedTarget(selector: .tab, value: value)
     case .pane(let value):
       return FocusRequestedTarget(selector: .pane, value: value)
+    case .auto(let value):
+      return FocusRequestedTarget(selector: .auto, value: value)
     case .none:
       return FocusRequestedTarget(selector: .current, value: nil)
     }
   }
 
-  private func makeResolvedVia(from selector: TargetSelector) -> FocusResolvedVia {
+  private func makeResolvedVia(
+    from selector: TargetSelector,
+    requestedTarget: FocusResolvedTarget
+  ) -> FocusResolvedVia {
     switch selector {
     case .worktree:
       return .worktree
@@ -137,6 +141,16 @@ final class FocusCommandHandler: CommandHandler {
       return .tab
     case .pane, .none:
       return .pane
+    case .auto(let value):
+      if let uuid = UUID(uuidString: value) {
+        if uuid == requestedTarget.paneID {
+          return .pane
+        }
+        if uuid == requestedTarget.tabID {
+          return .tab
+        }
+      }
+      return .worktree
     }
   }
 

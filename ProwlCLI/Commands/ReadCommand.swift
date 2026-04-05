@@ -15,9 +15,12 @@ struct ReadCommand: ParsableCommand {
   @Option(name: .long, help: "Number of recent lines to read (omit for snapshot).")
   var last: Int?
 
+  @Argument(help: "Target pane/tab UUID or worktree id/name/path (auto-resolved).")
+  var target: String?
+
   mutating func run() throws {
     try CLIExecution.run(command: "read", output: options.outputMode, colorEnabled: options.colorEnabled) {
-      let sel = try selector.resolve()
+      let sel = try selector.resolve(positionalTarget: target)
 
       if let n = last, n < 1 {
         throw ExitError(
