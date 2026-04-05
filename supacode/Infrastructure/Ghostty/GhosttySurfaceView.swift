@@ -106,6 +106,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private let initialInputCString: UnsafeMutablePointer<CChar>?
   private let fontSize: Float32
   private let context: ghostty_surface_context_e
+  private let skipsSurfaceCreationForTesting: Bool
   private var trackingArea: NSTrackingArea?
   private var lastBackingSize: CGSize = .zero
   private var lastPerformKeyEvent: TimeInterval?
@@ -153,6 +154,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
   var onCommittedText: ((String) -> Void)?
   var onMirroredKey: ((MirroredTerminalKey) -> Void)?
   var onFontSizeShortcut: (() -> Void)?
+  var onOcclusionAppliedForTesting: ((Bool) -> Void)?
+  var attachmentStateForTesting: (() -> (hasSuperview: Bool, hasWindow: Bool))?
 
   private var accessibilityPaneIndexHelp: String?
 
@@ -213,12 +216,14 @@ final class GhosttySurfaceView: NSView, Identifiable {
     workingDirectory: URL?,
     initialInput: String? = nil,
     fontSize: Float32? = nil,
-    context: ghostty_surface_context_e
+    context: ghostty_surface_context_e,
+    skipsSurfaceCreationForTesting: Bool = false
   ) {
     self.runtime = runtime
     self.bridge = GhosttySurfaceBridge()
     self.fontSize = fontSize ?? 0
     self.context = context
+    self.skipsSurfaceCreationForTesting = skipsSurfaceCreationForTesting
     if let workingDirectory {
       let path = Self.normalizedWorkingDirectoryPath(
         workingDirectory.path(percentEncoded: false)
@@ -235,9 +240,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
     super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
     wantsLayer = true
     bridge.surfaceView = self
-    createSurface()
-    if let surface {
-      surfaceRef = runtime.registerSurface(surface)
+    if !skipsSurfaceCreationForTesting {
+      createSurface()
+      if let surface {
+        surfaceRef = runtime.registerSurface(surface)
+      }
     }
     registerForDraggedTypes(Array(Self.dropTypes))
 
@@ -987,18 +994,34 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   func setOcclusion(_ visible: Bool) {
-    guard let surface else { return }
+    guard let surface else {
+      guard skipsSurfaceCreationForTesting else { return }
+      guard isReadyToApplyOcclusion else {
+        if occlusionState.desired != visible {
+          surfaceLogger.info(
+            "[CanvasExit] deferOcclusion surface=\(debugID) desired=\(visible) "
+              + "attached=\(hasAttachedSuperview) window=\(hasAttachedWindow)"
+          )
+        }
+        occlusionState.setDesired(visible)
+        return
+      }
+      guard occlusionState.prepareToApply(visible) else { return }
+      onOcclusionAppliedForTesting?(visible)
+      return
+    }
     guard isReadyToApplyOcclusion else {
       if occlusionState.desired != visible {
         surfaceLogger.info(
           "[CanvasExit] deferOcclusion surface=\(debugID) desired=\(visible) "
-            + "attached=\(superview != nil) window=\(window != nil)"
+            + "attached=\(hasAttachedSuperview) window=\(hasAttachedWindow)"
         )
       }
       occlusionState.setDesired(visible)
       return
     }
     guard occlusionState.prepareToApply(visible) else { return }
+    onOcclusionAppliedForTesting?(visible)
     ghostty_surface_set_occlusion(surface, visible)
   }
 
@@ -1009,7 +1032,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     surfaceLogger.info(
       "[CanvasExit] attachmentChange surface=\(debugID) "
         + "desired=\(String(describing: occlusionState.desired)) "
-        + "attached=\(superview != nil) window=\(window != nil)"
+        + "attached=\(hasAttachedSuperview) window=\(hasAttachedWindow)"
     )
     _ = occlusionState.invalidateForAttachmentChange()
     guard isReadyToApplyOcclusion else { return }
@@ -1018,17 +1041,29 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
   }
 
+  func handleAttachmentChangeForTesting() {
+    handleAttachmentChange()
+  }
+
   private func reapplyOcclusionIfNeeded() {
     guard isReadyToApplyOcclusion, let desired = occlusionState.desired else { return }
     surfaceLogger.info(
       "[CanvasExit] reapplyOcclusion surface=\(debugID) desired=\(desired) "
-        + "attached=\(superview != nil) window=\(window != nil)"
+        + "attached=\(hasAttachedSuperview) window=\(hasAttachedWindow)"
     )
     setOcclusion(desired)
   }
 
   private var isReadyToApplyOcclusion: Bool {
-    superview != nil && window != nil
+    hasAttachedSuperview && hasAttachedWindow
+  }
+
+  private var hasAttachedSuperview: Bool {
+    attachmentStateForTesting?().hasSuperview ?? (superview != nil)
+  }
+
+  private var hasAttachedWindow: Bool {
+    attachmentStateForTesting?().hasWindow ?? (window != nil)
   }
 
   private func setSurfaceFocus(_ focused: Bool) {
