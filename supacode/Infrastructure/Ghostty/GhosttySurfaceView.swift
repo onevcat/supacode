@@ -12,6 +12,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     private(set) var desired: Bool?
     private var applied: Bool?
 
+    mutating func setDesired(_ visible: Bool) {
+      desired = visible
+    }
+
     mutating func prepareToApply(_ visible: Bool) -> Bool {
       desired = visible
       guard applied != visible else { return false }
@@ -984,17 +988,18 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func setOcclusion(_ visible: Bool) {
     guard let surface else { return }
+    guard isReadyToApplyOcclusion else {
+      if occlusionState.desired != visible {
+        surfaceLogger.info(
+          "[CanvasExit] deferOcclusion surface=\(debugID) desired=\(visible) "
+            + "attached=\(superview != nil) window=\(window != nil)"
+        )
+      }
+      occlusionState.setDesired(visible)
+      return
+    }
     guard occlusionState.prepareToApply(visible) else { return }
     ghostty_surface_set_occlusion(surface, visible)
-  }
-
-  func invalidateOcclusionCache(reason: String) {
-    surfaceLogger.info(
-      "[CanvasExit] invalidateOcclusionCache surface=\(debugID) "
-        + "reason=\(reason) desired=\(String(describing: occlusionState.desired)) "
-        + "attached=\(superview != nil) window=\(window != nil)"
-    )
-    _ = occlusionState.invalidateForAttachmentChange()
   }
 
   private func handleAttachmentChange() {
@@ -1007,19 +1012,23 @@ final class GhosttySurfaceView: NSView, Identifiable {
         + "attached=\(superview != nil) window=\(window != nil)"
     )
     _ = occlusionState.invalidateForAttachmentChange()
-    guard superview != nil else { return }
+    guard isReadyToApplyOcclusion else { return }
     DispatchQueue.main.async { [weak self] in
       self?.reapplyOcclusionIfNeeded()
     }
   }
 
   private func reapplyOcclusionIfNeeded() {
-    guard superview != nil, let desired = occlusionState.desired else { return }
+    guard isReadyToApplyOcclusion, let desired = occlusionState.desired else { return }
     surfaceLogger.info(
       "[CanvasExit] reapplyOcclusion surface=\(debugID) desired=\(desired) "
         + "attached=\(superview != nil) window=\(window != nil)"
     )
     setOcclusion(desired)
+  }
+
+  private var isReadyToApplyOcclusion: Bool {
+    superview != nil && window != nil
   }
 
   private func setSurfaceFocus(_ focused: Bool) {

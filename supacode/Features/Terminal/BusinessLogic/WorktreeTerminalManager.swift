@@ -145,9 +145,6 @@ final class WorktreeTerminalManager {
         "[CanvasExit] setSelectedWorktreeID previous=\(previousSelectedWorktreeID ?? "nil") "
           + "next=\(id ?? "nil") leavingCanvas=\(leavingCanvas) states=\(states.count)"
       )
-      if leavingCanvas, let id, let state = states[id] {
-        state.refreshSurfaceActivity(reason: "canvas-exit-selected-worktree")
-      }
       terminalLogger.info("Selected worktree \(id ?? "nil")")
     case .saveLayoutSnapshot:
       terminalLogger.info("[LayoutRestore] received saveLayoutSnapshot command")

@@ -32,6 +32,62 @@ struct GhosttySurfaceViewTests {
     #expect(!secondApply)
   }
 
+  @Test func occlusionStateStoresDesiredValueWithoutMarkingItApplied() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    let firstApply = state.prepareToApply(true)
+    let secondApply = state.prepareToApply(true)
+
+    #expect(firstApply)
+    #expect(!secondApply)
+  }
+
+  @Test func occlusionStateUsesLatestDeferredDesiredValue() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    state.setDesired(false)
+    let applyDeferredValue = state.prepareToApply(false)
+    let secondApply = state.prepareToApply(false)
+
+    #expect(applyDeferredValue)
+    #expect(!secondApply)
+  }
+
+  @Test func occlusionStateAppliesLatestValueAfterAttachmentInvalidation() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    let firstApply = state.prepareToApply(true)
+    let desiredAfterAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(firstApply)
+    #expect(desiredAfterAttachmentChange == true)
+
+    state.setDesired(false)
+    let applyLatestValue = state.prepareToApply(false)
+    let duplicateApply = state.prepareToApply(false)
+
+    #expect(applyLatestValue)
+    #expect(!duplicateApply)
+  }
+
+  @Test func occlusionStateRetainsLatestDesiredValueAcrossMultipleAttachmentChanges() {
+    var state = GhosttySurfaceView.OcclusionState()
+
+    state.setDesired(true)
+    let desiredAfterFirstAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(desiredAfterFirstAttachmentChange == true)
+    state.setDesired(false)
+    let desiredAfterSecondAttachmentChange = state.invalidateForAttachmentChange()
+    #expect(desiredAfterSecondAttachmentChange == false)
+
+    let applyLatestValue = state.prepareToApply(false)
+    let duplicateApply = state.prepareToApply(false)
+
+    #expect(applyLatestValue)
+    #expect(!duplicateApply)
+  }
+
   @Test func normalizedWorkingDirectoryPathRemovesTrailingSlashForNonRootPath() {
     #expect(
       GhosttySurfaceView.normalizedWorkingDirectoryPath("/Users/onevcat/Sync/github/supacode/")
