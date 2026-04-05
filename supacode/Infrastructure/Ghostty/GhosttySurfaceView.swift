@@ -989,20 +989,17 @@ final class GhosttySurfaceView: NSView, Identifiable {
   func setOcclusion(_ visible: Bool) {
     guard let surface else { return }
     guard isReadyToApplyOcclusion else {
+      if occlusionState.desired != visible {
+        surfaceLogger.info(
+          "[CanvasExit] deferOcclusion surface=\(debugID) desired=\(visible) "
+            + "attached=\(superview != nil) window=\(window != nil)"
+        )
+      }
       occlusionState.setDesired(visible)
       return
     }
     guard occlusionState.prepareToApply(visible) else { return }
     ghostty_surface_set_occlusion(surface, visible)
-  }
-
-  func invalidateOcclusionCache(reason: String) {
-    surfaceLogger.info(
-      "[CanvasExit] invalidateOcclusionCache surface=\(debugID) "
-        + "reason=\(reason) desired=\(String(describing: occlusionState.desired)) "
-        + "attached=\(superview != nil) window=\(window != nil)"
-    )
-    _ = occlusionState.invalidateForAttachmentChange()
   }
 
   private func handleAttachmentChange() {

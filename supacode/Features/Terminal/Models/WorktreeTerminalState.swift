@@ -318,20 +318,6 @@ final class WorktreeTerminalState {
     applySurfaceActivity()
   }
 
-  func refreshSurfaceActivity(reason: String) {
-    terminalStateLogger.info(
-      "[CanvasExit] refreshSurfaceActivity worktree=\(worktree.id) reason=\(reason) "
-        + "selectedTab=\(tabManager.selectedTabId?.rawValue.uuidString ?? "nil") "
-        + "windowKey=\(String(describing: lastWindowIsKey)) "
-        + "windowVisible=\(String(describing: lastWindowIsVisible)) "
-        + "surfaces=\(surfaces.count) tabs=\(tabManager.tabs.count)"
-    )
-    for surface in surfaces.values {
-      surface.invalidateOcclusionCache(reason: reason)
-    }
-    applySurfaceActivity()
-  }
-
   private func applySurfaceActivity() {
     let selectedTabId = tabManager.selectedTabId
     var surfaceToFocus: GhosttySurfaceView?
