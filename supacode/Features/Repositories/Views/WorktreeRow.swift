@@ -146,7 +146,7 @@ struct WorktreeRow: View {
   }
 
   private var worktreeRowHeight: CGFloat {
-    42
+    38
   }
 }
 
