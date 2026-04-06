@@ -1,5 +1,24 @@
 # Changelog
 
+## [2026.4.6](https://github.com/onevcat/Prowl/releases/tag/v2026.4.6)
+
+This release brings a redesigned sidebar with a modern, cleaner, and more compact layout, along with reliability fixes across the terminal surface and CLI.
+
+## New
+
+- **Redesigned Sidebar** — the sidebar has been completely re-laid out for a modern, cleaner, and more compact look, giving you more room to focus on your work.
+- **Reveal in Finder** is now available in the worktree context menu, opening the worktree directory directly in Finder.
+- The run script indicator (green play icon) now shows a red stop button on hover; clicking it stops the running script.
+- The tab count badge on repository headers now shows a tooltip with the active tab count when hovered.
+- CLI tool install and uninstall results now show a toolbar toast on the main window for all entry points (Command Palette, menu bar), so you always get feedback regardless of whether Settings is open.
+- `prowl key` now correctly emits ANSI control characters for `Ctrl-[`, `Ctrl-\`, `Ctrl-]`, `Ctrl-^`, and `Ctrl-_` combos, and uppercase letters preserve their shift meaning.
+
+## Fixed
+
+- Hovering a worktree row no longer causes a vertical layout jump when pin and archive buttons appear.
+- Archive, Delete, pin, and archive buttons are now hidden for the main worktree, where those actions do not apply.
+- Terminals could appear blank after exiting Canvas view due to occlusion state being applied before the surface was reattached to the view hierarchy; this is now deferred correctly.
+
 ## [2026.4.5](https://github.com/onevcat/Prowl/releases/tag/v2026.4.5)
 
 Prowl gains a command-line tool for scripted terminal control.
