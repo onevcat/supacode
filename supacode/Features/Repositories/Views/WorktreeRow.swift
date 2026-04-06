@@ -80,24 +80,6 @@ struct WorktreeRow: View {
             .help("Run script active")
             .accessibilityLabel("Run script active")
         }
-        if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
-          Button {
-            onDiffTap?()
-          } label: {
-            WorktreeRowChangeCountView(
-              addedLines: displayAddedLines,
-              removedLines: displayRemovedLines,
-              isSelected: isSelected,
-            )
-          }
-          .buttonStyle(.plain)
-          .help(
-            AppShortcuts.helpText(
-              title: "Show Diff",
-              commandID: AppShortcuts.CommandID.showDiff,
-              in: resolvedKeybindings
-            ))
-        }
         if isHovered {
           Button {
             pinAction?()
@@ -120,6 +102,24 @@ struct WorktreeRow: View {
           .buttonStyle(.plain)
           .help("Archive Worktree")
           .disabled(archiveAction == nil)
+        }
+        if hasChangeCounts, let displayAddedLines, let displayRemovedLines {
+          Button {
+            onDiffTap?()
+          } label: {
+            WorktreeRowChangeCountView(
+              addedLines: displayAddedLines,
+              removedLines: displayRemovedLines,
+              isSelected: isSelected,
+            )
+          }
+          .buttonStyle(.plain)
+          .help(
+            AppShortcuts.helpText(
+              title: "Show Diff",
+              commandID: AppShortcuts.CommandID.showDiff,
+              in: resolvedKeybindings
+            ))
         }
       }
       WorktreeRowInfoView(
