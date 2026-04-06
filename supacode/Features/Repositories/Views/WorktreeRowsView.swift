@@ -241,12 +241,15 @@ struct WorktreeRowsView: View {
           repositoryID: $0.repositoryID
         )
       }
-    let deleteTargets = contextRows.map {
-      RepositoriesFeature.DeleteWorktreeTarget(
-        worktreeID: $0.id,
-        repositoryID: $0.repositoryID
-      )
-    }
+    let deleteTargets =
+      contextRows
+      .filter { !$0.isMainWorktree }
+      .map {
+        RepositoriesFeature.DeleteWorktreeTarget(
+          worktreeID: $0.id,
+          repositoryID: $0.repositoryID
+        )
+      }
     let archiveTitle =
       isBulkSelection
       ? "Archive Selected Worktrees"
@@ -272,19 +275,18 @@ struct WorktreeRowsView: View {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(worktree.workingDirectory.path, forType: .string)
     }
-    Button(archiveTitle) {
-      archiveWorktrees(archiveTargets)
+    if !row.isMainWorktree || isBulkSelection {
+      Button(archiveTitle) {
+        archiveWorktrees(archiveTargets)
+      }
+      .help(archiveTitle)
+      .disabled(archiveTargets.isEmpty)
+      Button(deleteTitle, role: .destructive) {
+        deleteWorktrees(deleteTargets)
+      }
+      .help(deleteTitle)
+      .disabled(deleteTargets.isEmpty)
     }
-    .help(
-      archiveTargets.isEmpty
-        ? "Main worktree can't be archived"
-        : archiveTitle
-    )
-    .disabled(archiveTargets.isEmpty)
-    Button(deleteTitle, role: .destructive) {
-      deleteWorktrees(deleteTargets)
-    }
-    .help(deleteTitle)
   }
 
   private func worktreeShortcutHint(for index: Int?) -> String? {
