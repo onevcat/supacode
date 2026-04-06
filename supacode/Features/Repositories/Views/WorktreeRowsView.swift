@@ -127,6 +127,10 @@ struct WorktreeRowsView: View {
         resolvedKeybindings: resolvedKeybindings
       )
     }
+    let onStopRunScript: (() -> Void)? =
+      terminalManager.isRunScriptRunning(for: row.id)
+      ? { _ = terminalManager.stateIfExists(for: row.id)?.stopRunScript() }
+      : nil
     let config = WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
@@ -138,6 +142,7 @@ struct WorktreeRowsView: View {
       pinAction: pinAction,
       archiveAction: archiveAction,
       onDiffTap: onDiffTap,
+      onStopRunScript: onStopRunScript,
       moveDisabled: moveDisabled,
     )
     let baseRow = worktreeRowView(row, config: config)
@@ -192,6 +197,7 @@ struct WorktreeRowsView: View {
     let pinAction: (() -> Void)?
     let archiveAction: (() -> Void)?
     let onDiffTap: (() -> Void)?
+    let onStopRunScript: (() -> Void)?
     let moveDisabled: Bool
   }
 
@@ -218,6 +224,7 @@ struct WorktreeRowsView: View {
       isSelected: isSelected,
       archiveAction: config.archiveAction,
       onDiffTap: config.onDiffTap,
+      onStopRunScript: config.onStopRunScript,
     )
     .tag(SidebarSelection.worktree(row.id))
     .typeSelectEquivalent("")

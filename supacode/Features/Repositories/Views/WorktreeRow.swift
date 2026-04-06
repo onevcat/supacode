@@ -20,6 +20,7 @@ struct WorktreeRow: View {
   let isSelected: Bool
   let archiveAction: (() -> Void)?
   let onDiffTap: (() -> Void)?
+  let onStopRunScript: (() -> Void)?
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -74,11 +75,7 @@ struct WorktreeRow: View {
           .lineLimit(1)
         Spacer(minLength: 4)
         if isRunScriptRunning {
-          Image(systemName: "play.fill")
-            .font(.caption)
-            .foregroundStyle(.green)
-            .help("Run script active")
-            .accessibilityLabel("Run script active")
+          RunScriptIndicator(onStop: onStopRunScript)
         }
         if isHovered {
           Button {
@@ -147,6 +144,27 @@ struct WorktreeRow: View {
 
   private var worktreeRowHeight: CGFloat {
     36
+  }
+}
+
+private struct RunScriptIndicator: View {
+  let onStop: (() -> Void)?
+  @State private var isHovering = false
+
+  var body: some View {
+    Button {
+      onStop?()
+    } label: {
+      Image(systemName: isHovering ? "stop.fill" : "play.fill")
+        .font(.caption)
+        .foregroundStyle(isHovering ? .red : .green)
+        .contentTransition(.symbolEffect(.replace))
+        .accessibilityLabel(isHovering ? "Stop run script" : "Run script active")
+    }
+    .buttonStyle(.plain)
+    .help(isHovering ? "Stop Script" : "Run script active")
+    .disabled(onStop == nil)
+    .onHover { isHovering = $0 }
   }
 }
 
@@ -274,7 +292,8 @@ private struct WorktreeRowPreview: View {
       pinAction: {},
       isSelected: isSelected,
       archiveAction: {},
-      onDiffTap: addedLines != nil ? {} : nil
+      onDiffTap: addedLines != nil ? {} : nil,
+      onStopRunScript: isRunScriptRunning ? {} : nil
     )
     .listRowInsets(EdgeInsets())
     .listRowSeparator(.hidden)
