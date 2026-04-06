@@ -103,6 +103,7 @@ struct WorktreeRow: View {
             pinAction?()
           } label: {
             Image(systemName: isPinned ? "pin.slash" : "pin")
+              .font(.caption)
               .contentTransition(.symbolEffect(.replace))
               .accessibilityLabel(isPinned ? "Unpin worktree" : "Pin worktree")
           }
@@ -113,6 +114,7 @@ struct WorktreeRow: View {
             archiveAction?()
           } label: {
             Image(systemName: "archivebox")
+              .font(.caption)
               .accessibilityLabel("Archive worktree")
           }
           .buttonStyle(.plain)
