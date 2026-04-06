@@ -160,6 +160,7 @@ struct RepositorySectionView: View {
     }
     .frame(maxWidth: .infinity)
     .frame(height: headerCellHeight, alignment: .center)
+    .padding(.top, showsTopSeparator ? 8 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if Self.debugHeaderLayers {

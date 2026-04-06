@@ -242,7 +242,7 @@ private struct SidebarLayoutPreview: View {
       row(id: "sc-pinned", name: "feature/auth", worktreeName: "auth", isPinned: true)
       row(id: "sc-running", name: "fix/crash", worktreeName: "crash", taskStatus: .running)
 
-      sectionHeader(name: "ghostty", tabCount: 1)
+      sectionHeader(name: "ghostty", tabCount: 1, isFirst: false)
       row(id: "gh-main", name: "main", worktreeName: "Default", isMainWorktree: true)
       row(id: "gh-feat", name: "feature/renderer", worktreeName: "renderer", isLoading: true)
     }
@@ -271,13 +271,15 @@ private struct SidebarLayoutPreview: View {
 
   private func sectionHeader(
     name: String,
-    tabCount: Int
+    tabCount: Int,
+    isFirst: Bool = true
   ) -> some View {
     HStack {
       RepoHeaderRow(name: name, isRemoving: false, tabCount: tabCount)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(height: 28, alignment: .center)
+    .padding(.top, isFirst ? 0 : 8)
     .listRowInsets(EdgeInsets())
     .listRowSeparator(.hidden)
   }
