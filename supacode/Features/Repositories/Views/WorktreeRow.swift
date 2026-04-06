@@ -74,7 +74,7 @@ struct WorktreeRow: View {
           .foregroundStyle(nameColor)
           .lineLimit(1)
         Spacer(minLength: 4)
-        if isHovered {
+        if isHovered, pinAction != nil {
           Button {
             pinAction?()
           } label: {
@@ -85,7 +85,8 @@ struct WorktreeRow: View {
           }
           .buttonStyle(.plain)
           .help(isPinned ? "Unpin" : "Pin to top")
-          .disabled(pinAction == nil)
+        }
+        if isHovered, archiveAction != nil {
           Button {
             archiveAction?()
           } label: {
@@ -95,7 +96,6 @@ struct WorktreeRow: View {
           }
           .buttonStyle(.plain)
           .help("Archive Worktree")
-          .disabled(archiveAction == nil)
         }
         if isRunScriptRunning {
           RunScriptIndicator(onStop: onStopRunScript)
