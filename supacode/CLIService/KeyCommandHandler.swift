@@ -70,7 +70,7 @@ final class KeyCommandHandler: CommandHandler {
     guard let category = KeyTokens.category(for: input.token) else {
       return errorResponse(
         code: CLIErrorCode.unsupportedKey,
-        message: "The key token '\(input.token)' is not supported in v1."
+        message: "The key token '\(input.token)' is not supported."
       )
     }
 

@@ -238,7 +238,7 @@ struct CLIKeyCommandHandlerTests {
   @Test func unsupportedKeyReturnsError() async throws {
     let handler = Self.makeHandler()
     let response = await handler.handle(
-      envelope: Self.makeEnvelope(token: "ctrl-z")
+      envelope: Self.makeEnvelope(token: "hyper-k")
     )
 
     #expect(response.ok == false)

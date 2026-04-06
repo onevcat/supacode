@@ -8,9 +8,12 @@ This file defines the **input/output contract** for:
 
 ## What changed in this revision
 
-Compared with the initial draft, this version makes `key` safer and more script-friendly:
+Compared with the initial draft, this version makes `key` broader and more script-friendly:
 
-- define a strict input grammar with aliases (`return` -> `enter`, `escape` -> `esc`, `pgup` -> `pageup`, ...)
+- normalize aliases (`return` -> `enter`, `escape` -> `esc`, `pgup` -> `pageup`, ...)
+- accept modifier prefixes and combinations such as `cmd-c`, `shift-tab`, `opt-enter`, `cmd-shift-k`
+- accept additional named keys such as `delete-forward`, `insert`, and `f1`...`f12`
+- keep CLI token acceptance aligned with the runtime's ANSI-style NSEvent materialization
 - add `--repeat <n>` as first-class input instead of forcing shell loops
 - split `requested` vs `normalized` in output so callers can debug token normalization
 - add `delivery` counters for machine verification (`attempted` / `delivered`)
@@ -19,6 +22,8 @@ Compared with the initial draft, this version makes `key` safer and more script-
 ## Contract goals
 
 - `key` should be deterministic for agent loops and TUI automation.
+- v1 follows ANSI-style key token semantics for shortcuts, special keys, and supported punctuation.
+- full layout-aware fidelity across keyboard layouts is out of scope for v1.
 - output must clearly answer:
   - what was requested
   - what token was actually accepted
@@ -54,27 +59,22 @@ prowl key [target selectors] <token> [--repeat <n>] [--json]
 Rules:
 
 - exactly one positional `<token>` is required
-- parsing is case-insensitive
 - surrounding spaces are ignored
 - canonical token form is lowercase kebab-case
+- modifier names and named-key aliases are parsed case-insensitively
+- single printable letters preserve case semantics: lowercase stays plain (`a`), uppercase implies `shift` (`A` -> `shift-a`)
+- mixed-case modifier combos keep that printable-letter rule, for example `Cmd-A` -> `cmd-shift-a` and `Ctrl-A` -> `shift-ctrl-a`
 
 ### Canonical tokens
 
-- `enter`
-- `esc`
-- `tab`
-- `backspace`
-- `up`
-- `down`
-- `left`
-- `right`
-- `pageup`
-- `pagedown`
-- `home`
-- `end`
-- `ctrl-c`
-- `ctrl-d`
-- `ctrl-l`
+Canonical normalized tokens now include:
+
+- navigation keys such as `tab`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`
+- editing keys such as `enter`, `backspace`, `delete-forward`, `insert`
+- printable keys such as letters, digits, and supported ANSI punctuation tokens
+- control combinations such as `ctrl-c`, `ctrl-d`, `ctrl-l`, `ctrl-z`
+- shortcut combinations such as `cmd-c`, `cmd-shift-k`, `shift-tab`, `opt-enter`
+- function keys `f1`...`f12`
 
 ### Accepted aliases (normalized to canonical)
 
@@ -86,9 +86,18 @@ Rules:
 - `arrow-right` -> `right`
 - `pgup` -> `pageup`
 - `pgdn` -> `pagedown`
-- `ctrl+c` -> `ctrl-c`
-- `ctrl+d` -> `ctrl-d`
-- `ctrl+l` -> `ctrl-l`
+- `forward-delete` / `deleteforward` -> `delete-forward`
+- `ins` -> `insert`
+- punctuation aliases such as `[` -> `left-bracket`, `]` -> `right-bracket`, `,` -> `comma`, `'` -> `quote`
+- `command-*` -> `cmd-*`
+- `alt-*` / `option-*` -> `opt-*`
+- `ctrl+*` -> `ctrl-*`
+
+### ANSI punctuation note
+
+- prefer canonical ANSI-style punctuation tokens such as `minus`, `equal`, `comma`, `period`, `slash`, `backslash`, `quote`, `left-bracket`
+- express shifted symbols via modifier combos such as `shift-1`, `shift-quote`, `shift-left-bracket`
+- raw shifted symbol literals such as `!`, `@`, `{`, `}` are intentionally unsupported in v1
 
 ### `--repeat`
 
@@ -162,7 +171,7 @@ Rules:
 - `normalized`: string
   - canonical token used by runtime
   - must be one of the canonical tokens listed above
-- `category`: `"navigation"` | `"editing"` | `"control"`
+- `category`: `"navigation"` | `"editing"` | `"control"` | `"shortcut"` | `"function"`
 
 ### `delivery`
 
@@ -216,9 +225,9 @@ Same shape used by other CLI contracts:
   "schema_version": "prowl.cli.key.v1",
   "error": {
     "code": "UNSUPPORTED_KEY",
-    "message": "The key token 'ctrl-z' is not supported in v1",
+    "message": "The key token 'hyper-k' is not supported.",
     "details": {
-      "token": "ctrl-z"
+      "token": "hyper-k"
     }
   }
 }

@@ -808,7 +808,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
   }
 
   func testKeyCommandRejectUnsupportedKey() throws {
-    let result = try runProwl(args: ["key", "ctrl-z", "--json"])
+    let result = try runProwl(args: ["key", "hyper-k", "--json"])
     XCTAssertNotEqual(result.exitCode, 0)
     let payload = try jsonObject(from: result.stdout)
     XCTAssertEqual(payload["ok"] as? Bool, false)
@@ -965,6 +965,60 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         XCTFail("Expected key command envelope for alias '\(alias)'")
       }
     }
+  }
+
+  func testKeyCommandExpandedTokensAccepted() throws {
+    let tokenCases: [(raw: String, normalized: String)] = [
+      ("cmd-c", "cmd-c"),
+      ("command-shift-k", "cmd-shift-k"),
+      ("alt-enter", "opt-enter"),
+      ("ctrl-z", "ctrl-z"),
+      ("A", "shift-a"),
+      ("Ctrl-A", "shift-ctrl-a"),
+      ("CTRL-A", "shift-ctrl-a"),
+      ("ctrl-left-bracket", "ctrl-left-bracket"),
+      ("ctrl-backslash", "ctrl-backslash"),
+      ("ctrl-right-bracket", "ctrl-right-bracket"),
+      ("ctrl-shift-6", "shift-ctrl-6"),
+      ("ctrl-shift-minus", "shift-ctrl-minus"),
+      ("deleteforward", "delete-forward"),
+      ("f12", "f12"),
+      ("[", "left-bracket"),
+    ]
+
+    for (raw, normalized) in tokenCases {
+      let socketPath = temporarySocketPath(suffix: "key-expanded-\(normalized.replacingOccurrences(of: "-", with: "_"))")
+      let response = CommandResponse(
+        ok: true,
+        command: "key",
+        schemaVersion: "prowl.cli.key.v1"
+      )
+
+      let (requestData, result) = try runWithMockServer(
+        socketPath: socketPath,
+        response: response,
+        args: ["key", raw, "--json"]
+      )
+
+      XCTAssertEqual(result.exitCode, 0, "Token '\(raw)' should be accepted")
+      let envelope = try JSONDecoder().decode(CommandEnvelope.self, from: requestData)
+      if case .key(let input) = envelope.command {
+        XCTAssertEqual(input.token, normalized)
+        XCTAssertEqual(input.rawToken, raw)
+      } else {
+        XCTFail("Expected key command envelope for token '\(raw)'")
+      }
+    }
+  }
+
+  func testKeyCommandRejectsUnsupportedShiftedSymbolLiteral() throws {
+    let result = try runProwl(args: ["key", "!", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.unsupportedKey)
   }
 
   // MARK: - Read command tests
