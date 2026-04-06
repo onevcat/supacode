@@ -2042,22 +2042,15 @@ struct CLIKeySpec {
     "space": UInt16(kVK_Space),
     "minus": UInt16(kVK_ANSI_Minus),
     "equal": UInt16(kVK_ANSI_Equal),
-    ",": UInt16(kVK_ANSI_Comma),
     "comma": UInt16(kVK_ANSI_Comma),
-    ".": UInt16(kVK_ANSI_Period),
     "period": UInt16(kVK_ANSI_Period),
-    "/": UInt16(kVK_ANSI_Slash),
     "slash": UInt16(kVK_ANSI_Slash),
-    "\\": UInt16(kVK_ANSI_Backslash),
     "backslash": UInt16(kVK_ANSI_Backslash),
-    ";": UInt16(kVK_ANSI_Semicolon),
     "semicolon": UInt16(kVK_ANSI_Semicolon),
-    "'": UInt16(kVK_ANSI_Quote),
     "quote": UInt16(kVK_ANSI_Quote),
-    "`": UInt16(kVK_ANSI_Grave),
     "grave": UInt16(kVK_ANSI_Grave),
-    "[": UInt16(kVK_ANSI_LeftBracket),
-    "]": UInt16(kVK_ANSI_RightBracket),
+    "left-bracket": UInt16(kVK_ANSI_LeftBracket),
+    "right-bracket": UInt16(kVK_ANSI_RightBracket),
   ]
 
   private static let shiftedCharacterMap: [String: String] = [
@@ -2073,21 +2066,15 @@ struct CLIKeySpec {
     "0": ")",
     "minus": "_",
     "equal": "+",
-    ",": "<",
     "comma": "<",
-    ".": ">",
     "period": ">",
-    "/": "?",
     "slash": "?",
-    "\\": "|",
     "backslash": "|",
-    ";": ":",
     "semicolon": ":",
-    "'": "\"",
     "quote": "\"",
-    "`": "~",
-    "[": "{",
-    "]": "}",
+    "grave": "~",
+    "left-bracket": "{",
+    "right-bracket": "}",
   ]
 
   private static func eventModifiers(from modifiers: [KeyModifier]) -> NSEvent.ModifierFlags {
@@ -2137,6 +2124,8 @@ struct CLIKeySpec {
     case "semicolon": return ";"
     case "quote": return "'"
     case "grave": return "`"
+    case "left-bracket": return "["
+    case "right-bracket": return "]"
     default:
       guard token.count == 1 else { return nil }
       return token.first
@@ -2161,9 +2150,9 @@ struct CLIKeySpec {
     }
 
     switch token {
-    case "[": return String(UnicodeScalar(27)!)
-    case "\\", "backslash": return String(UnicodeScalar(28)!)
-    case "]": return String(UnicodeScalar(29)!)
+    case "left-bracket": return String(UnicodeScalar(27)!)
+    case "backslash": return String(UnicodeScalar(28)!)
+    case "right-bracket": return String(UnicodeScalar(29)!)
     case "6": return String(UnicodeScalar(30)!)
     case "minus": return String(UnicodeScalar(31)!)
     default: return nil

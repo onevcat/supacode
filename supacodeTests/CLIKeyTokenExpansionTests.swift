@@ -12,11 +12,25 @@ struct CLIKeyTokenExpansionTests {
     #expect(KeyTokens.normalize("ctrl-z") == "ctrl-z")
   }
 
+  @Test func normalizesPrintableAliasesToCanonicalAnsiTokens() {
+    #expect(KeyTokens.normalize("[") == "left-bracket")
+    #expect(KeyTokens.normalize("]") == "right-bracket")
+    #expect(KeyTokens.normalize(",") == "comma")
+    #expect(KeyTokens.normalize("'") == "quote")
+  }
+
   @Test func normalizesAdditionalNamedKeys() {
     #expect(KeyTokens.normalize("deleteforward") == "delete-forward")
     #expect(KeyTokens.normalize("forward-delete") == "delete-forward")
     #expect(KeyTokens.normalize("ins") == "insert")
     #expect(KeyTokens.normalize("f12") == "f12")
+  }
+
+  @Test func rejectsUnsupportedShiftedSymbolLiterals() {
+    #expect(KeyTokens.normalize("!") == nil)
+    #expect(KeyTokens.normalize("@") == nil)
+    #expect(CLIKeySpec.from(token: "!") == nil)
+    #expect(CLIKeySpec.from(token: "@") == nil)
   }
 
   @Test func expandedCategoriesAreReported() {
@@ -41,6 +55,15 @@ struct CLIKeyTokenExpansionTests {
     #expect(spec.modifiers == [.command, .shift])
     #expect(spec.characters == "K")
     #expect(spec.charactersIgnoringModifiers == "k")
+  }
+
+  @Test func cliKeySpecBuildsShiftedAnsiPunctuationEvent() throws {
+    let spec = try #require(CLIKeySpec.from(token: "shift-left-bracket"))
+
+    #expect(spec.keyCode == UInt16(kVK_ANSI_LeftBracket))
+    #expect(spec.modifiers == [.shift])
+    #expect(spec.characters == "{")
+    #expect(spec.charactersIgnoringModifiers == "[")
   }
 
   @Test func cliKeySpecBuildsFunctionAndForwardDeleteEvents() throws {

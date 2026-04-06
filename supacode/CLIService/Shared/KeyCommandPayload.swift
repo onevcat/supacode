@@ -219,12 +219,60 @@ public enum KeyTokens {
     "apostrophe": KeyBaseDescriptor(canonical: "quote", category: .editing),
     "grave": KeyBaseDescriptor(canonical: "grave", category: .editing),
     "backtick": KeyBaseDescriptor(canonical: "grave", category: .editing),
-    "left-bracket": KeyBaseDescriptor(canonical: "[", category: .editing),
-    "leftbracket": KeyBaseDescriptor(canonical: "[", category: .editing),
-    "lbracket": KeyBaseDescriptor(canonical: "[", category: .editing),
-    "right-bracket": KeyBaseDescriptor(canonical: "]", category: .editing),
-    "rightbracket": KeyBaseDescriptor(canonical: "]", category: .editing),
-    "rbracket": KeyBaseDescriptor(canonical: "]", category: .editing),
+    "left-bracket": KeyBaseDescriptor(canonical: "left-bracket", category: .editing),
+    "leftbracket": KeyBaseDescriptor(canonical: "left-bracket", category: .editing),
+    "lbracket": KeyBaseDescriptor(canonical: "left-bracket", category: .editing),
+    "right-bracket": KeyBaseDescriptor(canonical: "right-bracket", category: .editing),
+    "rightbracket": KeyBaseDescriptor(canonical: "right-bracket", category: .editing),
+    "rbracket": KeyBaseDescriptor(canonical: "right-bracket", category: .editing),
+  ]
+
+  private static let singleCharacterBaseDescriptors: [String: KeyBaseDescriptor] = [
+    "a": KeyBaseDescriptor(canonical: "a", category: .editing),
+    "b": KeyBaseDescriptor(canonical: "b", category: .editing),
+    "c": KeyBaseDescriptor(canonical: "c", category: .editing),
+    "d": KeyBaseDescriptor(canonical: "d", category: .editing),
+    "e": KeyBaseDescriptor(canonical: "e", category: .editing),
+    "f": KeyBaseDescriptor(canonical: "f", category: .editing),
+    "g": KeyBaseDescriptor(canonical: "g", category: .editing),
+    "h": KeyBaseDescriptor(canonical: "h", category: .editing),
+    "i": KeyBaseDescriptor(canonical: "i", category: .editing),
+    "j": KeyBaseDescriptor(canonical: "j", category: .editing),
+    "k": KeyBaseDescriptor(canonical: "k", category: .editing),
+    "l": KeyBaseDescriptor(canonical: "l", category: .editing),
+    "m": KeyBaseDescriptor(canonical: "m", category: .editing),
+    "n": KeyBaseDescriptor(canonical: "n", category: .editing),
+    "o": KeyBaseDescriptor(canonical: "o", category: .editing),
+    "p": KeyBaseDescriptor(canonical: "p", category: .editing),
+    "q": KeyBaseDescriptor(canonical: "q", category: .editing),
+    "r": KeyBaseDescriptor(canonical: "r", category: .editing),
+    "s": KeyBaseDescriptor(canonical: "s", category: .editing),
+    "t": KeyBaseDescriptor(canonical: "t", category: .editing),
+    "u": KeyBaseDescriptor(canonical: "u", category: .editing),
+    "v": KeyBaseDescriptor(canonical: "v", category: .editing),
+    "w": KeyBaseDescriptor(canonical: "w", category: .editing),
+    "x": KeyBaseDescriptor(canonical: "x", category: .editing),
+    "y": KeyBaseDescriptor(canonical: "y", category: .editing),
+    "z": KeyBaseDescriptor(canonical: "z", category: .editing),
+    "0": KeyBaseDescriptor(canonical: "0", category: .editing),
+    "1": KeyBaseDescriptor(canonical: "1", category: .editing),
+    "2": KeyBaseDescriptor(canonical: "2", category: .editing),
+    "3": KeyBaseDescriptor(canonical: "3", category: .editing),
+    "4": KeyBaseDescriptor(canonical: "4", category: .editing),
+    "5": KeyBaseDescriptor(canonical: "5", category: .editing),
+    "6": KeyBaseDescriptor(canonical: "6", category: .editing),
+    "7": KeyBaseDescriptor(canonical: "7", category: .editing),
+    "8": KeyBaseDescriptor(canonical: "8", category: .editing),
+    "9": KeyBaseDescriptor(canonical: "9", category: .editing),
+    ",": KeyBaseDescriptor(canonical: "comma", category: .editing),
+    ".": KeyBaseDescriptor(canonical: "period", category: .editing),
+    "/": KeyBaseDescriptor(canonical: "slash", category: .editing),
+    "\\": KeyBaseDescriptor(canonical: "backslash", category: .editing),
+    ";": KeyBaseDescriptor(canonical: "semicolon", category: .editing),
+    "'": KeyBaseDescriptor(canonical: "quote", category: .editing),
+    "`": KeyBaseDescriptor(canonical: "grave", category: .editing),
+    "[": KeyBaseDescriptor(canonical: "left-bracket", category: .editing),
+    "]": KeyBaseDescriptor(canonical: "right-bracket", category: .editing),
   ]
 
   public static func normalize(_ raw: String) -> String? {
@@ -290,10 +338,7 @@ public enum KeyTokens {
 
   private static func baseDescriptor(for raw: String) -> KeyBaseDescriptor? {
     if let base = namedBaseDescriptors[raw] { return base }
-
-    if raw.count == 1, let scalar = raw.unicodeScalars.first, scalar.isASCII, !scalar.properties.isWhitespace {
-      return KeyBaseDescriptor(canonical: raw, category: .editing)
-    }
+    if let base = singleCharacterBaseDescriptors[raw] { return base }
 
     if raw.count >= 2,
       raw.first == "f",

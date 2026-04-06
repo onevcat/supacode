@@ -975,6 +975,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       ("ctrl-z", "ctrl-z"),
       ("deleteforward", "delete-forward"),
       ("f12", "f12"),
+      ("[", "left-bracket"),
     ]
 
     for (raw, normalized) in tokenCases {
@@ -1000,6 +1001,16 @@ final class ProwlCLIIntegrationTests: XCTestCase {
         XCTFail("Expected key command envelope for token '\(raw)'")
       }
     }
+  }
+
+  func testKeyCommandRejectsUnsupportedShiftedSymbolLiteral() throws {
+    let result = try runProwl(args: ["key", "!", "--json"])
+    XCTAssertNotEqual(result.exitCode, 0)
+    let payload = try jsonObject(from: result.stdout)
+    XCTAssertEqual(payload["ok"] as? Bool, false)
+    XCTAssertEqual(payload["command"] as? String, "key")
+    let error = try XCTUnwrap(payload["error"] as? [String: Any])
+    XCTAssertEqual(error["code"] as? String, CLIErrorCode.unsupportedKey)
   }
 
   // MARK: - Read command tests

@@ -7,11 +7,14 @@ import ProwlCLIShared
 struct KeyCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "key",
-    abstract: "Send a user key event to a terminal pane.",
+    abstract: "Send a keyboard shortcut or special key to a terminal pane.",
     discussion: """
       With one positional argument, the key is sent to the current pane.
       With two positional arguments, the first is the target (auto-resolved) and
       the second is the key token.
+
+      Printable punctuation currently follows ANSI-style key token semantics.
+      For shifted symbols, prefer modifier combos such as shift-1 or shift-left-bracket.
       """
   )
 

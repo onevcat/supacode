@@ -13,6 +13,7 @@ Compared with the initial draft, this version makes `key` broader and more scrip
 - normalize aliases (`return` -> `enter`, `escape` -> `esc`, `pgup` -> `pageup`, ...)
 - accept modifier prefixes and combinations such as `cmd-c`, `shift-tab`, `opt-enter`, `cmd-shift-k`
 - accept additional named keys such as `delete-forward`, `insert`, and `f1`...`f12`
+- keep CLI token acceptance aligned with the runtime's ANSI-style NSEvent materialization
 - add `--repeat <n>` as first-class input instead of forcing shell loops
 - split `requested` vs `normalized` in output so callers can debug token normalization
 - add `delivery` counters for machine verification (`attempted` / `delivered`)
@@ -21,6 +22,8 @@ Compared with the initial draft, this version makes `key` broader and more scrip
 ## Contract goals
 
 - `key` should be deterministic for agent loops and TUI automation.
+- v1 follows ANSI-style key token semantics for shortcuts, special keys, and supported punctuation.
+- full layout-aware fidelity across keyboard layouts is out of scope for v1.
 - output must clearly answer:
   - what was requested
   - what token was actually accepted
@@ -66,7 +69,7 @@ Canonical normalized tokens now include:
 
 - navigation keys such as `tab`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`
 - editing keys such as `enter`, `backspace`, `delete-forward`, `insert`
-- printable keys such as letters, digits, and common punctuation
+- printable keys such as letters, digits, and supported ANSI punctuation tokens
 - control combinations such as `ctrl-c`, `ctrl-d`, `ctrl-l`, `ctrl-z`
 - shortcut combinations such as `cmd-c`, `cmd-shift-k`, `shift-tab`, `opt-enter`
 - function keys `f1`...`f12`
@@ -83,9 +86,16 @@ Canonical normalized tokens now include:
 - `pgdn` -> `pagedown`
 - `forward-delete` / `deleteforward` -> `delete-forward`
 - `ins` -> `insert`
+- punctuation aliases such as `[` -> `left-bracket`, `]` -> `right-bracket`, `,` -> `comma`, `'` -> `quote`
 - `command-*` -> `cmd-*`
 - `alt-*` / `option-*` -> `opt-*`
 - `ctrl+*` -> `ctrl-*`
+
+### ANSI punctuation note
+
+- prefer canonical ANSI-style punctuation tokens such as `minus`, `equal`, `comma`, `period`, `slash`, `backslash`, `quote`, `left-bracket`
+- express shifted symbols via modifier combos such as `shift-1`, `shift-quote`, `shift-left-bracket`
+- raw shifted symbol literals such as `!`, `@`, `{`, `}` are intentionally unsupported in v1
 
 ### `--repeat`
 
