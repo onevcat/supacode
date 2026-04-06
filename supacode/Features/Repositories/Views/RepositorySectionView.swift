@@ -161,9 +161,9 @@ struct RepositorySectionView: View {
         }
       }
     }
-    .frame(maxWidth: .infinity)
-    .frame(height: headerCellHeight, alignment: .center)
+    .frame(maxWidth: .infinity, minHeight: headerCellHeight, maxHeight: .infinity, alignment: .center)
     .padding(.top, showsTopSeparator ? 4 : 0)
+    .padding(.bottom, showsTopSeparator && !repository.capabilities.supportsWorktrees ? 4 : 0)
     .contentShape(.interaction, .rect)
     .background {
       if Self.debugHeaderLayers {
