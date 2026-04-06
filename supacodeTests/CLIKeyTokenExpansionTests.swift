@@ -26,6 +26,11 @@ struct CLIKeyTokenExpansionTests {
     #expect(KeyTokens.normalize("f12") == "f12")
   }
 
+  @Test func normalizesUppercaseLettersToShiftedPrintableCombos() {
+    #expect(KeyTokens.normalize("A") == "shift-a")
+    #expect(KeyTokens.normalize("cmd-A") == "cmd-shift-a")
+  }
+
   @Test func rejectsUnsupportedShiftedSymbolLiterals() {
     #expect(KeyTokens.normalize("!") == nil)
     #expect(KeyTokens.normalize("@") == nil)
@@ -36,6 +41,7 @@ struct CLIKeyTokenExpansionTests {
   @Test func expandedCategoriesAreReported() {
     #expect(KeyTokens.category(for: "cmd-c") == .shortcut)
     #expect(KeyTokens.category(for: "ctrl-z") == .control)
+    #expect(KeyTokens.category(for: "ctrl-shift-minus") == .control)
     #expect(KeyTokens.category(for: "f12") == .function)
   }
 
@@ -64,6 +70,47 @@ struct CLIKeyTokenExpansionTests {
     #expect(spec.modifiers == [.shift])
     #expect(spec.characters == "{")
     #expect(spec.charactersIgnoringModifiers == "[")
+  }
+
+  @Test func cliKeySpecBuildsUppercasePrintableEvent() throws {
+    let spec = try #require(CLIKeySpec.from(token: "A"))
+
+    #expect(spec.keyCode == UInt16(kVK_ANSI_A))
+    #expect(spec.modifiers == [.shift])
+    #expect(spec.characters == "A")
+    #expect(spec.charactersIgnoringModifiers == "a")
+  }
+
+  @Test func cliKeySpecBuildsAnsiControlCharactersForCommonTerminalCombos() throws {
+    let esc = try #require(CLIKeySpec.from(token: "ctrl-left-bracket"))
+    #expect(esc.keyCode == UInt16(kVK_ANSI_LeftBracket))
+    #expect(esc.modifiers == [.control])
+    #expect(esc.characters == String(UnicodeScalar(27)!))
+    #expect(esc.charactersIgnoringModifiers == "[")
+
+    let fileSeparator = try #require(CLIKeySpec.from(token: "ctrl-backslash"))
+    #expect(fileSeparator.keyCode == UInt16(kVK_ANSI_Backslash))
+    #expect(fileSeparator.modifiers == [.control])
+    #expect(fileSeparator.characters == String(UnicodeScalar(28)!))
+    #expect(fileSeparator.charactersIgnoringModifiers == "\\")
+
+    let groupSeparator = try #require(CLIKeySpec.from(token: "ctrl-right-bracket"))
+    #expect(groupSeparator.keyCode == UInt16(kVK_ANSI_RightBracket))
+    #expect(groupSeparator.modifiers == [.control])
+    #expect(groupSeparator.characters == String(UnicodeScalar(29)!))
+    #expect(groupSeparator.charactersIgnoringModifiers == "]")
+
+    let caret = try #require(CLIKeySpec.from(token: "ctrl-shift-6"))
+    #expect(caret.keyCode == UInt16(kVK_ANSI_6))
+    #expect(caret.modifiers == [.control, .shift])
+    #expect(caret.characters == String(UnicodeScalar(30)!))
+    #expect(caret.charactersIgnoringModifiers == "6")
+
+    let underscore = try #require(CLIKeySpec.from(token: "ctrl-shift-minus"))
+    #expect(underscore.keyCode == UInt16(kVK_ANSI_Minus))
+    #expect(underscore.modifiers == [.control, .shift])
+    #expect(underscore.characters == String(UnicodeScalar(31)!))
+    #expect(underscore.charactersIgnoringModifiers == "-")
   }
 
   @Test func cliKeySpecBuildsFunctionAndForwardDeleteEvents() throws {
