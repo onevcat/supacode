@@ -44,14 +44,12 @@ struct RepositorySectionView: View {
         tabCount: Self.openTabCount(
           for: repository,
           terminalManager: terminalManager
-        )
-      )
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .help(
-        repository.capabilities.supportsWorktrees
+        ),
+        nameTooltip: repository.capabilities.supportsWorktrees
           ? (isExpanded ? "Collapse" : "Expand")
           : "Open terminal in folder"
       )
+      .frame(maxWidth: .infinity, alignment: .leading)
       .background {
         if Self.debugHeaderLayers {
           Rectangle()

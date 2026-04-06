@@ -5,10 +5,12 @@ struct RepoHeaderRow: View {
   let name: String
   let isRemoving: Bool
   let tabCount: Int
+  var nameTooltip: String?
   var body: some View {
     HStack {
       Text(name)
         .foregroundStyle(.secondary)
+        .help(nameTooltip ?? "")
       if isRemoving {
         Text("Removing...")
           .font(.caption)
