@@ -47,6 +47,11 @@ struct RepositorySectionView: View {
         )
       )
       .frame(maxWidth: .infinity, alignment: .leading)
+      .help(
+        repository.capabilities.supportsWorktrees
+          ? (isExpanded ? "Collapse" : "Expand")
+          : "Open terminal in folder"
+      )
       .background {
         if Self.debugHeaderLayers {
           Rectangle()
@@ -183,11 +188,6 @@ struct RepositorySectionView: View {
     }
     .onHover { isHovering = $0 }
     .contentShape(.rect)
-    .help(
-      repository.capabilities.supportsWorktrees
-        ? (isExpanded ? "Collapse" : "Expand")
-        : "Open folder terminal"
-    )
     .contextMenu {
       Button("Repo Settings") {
         openRepoSettings()
