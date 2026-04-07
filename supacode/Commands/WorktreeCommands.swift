@@ -46,6 +46,17 @@ struct WorktreeCommands: Commands {
         let commandID = worktreeShortcutCommandIDs[index]
         worktreeShortcutButton(index: index, commandID: commandID, orderedRows: orderedRows)
       }
+      if orderedRows.count > worktreeShortcutCommandIDs.count {
+        Divider()
+        ForEach(worktreeShortcutCommandIDs.count..<orderedRows.count, id: \.self) { index in
+          let row = orderedRows[index]
+          let title = worktreeShortcutTitle(index: index, row: row)
+          Button(title) {
+            store.send(.repositories(.selectWorktree(row.id)))
+          }
+          .help("Switch to \(title)")
+        }
+      }
     }
     CommandGroup(replacing: .newItem) {
       if !customCommands.isEmpty {
