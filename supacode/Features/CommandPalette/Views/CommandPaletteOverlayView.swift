@@ -605,14 +605,4 @@ extension NSColor {
   fileprivate var isLightColor: Bool {
     luminance > 0.5
   }
-
-  fileprivate var luminance: Double {
-    var red: CGFloat = 0
-    var green: CGFloat = 0
-    var blue: CGFloat = 0
-    var alpha: CGFloat = 0
-    guard let rgb = usingColorSpace(.sRGB) else { return 0 }
-    rgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-    return (0.299 * red) + (0.587 * green) + (0.114 * blue)
-  }
 }

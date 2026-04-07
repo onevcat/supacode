@@ -86,7 +86,13 @@ struct SidebarFooterView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBottomChromeBackgroundOpacity))
+    .background {
+      if surfaceBottomChromeBackgroundOpacity < 1 {
+        Rectangle().fill(.regularMaterial)
+      } else {
+        Color(nsColor: .windowBackgroundColor)
+      }
+    }
     .overlay(alignment: .top) {
       Divider()
     }
