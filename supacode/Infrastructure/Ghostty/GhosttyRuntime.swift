@@ -624,6 +624,14 @@ final class GhosttyRuntime {
     backgroundColor().isLightColor ? .aqua : .darkAqua
   }
 
+  /// Returns a window background color that tints the macOS glass effect
+  /// for non-opaque windows. macOS 26 renders a white-biased glass on
+  /// non-opaque windows; darker colors need higher alpha to counteract
+  /// the white bias, lighter colors need almost none.
+  static func chromeBackgroundColor(for color: NSColor) -> NSColor {
+    color.withAlphaComponent(0.7)
+  }
+
   private func backgroundColorFromConfig() -> NSColor? {
     guard let config else { return nil }
     var color: ghostty_config_color_s = .init()
@@ -687,7 +695,7 @@ extension NSColor {
     luminance > 0.5
   }
 
-  fileprivate var luminance: Double {
+  var luminance: Double {
     var red: CGFloat = 0
     var green: CGFloat = 0
     var blue: CGFloat = 0

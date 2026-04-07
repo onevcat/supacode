@@ -441,7 +441,8 @@ final class GhosttySurfaceView: NSView, Identifiable {
     if !isBackgroundOpaqueOverride, !window.styleMask.contains(.fullScreen), opacity < 1 {
       window.isOpaque = false
       window.titlebarAppearsTransparent = true
-      window.backgroundColor = .white.withAlphaComponent(0.001)
+      let isDark = window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+      window.backgroundColor = GhosttyRuntime.chromeBackgroundColor(for: isDark ? .black : .white)
       if let app = runtime.app {
         ghostty_set_window_background_blur(
           app,
