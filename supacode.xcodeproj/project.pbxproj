@@ -15,10 +15,10 @@
 		D64162B02F23CAF100260CA3 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = D64162AD2F23CAF100260CA3 /* ghostty */; };
 		D64162B12F23CAF100260CA3 /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = D64162AE2F23CAF100260CA3 /* terminfo */; };
 		D64162B22F23CAF100260CA3 /* git-wt in Resources */ = {isa = PBXBuildFile; fileRef = D64162AF2F23CAF100260CA3 /* git-wt */; };
-		D6CLI0012F99000100000001 /* prowl-cli in Resources */ = {isa = PBXBuildFile; fileRef = D6CLI0022F99000100000001 /* prowl-cli */; };
 		D661760B2F250A60000FC27C /* CasePaths in Frameworks */ = {isa = PBXBuildFile; productRef = D661760A2F250A60000FC27C /* CasePaths */; };
 		D6A1CB312F1F4ABF004FDABD /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */; };
 		D6A1CB362F1F4ACB004FDABD /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D6A1CB342F1F4AC2004FDABD /* Carbon.framework */; };
+		D6CLI0012F99000100000001 /* prowl-cli in Resources */ = {isa = PBXBuildFile; fileRef = D6CLI0022F99000100000001 /* prowl-cli */; };
 		D6D054282F2E3EBF00D70ED5 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = D6D054272F2E3EBF00D70ED5 /* PostHog */; };
 		DFE570C142184CC387C1BC78 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B5698573F7354B14B940EA60 /* Sparkle */; };
 /* End PBXBuildFile section */
@@ -37,10 +37,10 @@
 		D64162AD2F23CAF100260CA3 /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = Resources/ghostty; sourceTree = "<group>"; };
 		D64162AE2F23CAF100260CA3 /* terminfo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = terminfo; path = Resources/terminfo; sourceTree = "<group>"; };
 		D64162AF2F23CAF100260CA3 /* git-wt */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "git-wt"; path = "Resources/git-wt"; sourceTree = "<group>"; };
-		D6CLI0022F99000100000001 /* prowl-cli */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prowl-cli"; path = "Resources/prowl-cli"; sourceTree = "<group>"; };
 		D69CE04A2F1F378200584C57 /* Prowl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Prowl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6A1CB2F2F1F4A48004FDABD /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
 		D6A1CB342F1F4AC2004FDABD /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		D6CLI0022F99000100000001 /* prowl-cli */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prowl-cli"; path = "Resources/prowl-cli"; sourceTree = "<group>"; };
 		D6F821012F1FCBC1004B4174 /* supacodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = supacodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -478,6 +478,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				EXECUTABLE_NAME = ProwlApp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = supacode/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -491,7 +492,6 @@
 					"$(inherited)",
 					"-lc++",
 				);
-				EXECUTABLE_NAME = ProwlApp;
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
 				PRODUCT_MODULE_NAME = supacode;
@@ -536,6 +536,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				EXECUTABLE_NAME = ProwlApp;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = supacode/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -549,7 +550,6 @@
 					"$(inherited)",
 					"-lc++",
 				);
-				EXECUTABLE_NAME = ProwlApp;
 				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -Wno-incomplete-umbrella";
 				PRODUCT_BUNDLE_IDENTIFIER = com.onevcat.prowl;
 				PRODUCT_MODULE_NAME = supacode;
