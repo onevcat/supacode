@@ -38,6 +38,7 @@ struct CommandPaletteFeature {
     case openRepository
     case removeWorktree(Worktree.ID, Repository.ID)
     case archiveWorktree(Worktree.ID, Repository.ID)
+    case viewArchivedWorktrees
     case refreshWorktrees
     case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
@@ -204,6 +205,14 @@ struct CommandPaletteFeature {
         title: "Refresh Worktrees",
         subtitle: nil,
         kind: .refreshWorktrees
+      )
+    )
+    items.append(
+      CommandPaletteItem(
+        id: CommandPaletteItemID.globalViewArchivedWorktrees,
+        title: "View Archived Worktrees",
+        subtitle: nil,
+        kind: .viewArchivedWorktrees
       )
     )
     items.append(
@@ -438,6 +447,7 @@ private enum CommandPaletteItemID {
   static let globalOpenRepository = "global.open-repository"
   static let globalNewWorktree = "global.new-worktree"
   static let globalRefreshWorktrees = "global.refresh-worktrees"
+  static let globalViewArchivedWorktrees = "global.view-archived-worktrees"
   static let globalInstallCLI = "global.install-cli"
 
   static var globalIDs: [CommandPaletteItem.ID] {
@@ -447,6 +457,7 @@ private enum CommandPaletteItemID {
       globalOpenRepository,
       globalNewWorktree,
       globalRefreshWorktrees,
+      globalViewArchivedWorktrees,
       globalInstallCLI,
     ]
   }
@@ -553,6 +564,8 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
     return .removeWorktree(worktreeID, repositoryID)
   case .archiveWorktree(let worktreeID, let repositoryID):
     return .archiveWorktree(worktreeID, repositoryID)
+  case .viewArchivedWorktrees:
+    return .viewArchivedWorktrees
   case .refreshWorktrees:
     return .refreshWorktrees
   case .installCLI:
@@ -602,6 +615,7 @@ private func pullRequestDelegateAction(
     .openRepository,
     .removeWorktree,
     .archiveWorktree,
+    .viewArchivedWorktrees,
     .refreshWorktrees,
     .installCLI,
     .ghosttyCommand:

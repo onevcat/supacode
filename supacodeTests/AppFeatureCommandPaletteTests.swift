@@ -178,6 +178,7 @@ struct AppFeatureCommandPaletteTests {
       AppFeature()
     }
 
+    let archivedDisplay = AppShortcuts.archivedWorktrees.display
     let expectedAlert = AlertState<RepositoriesFeature.Alert> {
       TextState("Archive worktree?")
     } actions: {
@@ -188,7 +189,7 @@ struct AppFeatureCommandPaletteTests {
         TextState("Cancel")
       }
     } message: {
-      TextState("Archive \(worktree.name)?")
+      TextState("Find \(worktree.name) later in Menu Bar > Worktrees > Archived Worktrees (\(archivedDisplay)).")
     }
 
     await store.send(.commandPalette(.delegate(.archiveWorktree(worktree.id, repository.id))))

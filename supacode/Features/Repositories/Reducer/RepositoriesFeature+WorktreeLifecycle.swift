@@ -43,7 +43,7 @@ extension RepositoriesFeature {
           TextState("Cancel")
         }
       } message: {
-        TextState("Archive \(worktree.name)?")
+        TextState(archiveWorktreeAlertMessage(for: worktree.name))
       }
       return .none
 
@@ -86,7 +86,7 @@ extension RepositoriesFeature {
           TextState("Cancel")
         }
       } message: {
-        TextState("Archive \(count) worktrees?")
+        TextState(archiveWorktreesAlertMessage())
       }
       return .none
 
@@ -502,4 +502,14 @@ extension RepositoriesFeature {
       return reduceWorktreeLifecycle(state: &state, action: action)
     }
   }
+}
+
+private func archiveWorktreeAlertMessage(for name: String) -> String {
+  let shortcut = AppShortcuts.archivedWorktrees.display
+  return "Find \(name) later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut))."
+}
+
+private func archiveWorktreesAlertMessage() -> String {
+  let shortcut = AppShortcuts.archivedWorktrees.display
+  return "Find them later in Menu Bar > Worktrees > Archived Worktrees (\(shortcut))."
 }
