@@ -234,6 +234,8 @@ struct WorktreeTerminalManagerTests {
           tabs: [
             TerminalLayoutSnapshotPayload.SnapshotTab(
               tabID: "F96839F5-1371-4841-9E41-49124D918A67",
+              title: nil,
+              icon: nil,
               splitRoot: .leaf(surfaceID: "9B2F6D8C-44A4-42C5-8F9E-962108301901")
             ),
           ]

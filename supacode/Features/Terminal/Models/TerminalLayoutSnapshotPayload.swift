@@ -99,6 +99,8 @@ extension TerminalLayoutSnapshotPayload {
 
   nonisolated struct SnapshotTab: Codable, Equatable, Sendable {
     let tabID: String
+    let title: String?
+    let icon: String?
     let splitRoot: SnapshotSplitNode
 
     func isValid(maxSplitNodesPerTab: Int, maxSplitDepth: Int) -> Bool {
