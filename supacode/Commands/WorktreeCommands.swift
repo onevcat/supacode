@@ -212,7 +212,7 @@ struct WorktreeCommands: Commands {
         return "Switch to \(title)"
       }())
     case .plainFolder(let repoID, let name):
-      Button(name, systemImage: "folder") {
+      Button(name) {
         store.send(.repositories(.selectRepository(repoID)))
       }
       .help("Switch to \(name)")
