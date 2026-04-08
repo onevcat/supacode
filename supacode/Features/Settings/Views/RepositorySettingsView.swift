@@ -125,16 +125,30 @@ struct RepositorySettingsView: View {
           }
           .frame(maxWidth: .infinity, alignment: .leading)
 
-          Toggle(
-            "Copy ignored files to new worktrees",
-            isOn: settings.copyIgnoredOnWorktreeCreate
-          )
+          Picker(selection: settings.copyIgnoredOnWorktreeCreate) {
+            Text(
+              "Global \(Text(store.globalCopyIgnoredOnWorktreeCreate ? "Yes" : "No").foregroundStyle(.secondary))"
+            )
+            .tag(Bool?.none)
+            Text("Yes").tag(Bool?.some(true))
+            Text("No").tag(Bool?.some(false))
+          } label: {
+            Text("Copy ignored files to new worktrees")
+            Text("Copies gitignored files from the main worktree.")
+          }
           .disabled(store.isBareRepository)
 
-          Toggle(
-            "Copy untracked files to new worktrees",
-            isOn: settings.copyUntrackedOnWorktreeCreate
-          )
+          Picker(selection: settings.copyUntrackedOnWorktreeCreate) {
+            Text(
+              "Global \(Text(store.globalCopyUntrackedOnWorktreeCreate ? "Yes" : "No").foregroundStyle(.secondary))"
+            )
+            .tag(Bool?.none)
+            Text("Yes").tag(Bool?.some(true))
+            Text("No").tag(Bool?.some(false))
+          } label: {
+            Text("Copy untracked files to new worktrees")
+            Text("Copies untracked files from the main worktree.")
+          }
           .disabled(store.isBareRepository)
 
           if store.isBareRepository {
@@ -152,16 +166,18 @@ struct RepositorySettingsView: View {
 
       if store.showsPullRequestSettings {
         Section {
-          Picker(
-            "Merge strategy",
-            selection: settings.pullRequestMergeStrategy
-          ) {
+          Picker(selection: settings.pullRequestMergeStrategy) {
+            Text(
+              "Global \(Text(store.globalPullRequestMergeStrategy.title).foregroundStyle(.secondary))"
+            )
+            .tag(PullRequestMergeStrategy?.none)
             ForEach(PullRequestMergeStrategy.allCases) { strategy in
-              Text(strategy.title)
-                .tag(strategy)
+              Text(strategy.title).tag(PullRequestMergeStrategy?.some(strategy))
             }
+          } label: {
+            Text("Merge strategy")
+            Text("Used when merging PRs from the command palette.")
           }
-          .labelsHidden()
         } header: {
           VStack(alignment: .leading, spacing: 4) {
             Text("Pull Requests")

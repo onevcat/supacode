@@ -55,6 +55,16 @@ struct WorktreeSettingsView: View {
               .foregroundStyle(.secondary)
           }
         }
+        Section("Copy Defaults") {
+          Toggle(isOn: $store.copyIgnoredOnWorktreeCreate) {
+            Text("Copy ignored files to new worktrees")
+            Text("Copies gitignored files from the main worktree.")
+          }
+          Toggle(isOn: $store.copyUntrackedOnWorktreeCreate) {
+            Text("Copy untracked files to new worktrees")
+            Text("Copies untracked files from the main worktree.")
+          }
+        }
       }
       .formStyle(.grouped)
     }

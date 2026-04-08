@@ -377,12 +377,16 @@ struct AppFeature {
           }
           @Shared(.repositorySettings(repository.rootURL)) var repositorySettings
           @Shared(.userRepositorySettings(repository.rootURL)) var userRepositorySettings
-          state.settings.repositorySettings = RepositorySettingsFeature.State(
+          var repoSettingsState = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
             repositoryKind: repository.kind,
             settings: repositorySettings,
             userSettings: userRepositorySettings
           )
+          repoSettingsState.globalCopyIgnoredOnWorktreeCreate = state.settings.copyIgnoredOnWorktreeCreate
+          repoSettingsState.globalCopyUntrackedOnWorktreeCreate = state.settings.copyUntrackedOnWorktreeCreate
+          repoSettingsState.globalPullRequestMergeStrategy = state.settings.pullRequestMergeStrategy
+          state.settings.repositorySettings = repoSettingsState
         case .general, .notifications, .shortcuts, .worktree, .updates, .advanced, .github:
           state.settings.repositorySettings = nil
         }

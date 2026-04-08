@@ -239,8 +239,10 @@ extension RepositoriesFeature {
         repositoryOverridePath: repositorySettings.worktreeBaseDirectoryPath
       )
       let selectedBaseRef = repositorySettings.worktreeBaseRef
-      let copyIgnoredOnWorktreeCreate = repositorySettings.copyIgnoredOnWorktreeCreate
-      let copyUntrackedOnWorktreeCreate = repositorySettings.copyUntrackedOnWorktreeCreate
+      let copyIgnoredOnWorktreeCreate =
+        repositorySettings.copyIgnoredOnWorktreeCreate ?? settingsFile.global.copyIgnoredOnWorktreeCreate
+      let copyUntrackedOnWorktreeCreate =
+        repositorySettings.copyUntrackedOnWorktreeCreate ?? settingsFile.global.copyUntrackedOnWorktreeCreate
       state.pendingWorktrees.append(
         PendingWorktree(
           id: pendingID,

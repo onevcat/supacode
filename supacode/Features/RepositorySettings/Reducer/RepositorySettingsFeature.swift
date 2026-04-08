@@ -10,6 +10,9 @@ struct RepositorySettingsFeature {
     var settings: RepositorySettings
     var userSettings: UserRepositorySettings
     var globalDefaultWorktreeBaseDirectoryPath: String?
+    var globalCopyIgnoredOnWorktreeCreate: Bool = false
+    var globalCopyUntrackedOnWorktreeCreate: Bool = false
+    var globalPullRequestMergeStrategy: PullRequestMergeStrategy = .merge
     var isBareRepository = false
     var branchOptions: [String] = []
     var defaultWorktreeBaseRef = "origin/main"
@@ -65,6 +68,9 @@ struct RepositorySettingsFeature {
       UserRepositorySettings,
       isBareRepository: Bool,
       globalDefaultWorktreeBaseDirectoryPath: String?,
+      globalCopyIgnoredOnWorktreeCreate: Bool,
+      globalCopyUntrackedOnWorktreeCreate: Bool,
+      globalPullRequestMergeStrategy: PullRequestMergeStrategy,
       keybindingUserOverrides: KeybindingUserOverrideStore
     )
     case branchDataLoaded([String], defaultBaseRef: String)
@@ -90,13 +96,17 @@ struct RepositorySettingsFeature {
             @Shared(.repositorySettings(rootURL)) var repositorySettings
             @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
             @Shared(.settingsFile) var settingsFile
+            let global = settingsFile.global
             await send(
               .settingsLoaded(
                 repositorySettings,
                 userRepositorySettings,
                 isBareRepository: false,
-                globalDefaultWorktreeBaseDirectoryPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
-                keybindingUserOverrides: settingsFile.global.keybindingUserOverrides
+                globalDefaultWorktreeBaseDirectoryPath: global.defaultWorktreeBaseDirectoryPath,
+                globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
+                globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
+                globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
+                keybindingUserOverrides: global.keybindingUserOverrides
               )
             )
           }
@@ -107,13 +117,17 @@ struct RepositorySettingsFeature {
           @Shared(.repositorySettings(rootURL)) var repositorySettings
           @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
           @Shared(.settingsFile) var settingsFile
+          let global = settingsFile.global
           await send(
             .settingsLoaded(
               repositorySettings,
               userRepositorySettings,
               isBareRepository: isBareRepository,
-              globalDefaultWorktreeBaseDirectoryPath: settingsFile.global.defaultWorktreeBaseDirectoryPath,
-              keybindingUserOverrides: settingsFile.global.keybindingUserOverrides
+              globalDefaultWorktreeBaseDirectoryPath: global.defaultWorktreeBaseDirectoryPath,
+              globalCopyIgnoredOnWorktreeCreate: global.copyIgnoredOnWorktreeCreate,
+              globalCopyUntrackedOnWorktreeCreate: global.copyUntrackedOnWorktreeCreate,
+              globalPullRequestMergeStrategy: global.pullRequestMergeStrategy,
+              keybindingUserOverrides: global.keybindingUserOverrides
             )
           )
           let branches: [String]
@@ -135,6 +149,9 @@ struct RepositorySettingsFeature {
         let userSettings,
         let isBareRepository,
         let globalDefaultWorktreeBaseDirectoryPath,
+        let globalCopyIgnoredOnWorktreeCreate,
+        let globalCopyUntrackedOnWorktreeCreate,
+        let globalPullRequestMergeStrategy,
         let keybindingUserOverrides
       ):
         var updatedSettings = settings
@@ -143,13 +160,16 @@ struct RepositorySettingsFeature {
           repositoryRootURL: state.rootURL
         )
         if isBareRepository {
-          updatedSettings.copyIgnoredOnWorktreeCreate = false
-          updatedSettings.copyUntrackedOnWorktreeCreate = false
+          updatedSettings.copyIgnoredOnWorktreeCreate = nil
+          updatedSettings.copyUntrackedOnWorktreeCreate = nil
         }
         state.settings = updatedSettings
         state.userSettings = userSettings.normalized()
         state.globalDefaultWorktreeBaseDirectoryPath =
           SupacodePaths.normalizedWorktreeBaseDirectoryPath(globalDefaultWorktreeBaseDirectoryPath)
+        state.globalCopyIgnoredOnWorktreeCreate = globalCopyIgnoredOnWorktreeCreate
+        state.globalCopyUntrackedOnWorktreeCreate = globalCopyUntrackedOnWorktreeCreate
+        state.globalPullRequestMergeStrategy = globalPullRequestMergeStrategy
         state.isBareRepository = isBareRepository
         state.keybindingUserOverrides = keybindingUserOverrides
         guard updatedSettings != settings else { return .none }
@@ -173,8 +193,8 @@ struct RepositorySettingsFeature {
 
       case .binding:
         if state.isBareRepository {
-          state.settings.copyIgnoredOnWorktreeCreate = false
-          state.settings.copyUntrackedOnWorktreeCreate = false
+          state.settings.copyIgnoredOnWorktreeCreate = nil
+          state.settings.copyUntrackedOnWorktreeCreate = nil
         }
         state.userSettings = state.userSettings.normalized()
         let rootURL = state.rootURL

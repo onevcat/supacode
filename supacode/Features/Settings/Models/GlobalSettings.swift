@@ -18,6 +18,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var automaticallyArchiveMergedWorktrees: Bool
   var promptForWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
+  var copyIgnoredOnWorktreeCreate: Bool
+  var copyUntrackedOnWorktreeCreate: Bool
+  var pullRequestMergeStrategy: PullRequestMergeStrategy
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
   var keybindingUserOverrides: KeybindingUserOverrideStore
@@ -42,6 +45,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     automaticallyArchiveMergedWorktrees: false,
     promptForWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
+    copyIgnoredOnWorktreeCreate: false,
+    copyUntrackedOnWorktreeCreate: false,
+    pullRequestMergeStrategy: .merge,
     restoreTerminalLayoutOnLaunch: false,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty
@@ -67,6 +73,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     automaticallyArchiveMergedWorktrees: Bool,
     promptForWorktreeCreation: Bool,
     defaultWorktreeBaseDirectoryPath: String? = nil,
+    copyIgnoredOnWorktreeCreate: Bool = false,
+    copyUntrackedOnWorktreeCreate: Bool = false,
+    pullRequestMergeStrategy: PullRequestMergeStrategy = .merge,
     restoreTerminalLayoutOnLaunch: Bool = false,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty
@@ -90,6 +99,9 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
+    self.copyIgnoredOnWorktreeCreate = copyIgnoredOnWorktreeCreate
+    self.copyUntrackedOnWorktreeCreate = copyUntrackedOnWorktreeCreate
+    self.pullRequestMergeStrategy = pullRequestMergeStrategy
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
@@ -148,6 +160,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     defaultWorktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .defaultWorktreeBaseDirectoryPath)
       ?? Self.default.defaultWorktreeBaseDirectoryPath
+    copyIgnoredOnWorktreeCreate =
+      try container.decodeIfPresent(Bool.self, forKey: .copyIgnoredOnWorktreeCreate)
+      ?? Self.default.copyIgnoredOnWorktreeCreate
+    copyUntrackedOnWorktreeCreate =
+      try container.decodeIfPresent(Bool.self, forKey: .copyUntrackedOnWorktreeCreate)
+      ?? Self.default.copyUntrackedOnWorktreeCreate
+    pullRequestMergeStrategy =
+      try container.decodeIfPresent(PullRequestMergeStrategy.self, forKey: .pullRequestMergeStrategy)
+      ?? Self.default.pullRequestMergeStrategy
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch
