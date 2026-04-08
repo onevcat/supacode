@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.4.9](https://github.com/onevcat/Prowl/releases/tag/v2026.4.9)
+
+Tab layout and Worktrees menu discoverability are the main themes of this release.
+
+## New
+
+- All worktrees and plain folders now appear in the Worktrees menu, regardless of count. Previously only the first 9 were shown. Items beyond the 9th no longer have keyboard shortcuts but remain reachable via the menu or **Help > Search**.
+- Manually renamed tab titles and icons are now saved in the terminal layout snapshot and restored when the layout is reloaded.
+- Added Homepage and Release Notes links to the Help menu and sidebar footer.
+
+## Fixed
+
+- Plain folders were missing from the Worktrees menu entirely; they now appear in the same order as the sidebar.
+
 ## [2026.4.7](https://github.com/onevcat/Prowl/releases/tag/v2026.4.7)
 
 **Fixed**
