@@ -42,9 +42,8 @@ struct WorktreeCommands: Commands {
       .help(helpText(title: "Select Previous Worktree", commandID: AppShortcuts.CommandID.selectPreviousWorktree))
       .disabled(orderedRows.isEmpty)
       Divider()
-      ForEach(worktreeShortcutCommandIDs.indices, id: \.self) { index in
-        let commandID = worktreeShortcutCommandIDs[index]
-        worktreeShortcutButton(index: index, commandID: commandID, orderedRows: orderedRows)
+      ForEach(worktreeMenuEntries(orderedRows: orderedRows)) { entry in
+        worktreeMenuButton(entry: entry)
       }
     }
     CommandGroup(replacing: .newItem) {
@@ -164,33 +163,60 @@ struct WorktreeCommands: Commands {
     store.resolvedKeybindings.display(for: customCommandID(for: command))
   }
 
-  private func worktreeShortcutButton(
-    index: Int,
-    commandID: String,
-    orderedRows: [WorktreeRowModel]
-  ) -> some View {
-    let row = orderedRows.indices.contains(index) ? orderedRows[index] : nil
-    let title = worktreeShortcutTitle(index: index, row: row)
-    return Button(title) {
-      guard let row else { return }
-      store.send(.repositories(.selectWorktree(row.id)))
+  private func worktreeMenuEntries(orderedRows: [WorktreeRowModel]) -> [WorktreeMenuEntry] {
+    let shortcutIDs = worktreeShortcutCommandIDs
+    var shortcutByWorktreeID: [String: String] = [:]
+    for (index, commandID) in shortcutIDs.enumerated() where orderedRows.indices.contains(index) {
+      shortcutByWorktreeID[orderedRows[index].id] = commandID
     }
-    .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: commandID)))
-    .help(
-      {
-        if let shortcut = shortcutDisplay(for: commandID) {
+
+    let repositories = store.repositories
+    let reposByID = Dictionary(uniqueKeysWithValues: repositories.repositories.map { ($0.id, $0) })
+
+    var entries: [WorktreeMenuEntry] = []
+    for repoID in repositories.orderedRepositoryIDs() {
+      guard let repo = reposByID[repoID] else { continue }
+      if repo.kind == .plain {
+        entries.append(WorktreeMenuEntry(
+          kind: .plainFolder(id: repo.id, name: repo.name),
+          shortcutCommandID: nil
+        ))
+      } else {
+        for row in repositories.worktreeRows(in: repo) {
+          entries.append(WorktreeMenuEntry(
+            kind: .worktree(row),
+            shortcutCommandID: shortcutByWorktreeID[row.id]
+          ))
+        }
+      }
+    }
+    return entries
+  }
+
+  @ViewBuilder
+  private func worktreeMenuButton(entry: WorktreeMenuEntry) -> some View {
+    switch entry.kind {
+    case .worktree(let row):
+      let repoName = store.repositories.repositoryName(for: row.repositoryID) ?? "Repository"
+      let title = "\(repoName) — \(row.name)"
+      Button(title) {
+        store.send(.repositories(.selectWorktree(row.id)))
+      }
+      .modifier(KeyboardShortcutModifier(
+        shortcut: entry.shortcutCommandID.flatMap { keyboardShortcut(for: $0) }
+      ))
+      .help({
+        if let commandID = entry.shortcutCommandID, let shortcut = shortcutDisplay(for: commandID) {
           return "Switch to \(title) (\(shortcut))"
         }
         return "Switch to \(title)"
-      }()
-    )
-    .disabled(row == nil)
-  }
-
-  private func worktreeShortcutTitle(index: Int, row: WorktreeRowModel?) -> String {
-    guard let row else { return "Worktree \(index + 1)" }
-    let repositoryName = store.repositories.repositoryName(for: row.repositoryID) ?? "Repository"
-    return "\(repositoryName) — \(row.name)"
+      }())
+    case .plainFolder(let repoID, let name):
+      Button(name) {
+        store.send(.repositories(.selectRepository(repoID)))
+      }
+      .help("Switch to \(name)")
+    }
   }
 
   @ViewBuilder
@@ -212,6 +238,23 @@ struct WorktreeCommands: Commands {
     .modifier(KeyboardShortcutModifier(shortcut: customCommandShortcut(for: command)))
     .help(helpText)
     .disabled(!hasActiveWorktree)
+  }
+}
+
+private struct WorktreeMenuEntry: Identifiable {
+  enum Kind {
+    case worktree(WorktreeRowModel)
+    case plainFolder(id: Repository.ID, name: String)
+  }
+
+  let kind: Kind
+  let shortcutCommandID: String?
+
+  var id: String {
+    switch kind {
+    case .worktree(let row): row.id
+    case .plainFolder(let repoID, _): "plain-\(repoID)"
+    }
   }
 }
 
