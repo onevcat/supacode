@@ -2468,7 +2468,7 @@ struct RepositoriesFeatureTests {
     )
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureWorktree])
     var state = makeState(repositories: [repository])
-    state.automaticallyArchiveMergedWorktrees = true
+    state.mergedWorktreeAction = .archive
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
@@ -2499,7 +2499,7 @@ struct RepositoriesFeatureTests {
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
     let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
     var state = makeState(repositories: [repository])
-    state.automaticallyArchiveMergedWorktrees = true
+    state.mergedWorktreeAction = .archive
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
@@ -2533,7 +2533,7 @@ struct RepositoriesFeatureTests {
     let openPullRequest = makePullRequest(state: "OPEN", headRefName: featureWorktree.name, number: 12)
     var state = makeState(repositories: [repository])
     state.githubIntegrationAvailability = .disabled
-    state.automaticallyArchiveMergedWorktrees = true
+    state.mergedWorktreeAction = .archive
     state.worktreeInfoByID[featureWorktree.id] = WorktreeInfoEntry(
       addedLines: nil,
       removedLines: nil,

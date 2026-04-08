@@ -15,7 +15,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var crashReportsEnabled: Bool
   var githubIntegrationEnabled: Bool
   var deleteBranchOnDeleteWorktree: Bool
-  var automaticallyArchiveMergedWorktrees: Bool
+  var mergedWorktreeAction: MergedWorktreeAction?
   var promptForWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
   var restoreTerminalLayoutOnLaunch: Bool
@@ -39,7 +39,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     crashReportsEnabled: true,
     githubIntegrationEnabled: true,
     deleteBranchOnDeleteWorktree: true,
-    automaticallyArchiveMergedWorktrees: false,
+    mergedWorktreeAction: nil,
     promptForWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
     restoreTerminalLayoutOnLaunch: false,
@@ -64,7 +64,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     crashReportsEnabled: Bool,
     githubIntegrationEnabled: Bool,
     deleteBranchOnDeleteWorktree: Bool,
-    automaticallyArchiveMergedWorktrees: Bool,
+    mergedWorktreeAction: MergedWorktreeAction? = nil,
     promptForWorktreeCreation: Bool,
     defaultWorktreeBaseDirectoryPath: String? = nil,
     restoreTerminalLayoutOnLaunch: Bool = false,
@@ -87,12 +87,65 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.crashReportsEnabled = crashReportsEnabled
     self.githubIntegrationEnabled = githubIntegrationEnabled
     self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
-    self.automaticallyArchiveMergedWorktrees = automaticallyArchiveMergedWorktrees
+    self.mergedWorktreeAction = mergedWorktreeAction
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(appearanceMode, forKey: .appearanceMode)
+    try container.encode(defaultEditorID, forKey: .defaultEditorID)
+    try container.encode(confirmBeforeQuit, forKey: .confirmBeforeQuit)
+    try container.encode(updateChannel, forKey: .updateChannel)
+    try container.encode(updatesAutomaticallyCheckForUpdates, forKey: .updatesAutomaticallyCheckForUpdates)
+    try container.encode(updatesAutomaticallyDownloadUpdates, forKey: .updatesAutomaticallyDownloadUpdates)
+    try container.encode(inAppNotificationsEnabled, forKey: .inAppNotificationsEnabled)
+    try container.encode(notificationSoundEnabled, forKey: .notificationSoundEnabled)
+    try container.encode(systemNotificationsEnabled, forKey: .systemNotificationsEnabled)
+    try container.encode(moveNotifiedWorktreeToTop, forKey: .moveNotifiedWorktreeToTop)
+    try container.encode(commandFinishedNotificationEnabled, forKey: .commandFinishedNotificationEnabled)
+    try container.encode(commandFinishedNotificationThreshold, forKey: .commandFinishedNotificationThreshold)
+    try container.encode(analyticsEnabled, forKey: .analyticsEnabled)
+    try container.encode(crashReportsEnabled, forKey: .crashReportsEnabled)
+    try container.encode(githubIntegrationEnabled, forKey: .githubIntegrationEnabled)
+    try container.encode(deleteBranchOnDeleteWorktree, forKey: .deleteBranchOnDeleteWorktree)
+    try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
+    try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
+    try container.encodeIfPresent(defaultWorktreeBaseDirectoryPath, forKey: .defaultWorktreeBaseDirectoryPath)
+    try container.encode(restoreTerminalLayoutOnLaunch, forKey: .restoreTerminalLayoutOnLaunch)
+    try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
+    try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case appearanceMode
+    case defaultEditorID
+    case confirmBeforeQuit
+    case updateChannel
+    case updatesAutomaticallyCheckForUpdates
+    case updatesAutomaticallyDownloadUpdates
+    case inAppNotificationsEnabled
+    case notificationSoundEnabled
+    case systemNotificationsEnabled
+    case moveNotifiedWorktreeToTop
+    case commandFinishedNotificationEnabled
+    case commandFinishedNotificationThreshold
+    case analyticsEnabled
+    case crashReportsEnabled
+    case githubIntegrationEnabled
+    case deleteBranchOnDeleteWorktree
+    case mergedWorktreeAction
+    case promptForWorktreeCreation
+    case defaultWorktreeBaseDirectoryPath
+    case restoreTerminalLayoutOnLaunch
+    case terminalFontSize
+    case keybindingUserOverrides
+    // Legacy key for migration
+    case automaticallyArchiveMergedWorktrees
   }
 
   init(from decoder: any Decoder) throws {
@@ -139,9 +192,15 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree =
       try container.decodeIfPresent(Bool.self, forKey: .deleteBranchOnDeleteWorktree)
       ?? Self.default.deleteBranchOnDeleteWorktree
-    automaticallyArchiveMergedWorktrees =
-      try container.decodeIfPresent(Bool.self, forKey: .automaticallyArchiveMergedWorktrees)
-      ?? Self.default.automaticallyArchiveMergedWorktrees
+    if let decoded = try container.decodeIfPresent(MergedWorktreeAction.self, forKey: .mergedWorktreeAction) {
+      mergedWorktreeAction = decoded
+    } else if let legacyBool = try container.decodeIfPresent(
+      Bool.self, forKey: .automaticallyArchiveMergedWorktrees
+    ) {
+      mergedWorktreeAction = legacyBool ? .archive : nil
+    } else {
+      mergedWorktreeAction = Self.default.mergedWorktreeAction
+    }
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
       ?? Self.default.promptForWorktreeCreation
