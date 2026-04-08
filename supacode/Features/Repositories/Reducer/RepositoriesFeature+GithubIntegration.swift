@@ -176,7 +176,7 @@ extension RepositoriesFeature {
       guard let repository = state.repositories[id: repositoryID] else {
         return .none
       }
-      var archiveWorktreeIDs: [Worktree.ID] = []
+      var mergedWorktreeIDs: [Worktree.ID] = []
       for worktreeID in pullRequestsByWorktreeID.keys.sorted() {
         guard let worktree = repository.worktrees[id: worktreeID] else {
           continue
@@ -193,24 +193,35 @@ extension RepositoriesFeature {
           pullRequest: pullRequest,
           state: &state
         )
-        if state.automaticallyArchiveMergedWorktrees,
+        if state.mergedWorktreeAction != nil,
           !previousMerged,
           nextMerged,
           !state.isMainWorktree(worktree),
           !state.isWorktreeArchived(worktreeID),
           !state.deletingWorktreeIDs.contains(worktreeID)
         {
-          archiveWorktreeIDs.append(worktreeID)
+          mergedWorktreeIDs.append(worktreeID)
         }
       }
-      guard !archiveWorktreeIDs.isEmpty else {
+      guard !mergedWorktreeIDs.isEmpty else {
         return .none
       }
-      return .merge(
-        archiveWorktreeIDs.map { worktreeID in
-          .send(.worktreeLifecycle(.archiveWorktreeConfirmed(worktreeID, repositoryID)))
-        }
-      )
+      switch state.mergedWorktreeAction {
+      case .archive:
+        return .merge(
+          mergedWorktreeIDs.map { worktreeID in
+            .send(.worktreeLifecycle(.archiveWorktreeConfirmed(worktreeID, repositoryID)))
+          }
+        )
+      case .delete:
+        return .merge(
+          mergedWorktreeIDs.map { worktreeID in
+            .send(.worktreeLifecycle(.deleteWorktreeConfirmed(worktreeID, repositoryID)))
+          }
+        )
+      case nil:
+        return .none
+      }
 
     case .pullRequestAction(let worktreeID, let action):
       guard let worktree = state.worktree(for: worktreeID),
@@ -534,8 +545,8 @@ extension RepositoriesFeature {
         .cancel(id: CancelID.githubIntegrationRecovery)
       )
 
-    case .setAutomaticallyArchiveMergedWorktrees(let isEnabled):
-      state.automaticallyArchiveMergedWorktrees = isEnabled
+    case .setMergedWorktreeAction(let action):
+      state.mergedWorktreeAction = action
       return .none
     }
   }

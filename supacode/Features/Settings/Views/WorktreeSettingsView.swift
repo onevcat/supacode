@@ -40,11 +40,22 @@ struct WorktreeSettingsView: View {
               .foregroundStyle(.red)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          Toggle(
-            "Automatically archive merged worktrees",
-            isOn: $store.automaticallyArchiveMergedWorktrees
-          )
-          .help("Archive worktrees automatically when their pull requests are merged.")
+          Picker(selection: $store.mergedWorktreeAction) {
+            Text("Do nothing").tag(MergedWorktreeAction?.none)
+            ForEach(MergedWorktreeAction.allCases) { action in
+              Text(action.title).tag(MergedWorktreeAction?.some(action))
+            }
+          } label: {
+            Text("When a pull request is merged")
+            switch store.mergedWorktreeAction {
+            case .archive:
+              Text("Archives worktrees when their pull requests are merged.")
+            case .delete:
+              Text("Follows the \"Delete local branch with worktree\" option below.")
+            case nil:
+              EmptyView()
+            }
+          }
           VStack(alignment: .leading) {
             Toggle(
               "Prompt for branch name during creation",

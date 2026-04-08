@@ -108,13 +108,59 @@ struct SettingsFilePersistenceTests {
     #expect(settings.global.crashReportsEnabled == true)
     #expect(settings.global.githubIntegrationEnabled == true)
     #expect(settings.global.deleteBranchOnDeleteWorktree == true)
-    #expect(settings.global.automaticallyArchiveMergedWorktrees == false)
+    #expect(settings.global.mergedWorktreeAction == nil)
     #expect(settings.global.promptForWorktreeCreation == true)
     #expect(settings.global.defaultWorktreeBaseDirectoryPath == nil)
     #expect(settings.global.restoreTerminalLayoutOnLaunch == false)
     #expect(settings.global.defaultEditorID == OpenWorktreeAction.automaticSettingsID)
     #expect(settings.repositoryRoots.isEmpty)
     #expect(settings.pinnedWorktreeIDs.isEmpty)
+  }
+
+  @Test(.dependencies) func legacyAutomaticallyArchiveMergedWorktreesMigratesToMergedWorktreeAction() throws {
+    let legacy = LegacyAutoArchiveSettingsFile(
+      global: LegacyAutoArchiveGlobalSettings(
+        appearanceMode: .dark,
+        updatesAutomaticallyCheckForUpdates: false,
+        updatesAutomaticallyDownloadUpdates: true,
+        automaticallyArchiveMergedWorktrees: true
+      ),
+      repositories: [:]
+    )
+    let data = try JSONEncoder().encode(legacy)
+    let storage = MutableTestStorage(initialData: data)
+
+    let settings: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(settings.global.mergedWorktreeAction == .archive)
+  }
+
+  @Test(.dependencies) func legacyAutomaticallyArchiveFalseMigratesToNil() throws {
+    let legacy = LegacyAutoArchiveSettingsFile(
+      global: LegacyAutoArchiveGlobalSettings(
+        appearanceMode: .dark,
+        updatesAutomaticallyCheckForUpdates: false,
+        updatesAutomaticallyDownloadUpdates: true,
+        automaticallyArchiveMergedWorktrees: false
+      ),
+      repositories: [:]
+    )
+    let data = try JSONEncoder().encode(legacy)
+    let storage = MutableTestStorage(initialData: data)
+
+    let settings: SettingsFile = withDependencies {
+      $0.settingsFileStorage = storage.storage
+    } operation: {
+      @Shared(.settingsFile) var settings: SettingsFile
+      return settings
+    }
+
+    #expect(settings.global.mergedWorktreeAction == nil)
   }
 }
 
@@ -148,6 +194,18 @@ nonisolated private final class MutableTestStorage: @unchecked Sendable {
     defer { lock.unlock() }
     self.data = data
   }
+}
+
+private struct LegacyAutoArchiveSettingsFile: Codable {
+  var global: LegacyAutoArchiveGlobalSettings
+  var repositories: [String: RepositorySettings]
+}
+
+private struct LegacyAutoArchiveGlobalSettings: Codable {
+  var appearanceMode: AppearanceMode
+  var updatesAutomaticallyCheckForUpdates: Bool
+  var updatesAutomaticallyDownloadUpdates: Bool
+  var automaticallyArchiveMergedWorktrees: Bool
 }
 
 private struct LegacySettingsFile: Codable {

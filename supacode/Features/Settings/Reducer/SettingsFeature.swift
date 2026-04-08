@@ -21,7 +21,7 @@ struct SettingsFeature {
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
-    var automaticallyArchiveMergedWorktrees: Bool
+    var mergedWorktreeAction: MergedWorktreeAction?
     var promptForWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
     var restoreTerminalLayoutOnLaunch: Bool
@@ -51,7 +51,7 @@ struct SettingsFeature {
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
-      automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
+      mergedWorktreeAction = settings.mergedWorktreeAction
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
@@ -78,7 +78,7 @@ struct SettingsFeature {
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
-        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees,
+        mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
@@ -174,7 +174,7 @@ struct SettingsFeature {
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
-        state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch

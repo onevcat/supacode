@@ -152,7 +152,7 @@ struct RepositoriesFeature {
       pullRequestsByWorktreeID: [Worktree.ID: GithubPullRequest?]
     )
     case setGithubIntegrationEnabled(Bool)
-    case setAutomaticallyArchiveMergedWorktrees(Bool)
+    case setMergedWorktreeAction(MergedWorktreeAction?)
     case pullRequestAction(Worktree.ID, PullRequestAction)
   }
 
@@ -192,7 +192,7 @@ struct RepositoriesFeature {
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
     var archivedWorktreeIDs: [Worktree.ID] = []
-    var automaticallyArchiveMergedWorktrees = false
+    var mergedWorktreeAction: MergedWorktreeAction?
     var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
