@@ -20,7 +20,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var defaultWorktreeBaseDirectoryPath: String?
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
-  var autoDeleteArchivedWorktreesAfterDays: AutoDeletePeriod?
+  var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
 
   static let `default` = GlobalSettings(
@@ -44,7 +44,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
     restoreTerminalLayoutOnLaunch: false,
-    autoDeleteArchivedWorktreesAfterDays: nil,
+    archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty
   )
@@ -70,7 +70,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation: Bool,
     defaultWorktreeBaseDirectoryPath: String? = nil,
     restoreTerminalLayoutOnLaunch: Bool = false,
-    autoDeleteArchivedWorktreesAfterDays: AutoDeletePeriod? = nil,
+    archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty
   ) {
@@ -94,7 +94,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.promptForWorktreeCreation = promptForWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
-    self.autoDeleteArchivedWorktreesAfterDays = autoDeleteArchivedWorktreesAfterDays
+    self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
   }
@@ -155,10 +155,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch
-    if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .autoDeleteArchivedWorktreesAfterDays) {
-      autoDeleteArchivedWorktreesAfterDays = AutoDeletePeriod(rawValue: rawAutoDelete)
+    if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod) {
+      archivedAutoDeletePeriod = AutoDeletePeriod(rawValue: rawAutoDelete)
     } else {
-      autoDeleteArchivedWorktreesAfterDays = Self.default.autoDeleteArchivedWorktreesAfterDays
+      archivedAutoDeletePeriod = Self.default.archivedAutoDeletePeriod
     }
     terminalFontSize =
       try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)

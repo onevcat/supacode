@@ -418,8 +418,8 @@ struct AppFeature {
           ),
           .send(
             .repositories(
-              .setAutoDeleteArchivedWorktreesAfterDays(
-                settings.autoDeleteArchivedWorktreesAfterDays
+              .setArchivedAutoDeletePeriod(
+                settings.archivedAutoDeletePeriod
               )
             )
           ),

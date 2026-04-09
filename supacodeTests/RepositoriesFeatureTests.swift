@@ -2959,7 +2959,7 @@ struct RepositoriesFeatureTests {
     let archivedAt = fixedDate.addingTimeInterval(-2 * 86_400)  // 2 days ago
     var state = makeState(repositories: [repository])
     state.archivedWorktrees = [ArchivedWorktree(id: expiredWorktree.id, archivedAt: archivedAt)]
-    state.autoDeleteArchivedWorktreesAfterDays = .oneDay
+    state.archivedAutoDeletePeriod = .oneDay
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -2983,7 +2983,7 @@ struct RepositoriesFeatureTests {
     let archivedAt = fixedDate.addingTimeInterval(-1 * 86_400)  // 1 day ago
     var state = makeState(repositories: [repository])
     state.archivedWorktrees = [ArchivedWorktree(id: recentWorktree.id, archivedAt: archivedAt)]
-    state.autoDeleteArchivedWorktreesAfterDays = .sevenDays
+    state.archivedAutoDeletePeriod = .sevenDays
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -3004,7 +3004,7 @@ struct RepositoriesFeatureTests {
     state.archivedWorktrees = [
       ArchivedWorktree(id: worktree.id, archivedAt: .distantPast),
     ]
-    state.autoDeleteArchivedWorktreesAfterDays = nil
+    state.archivedAutoDeletePeriod = nil
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -3024,7 +3024,7 @@ struct RepositoriesFeatureTests {
     state.archivedWorktrees = [
       ArchivedWorktree(id: mainWorktree.id, archivedAt: .distantPast),
     ]
-    state.autoDeleteArchivedWorktreesAfterDays = .oneDay
+    state.archivedAutoDeletePeriod = .oneDay
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     } withDependencies: {
@@ -3033,6 +3033,41 @@ struct RepositoriesFeatureTests {
 
     await store.send(.autoDeleteExpiredArchivedWorktrees)
     // No effects — main worktree must not be deleted
+  }
+
+  @Test func autoDeleteMultipleExpiredWorktreesConcurrently() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let expired1 = makeWorktree(id: "/tmp/repo/expired1", name: "expired1", repoRoot: repoRoot)
+    let expired2 = makeWorktree(id: "/tmp/repo/expired2", name: "expired2", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, expired1, expired2])
+    let fixedDate = Date(timeIntervalSince1970: 1_000_000)
+    let archivedAt = fixedDate.addingTimeInterval(-2 * 86_400)
+    var state = makeState(repositories: [repository])
+    state.archivedWorktrees = [
+      ArchivedWorktree(id: expired1.id, archivedAt: archivedAt),
+      ArchivedWorktree(id: expired2.id, archivedAt: archivedAt),
+    ]
+    state.archivedAutoDeletePeriod = .oneDay
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.date = .constant(fixedDate)
+      $0.gitClient.removeWorktree = { worktree, _ in worktree.workingDirectory }
+      $0.gitClient.worktrees = { _ in [mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.autoDeleteExpiredArchivedWorktrees)
+    // Both deleteWorktreeConfirmed should fire
+    await store.receive(\.worktreeLifecycle.deleteWorktreeConfirmed)
+    await store.receive(\.worktreeLifecycle.deleteWorktreeConfirmed)
+    // Both worktreeDeleted should complete without crash
+    await store.receive(\.worktreeLifecycle.worktreeDeleted)
+    await store.receive(\.worktreeLifecycle.worktreeDeleted)
+    // State should be consistent: both worktrees removed from archives
+    #expect(store.state.archivedWorktrees.isEmpty)
+    #expect(store.state.deletingWorktreeIDs.isEmpty)
   }
 
   // MARK: - Select Next/Previous Worktree

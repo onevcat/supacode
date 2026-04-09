@@ -46,7 +46,7 @@ struct WorktreeSettingsView: View {
           )
           .help("Archive worktrees automatically when their pull requests are merged.")
           VStack(alignment: .leading) {
-            Picker(selection: $store.autoDeleteArchivedWorktreesAfterDays) {
+            Picker(selection: $store.archivedAutoDeletePeriod) {
               Text("Never").tag(AutoDeletePeriod?.none)
               ForEach(AutoDeletePeriod.allCases) { period in
                 Text(period.label).tag(AutoDeletePeriod?.some(period))

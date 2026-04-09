@@ -193,7 +193,7 @@ struct RepositoriesFeature {
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
     var archivedWorktrees: [ArchivedWorktree] = []
-    var autoDeleteArchivedWorktreesAfterDays: AutoDeletePeriod?
+    var archivedAutoDeletePeriod: AutoDeletePeriod?
     var automaticallyArchiveMergedWorktrees = false
     var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
@@ -250,7 +250,7 @@ struct RepositoriesFeature {
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
     case archivedWorktreesLoaded([ArchivedWorktree])
-    case setAutoDeleteArchivedWorktreesAfterDays(AutoDeletePeriod?)
+    case setArchivedAutoDeletePeriod(AutoDeletePeriod?)
     case autoDeleteExpiredArchivedWorktrees
     case repositoryOrderIDsLoaded([Repository.ID])
     case worktreeOrderByRepositoryLoaded([Repository.ID: [Worktree.ID]])
@@ -419,13 +419,13 @@ struct RepositoriesFeature {
           state.archivedWorktrees = archivedWorktrees
           return .none
 
-        case .setAutoDeleteArchivedWorktreesAfterDays(let period):
-          state.autoDeleteArchivedWorktreesAfterDays = period
+        case .setArchivedAutoDeletePeriod(let period):
+          state.archivedAutoDeletePeriod = period
           guard period != nil else { return .none }
           return .send(.autoDeleteExpiredArchivedWorktrees)
 
         case .autoDeleteExpiredArchivedWorktrees:
-          guard let period = state.autoDeleteArchivedWorktreesAfterDays else {
+          guard let period = state.archivedAutoDeletePeriod else {
             return .none
           }
           let cutoff = now.addingTimeInterval(-Double(period.rawValue) * secondsPerDay)
@@ -577,7 +577,7 @@ struct RepositoriesFeature {
               }
             )
           }
-          if state.autoDeleteArchivedWorktreesAfterDays != nil {
+          if state.archivedAutoDeletePeriod != nil {
             allEffects.append(.send(.autoDeleteExpiredArchivedWorktrees))
           }
           return .merge(allEffects)

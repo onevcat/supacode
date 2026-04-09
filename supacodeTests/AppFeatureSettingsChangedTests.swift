@@ -23,7 +23,7 @@ struct AppFeatureSettingsChangedTests {
     await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees) {
       $0.repositories.automaticallyArchiveMergedWorktrees = true
     }
-    await store.receive(\.repositories.setAutoDeleteArchivedWorktreesAfterDays)
+    await store.receive(\.repositories.setArchivedAutoDeletePeriod)
     await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop) {
       $0.repositories.moveNotifiedWorktreeToTop = false
     }
@@ -83,7 +83,7 @@ struct AppFeatureSettingsChangedTests {
     }
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled)
     await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees)
-    await store.receive(\.repositories.setAutoDeleteArchivedWorktreesAfterDays)
+    await store.receive(\.repositories.setArchivedAutoDeletePeriod)
     await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop)
     await store.receive(\.updates.applySettings) {
       $0.updates.didConfigureUpdates = true
