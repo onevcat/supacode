@@ -227,6 +227,7 @@ struct WorktreeRowsView: View {
       onStopRunScript: config.onStopRunScript,
     )
     .tag(SidebarSelection.worktree(row.id))
+    .id(row.id)
     .typeSelectEquivalent("")
     .listRowInsets(EdgeInsets())
     .listRowSeparator(.hidden)

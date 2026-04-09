@@ -4,6 +4,7 @@ import SwiftUI
 struct SidebarCommands: Commands {
   @Bindable var store: StoreOf<AppFeature>
   @FocusedValue(\.toggleLeftSidebarAction) private var toggleLeftSidebarAction
+  @FocusedValue(\.revealInSidebarAction) private var revealInSidebarAction
 
   var body: some Commands {
     CommandGroup(replacing: .sidebar) {
@@ -13,6 +14,12 @@ struct SidebarCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleLeftSidebar)))
       .help(helpText(title: "Toggle Left Sidebar", commandID: AppShortcuts.CommandID.toggleLeftSidebar))
       .disabled(toggleLeftSidebarAction == nil)
+      Button("Reveal in Sidebar") {
+        revealInSidebarAction?()
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.revealInSidebar)))
+      .help(helpText(title: "Reveal in Sidebar", commandID: AppShortcuts.CommandID.revealInSidebar))
+      .disabled(revealInSidebarAction == nil)
       Divider()
       Button("Canvas") {
         store.send(.repositories(.toggleCanvas))
@@ -52,9 +59,18 @@ private struct ToggleLeftSidebarActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
+private struct RevealInSidebarActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 extension FocusedValues {
   var toggleLeftSidebarAction: (() -> Void)? {
     get { self[ToggleLeftSidebarActionKey.self] }
     set { self[ToggleLeftSidebarActionKey.self] = newValue }
+  }
+
+  var revealInSidebarAction: (() -> Void)? {
+    get { self[RevealInSidebarActionKey.self] }
+    set { self[RevealInSidebarActionKey.self] = newValue }
   }
 }

@@ -472,6 +472,84 @@ struct RepositoriesFeatureTests {
     #expect(savedEntries.value == expectedSavedEntries)
   }
 
+  @Test func revealInSidebarExpandsCollapsedRepository() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.selection = .worktree(worktree.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree.id]
+    initialState.$collapsedRepositoryIDs.withLock { $0 = [repository.id] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [] }
+      $0.nextPendingSidebarRevealID = 1
+      $0.pendingSidebarReveal = .init(id: 1, worktreeID: worktree.id)
+    }
+  }
+
+  @Test func revealInSidebarWithNoSelectionIsNoOp() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    let initialState = makeState(repositories: [repository])
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar)
+  }
+
+  @Test func revealInSidebarKeepsOtherRepositoriesCollapsed() async {
+    let worktree1 = makeWorktree(id: "/tmp/repo-a/wt", name: "wt", repoRoot: "/tmp/repo-a")
+    let worktree2 = makeWorktree(id: "/tmp/repo-b/wt", name: "wt", repoRoot: "/tmp/repo-b")
+    let repoA = makeRepository(id: "/tmp/repo-a", worktrees: [worktree1])
+    let repoB = makeRepository(id: "/tmp/repo-b", worktrees: [worktree2])
+    var initialState = makeState(repositories: [repoA, repoB])
+    initialState.selection = .worktree(worktree1.id)
+    initialState.sidebarSelectedWorktreeIDs = [worktree1.id]
+    initialState.$collapsedRepositoryIDs.withLock { $0 = [repoA.id, repoB.id] }
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.revealSelectedWorktreeInSidebar) {
+      $0.$collapsedRepositoryIDs.withLock { $0 = [repoB.id] }
+      $0.nextPendingSidebarRevealID = 1
+      $0.pendingSidebarReveal = .init(id: 1, worktreeID: worktree1.id)
+    }
+  }
+
+  @Test func consumePendingSidebarRevealClearsMatchingRequest() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.nextPendingSidebarRevealID = 1
+    initialState.pendingSidebarReveal = .init(id: 1, worktreeID: worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.consumePendingSidebarReveal(1)) {
+      $0.pendingSidebarReveal = nil
+    }
+  }
+
+  @Test func consumePendingSidebarRevealIgnoresStaleRequest() async {
+    let worktree = makeWorktree(id: "/tmp/repo/wt", name: "wt")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var initialState = makeState(repositories: [repository])
+    initialState.nextPendingSidebarRevealID = 2
+    initialState.pendingSidebarReveal = .init(id: 2, worktreeID: worktree.id)
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    // Stale ID should be ignored, pendingSidebarReveal remains unchanged.
+    await store.send(.consumePendingSidebarReveal(1))
+  }
+
   @Test func openRepositoriesDoesNotDowngradeFoldersOnUnexpectedProbeError() async {
     let repoSelection = "/tmp/repo/subdir"
     let repoRoot = "/tmp/repo"
