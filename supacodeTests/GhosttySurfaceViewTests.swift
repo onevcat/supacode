@@ -142,16 +142,52 @@ struct GhosttySurfaceViewTests {
     surfaceView.handleAttachmentChangeForTesting()
     await drainMainQueue()
 
+    // Occluding (false) applies immediately even while detached to stop
+    // the render loop.  Un-occluding (true) is deferred until reattached.
     surfaceView.setOcclusion(false)
     surfaceView.setOcclusion(true)
     surfaceView.setOcclusion(false)
     await drainMainQueue()
-    #expect(appliedValues == [true])
+    #expect(appliedValues == [true, false])
 
     attachmentState = (hasSuperview: true, hasWindow: true)
     surfaceView.handleAttachmentChangeForTesting()
     await drainMainQueue()
-    #expect(appliedValues == [true, false])
+    // Reattachment re-applies the desired value (false) even though it
+    // was already applied, because invalidateForAttachmentChange clears
+    // the applied cache.
+    #expect(appliedValues == [true, false, false])
+  }
+
+  @Test func occlusionFalseAppliesImmediatelyWithoutViewAttachment() async {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    var appliedValues: [Bool] = []
+    surfaceView.onOcclusionAppliedForTesting = { appliedValues.append($0) }
+    var attachmentState = (hasSuperview: false, hasWindow: false)
+    surfaceView.attachmentStateForTesting = { attachmentState }
+
+    // Occluding without a view hierarchy applies immediately (stops the
+    // Metal render loop for restored surfaces that are never displayed).
+    surfaceView.setOcclusion(false)
+    await drainMainQueue()
+    #expect(appliedValues == [false])
+
+    // Un-occluding without a view hierarchy is deferred.
+    surfaceView.setOcclusion(true)
+    await drainMainQueue()
+    #expect(appliedValues == [false])
+
+    // Once attached, the deferred un-occlude is applied.
+    attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+    #expect(appliedValues == [false, true])
   }
 
   private func drainMainQueue() async {
