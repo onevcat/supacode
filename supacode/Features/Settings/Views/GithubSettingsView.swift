@@ -120,6 +120,16 @@ struct GithubSettingsView: View {
             }
           }
         }
+        Section("Pull Requests") {
+          Picker(selection: $store.pullRequestMergeStrategy) {
+            ForEach(PullRequestMergeStrategy.allCases) { strategy in
+              Text(strategy.title).tag(strategy)
+            }
+          } label: {
+            Text("Merge strategy")
+            Text("Default strategy when merging PRs from the command palette.")
+          }
+        }
       }
       .formStyle(.grouped)
 

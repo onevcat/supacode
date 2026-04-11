@@ -322,7 +322,8 @@ extension RepositoriesFeature {
             return
           }
           @Shared(.repositorySettings(repoRoot)) var repositorySettings
-          let strategy = repositorySettings.pullRequestMergeStrategy
+          @Shared(.settingsFile) var settingsFile
+          let strategy = repositorySettings.pullRequestMergeStrategy ?? settingsFile.global.pullRequestMergeStrategy
           await send(.showToast(.inProgress("Merging pull request…")))
           do {
             try await githubCLI.mergePullRequest(worktreeRoot, pullRequest.number, strategy)

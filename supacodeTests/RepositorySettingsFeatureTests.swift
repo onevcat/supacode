@@ -22,7 +22,7 @@ struct RepositorySettingsFeatureTests {
       worktreeBaseRef: "origin/main",
       copyIgnoredOnWorktreeCreate: true,
       copyUntrackedOnWorktreeCreate: true,
-      pullRequestMergeStrategy: .squash
+      pullRequestMergeStrategy: .squash,
     )
     let storedOnevcatSettings = UserRepositorySettings(
       customCommands: [.default(index: 0)]
