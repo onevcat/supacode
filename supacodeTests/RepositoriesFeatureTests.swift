@@ -1289,6 +1289,96 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func createWorktreeContinuesWhenFetchFails() async {
+    let repoRoot = "/tmp/\(UUID().uuidString)-repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "\(repoRoot)/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "origin/main" }
+      $0.gitClient.remoteNames = { _ in ["origin"] }
+      $0.gitClient.fetchRemote = { _, _ in
+        throw NSError(domain: "git", code: 128, userInfo: [NSLocalizedDescriptionKey: "network unreachable"])
+      }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreation(
+        .createWorktreeInRepository(
+          repositoryID: repository.id,
+          nameSource: .random,
+          baseRefSource: .repositorySetting,
+          fetchRemote: true
+        ))
+    )
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func createWorktreeSkipsFetchWhenNoMatchedRemote() async {
+    let repoRoot = "/tmp/\(UUID().uuidString)-repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree])
+    let createdWorktree = makeWorktree(
+      id: "\(repoRoot)/swift-otter",
+      name: "swift-otter",
+      repoRoot: repoRoot
+    )
+    let store = TestStore(initialState: makeState(repositories: [repository])) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.gitClient.localBranchNames = { _ in [] }
+      $0.gitClient.isBareRepository = { _ in false }
+      $0.gitClient.automaticWorktreeBaseRef = { _ in "local-branch" }
+      $0.gitClient.remoteNames = { _ in ["origin", "upstream"] }
+      $0.gitClient.fetchRemote = { _, _ in
+        Issue.record("fetchRemote should not run when no remote matches the base ref")
+      }
+      $0.gitClient.ignoredFileCount = { _ in 0 }
+      $0.gitClient.untrackedFileCount = { _ in 0 }
+      $0.gitClient.createWorktreeStream = { _, _, _, _, _, _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(.finished(createdWorktree))
+          continuation.finish()
+        }
+      }
+      $0.gitClient.worktrees = { _ in [createdWorktree, mainWorktree] }
+    }
+    store.exhaustivity = .off
+
+    await store.send(
+      .worktreeCreation(
+        .createWorktreeInRepository(
+          repositoryID: repository.id,
+          nameSource: .random,
+          baseRefSource: .repositorySetting,
+          fetchRemote: true
+        ))
+    )
+    await store.receive(\.worktreeCreation.createRandomWorktreeSucceeded)
+    await store.finish()
+  }
+
   @Test(.dependencies) func createRandomWorktreeUsesRepositoryWorktreeBaseDirectoryOverride() async {
     let repoRoot = "/tmp/repo"
     let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
