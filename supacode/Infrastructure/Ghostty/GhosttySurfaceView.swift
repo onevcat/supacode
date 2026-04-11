@@ -882,6 +882,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
   }
 
   func updateSurfaceSize() {
+    resumeDeferredOcclusionIfNeeded()
     guard let surface else { return }
     // When pinnedSize is set (canvas mode), convertToBacking() includes the
     // .scaleEffect() layer transform, producing scale-dependent backing sizes.
@@ -1044,6 +1045,15 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   func handleAttachmentChangeForTesting() {
     handleAttachmentChange()
+  }
+
+  func resumeDeferredOcclusionIfNeededForTesting() {
+    resumeDeferredOcclusionIfNeeded()
+  }
+
+  private func resumeDeferredOcclusionIfNeeded() {
+    guard isReadyToApplyOcclusion else { return }
+    reapplyOcclusionIfNeeded()
   }
 
   private func reapplyOcclusionIfNeeded() {

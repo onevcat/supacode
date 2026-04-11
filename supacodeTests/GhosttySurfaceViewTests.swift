@@ -154,6 +154,33 @@ struct GhosttySurfaceViewTests {
     #expect(appliedValues == [true, false])
   }
 
+  @Test func occlusionCanRecoverWhenAttachmentCallbackIsMissedAfterReattachment() async {
+    let runtime = GhosttyRuntime()
+    let surfaceView = GhosttySurfaceView(
+      runtime: runtime,
+      workingDirectory: nil,
+      context: GHOSTTY_SURFACE_CONTEXT_TAB,
+      skipsSurfaceCreationForTesting: true
+    )
+    var appliedValues: [Bool] = []
+    surfaceView.onOcclusionAppliedForTesting = { appliedValues.append($0) }
+    var attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.attachmentStateForTesting = { attachmentState }
+
+    surfaceView.setOcclusion(true)
+    await drainMainQueue()
+    #expect(appliedValues == [true])
+
+    attachmentState = (hasSuperview: false, hasWindow: false)
+    surfaceView.handleAttachmentChangeForTesting()
+    await drainMainQueue()
+
+    attachmentState = (hasSuperview: true, hasWindow: true)
+    surfaceView.resumeDeferredOcclusionIfNeededForTesting()
+    await drainMainQueue()
+    #expect(appliedValues == [true, true])
+  }
+
   private func drainMainQueue() async {
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async {
