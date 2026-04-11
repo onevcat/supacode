@@ -34,6 +34,17 @@ struct WorktreeCreationPromptView: View {
         }
       }
 
+      VStack(alignment: .leading) {
+        Toggle(
+          "Fetch remote before creating worktree",
+          isOn: $store.fetchRemote
+        )
+        .help("Runs git fetch <remote> before creating the worktree.")
+        Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+
       if let validationMessage = store.validationMessage, !validationMessage.isEmpty {
         Text(validationMessage)
           .font(.footnote)
