@@ -75,12 +75,13 @@ struct RepositoriesFeature {
     case createWorktreeInRepository(
       repositoryID: Repository.ID,
       nameSource: WorktreeCreationNameSource,
-      baseRefSource: WorktreeCreationBaseRefSource
+      baseRefSource: WorktreeCreationBaseRefSource,
+      fetchRemote: Bool
     )
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
       baseRefOptions: [String],
-      automaticBaseRefLabel: String,
+      automaticBaseRef: String,
       selectedBaseRef: String?
     )
     case startPromptedWorktreeCreation(
@@ -92,6 +93,7 @@ struct RepositoriesFeature {
       repositoryID: Repository.ID,
       branchName: String,
       baseRef: String?,
+      fetchRemote: Bool,
       duplicateMessage: String?
     )
     case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)

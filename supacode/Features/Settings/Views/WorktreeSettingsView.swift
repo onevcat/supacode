@@ -65,6 +65,15 @@ struct WorktreeSettingsView: View {
             Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
               .foregroundStyle(.secondary)
           }
+          VStack(alignment: .leading) {
+            Toggle(
+              "Fetch remote before creating worktree",
+              isOn: $store.fetchRemoteBeforeWorktreeCreation
+            )
+            .help("Runs git fetch <remote> before creating a worktree.")
+            Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
+              .foregroundStyle(.secondary)
+          }
         }
       }
       .formStyle(.grouped)

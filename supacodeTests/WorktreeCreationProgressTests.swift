@@ -13,6 +13,17 @@ struct WorktreeCreationProgressTests {
     #expect(progress.detailText == "Resolving base reference (HEAD)")
   }
 
+  @Test func fetchingRemoteIncludesRemoteName() {
+    let progress = WorktreeCreationProgress(
+      stage: .fetchingRemote,
+      worktreeName: "swift-otter",
+      fetchRemoteName: "origin"
+    )
+
+    #expect(progress.titleText == "Creating swift-otter")
+    #expect(progress.detailText == "Fetching origin")
+  }
+
   @Test func creatingWorktreeIncludesBaseRefAndCopyFlags() {
     let progress = WorktreeCreationProgress(
       stage: .creatingWorktree,
