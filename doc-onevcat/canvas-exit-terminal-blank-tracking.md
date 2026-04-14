@@ -1,7 +1,7 @@
 # Canvas Exit Terminal Blank Tracking
 
-Last updated: 2026-04-11
-Status: Open, intermittent, likely long-lived native state issue
+Last updated: 2026-04-15
+Status: Open, intermittent, narrowed from occlusion-only suspicion to host reattachment failure
 
 ## Symptom
 
@@ -32,6 +32,7 @@ This strongly suggests a sticky stale state in the long-lived terminal/native vi
 - `supacode/Features/Terminal/Views/WorktreeTerminalTabsView.swift`
 - `supacode/Features/Terminal/Views/WindowFocusObserverView.swift`
 - `supacode/Infrastructure/Ghostty/GhosttySurfaceView.swift`
+- `supacode/Infrastructure/Ghostty/GhosttyTerminalView.swift`
 - `supacode/Infrastructure/Ghostty/GhosttyRuntime.swift`
 - `supacode/Features/Canvas/Views/CanvasView.swift`
 
@@ -47,6 +48,11 @@ Known commits that attempted to address this family of issues:
 - `d4e59155` Add canvas exit terminal diagnostics and occlusion refresh
 - `e2a29b2c` test: cover Ghostty attachment occlusion behavior
 - `32f51451` Fix canvas exit terminal occlusion recovery
+- current branch `fix/canvas-exit-surface-reattach`
+  - add detach-intent stack logging before `GhosttySurfaceView` loses its superview/window
+  - add wrapper host diagnostics (`hostKind`, wrapper id, surface id)
+  - add terminal-only defensive reattach in `GhosttySurfaceScrollView.ensureSurfaceAttached()`
+  - add focused tests for terminal-vs-canvas wrapper ownership behavior
 
 Relevant changelog entries:
 
@@ -56,23 +62,28 @@ Relevant changelog entries:
 
 ## Current Working Theory
 
-The highest-probability root cause is a stale native terminal surface state after reparenting, likely amplified by long app lifetime and sleep/wake transitions.
+The highest-probability root cause is no longer "occlusion state got stale while the surface stayed attached".
 
-Current best hypothesis:
+New evidence from a reduced two-tab repro points to a more concrete failure mode:
 
-- Exiting Canvas causes `GhosttySurfaceView` to be reattached into the normal terminal hierarchy.
-- Reparenting invalidates the occlusion-applied cache.
-- In some sessions, especially after sleep/wake, the expected "surface is ready again, now reapply visible occlusion" chain does not complete reliably.
-- SwiftUI has already switched back to the normal terminal view, but Ghostty's renderer remains effectively paused or not fully resumed for that surface.
-- Switching tabs forces another round of visibility/focus activity, which recovers the surface.
+- the selected surface (`desired=Optional(true)`, focused, first responder) is briefly attached during Canvas exit
+- it reaches the normal terminal layout size
+- it is later detached (`attached=false window=false`)
+- no subsequent log shows that surface reattached to the final terminal host
 
-What is less likely at this point:
+This suggests the blank terminal is caused by host ownership loss:
 
-- Wrong worktree selection
-- Wrong selected tab restoration
-- Basic reducer ordering bug in `toggleCanvas`
+- SwiftUI/AppKit reparenting during Canvas teardown temporarily moves the `GhosttySurfaceView`
+- a later teardown or host rebuild removes the surface from the active view tree
+- the normal terminal host does not currently guarantee that its `documentView` still owns the surface after updates
+- once detached, occlusion recovery is irrelevant because there is no live host left to present the surface
 
-Those paths have been observed as correct in diagnostic logs while the surface still remained blank.
+What now looks less likely:
+
+- wrong worktree selection
+- wrong selected tab restoration
+- pure reducer ordering bug in `toggleCanvas`
+- occlusion cache invalidation as the sole root cause
 
 ## Logs Added For Ongoing Investigation
 
@@ -86,10 +97,14 @@ Two log markers should be collected together:
 Existing and previous diagnostics already cover:
 
 - `WorktreeTerminalTabsView.onAppear`
+- `WorktreeTerminalTabsView.onDisappear`
 - surface attachment changes
 - deferred occlusion
 - reapply occlusion
 - selected worktree transition when leaving Canvas
+- surface detach intent (`viewWillMove(toSuperview:/toWindow:)`) with call stack
+- host wrapper lifecycle (`hostMake`, `hostInit`, `hostUpdate`, `hostDeinit`, `hostReattach`)
+- per-surface host metadata (`hostKind`, wrapper id)
 
 ### `[TerminalWake]`
 
@@ -147,26 +162,27 @@ log stream --style compact \
 When the bug reproduces again, compare a healthy exit and a broken exit for:
 
 - whether `workspaceDidWake` or `screensDidWake` happened shortly before failures started
-- whether the affected surface reports `desired=Optional(true)` but never logs `reapplyOcclusion`
+- whether the affected surface logs `detachIntent` before going blank, and which stack removes it
+- whether a terminal host logs `hostUpdate` but never `hostReattach` for the affected surface
+- whether the terminal host does log `hostReattach`, but the surface still remains blank afterward
 - whether `WindowFocusObserverView` still reports the window as visible/key when the blank terminal is shown
-- whether the affected surface is attached to a superview and window but still does not recover
-- whether `bounds` and `backing` stop changing for the affected surface while the view is visibly present
 
 ## Open Questions
 
 - Is sleep/wake the true trigger, or just the most common way to enter the stale state?
-- Is the bad state owned by `GhosttySurfaceView`, underlying `ghostty_surface_t`, or AppKit/Metal attachment?
-- Does the failure always affect the same surface instance for a worktree, or any surface after the session becomes "poisoned"?
-- Would an explicit post-wake surface refresh solve the actual root cause, or only mask a lower-level Ghostty/AppKit lifecycle issue?
+- Which host teardown path actually performs the final detach: Canvas wrapper cleanup, terminal wrapper replacement, or another AppKit rebuild?
+- If terminal-side defensive reattach works, is it sufficient as the durable fix or just masking a lower-level host lifecycle race?
+- If reattach does not work, is the detached native view still valid, or do we need to recreate the underlying `ghostty_surface_t`?
 
 ## Next Step Candidates
 
 Do not do these preemptively unless new logs support them:
 
+- widen defensive reattach beyond the normal terminal host
+- recreate a surface when host reattach fails
 - add explicit post-wake repair for all active surfaces
 - force-resend occlusion and size after wake
 - force content-scale/display-id refresh after wake
-- invalidate more cached state after wake, not only after attachment changes
 
 ## Notes
 
@@ -177,3 +193,23 @@ This document should be updated every time:
 - a repro pattern changes
 - a candidate fix is attempted
 - a failed fix is ruled out
+
+## 2026-04-15 Snapshot
+
+Latest reduced repro:
+
+- two tabs only
+- selected tab surface detached after briefly reaching terminal-sized bounds
+- no reattach log observed afterward
+
+Current tactical response:
+
+- add detach stack logging to identify who removes the surface
+- add host wrapper diagnostics to correlate `surface ↔ wrapper ↔ canvas/terminal`
+- attempt a narrow fix: terminal host reattaches the surface if updates/layout find it missing
+
+Expected interpretation of the next repro:
+
+- if `hostReattach` appears and the terminal becomes visible again, the bug is likely host ownership loss during Canvas teardown
+- if `hostReattach` appears but the terminal stays blank, the issue may still involve stale native surface/render state after detach
+- if no terminal `hostReattach` appears, the active terminal host may not be rebuilding/updating as expected

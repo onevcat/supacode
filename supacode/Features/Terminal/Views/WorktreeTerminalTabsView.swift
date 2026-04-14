@@ -67,6 +67,14 @@ struct WorktreeTerminalTabsView: View {
       )
       state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
+    .onDisappear {
+      let activity = resolvedWindowActivity
+      terminalTabsLogger.info(
+        "[CanvasExit] onDisappear worktree=\(worktree.id) "
+          + "selectedTab=\(state.tabManager.selectedTabId?.rawValue.uuidString ?? "nil") "
+          + "windowKey=\(activity.isKeyWindow) windowVisible=\(activity.isVisible)"
+      )
+    }
     .onChange(of: state.tabManager.selectedTabId) { _, newValue in
       if shouldAutoFocusTerminal {
         state.focusSelectedTab()
