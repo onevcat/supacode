@@ -21,7 +21,7 @@ struct SettingsFeature {
     var crashReportsEnabled: Bool
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
-    var automaticallyArchiveMergedWorktrees: Bool
+    var mergedWorktreeAction: MergedWorktreeAction?
     var archivedAutoDeletePeriod: AutoDeletePeriod?
     var promptForWorktreeCreation: Bool
     var fetchRemoteBeforeWorktreeCreation: Bool
@@ -53,7 +53,7 @@ struct SettingsFeature {
       crashReportsEnabled = settings.crashReportsEnabled
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
-      automaticallyArchiveMergedWorktrees = settings.automaticallyArchiveMergedWorktrees
+      mergedWorktreeAction = settings.mergedWorktreeAction
       archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
       promptForWorktreeCreation = settings.promptForWorktreeCreation
       fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
@@ -82,7 +82,7 @@ struct SettingsFeature {
         crashReportsEnabled: crashReportsEnabled,
         githubIntegrationEnabled: githubIntegrationEnabled,
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
-        automaticallyArchiveMergedWorktrees: automaticallyArchiveMergedWorktrees,
+        mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
         fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
@@ -180,7 +180,7 @@ struct SettingsFeature {
         state.crashReportsEnabled = normalizedSettings.crashReportsEnabled
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
-        state.automaticallyArchiveMergedWorktrees = normalizedSettings.automaticallyArchiveMergedWorktrees
+        state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
         state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
         state.fetchRemoteBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation

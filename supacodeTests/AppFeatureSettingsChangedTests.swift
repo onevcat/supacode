@@ -10,7 +10,7 @@ struct AppFeatureSettingsChangedTests {
   @Test(.dependencies) func settingsChangedPropagatesRepositorySettings() async {
     var settings = GlobalSettings.default
     settings.githubIntegrationEnabled = false
-    settings.automaticallyArchiveMergedWorktrees = true
+    settings.mergedWorktreeAction = .archive
     settings.moveNotifiedWorktreeToTop = false
     let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
@@ -20,8 +20,8 @@ struct AppFeatureSettingsChangedTests {
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled) {
       $0.repositories.githubIntegrationAvailability = .disabled
     }
-    await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees) {
-      $0.repositories.automaticallyArchiveMergedWorktrees = true
+    await store.receive(\.repositories.githubIntegration.setMergedWorktreeAction) {
+      $0.repositories.mergedWorktreeAction = .archive
     }
     await store.receive(\.repositories.setArchivedAutoDeletePeriod)
     await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop) {
@@ -82,7 +82,7 @@ struct AppFeatureSettingsChangedTests {
       $0.resolvedKeybindings = expectedResolved
     }
     await store.receive(\.repositories.githubIntegration.setGithubIntegrationEnabled)
-    await store.receive(\.repositories.githubIntegration.setAutomaticallyArchiveMergedWorktrees)
+    await store.receive(\.repositories.githubIntegration.setMergedWorktreeAction)
     await store.receive(\.repositories.setArchivedAutoDeletePeriod)
     await store.receive(\.repositories.worktreeOrdering.setMoveNotifiedWorktreeToTop)
     await store.receive(\.updates.applySettings) {

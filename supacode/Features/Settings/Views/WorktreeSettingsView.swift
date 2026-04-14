@@ -14,7 +14,7 @@ struct WorktreeSettingsView: View {
     )
     VStack(alignment: .leading) {
       Form {
-        Section("Worktree") {
+        Section("Creation") {
           VStack(alignment: .leading) {
             TextField(
               "Default: current behavior",
@@ -28,34 +28,6 @@ struct WorktreeSettingsView: View {
               .monospaced()
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          VStack(alignment: .leading) {
-            Toggle(
-              "Also delete local branch when deleting a worktree",
-              isOn: $store.deleteBranchOnDeleteWorktree
-            )
-            .help("Delete the local branch when deleting a worktree")
-            Text("Removes the local branch along with the worktree. Remote branches must be deleted on GitHub.")
-              .foregroundStyle(.secondary)
-            Text("Uncommitted changes will be lost.")
-              .foregroundStyle(.red)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          Toggle(
-            "Automatically archive merged worktrees",
-            isOn: $store.automaticallyArchiveMergedWorktrees
-          )
-          .help("Archive worktrees automatically when their pull requests are merged.")
-          VStack(alignment: .leading) {
-            Picker(selection: $store.archivedAutoDeletePeriod) {
-              Text("Never").tag(AutoDeletePeriod?.none)
-              ForEach(AutoDeletePeriod.allCases) { period in
-                Text(period.label).tag(AutoDeletePeriod?.some(period))
-              }
-            } label: {
-              Text("Auto-delete archived worktrees")
-              Text("Permanently removes archived worktrees after the selected period.")
-            }
-          }
           VStack(alignment: .leading) {
             Toggle(
               "Prompt for branch name during creation",
@@ -73,6 +45,47 @@ struct WorktreeSettingsView: View {
             .help("Runs git fetch <remote> before creating a worktree.")
             Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
               .foregroundStyle(.secondary)
+          }
+        }
+        Section("Cleanup") {
+          VStack(alignment: .leading) {
+            Toggle(
+              "Also delete local branch when deleting a worktree",
+              isOn: $store.deleteBranchOnDeleteWorktree
+            )
+            .help("Delete the local branch when deleting a worktree")
+            Text("Removes the local branch along with the worktree. Remote branches must be deleted on GitHub.")
+              .foregroundStyle(.secondary)
+            Text("Uncommitted changes will be lost.")
+              .foregroundStyle(.red)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          Picker(selection: $store.mergedWorktreeAction) {
+            Text("Do nothing").tag(MergedWorktreeAction?.none)
+            ForEach(MergedWorktreeAction.allCases) { action in
+              Text(action.title).tag(MergedWorktreeAction?.some(action))
+            }
+          } label: {
+            Text("When a pull request is merged")
+            switch store.mergedWorktreeAction {
+            case .archive:
+              Text("Archives worktrees when their pull requests are merged.")
+            case .delete:
+              Text("Follows the \"Also delete local branch when deleting a worktree\" option above.")
+            case nil:
+              EmptyView()
+            }
+          }
+          VStack(alignment: .leading) {
+            Picker(selection: $store.archivedAutoDeletePeriod) {
+              Text("Never").tag(AutoDeletePeriod?.none)
+              ForEach(AutoDeletePeriod.allCases) { period in
+                Text(period.label).tag(AutoDeletePeriod?.some(period))
+              }
+            } label: {
+              Text("Auto-delete archived worktrees")
+              Text("Permanently removes archived worktrees after the selected period.")
+            }
           }
         }
       }
