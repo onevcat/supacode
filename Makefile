@@ -121,7 +121,6 @@ format: # Format code with swift format (local only)
 	swift format -p --in-place --recursive --configuration ./.swift-format.json supacode supacode-cli supacodeTests
 
 lint: # Lint code with swiftlint
-	mise exec -- swiftlint --fix --quiet
 	mise exec -- swiftlint lint --quiet --config .swiftlint.yml
 
 check: format lint # Format and lint
