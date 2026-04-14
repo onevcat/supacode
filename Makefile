@@ -21,7 +21,6 @@ TUIST_SOURCE_RELEASE_GENERATION_STAMP := $(TUIST_GENERATION_STAMP_DIR)/none-rele
 TUIST_GENERATION_INPUTS := Project.swift Workspace.swift Tuist.swift Tuist/Package.swift $(wildcard Tuist/Package.resolved) $(PROJECT_CONFIG_PATH) mise.toml scripts/build-ghostty.sh $(TUIST_MACRO_PATCH_SCRIPT)
 TUIST_GENERATE_CACHE_PROFILE ?= development
 TUIST_CACHE_CONFIGURATION ?= Debug
-TUIST_CACHE_TARGETS ?= GhosttyKit supacode-cli
 FORMAT ?= xcsift
 VERSION ?=
 BUILD ?=
@@ -87,7 +86,7 @@ inspect-dependencies: $(TUIST_INSTALL_STAMP) # Check for implicit Tuist dependen
 	mise exec -- tuist inspect dependencies --only implicit
 
 warm-cache: $(TUIST_INSTALL_STAMP) # Warm Tuist module cache for the full cacheable graph
-	mise exec -- tuist cache warm $(TUIST_CACHE_TARGETS) --configuration $(TUIST_CACHE_CONFIGURATION)
+	mise exec -- tuist cache warm --configuration $(TUIST_CACHE_CONFIGURATION)
 
 build-app: $(TUIST_DEVELOPMENT_GENERATION_STAMP) # Build the macOS app (Debug)
 	bash -o pipefail -c 'xcodebuild -workspace "$(PROJECT_WORKSPACE)" -scheme "$(APP_SCHEME)" -configuration Debug build -skipMacroValidation 2>&1 $(FORMATTER)'
