@@ -37,6 +37,7 @@ jobs:
     env:
       MISE_HTTP_TIMEOUT: 120
       MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TUIST_TOKEN: ${{ secrets.TUIST_TOKEN }}
       DEVELOPER_ID_CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
       DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
       DEVELOPER_ID_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
@@ -51,6 +52,13 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
+      - name: Ensure Tuist token is configured
+        shell: bash
+        run: |
+          if [ -z "${TUIST_TOKEN:-}" ]; then
+            echo "::error::TUIST_TOKEN is required for the release workflow."
+            exit 1
+          fi
       - run: echo "TAG=${{ github.event.release.tag_name }}" >> "$GITHUB_ENV"
       - name: Prepare release overrides
         env:

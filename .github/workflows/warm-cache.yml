@@ -1,14 +1,12 @@
-name: test
+name: warm-cache
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+
 jobs:
-  build:
+  warm-cache-debug:
     runs-on: macos-26
     permissions:
       contents: read
@@ -21,7 +19,11 @@ jobs:
         with:
           submodules: recursive
       - uses: ./.github/actions/setup-macos
-      - run: make inspect-dependencies
-      - run: make lint
-      - run: make build-app
-      - run: make test
+      - name: Ensure Tuist token is configured
+        shell: bash
+        run: |
+          if [ -z "${TUIST_TOKEN:-}" ]; then
+            echo "::error::TUIST_TOKEN is required to warm the Tuist remote cache."
+            exit 1
+          fi
+      - run: make warm-cache
