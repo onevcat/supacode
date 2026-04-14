@@ -223,6 +223,76 @@ struct TerminalLayoutSnapshotPayloadTests {
     #expect(decoded?.selectedWorktreeID == nil)
   }
 
+  @Test func decodeValidatedRoundTripsTitleAndIcon() throws {
+    let tab = makeTab(tabID: "tab-1", title: "my-feature", icon: "star")
+    let payload = TerminalLayoutSnapshotPayload(
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: "wt-1",
+          selectedTabID: "tab-1",
+          tabs: [tab]
+        ),
+      ]
+    )
+    let data = try JSONEncoder().encode(payload)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    #expect(decoded == payload)
+    let decodedTab = decoded?.worktrees.first?.tabs.first
+    #expect(decodedTab?.title == "my-feature")
+    #expect(decodedTab?.icon == "star")
+  }
+
+  @Test func decodeValidatedRoundTripsNilTitleAndIcon() throws {
+    let tab = makeTab(tabID: "tab-1", title: nil, icon: nil)
+    let payload = TerminalLayoutSnapshotPayload(
+      worktrees: [
+        TerminalLayoutSnapshotPayload.SnapshotWorktree(
+          worktreeID: "wt-1",
+          selectedTabID: "tab-1",
+          tabs: [tab]
+        ),
+      ]
+    )
+    let data = try JSONEncoder().encode(payload)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    #expect(decoded == payload)
+    let decodedTab = decoded?.worktrees.first?.tabs.first
+    #expect(decodedTab?.title == nil)
+    #expect(decodedTab?.icon == nil)
+  }
+
+  @Test func decodeValidatedBackwardCompatibleWithoutTitleAndIcon() {
+    let json = #"""
+      {
+        "version": 1,
+        "worktrees": [
+          {
+            "worktreeID": "wt-1",
+            "selectedTabID": "tab-1",
+            "tabs": [
+              {
+                "tabID": "tab-1",
+                "splitRoot": {
+                  "kind": "leaf",
+                  "surfaceID": "surface-1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      """#
+    let data = Data(json.utf8)
+
+    let decoded = TerminalLayoutSnapshotPayload.decodeValidated(from: data)
+    #expect(decoded != nil)
+    let decodedTab = decoded?.worktrees.first?.tabs.first
+    #expect(decodedTab?.title == nil)
+    #expect(decodedTab?.icon == nil)
+  }
+
   @Test func decodeValidatedRejectsSelectedWorktreeIDNotInWorktrees() throws {
     let payload = TerminalLayoutSnapshotPayload(
       version: TerminalLayoutSnapshotPayload.currentVersion,
@@ -269,10 +339,14 @@ private func makeWorktree(
 
 private func makeTab(
   tabID: String,
+  title: String? = nil,
+  icon: String? = nil,
   splitRoot: TerminalLayoutSnapshotPayload.SnapshotSplitNode = .leaf(surfaceID: "surface-1")
 ) -> TerminalLayoutSnapshotPayload.SnapshotTab {
   TerminalLayoutSnapshotPayload.SnapshotTab(
     tabID: tabID,
+    title: title,
+    icon: icon,
     splitRoot: splitRoot
   )
 }

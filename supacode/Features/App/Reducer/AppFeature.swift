@@ -418,6 +418,13 @@ struct AppFeature {
           ),
           .send(
             .repositories(
+              .setArchivedAutoDeletePeriod(
+                settings.archivedAutoDeletePeriod
+              )
+            )
+          ),
+          .send(
+            .repositories(
               .worktreeOrdering(
                 .setMoveNotifiedWorktreeToTop(
                   settings.moveNotifiedWorktreeToTop
@@ -838,6 +845,9 @@ struct AppFeature {
 
       case .commandPalette(.delegate(.archiveWorktree(let worktreeID, let repositoryID))):
         return .send(.repositories(.worktreeLifecycle(.requestArchiveWorktree(worktreeID, repositoryID))))
+
+      case .commandPalette(.delegate(.viewArchivedWorktrees)):
+        return .send(.repositories(.selectArchivedWorktrees))
 
       case .commandPalette(.delegate(.refreshWorktrees)):
         return .send(.repositories(.refreshWorktrees))

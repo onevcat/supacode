@@ -17,9 +17,11 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var deleteBranchOnDeleteWorktree: Bool
   var mergedWorktreeAction: MergedWorktreeAction?
   var promptForWorktreeCreation: Bool
+  var fetchOriginBeforeWorktreeCreation: Bool
   var defaultWorktreeBaseDirectoryPath: String?
   var restoreTerminalLayoutOnLaunch: Bool
   var terminalFontSize: Float32?
+  var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
 
   static let `default` = GlobalSettings(
@@ -41,8 +43,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: true,
     mergedWorktreeAction: nil,
     promptForWorktreeCreation: true,
+    fetchOriginBeforeWorktreeCreation: true,
     defaultWorktreeBaseDirectoryPath: nil,
     restoreTerminalLayoutOnLaunch: false,
+    archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
     keybindingUserOverrides: .empty
   )
@@ -66,8 +70,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     deleteBranchOnDeleteWorktree: Bool,
     mergedWorktreeAction: MergedWorktreeAction? = nil,
     promptForWorktreeCreation: Bool,
+    fetchOriginBeforeWorktreeCreation: Bool = true,
     defaultWorktreeBaseDirectoryPath: String? = nil,
     restoreTerminalLayoutOnLaunch: Bool = false,
+    archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
     keybindingUserOverrides: KeybindingUserOverrideStore = .empty
   ) {
@@ -89,8 +95,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.deleteBranchOnDeleteWorktree = deleteBranchOnDeleteWorktree
     self.mergedWorktreeAction = mergedWorktreeAction
     self.promptForWorktreeCreation = promptForWorktreeCreation
+    self.fetchOriginBeforeWorktreeCreation = fetchOriginBeforeWorktreeCreation
     self.defaultWorktreeBaseDirectoryPath = defaultWorktreeBaseDirectoryPath
     self.restoreTerminalLayoutOnLaunch = restoreTerminalLayoutOnLaunch
+    self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
   }
@@ -115,8 +123,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encode(deleteBranchOnDeleteWorktree, forKey: .deleteBranchOnDeleteWorktree)
     try container.encodeIfPresent(mergedWorktreeAction, forKey: .mergedWorktreeAction)
     try container.encode(promptForWorktreeCreation, forKey: .promptForWorktreeCreation)
+    try container.encode(fetchOriginBeforeWorktreeCreation, forKey: .fetchOriginBeforeWorktreeCreation)
     try container.encodeIfPresent(defaultWorktreeBaseDirectoryPath, forKey: .defaultWorktreeBaseDirectoryPath)
     try container.encode(restoreTerminalLayoutOnLaunch, forKey: .restoreTerminalLayoutOnLaunch)
+    try container.encodeIfPresent(archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
     try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
     try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
   }
@@ -140,8 +150,10 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case deleteBranchOnDeleteWorktree
     case mergedWorktreeAction
     case promptForWorktreeCreation
+    case fetchOriginBeforeWorktreeCreation
     case defaultWorktreeBaseDirectoryPath
     case restoreTerminalLayoutOnLaunch
+    case archivedAutoDeletePeriod
     case terminalFontSize
     case keybindingUserOverrides
     // Legacy key for migration
@@ -204,12 +216,20 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     promptForWorktreeCreation =
       try container.decodeIfPresent(Bool.self, forKey: .promptForWorktreeCreation)
       ?? Self.default.promptForWorktreeCreation
+    fetchOriginBeforeWorktreeCreation =
+      try container.decodeIfPresent(Bool.self, forKey: .fetchOriginBeforeWorktreeCreation)
+      ?? Self.default.fetchOriginBeforeWorktreeCreation
     defaultWorktreeBaseDirectoryPath =
       try container.decodeIfPresent(String.self, forKey: .defaultWorktreeBaseDirectoryPath)
       ?? Self.default.defaultWorktreeBaseDirectoryPath
     restoreTerminalLayoutOnLaunch =
       try container.decodeIfPresent(Bool.self, forKey: .restoreTerminalLayoutOnLaunch)
       ?? Self.default.restoreTerminalLayoutOnLaunch
+    if let rawAutoDelete = try container.decodeIfPresent(Int.self, forKey: .archivedAutoDeletePeriod) {
+      archivedAutoDeletePeriod = AutoDeletePeriod(rawValue: rawAutoDelete)
+    } else {
+      archivedAutoDeletePeriod = Self.default.archivedAutoDeletePeriod
+    }
     terminalFontSize =
       try container.decodeIfPresent(Float32.self, forKey: .terminalFontSize)
       ?? Self.default.terminalFontSize

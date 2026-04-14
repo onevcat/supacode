@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let windowFocusLogger = SupaLogger("WindowFocus")
+
 struct WindowActivityState: Equatable {
   let isKeyWindow: Bool
   let isVisible: Bool
@@ -92,6 +94,11 @@ final class WindowFocusObserverNSView: NSView {
       return
     }
     lastEmittedActivity = activity
+    windowFocusLogger.info(
+      "[TerminalWake] activityChanged key=\(activity.isKeyWindow) "
+        + "visible=\(activity.isVisible) force=\(force) "
+        + "windowNumber=\(window?.windowNumber ?? -1)"
+    )
     onWindowActivityChanged(activity)
   }
 

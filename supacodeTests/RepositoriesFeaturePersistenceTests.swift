@@ -28,11 +28,11 @@ struct RepositoriesFeaturePersistenceTests {
           return pinned
         },
         savePinnedWorktreeIDs: { _ in },
-        loadArchivedWorktreeIDs: {
-          calls.withValue { $0.append("loadArchivedWorktreeIDs") }
+        loadArchivedWorktrees: {
+          calls.withValue { $0.append("loadArchivedWorktrees") }
           return []
         },
-        saveArchivedWorktreeIDs: { _ in },
+        saveArchivedWorktrees: { _ in },
         loadRepositoryOrderIDs: {
           calls.withValue { $0.append("loadRepositoryOrderIDs") }
           return repositoryOrder
@@ -62,7 +62,7 @@ struct RepositoriesFeaturePersistenceTests {
     #expect(
       calls.value == [
         "loadPinnedWorktreeIDs",
-        "loadArchivedWorktreeIDs",
+        "loadArchivedWorktrees",
         "loadLastFocusedWorktreeID",
         "loadRepositoryOrderIDs",
         "loadWorktreeOrderByRepository",

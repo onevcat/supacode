@@ -9,6 +9,7 @@ nonisolated let githubIntegrationRecoveryInterval: Duration = .seconds(15)
 nonisolated let worktreeCreationProgressLineLimit = 200
 nonisolated let worktreeCreationProgressUpdateStride = 20
 nonisolated let archiveScriptProgressLineLimit = 200
+private let secondsPerDay: Double = 86_400
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -43,6 +44,11 @@ nonisolated struct WorktreeCreationProgressUpdateThrottle {
   }
 }
 
+struct PendingSidebarReveal: Equatable, Sendable {
+  let id: Int
+  let worktreeID: Worktree.ID
+}
+
 @Reducer
 struct RepositoriesFeature {
   enum CancelID {
@@ -69,12 +75,13 @@ struct RepositoriesFeature {
     case createWorktreeInRepository(
       repositoryID: Repository.ID,
       nameSource: WorktreeCreationNameSource,
-      baseRefSource: WorktreeCreationBaseRefSource
+      baseRefSource: WorktreeCreationBaseRefSource,
+      fetchRemote: Bool
     )
     case promptedWorktreeCreationDataLoaded(
       repositoryID: Repository.ID,
       baseRefOptions: [String],
-      automaticBaseRefLabel: String,
+      automaticBaseRef: String,
       selectedBaseRef: String?
     )
     case startPromptedWorktreeCreation(
@@ -86,6 +93,7 @@ struct RepositoriesFeature {
       repositoryID: Repository.ID,
       branchName: String,
       baseRef: String?,
+      fetchRemote: Bool,
       duplicateMessage: String?
     )
     case pendingWorktreeProgressUpdated(id: Worktree.ID, progress: WorktreeCreationProgress)
@@ -191,7 +199,8 @@ struct RepositoriesFeature {
     var deletingWorktreeIDs: Set<Worktree.ID> = []
     var removingRepositoryIDs: Set<Repository.ID> = []
     var pinnedWorktreeIDs: [Worktree.ID] = []
-    var archivedWorktreeIDs: [Worktree.ID] = []
+    var archivedWorktrees: [ArchivedWorktree] = []
+    var archivedAutoDeletePeriod: AutoDeletePeriod?
     var mergedWorktreeAction: MergedWorktreeAction?
     var moveNotifiedWorktreeToTop = true
     var lastFocusedWorktreeID: Worktree.ID?
@@ -208,6 +217,8 @@ struct RepositoriesFeature {
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
+    var nextPendingSidebarRevealID = 0
+    var pendingSidebarReveal: PendingSidebarReveal?
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -247,7 +258,9 @@ struct RepositoriesFeature {
     case setOpenPanelPresented(Bool)
     case loadPersistedRepositories
     case pinnedWorktreeIDsLoaded([Worktree.ID])
-    case archivedWorktreeIDsLoaded([Worktree.ID])
+    case archivedWorktreesLoaded([ArchivedWorktree])
+    case setArchivedAutoDeletePeriod(AutoDeletePeriod?)
+    case autoDeleteExpiredArchivedWorktrees
     case repositoryOrderIDsLoaded([Repository.ID])
     case worktreeOrderByRepositoryLoaded([Repository.ID: [Worktree.ID]])
     case lastFocusedWorktreeIDLoaded(Worktree.ID?)
@@ -262,6 +275,8 @@ struct RepositoriesFeature {
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
     case selectNextWorktree
     case selectPreviousWorktree
+    case revealSelectedWorktreeInSidebar
+    case consumePendingSidebarReveal(Int)
     case requestRenameBranch(Worktree.ID, String)
     case presentAlert(title: String, message: String)
     case worktreeInfoEvent(WorktreeInfoWatcherClient.Event)
@@ -293,7 +308,7 @@ struct RepositoriesFeature {
     let didPrunePinned: Bool
     let didPruneRepositoryOrder: Bool
     let didPruneWorktreeOrder: Bool
-    let didPruneArchivedWorktreeIDs: Bool
+    let didPruneArchivedWorktrees: Bool
   }
 
   enum StatusToast: Equatable {
@@ -342,6 +357,7 @@ struct RepositoriesFeature {
   @Dependency(GithubIntegrationClient.self) var githubIntegration
   @Dependency(RepositoryPersistenceClient.self) var repositoryPersistence
   @Dependency(ShellClient.self) var shellClient
+  @Dependency(\.date.now) var now
   @Dependency(\.uuid) var uuid
 
   var body: some Reducer<State, Action> {
@@ -355,14 +371,14 @@ struct RepositoriesFeature {
           state.snapshotPersistencePhase = .restoring
           return .run { send in
             let pinned = await repositoryPersistence.loadPinnedWorktreeIDs()
-            let archived = await repositoryPersistence.loadArchivedWorktreeIDs()
+            let archived = await repositoryPersistence.loadArchivedWorktrees()
             let lastFocused = await repositoryPersistence.loadLastFocusedWorktreeID()
             let repositoryOrderIDs = await repositoryPersistence.loadRepositoryOrderIDs()
             let worktreeOrderByRepository =
               await repositoryPersistence.loadWorktreeOrderByRepository()
             let repositorySnapshot = await repositoryPersistence.loadRepositorySnapshot()
             await send(.pinnedWorktreeIDsLoaded(pinned))
-            await send(.archivedWorktreeIDsLoaded(archived))
+            await send(.archivedWorktreesLoaded(archived))
             await send(.repositoryOrderIDsLoaded(repositoryOrderIDs))
             await send(.worktreeOrderByRepositoryLoaded(worktreeOrderByRepository))
             await send(.lastFocusedWorktreeIDLoaded(lastFocused))
@@ -383,7 +399,7 @@ struct RepositoriesFeature {
           _ = applyRepositories(
             repositories,
             roots: roots,
-            shouldPruneArchivedWorktreeIDs: true,
+            shouldPruneArchivedWorktrees: true,
             state: &state,
             animated: false
           )
@@ -410,9 +426,44 @@ struct RepositoriesFeature {
           state.pinnedWorktreeIDs = pinnedWorktreeIDs
           return .none
 
-        case .archivedWorktreeIDsLoaded(let archivedWorktreeIDs):
-          state.archivedWorktreeIDs = archivedWorktreeIDs
+        case .archivedWorktreesLoaded(let archivedWorktrees):
+          state.archivedWorktrees = archivedWorktrees
           return .none
+
+        case .setArchivedAutoDeletePeriod(let period):
+          state.archivedAutoDeletePeriod = period
+          guard period != nil else { return .none }
+          return .send(.autoDeleteExpiredArchivedWorktrees)
+
+        case .autoDeleteExpiredArchivedWorktrees:
+          guard let period = state.archivedAutoDeletePeriod else {
+            return .none
+          }
+          let cutoff = now.addingTimeInterval(-Double(period.rawValue) * secondsPerDay)
+          let expiredEntries = state.archivedWorktrees.filter { $0.archivedAt <= cutoff }
+          guard !expiredEntries.isEmpty else {
+            return .none
+          }
+          var deleteEffects: [Effect<Action>] = []
+          for entry in expiredEntries {
+            guard
+              let (worktree, repository) = findWorktreeAndRepository(
+                worktreeID: entry.id,
+                state: state
+              ),
+              !state.isMainWorktree(worktree),
+              !state.deletingWorktreeIDs.contains(entry.id)
+            else {
+              continue
+            }
+            deleteEffects.append(
+              .send(.worktreeLifecycle(.deleteWorktreeConfirmed(worktree.id, repository.id)))
+            )
+          }
+          guard !deleteEffects.isEmpty else {
+            return .none
+          }
+          return .merge(deleteEffects)
 
         case .repositoryOrderIDsLoaded(let repositoryOrderIDs):
           state.repositoryOrderIDs = repositoryOrderIDs
@@ -477,7 +528,7 @@ struct RepositoriesFeature {
           let applyResult = applyRepositories(
             repositories,
             roots: roots,
-            shouldPruneArchivedWorktreeIDs: failures.isEmpty,
+            shouldPruneArchivedWorktrees: failures.isEmpty,
             state: &state,
             animated: animated
           )
@@ -521,11 +572,11 @@ struct RepositoriesFeature {
                 await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
               })
           }
-          if applyResult.didPruneArchivedWorktreeIDs {
-            let archivedWorktreeIDs = state.archivedWorktreeIDs
+          if applyResult.didPruneArchivedWorktrees {
+            let archivedWorktrees = state.archivedWorktrees
             allEffects.append(
               .run { _ in
-                await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+                await repositoryPersistence.saveArchivedWorktrees(archivedWorktrees)
               }
             )
           }
@@ -536,6 +587,9 @@ struct RepositoriesFeature {
                 await repositoryPersistence.saveRepositorySnapshot(repositories)
               }
             )
+          }
+          if state.archivedAutoDeletePeriod != nil {
+            allEffects.append(.send(.autoDeleteExpiredArchivedWorktrees))
           }
           return .merge(allEffects)
 
@@ -609,6 +663,25 @@ struct RepositoriesFeature {
         case .selectPreviousWorktree:
           guard let id = state.worktreeID(byOffset: -1) else { return .none }
           return .send(.selectWorktree(id))
+
+        case .revealSelectedWorktreeInSidebar:
+          guard let worktreeID = state.selectedWorktreeID,
+            let repositoryID = state.repositoryID(containing: worktreeID)
+          else { return .none }
+          state.$collapsedRepositoryIDs.withLock {
+            $0.removeAll { $0 == repositoryID }
+          }
+          state.nextPendingSidebarRevealID += 1
+          state.pendingSidebarReveal = .init(
+            id: state.nextPendingSidebarRevealID,
+            worktreeID: worktreeID
+          )
+          return .none
+
+        case .consumePendingSidebarReveal(let revealID):
+          guard state.pendingSidebarReveal?.id == revealID else { return .none }
+          state.pendingSidebarReveal = nil
+          return .none
 
         case .requestRenameBranch(let worktreeID, let branchName):
           guard let worktree = state.worktree(for: worktreeID) else { return .none }
@@ -1038,7 +1111,7 @@ struct RepositoriesFeature {
   func applyRepositories(
     _ repositories: [Repository],
     roots: [URL],
-    shouldPruneArchivedWorktreeIDs: Bool,
+    shouldPruneArchivedWorktrees: Bool,
     state: inout State,
     animated: Bool
   ) -> ApplyRepositoriesResult {
@@ -1103,9 +1176,9 @@ struct RepositoriesFeature {
     let didPrunePinned = prunePinnedWorktreeIDs(state: &state)
     let didPruneRepositoryOrder = pruneRepositoryOrderIDs(roots: roots, state: &state)
     let didPruneWorktreeOrder = pruneWorktreeOrderByRepository(roots: roots, state: &state)
-    let didPruneArchivedWorktreeIDs =
-      shouldPruneArchivedWorktreeIDs
-      ? pruneArchivedWorktreeIDs(availableWorktreeIDs: availableWorktreeIDs, state: &state)
+    let didPruneArchivedWorktrees =
+      shouldPruneArchivedWorktrees
+      ? pruneArchivedWorktrees(availableWorktreeIDs: availableWorktreeIDs, state: &state)
       : false
     if !state.isShowingArchivedWorktrees, !state.isShowingCanvas,
       !isSidebarSelectionValid(state.selection, state: state)
@@ -1129,7 +1202,7 @@ struct RepositoriesFeature {
       didPrunePinned: didPrunePinned,
       didPruneRepositoryOrder: didPruneRepositoryOrder,
       didPruneWorktreeOrder: didPruneWorktreeOrder,
-      didPruneArchivedWorktreeIDs: didPruneArchivedWorktreeIDs
+      didPruneArchivedWorktrees: didPruneArchivedWorktrees
     )
   }
 
@@ -1270,7 +1343,7 @@ extension RepositoriesFeature.State {
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {
-    Set(archivedWorktreeIDs)
+    Set(archivedWorktrees.map(\.id))
   }
 
   func isWorktreeArchived(_ id: Worktree.ID) -> Bool {
@@ -2095,13 +2168,13 @@ private func pruneWorktreeOrderByRepository(
   return false
 }
 
-private func pruneArchivedWorktreeIDs(
+private func pruneArchivedWorktrees(
   availableWorktreeIDs: Set<Worktree.ID>,
   state: inout RepositoriesFeature.State
 ) -> Bool {
-  let pruned = state.archivedWorktreeIDs.filter { availableWorktreeIDs.contains($0) }
-  if pruned != state.archivedWorktreeIDs {
-    state.archivedWorktreeIDs = pruned
+  let pruned = state.archivedWorktrees.filter { availableWorktreeIDs.contains($0.id) }
+  if pruned != state.archivedWorktrees {
+    state.archivedWorktrees = pruned
     return true
   }
   return false
@@ -2127,6 +2200,18 @@ func firstAvailableWorktreeID(
     return nil
   }
   return state.orderedWorktrees(in: repository).first?.id
+}
+
+private func findWorktreeAndRepository(
+  worktreeID: Worktree.ID,
+  state: RepositoriesFeature.State
+) -> (worktree: Worktree, repository: Repository)? {
+  for repository in state.repositories {
+    if let worktree = repository.worktrees[id: worktreeID] {
+      return (worktree, repository)
+    }
+  }
+  return nil
 }
 
 func nextWorktreeID(

@@ -37,6 +37,8 @@ struct GitClientDependency: Sendable {
   var lineChanges: @Sendable (URL) async -> (added: Int, removed: Int)?
   var renameBranch: @Sendable (_ worktreeURL: URL, _ branchName: String) async throws -> Void
   var remoteInfo: @Sendable (_ repositoryRoot: URL) async -> GithubRemoteInfo?
+  var remoteNames: @Sendable (_ repoRoot: URL) async throws -> [String]
+  var fetchRemote: @Sendable (_ remote: String, _ repoRoot: URL) async throws -> Void
 }
 
 extension GitClientDependency: DependencyKey {
@@ -84,6 +86,12 @@ extension GitClientDependency: DependencyKey {
     },
     remoteInfo: { repositoryRoot in
       await GitClient().remoteInfo(for: repositoryRoot)
+    },
+    remoteNames: { repoRoot in
+      try await GitClient().remoteNames(for: repoRoot)
+    },
+    fetchRemote: { remote, repoRoot in
+      try await GitClient().fetchRemote(remote, for: repoRoot)
     }
   )
   static let testValue = liveValue

@@ -22,7 +22,9 @@ struct SettingsFeature {
     var githubIntegrationEnabled: Bool
     var deleteBranchOnDeleteWorktree: Bool
     var mergedWorktreeAction: MergedWorktreeAction?
+    var archivedAutoDeletePeriod: AutoDeletePeriod?
     var promptForWorktreeCreation: Bool
+    var fetchRemoteBeforeWorktreeCreation: Bool
     var defaultWorktreeBaseDirectoryPath: String
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
@@ -52,7 +54,9 @@ struct SettingsFeature {
       githubIntegrationEnabled = settings.githubIntegrationEnabled
       deleteBranchOnDeleteWorktree = settings.deleteBranchOnDeleteWorktree
       mergedWorktreeAction = settings.mergedWorktreeAction
+      archivedAutoDeletePeriod = settings.archivedAutoDeletePeriod
       promptForWorktreeCreation = settings.promptForWorktreeCreation
+      fetchRemoteBeforeWorktreeCreation = settings.fetchOriginBeforeWorktreeCreation
       defaultWorktreeBaseDirectoryPath =
         SupacodePaths.normalizedWorktreeBaseDirectoryPath(settings.defaultWorktreeBaseDirectoryPath) ?? ""
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
@@ -80,10 +84,12 @@ struct SettingsFeature {
         deleteBranchOnDeleteWorktree: deleteBranchOnDeleteWorktree,
         mergedWorktreeAction: mergedWorktreeAction,
         promptForWorktreeCreation: promptForWorktreeCreation,
+        fetchOriginBeforeWorktreeCreation: fetchRemoteBeforeWorktreeCreation,
         defaultWorktreeBaseDirectoryPath: SupacodePaths.normalizedWorktreeBaseDirectoryPath(
           defaultWorktreeBaseDirectoryPath
         ),
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
+        archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
         keybindingUserOverrides: keybindingUserOverrides
       )
@@ -175,7 +181,9 @@ struct SettingsFeature {
         state.githubIntegrationEnabled = normalizedSettings.githubIntegrationEnabled
         state.deleteBranchOnDeleteWorktree = normalizedSettings.deleteBranchOnDeleteWorktree
         state.mergedWorktreeAction = normalizedSettings.mergedWorktreeAction
+        state.archivedAutoDeletePeriod = normalizedSettings.archivedAutoDeletePeriod
         state.promptForWorktreeCreation = normalizedSettings.promptForWorktreeCreation
+        state.fetchRemoteBeforeWorktreeCreation = normalizedSettings.fetchOriginBeforeWorktreeCreation
         state.defaultWorktreeBaseDirectoryPath = normalizedSettings.defaultWorktreeBaseDirectoryPath ?? ""
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize

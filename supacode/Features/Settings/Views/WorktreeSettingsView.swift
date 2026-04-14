@@ -57,12 +57,32 @@ struct WorktreeSettingsView: View {
             }
           }
           VStack(alignment: .leading) {
+            Picker(selection: $store.archivedAutoDeletePeriod) {
+              Text("Never").tag(AutoDeletePeriod?.none)
+              ForEach(AutoDeletePeriod.allCases) { period in
+                Text(period.label).tag(AutoDeletePeriod?.some(period))
+              }
+            } label: {
+              Text("Auto-delete archived worktrees")
+              Text("Permanently removes archived worktrees after the selected period.")
+            }
+          }
+          VStack(alignment: .leading) {
             Toggle(
               "Prompt for branch name during creation",
               isOn: $store.promptForWorktreeCreation
             )
             .help("Ask for branch name and base ref before creating a worktree.")
             Text("When enabled, you choose the branch name and where it branches from before creating the worktree.")
+              .foregroundStyle(.secondary)
+          }
+          VStack(alignment: .leading) {
+            Toggle(
+              "Fetch remote before creating worktree",
+              isOn: $store.fetchRemoteBeforeWorktreeCreation
+            )
+            .help("Runs git fetch <remote> before creating a worktree.")
+            Text("Keeps remote-tracking base branches current. Fetch failures are logged and creation continues.")
               .foregroundStyle(.secondary)
           }
         }

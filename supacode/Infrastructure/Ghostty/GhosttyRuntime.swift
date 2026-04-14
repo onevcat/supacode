@@ -63,6 +63,10 @@ final class GhosttyRuntime {
     }
     self.app = app
 
+    registerNotificationObservers()
+  }
+
+  private func registerNotificationObservers() {
     let center = NotificationCenter.default
     observers.append(
       center.addObserver(
@@ -95,6 +99,48 @@ final class GhosttyRuntime {
           ghostty_app_keyboard_changed(app)
         }
       })
+
+    let workspaceCenter = NSWorkspace.shared.notificationCenter
+    observers.append(
+      workspaceCenter.addObserver(
+        forName: NSWorkspace.willSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.logLifecycleEvent("workspaceWillSleep")
+        }
+      })
+    observers.append(
+      workspaceCenter.addObserver(
+        forName: NSWorkspace.didWakeNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.logLifecycleEvent("workspaceDidWake")
+        }
+      })
+    observers.append(
+      workspaceCenter.addObserver(
+        forName: NSWorkspace.screensDidSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.logLifecycleEvent("screensDidSleep")
+        }
+      })
+    observers.append(
+      workspaceCenter.addObserver(
+        forName: NSWorkspace.screensDidWakeNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.logLifecycleEvent("screensDidWake")
+        }
+      })
   }
 
   isolated deinit {
@@ -120,6 +166,18 @@ final class GhosttyRuntime {
     if let app {
       ghostty_app_tick(app)
     }
+  }
+
+  private func logLifecycleEvent(_ event: String) {
+    let validSurfaceCount = surfaceRefs.reduce(into: 0) { count, ref in
+      if ref.isValid {
+        count += 1
+      }
+    }
+    ghosttyLogger.info(
+      "[TerminalWake] event=\(event) appActive=\(NSApp.isActive) "
+        + "windows=\(NSApp.windows.count) runtimeSurfaces=\(validSurfaceCount)"
+    )
   }
 
   func setColorScheme(_ scheme: ColorScheme) {

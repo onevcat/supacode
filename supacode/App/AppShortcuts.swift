@@ -99,6 +99,7 @@ enum AppShortcuts {
     static let checkForUpdates = "check_for_updates"
     static let showDiff = "show_diff"
     static let toggleCanvas = "toggle_canvas"
+    static let revealInSidebar = "reveal_in_sidebar"
     static let archivedWorktrees = "archived_worktrees"
     static let selectNextWorktree = "select_next_worktree"
     static let selectPreviousWorktree = "select_previous_worktree"
@@ -174,6 +175,7 @@ enum AppShortcuts {
   static let toggleCanvas = AppShortcut(
     keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .option]
   )
+  static let revealInSidebar = AppShortcut(key: "l", modifiers: [.command, .shift])
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
   static let selectNextWorktree = AppShortcut(
     keyEquivalent: .downArrow, ghosttyKeyName: "arrow_down", modifiers: [.command, .control]
@@ -371,6 +373,12 @@ enum AppShortcuts {
       title: "Toggle Canvas",
       scope: .configurableAppAction,
       shortcut: toggleCanvas
+    ),
+    .init(
+      id: CommandID.revealInSidebar,
+      title: "Reveal in Sidebar",
+      scope: .configurableAppAction,
+      shortcut: revealInSidebar
     ),
     .init(
       id: CommandID.archivedWorktrees,
@@ -705,6 +713,7 @@ enum AppShortcuts {
     openRepository,
     openPullRequest,
     toggleLeftSidebar,
+    revealInSidebar,
     refreshWorktrees,
     runScript,
     stopRunScript,

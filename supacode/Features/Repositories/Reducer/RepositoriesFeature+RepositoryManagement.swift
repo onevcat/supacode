@@ -81,7 +81,7 @@ extension RepositoriesFeature {
       let applyResult = applyRepositories(
         repositories,
         roots: roots,
-        shouldPruneArchivedWorktreeIDs: failures.isEmpty,
+        shouldPruneArchivedWorktrees: failures.isEmpty,
         state: &state,
         animated: false
       )
@@ -131,11 +131,11 @@ extension RepositoriesFeature {
             await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
           })
       }
-      if applyResult.didPruneArchivedWorktreeIDs {
-        let archivedWorktreeIDs = state.archivedWorktreeIDs
+      if applyResult.didPruneArchivedWorktrees {
+        let archivedWorktrees = state.archivedWorktrees
         allEffects.append(
           .run { _ in
-            await repositoryPersistence.saveArchivedWorktreeIDs(archivedWorktreeIDs)
+            await repositoryPersistence.saveArchivedWorktrees(archivedWorktrees)
           }
         )
       }

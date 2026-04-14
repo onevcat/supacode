@@ -1,5 +1,33 @@
 # Changelog
 
+## [2026.4.11](https://github.com/onevcat/Prowl/releases/tag/v2026.4.11)
+
+This release focuses on worktree management improvements and quality-of-life fixes.
+
+## New
+
+- **Auto-delete archived worktrees**: A new setting in Worktree Settings lets you configure a period (1, 3, 7, 14, or 30 days) after which archived worktrees are deleted automatically.
+- **Reveal in Sidebar**: Press Shift+Cmd+L to scroll the sidebar to the currently selected worktree, expanding its repository section if collapsed.
+- **Archived worktrees discoverability**: Archive confirmation dialogs now tell you where to find archived worktrees (Menu Bar > Worktrees, or Control+Cmd+A). A "View Archived Worktrees" entry is also available in the command palette.
+
+## Fixed
+
+- Restored terminal surfaces no longer spin the CPU and GPU when they are not displayed, keeping resource usage low for non-visible tabs after session restore.
+
+## [2026.4.9](https://github.com/onevcat/Prowl/releases/tag/v2026.4.9)
+
+Tab layout and Worktrees menu discoverability are the main themes of this release.
+
+## New
+
+- All worktrees and plain folders now appear in the Worktrees menu, regardless of count. Previously only the first 9 were shown. Items beyond the 9th no longer have keyboard shortcuts but remain reachable via the menu or **Help > Search**.
+- Manually renamed tab titles and icons are now saved in the terminal layout snapshot and restored when the layout is reloaded.
+- Added Homepage and Release Notes links to the Help menu and sidebar footer.
+
+## Fixed
+
+- Plain folders were missing from the Worktrees menu entirely; they now appear in the same order as the sidebar.
+
 ## [2026.4.7](https://github.com/onevcat/Prowl/releases/tag/v2026.4.7)
 
 **Fixed**

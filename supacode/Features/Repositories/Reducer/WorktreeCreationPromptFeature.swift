@@ -7,12 +7,17 @@ struct WorktreeCreationPromptFeature {
   struct State: Equatable {
     let repositoryID: Repository.ID
     let repositoryName: String
-    let automaticBaseRefLabel: String
+    let automaticBaseRef: String
     let baseRefOptions: [String]
     var branchName: String
     var selectedBaseRef: String?
+    var fetchRemote: Bool
     var validationMessage: String?
     var isValidating = false
+
+    var automaticBaseRefLabel: String {
+      automaticBaseRef.isEmpty ? "Automatic" : "Automatic (\(automaticBaseRef))"
+    }
   }
 
   enum Action: BindableAction, Equatable {

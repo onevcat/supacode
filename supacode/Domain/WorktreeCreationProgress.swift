@@ -2,6 +2,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
   var stage: WorktreeCreationStage
   var worktreeName: String?
   var baseRef: String?
+  var fetchRemoteName: String?
   var copyIgnored: Bool?
   var copyUntracked: Bool?
   var ignoredFilesToCopyCount: Int?
@@ -14,6 +15,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     stage: WorktreeCreationStage,
     worktreeName: String? = nil,
     baseRef: String? = nil,
+    fetchRemoteName: String? = nil,
     copyIgnored: Bool? = nil,
     copyUntracked: Bool? = nil,
     ignoredFilesToCopyCount: Int? = nil,
@@ -25,6 +27,7 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
     self.stage = stage
     self.worktreeName = worktreeName
     self.baseRef = baseRef
+    self.fetchRemoteName = fetchRemoteName
     self.copyIgnored = copyIgnored
     self.copyUntracked = copyUntracked
     self.ignoredFilesToCopyCount = ignoredFilesToCopyCount
@@ -51,6 +54,11 @@ nonisolated struct WorktreeCreationProgress: Hashable, Sendable {
       return "Checking repository mode"
     case .resolvingBaseReference:
       return "Resolving base reference (\(baseRefDisplay))"
+    case .fetchingRemote:
+      if let fetchRemoteName, !fetchRemoteName.isEmpty {
+        return "Fetching \(fetchRemoteName)"
+      }
+      return "Fetching remote"
     case .creatingWorktree:
       if let outputLine = outputLines.last, !outputLine.isEmpty {
         return outputLine
@@ -121,5 +129,6 @@ nonisolated enum WorktreeCreationStage: Hashable, Sendable {
   case choosingWorktreeName
   case checkingRepositoryMode
   case resolvingBaseReference
+  case fetchingRemote
   case creatingWorktree
 }

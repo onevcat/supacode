@@ -1,4 +1,45 @@
-### Change content
+# Fork Change Log
+
+## Upstream Baseline
+
+| Key | Value |
+| --- | --- |
+| Commit | `0150ceaf0d2bc5e976df25b2f2cfa33ad92e5558` |
+| Tag | v0.8.0 |
+| Date | 2026-04-08 |
+
+All upstream changes up to and including this commit have been reviewed.
+Future upstream checks should only inspect commits **after** this baseline.
+
+---
+
+## 2026-04-08 — Full upstream review & change-list format migration
+
+### Upstream changes reviewed
+
+Reviewed all upstream (`supabitapp/supacode`) commits from our last sync through `0150ceaf` (v0.8.0). Key additions:
+
+- **Deeplinks** (`a7f6d81f`) — new deeplink handling
+- **Coding agent hook system** (`61356be1`) — hooks for Claude Code and Codex
+- **Auto-hide tab bar for tmux** (`dc8eb02e`) — new setting
+- **Inhibit command on script & single-tab bar hiding** (`301cf398`)
+- **Auto-delete archived worktrees** (`666d440d`) — configurable retention period
+- **Terminal layout persistence and restoration** (`771e4aab`)
+- **Global worktree settings** (`c29ee5a5`) — global defaults with per-repo overrides
+- **Merged worktree action picker** (`4db25220`) — replaces auto-archive toggle
+- **Global defaults for copy flags and merge strategy** (`ce214902`) — overlaps with our #178
+
+### Decisions
+
+- **#178 (global defaults)**: Upstream added `ce214902` which covers global defaults for copy flags and merge strategy. Our fork branch `feat/issue-178-global-defaults` (`c7a10bd0`) implements the same concept. On next upstream sync, check for conflicts and prefer upstream's implementation where equivalent; keep fork extensions if any.
+- **#173, #177**: Both PRs already merged.
+- **change-list.md format**: This file is no longer maintained as a per-commit tracking table. It is now a dated log of upstream reviews and fork decisions. Use the `/check-upstream-changes` command to generate diffs against the baseline.
+
+---
+
+## Old Log
+
+The table below was the original per-commit tracking format, preserved for reference.
 
 | summary | commit hash | status |
 | --- | --- | --- |

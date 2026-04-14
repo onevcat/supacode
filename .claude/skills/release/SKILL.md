@@ -1,3 +1,10 @@
+---
+name: release
+description: Build, sign, notarize, and publish a Prowl release.
+---
+
+# Release
+
 Build, sign, notarize, and publish a Prowl release.
 
 1. Verify current branch is `main`: `git branch --show-current`

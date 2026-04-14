@@ -111,6 +111,37 @@ struct RepositoryPersistenceClientTests {
     )
   }
 
+  @Test(.dependencies) func legacyArchivedWorktreeIDsMigratedAndCleared() async {
+    let client = RepositoryPersistenceClient.liveValue
+
+    // Seed legacy key
+    @Shared(.appStorage("archivedWorktreeIDs")) var legacyArchived: [Worktree.ID] = []
+    $legacyArchived.withLock { $0 = ["/tmp/repo/wt-1", "/tmp/repo/wt-2"] }
+
+    // First load should migrate
+    let loaded = await client.loadArchivedWorktrees()
+    #expect(loaded.count == 2)
+    #expect(loaded.map(\.id) == ["/tmp/repo/wt-1", "/tmp/repo/wt-2"])
+    // Migrated timestamps should be recent, not distantPast
+    for entry in loaded {
+      #expect(entry.archivedAt > Date.distantPast)
+    }
+
+    // Legacy key should be cleared
+    #expect(legacyArchived.isEmpty)
+
+    // New key should be populated
+    @Shared(.appStorage("archivedWorktrees")) var newArchived: [ArchivedWorktree] = []
+    #expect(newArchived.count == 2)
+
+    // Save empty (user clears all archives)
+    await client.saveArchivedWorktrees([])
+
+    // Reload should return empty — no resurrection from legacy key
+    let reloaded = await client.loadArchivedWorktrees()
+    #expect(reloaded.isEmpty)
+  }
+
   @Test func repositorySnapshotPayloadRoundTripsRepositories() {
     let repoRoot = "/tmp/repo"
     let worktree = Worktree(

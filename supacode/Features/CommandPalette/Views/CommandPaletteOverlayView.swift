@@ -347,8 +347,8 @@ private struct CommandPaletteRowView: View {
 
   private var badge: String? {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
-      .installCLI, .ghosttyCommand,
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .refreshWorktrees, .installCLI, .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect:
@@ -374,6 +374,8 @@ private struct CommandPaletteRowView: View {
       return "gearshape"
     case .newWorktree:
       return "plus"
+    case .viewArchivedWorktrees:
+      return "archivebox"
     case .refreshWorktrees:
       return "arrow.clockwise"
     case .ghosttyCommand:
@@ -411,8 +413,8 @@ private struct CommandPaletteRowView: View {
 
   private var emphasis: Bool {
     switch row.kind {
-    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .refreshWorktrees,
-      .installCLI, .ghosttyCommand,
+    case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
+      .refreshWorktrees, .installCLI, .ghosttyCommand,
       .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails:
@@ -503,6 +505,8 @@ private struct CommandPaletteRowView: View {
       base = "Open Settings"
     case .newWorktree:
       base = "New Worktree"
+    case .viewArchivedWorktrees:
+      base = "View Archived Worktrees"
     case .refreshWorktrees:
       base = "Refresh Worktrees"
     case .ghosttyCommand:

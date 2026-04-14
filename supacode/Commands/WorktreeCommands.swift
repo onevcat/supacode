@@ -45,6 +45,12 @@ struct WorktreeCommands: Commands {
       ForEach(worktreeMenuEntries(orderedRows: orderedRows)) { entry in
         worktreeMenuButton(entry: entry)
       }
+      Divider()
+      Button("Archived Worktrees") {
+        store.send(.repositories(.selectArchivedWorktrees))
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.archivedWorktrees)))
+      .help(helpText(title: "Archived Worktrees", commandID: AppShortcuts.CommandID.archivedWorktrees))
     }
     CommandGroup(replacing: .newItem) {
       if !customCommands.isEmpty {
@@ -82,11 +88,6 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.newWorktree)))
       .help(helpText(title: "New Worktree", commandID: AppShortcuts.CommandID.newWorktree))
       .disabled(!repositories.canCreateWorktree)
-      Button("Archived Worktrees") {
-        store.send(.repositories(.selectArchivedWorktrees))
-      }
-      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.archivedWorktrees)))
-      .help(helpText(title: "Archived Worktrees", commandID: AppShortcuts.CommandID.archivedWorktrees))
       Button("Archive Worktree") {
         archiveWorktreeAction?()
       }

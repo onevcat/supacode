@@ -58,7 +58,7 @@ struct ToolbarNotificationGroupingTests {
 
     var state = RepositoriesFeature.State(repositories: [repoA, repoB])
     state.repositoryRoots = [repoA.rootURL, repoB.rootURL]
-    state.archivedWorktreeIDs = [repoAArchived.id]
+    state.archivedWorktrees = [ArchivedWorktree(id: repoAArchived.id, archivedAt: .distantPast)]
 
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     manager.state(for: repoAArchived).notifications = [

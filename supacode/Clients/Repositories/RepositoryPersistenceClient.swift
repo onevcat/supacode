@@ -9,8 +9,8 @@ struct RepositoryPersistenceClient {
   var saveRoots: @Sendable ([String]) async -> Void
   var loadPinnedWorktreeIDs: @Sendable () async -> [Worktree.ID]
   var savePinnedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
-  var loadArchivedWorktreeIDs: @Sendable () async -> [Worktree.ID]
-  var saveArchivedWorktreeIDs: @Sendable ([Worktree.ID]) async -> Void
+  var loadArchivedWorktrees: @Sendable () async -> [ArchivedWorktree]
+  var saveArchivedWorktrees: @Sendable ([ArchivedWorktree]) async -> Void
   var loadRepositoryOrderIDs: @Sendable () async -> [Repository.ID]
   var saveRepositoryOrderIDs: @Sendable ([Repository.ID]) async -> Void
   var loadWorktreeOrderByRepository: @Sendable () async -> [Repository.ID: [Worktree.ID]]
@@ -57,13 +57,24 @@ extension RepositoryPersistenceClient: DependencyKey {
           $0 = ids
         }
       },
-      loadArchivedWorktreeIDs: {
-        @Shared(.appStorage("archivedWorktreeIDs")) var archived: [Worktree.ID] = []
-        return RepositoryPathNormalizer.normalize(archived)
+      loadArchivedWorktrees: {
+        @Shared(.appStorage("archivedWorktrees")) var archived: [ArchivedWorktree] = []
+        if !archived.isEmpty {
+          return normalizeArchivedWorktrees(archived)
+        }
+        // One-time migration from legacy format
+        @Shared(.appStorage("archivedWorktreeIDs")) var legacyArchived: [Worktree.ID] = []
+        let legacyIDs = RepositoryPathNormalizer.normalize(legacyArchived)
+        guard !legacyIDs.isEmpty else { return [] }
+        let now = Date()
+        let migrated = legacyIDs.map { ArchivedWorktree(id: $0, archivedAt: now) }
+        $archived.withLock { $0 = migrated }
+        $legacyArchived.withLock { $0 = [] }
+        return migrated
       },
-      saveArchivedWorktreeIDs: { ids in
-        @Shared(.appStorage("archivedWorktreeIDs")) var sharedArchived: [Worktree.ID] = []
-        let normalized = RepositoryPathNormalizer.normalize(ids)
+      saveArchivedWorktrees: { worktrees in
+        @Shared(.appStorage("archivedWorktrees")) var sharedArchived: [ArchivedWorktree] = []
+        let normalized = normalizeArchivedWorktrees(worktrees)
         $sharedArchived.withLock {
           $0 = normalized
         }
@@ -180,8 +191,8 @@ extension RepositoryPersistenceClient: DependencyKey {
     saveRoots: { _ in },
     loadPinnedWorktreeIDs: { [] },
     savePinnedWorktreeIDs: { _ in },
-    loadArchivedWorktreeIDs: { [] },
-    saveArchivedWorktreeIDs: { _ in },
+    loadArchivedWorktrees: { [] },
+    saveArchivedWorktrees: { _ in },
     loadRepositoryOrderIDs: { [] },
     saveRepositoryOrderIDs: { _ in },
     loadWorktreeOrderByRepository: { [:] },
@@ -336,6 +347,19 @@ extension RepositorySnapshotCachePayload {
       )
     }
   }
+}
+
+private nonisolated func normalizeArchivedWorktrees(_ worktrees: [ArchivedWorktree]) -> [ArchivedWorktree] {
+  var seen = Set<Worktree.ID>()
+  var result: [ArchivedWorktree] = []
+  result.reserveCapacity(worktrees.count)
+  for entry in worktrees {
+    guard let normalized = normalizePath(entry.id), seen.insert(normalized).inserted else {
+      continue
+    }
+    result.append(ArchivedWorktree(id: normalized, archivedAt: entry.archivedAt))
+  }
+  return result
 }
 
 private nonisolated func normalizePath(_ path: String) -> String? {
