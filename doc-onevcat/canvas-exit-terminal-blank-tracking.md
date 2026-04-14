@@ -104,6 +104,7 @@ Existing and previous diagnostics already cover:
 - selected worktree transition when leaving Canvas
 - surface detach intent (`viewWillMove(toSuperview:/toWindow:)`) with call stack
 - host wrapper lifecycle (`hostMake`, `hostInit`, `hostUpdate`, `hostDeinit`, `hostReattach`)
+- host reattach completion snapshot (`hostReattachComplete`)
 - per-surface host metadata (`hostKind`, wrapper id)
 
 ### `[TerminalWake]`
@@ -120,6 +121,7 @@ Added on 2026-04-11 to correlate future failures with sleep/wake and long-lived 
   - per-surface state snapshot on workspace sleep/wake
   - per-surface state snapshot on `viewDidMoveToWindow`
   - per-surface state snapshot on `viewDidMoveToSuperview`
+  - detach-time safety-net request back to the last known terminal host
 - `WindowFocusObserverView`
   - window activity changes (`key`, `visible`, `force`, `windowNumber`)
 
@@ -207,6 +209,7 @@ Current tactical response:
 - add detach stack logging to identify who removes the surface
 - add host wrapper diagnostics to correlate `surface ↔ wrapper ↔ canvas/terminal`
 - attempt a narrow fix: terminal host reattaches the surface if updates/layout find it missing
+- add a detach-time safety net so a just-detached surface asks its last terminal host to try reattachment on the next main-loop turn
 
 Expected interpretation of the next repro:
 

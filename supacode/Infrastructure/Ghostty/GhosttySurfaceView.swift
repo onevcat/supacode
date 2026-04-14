@@ -1131,6 +1131,11 @@ final class GhosttySurfaceView: NSView, Identifiable {
         + "wrapper=\(scrollWrapper?.debugIdentifier ?? "none")"
     )
     _ = occlusionState.invalidateForAttachmentChange()
+    if superview == nil {
+      DispatchQueue.main.async { [weak self] in
+        self?.scrollWrapper?.ensureSurfaceAttached()
+      }
+    }
     guard isReadyToApplyOcclusion else { return }
     DispatchQueue.main.async { [weak self] in
       self?.reapplyOcclusionIfNeeded()
@@ -2521,6 +2526,13 @@ final class GhosttySurfaceScrollView: NSView {
     )
     documentView.addSubview(surfaceView)
     surfaceView.scrollWrapper = self
+    surfaceHostLogger.info(
+      "[CanvasExit] hostReattachComplete wrapper=\(debugID) host=\(hostKind.rawValue) "
+        + "surface=\(surfaceView.debugIdentifierForLogging) "
+        + "superview=\(surfaceView.superview != nil) "
+        + "window=\(surfaceView.window != nil) "
+        + "bounds=\(Int(surfaceView.bounds.width))x\(Int(surfaceView.bounds.height))"
+    )
   }
 
   func updateScrollbar(total: UInt64, offset: UInt64, length: UInt64) {
