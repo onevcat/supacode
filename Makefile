@@ -66,6 +66,10 @@ $(TUIST_GENERATION_STAMP_DIR)/%: $(TUIST_GENERATION_INPUTS) $(TUIST_INSTALL_STAM
 	mkdir -p "$(TUIST_GENERATION_STAMP_DIR)"
 	find "$(TUIST_GENERATION_STAMP_DIR)" -mindepth 1 -maxdepth 1 ! -name '.installed' -delete
 	rm -rf supacode.xcodeproj supacode.xcworkspace
+	for path in "$${HOME}/Library/Developer/Xcode/DerivedData"/supacode-*; do \
+		[ -e "$$path" ] || continue; \
+		rm -rf "$$path"; \
+	done
 	mise exec -- tuist generate --no-open --cache-profile "$*"
 	touch "$@"
 
@@ -73,6 +77,10 @@ $(TUIST_SOURCE_RELEASE_GENERATION_STAMP): $(TUIST_GENERATION_INPUTS) $(TUIST_INS
 	mkdir -p "$(TUIST_GENERATION_STAMP_DIR)"
 	find "$(TUIST_GENERATION_STAMP_DIR)" -mindepth 1 -maxdepth 1 ! -name '.installed' -delete
 	rm -rf supacode.xcodeproj supacode.xcworkspace
+	for path in "$${HOME}/Library/Developer/Xcode/DerivedData"/supacode-*; do \
+		[ -e "$$path" ] || continue; \
+		rm -rf "$$path"; \
+	done
 	mise exec -- tuist generate --no-open --cache-profile none --configuration Release
 	touch "$@"
 
