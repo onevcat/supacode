@@ -342,7 +342,9 @@ public enum AppShortcuts {
     AppShortcutGroup(category: .worktreeSelection, shortcuts: worktreeSelection),
     AppShortcutGroup(
       category: .actions,
-      shortcuts: [openWorktree, revealInFinder, openRepository, openPullRequest, copyPath, runScript, stopRunScript]
+      shortcuts: [
+        openWorktree, revealInFinder, openRepository, openPullRequest, copyPath, runScript, stopRunScript,
+      ]
     ),
   ]
 
@@ -407,9 +409,9 @@ public enum AppShortcuts {
 
 // MARK: - View modifier.
 
-public extension View {
+extension View {
   @ViewBuilder
-  func appKeyboardShortcut(_ shortcut: AppShortcut?) -> some View {
+  public func appKeyboardShortcut(_ shortcut: AppShortcut?) -> some View {
     if let shortcut {
       self.keyboardShortcut(shortcut.keyEquivalent, modifiers: shortcut.modifiers)
     } else {

@@ -101,7 +101,7 @@ struct WorktreeCommands: Commands {
       .disabled(deleteWorktreeAction == nil)
       Divider()
       // Scripts.
-      Button("Run Script", systemImage: "play") {
+      Button("Run Script", systemImage: ScriptKind.run.defaultSystemImage) {
         runScriptAction?()
       }
       .appKeyboardShortcut(run)

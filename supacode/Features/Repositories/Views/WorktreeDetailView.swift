@@ -1,6 +1,7 @@
 import AppKit
 import ComposableArchitecture
 import Sharing
+import SupacodeSettingsFeature
 import SupacodeSettingsShared
 import SwiftUI
 
@@ -38,8 +39,8 @@ struct WorktreeDetailView: View {
       && loadingInfo == nil
       && !showsMultiSelectionSummary
     let openActionSelection = state.openActionSelection
-    let runScriptEnabled = hasActiveWorktree
-    let runScriptIsRunning = selectedWorktree.map { state.repositories.runScriptWorktreeIDs.contains($0.id) } == true
+    let scripts = state.scripts
+    let runningScriptIDs = state.runningScriptIDs
     let notificationGroups = repositories.toolbarNotificationGroups(terminalManager: terminalManager)
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
       count + repository.unseenWorktreeCount
@@ -70,8 +71,8 @@ struct WorktreeDetailView: View {
           unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
           openActionSelection: openActionSelection,
           showExtras: commandKeyObserver.isPressed,
-          runScriptEnabled: runScriptEnabled,
-          runScriptIsRunning: runScriptIsRunning
+          scripts: scripts,
+          runningScriptIDs: runningScriptIDs,
         )
         WorktreeToolbarContent(
           toolbarState: toolbarState,
@@ -90,14 +91,20 @@ struct WorktreeDetailView: View {
           onSelectNotification: selectToolbarNotification,
           onDismissAllNotifications: { dismissAllToolbarNotifications(in: notificationGroups) },
           onRunScript: { store.send(.runScript) },
-          onStopRunScript: { store.send(.stopRunScript) }
+          onRunNamedScript: { store.send(.runNamedScript($0)) },
+          onStopScript: { store.send(.stopScript($0)) },
+          onStopRunScripts: { store.send(.stopRunScripts) },
+          onManageScripts: {
+            let repositoryID = selectedWorktree.repositoryRootURL.path(percentEncoded: false)
+            store.send(.settings(.setSelection(.repositoryScripts(repositoryID))))
+          }
         )
       }
     }
+    let hasRunningRunScript = state.hasRunningRunScript
     let actions = makeFocusedActions(
       hasActiveWorktree: hasActiveWorktree,
-      runScriptEnabled: runScriptEnabled,
-      runScriptIsRunning: runScriptIsRunning
+      hasRunningRunScript: hasRunningRunScript
     )
     return applyFocusedActions(content: content, actions: actions)
   }
@@ -226,8 +233,7 @@ struct WorktreeDetailView: View {
 
   private func makeFocusedActions(
     hasActiveWorktree: Bool,
-    runScriptEnabled: Bool,
-    runScriptIsRunning: Bool
+    hasRunningRunScript: Bool
   ) -> FocusedActions {
     func action(_ appAction: AppFeature.Action) -> (() -> Void)? {
       hasActiveWorktree ? { store.send(appAction) } : nil
@@ -243,8 +249,8 @@ struct WorktreeDetailView: View {
       navigateSearchNext: action(.navigateSearchNext),
       navigateSearchPrevious: action(.navigateSearchPrevious),
       endSearch: action(.endSearch),
-      runScript: runScriptEnabled ? { store.send(.runScript) } : nil,
-      stopRunScript: runScriptIsRunning ? { store.send(.stopRunScript) } : nil
+      runScript: hasActiveWorktree ? { store.send(.runScript) } : nil,
+      stopRunScript: hasRunningRunScript ? { store.send(.stopRunScripts) } : nil,
     )
   }
 
@@ -289,8 +295,18 @@ struct WorktreeDetailView: View {
     let unseenNotificationWorktreeCount: Int
     let openActionSelection: OpenWorktreeAction
     let showExtras: Bool
-    let runScriptEnabled: Bool
-    let runScriptIsRunning: Bool
+    let scripts: [ScriptDefinition]
+    let runningScriptIDs: Set<UUID>
+
+    /// The first `.run`-kind script, if any.
+    var primaryScript: ScriptDefinition? {
+      scripts.primaryScript
+    }
+
+    /// Whether any `.run`-kind script is currently running.
+    var hasRunningRunScript: Bool {
+      scripts.hasRunningRunScript(in: runningScriptIDs)
+    }
 
     var runScriptHelpText: String {
       @Shared(.settingsFile) var settingsFile
@@ -314,7 +330,10 @@ struct WorktreeDetailView: View {
     let onSelectNotification: (Worktree.ID, WorktreeTerminalNotification) -> Void
     let onDismissAllNotifications: () -> Void
     let onRunScript: () -> Void
-    let onStopRunScript: () -> Void
+    let onRunNamedScript: (ScriptDefinition) -> Void
+    let onStopScript: (ScriptDefinition) -> Void
+    let onStopRunScripts: () -> Void
+    let onManageScripts: () -> Void
 
     var body: some ToolbarContent {
       ToolbarItem {
@@ -348,7 +367,7 @@ struct WorktreeDetailView: View {
 
       ToolbarSpacer(.flexible)
 
-      ToolbarItemGroup {
+      ToolbarItem {
         openMenu(
           openActionSelection: toolbarState.openActionSelection,
           showExtras: toolbarState.showExtras
@@ -356,19 +375,15 @@ struct WorktreeDetailView: View {
       }
       ToolbarSpacer(.fixed)
 
-      if toolbarState.runScriptIsRunning || toolbarState.runScriptEnabled {
-        ToolbarItem {
-          RunScriptToolbarButton(
-            isRunning: toolbarState.runScriptIsRunning,
-            isEnabled: toolbarState.runScriptEnabled,
-            runHelpText: toolbarState.runScriptHelpText,
-            stopHelpText: toolbarState.stopRunScriptHelpText,
-            runShortcut: shortcutDisplay(for: AppShortcuts.runScript, fallback: ""),
-            stopShortcut: shortcutDisplay(for: AppShortcuts.stopRunScript, fallback: ""),
-            runAction: onRunScript,
-            stopAction: onStopRunScript
-          )
-        }
+      ToolbarItem {
+        ScriptMenu(
+          toolbarState: toolbarState,
+          onRunScript: onRunScript,
+          onRunNamedScript: onRunNamedScript,
+          onStopScript: onStopScript,
+          onStopRunScripts: onStopRunScripts,
+          onManageScripts: onManageScripts
+        )
       }
 
     }
@@ -379,55 +394,40 @@ struct WorktreeDetailView: View {
       let resolved = OpenWorktreeAction.availableSelection(openActionSelection)
       let primarySelection = resolved == .finder ? availableActions.first : resolved
       if let primarySelection {
-        Button {
-          onOpenWorktree(primarySelection)
+        Menu {
+          ForEach(availableActions) { action in
+            let isDefault = action == primarySelection
+            Button {
+              onOpenActionSelectionChanged(action)
+              onOpenWorktree(action)
+            } label: {
+              OpenWorktreeActionMenuLabelView(action: action, shortcutHint: nil)
+            }
+            .buttonStyle(.plain)
+            .help(openActionHelpText(for: action, isDefault: isDefault))
+          }
+          Divider()
+          Button {
+            onRevealInFinder()
+          } label: {
+            OpenWorktreeActionMenuLabelView(action: .finder, shortcutHint: nil)
+          }
+          .help("Reveal in Finder (\(resolveShortcutDisplay(for: AppShortcuts.revealInFinder)))")
         } label: {
           OpenWorktreeActionMenuLabelView(
             action: primarySelection,
-            shortcutHint: showExtras ? shortcutDisplay(for: AppShortcuts.openWorktree, fallback: "") : nil
+            shortcutHint: showExtras ? resolveShortcutDisplay(for: AppShortcuts.openWorktree, fallback: "") : nil
           )
+        } primaryAction: {
+          onOpenWorktree(primarySelection)
         }
         .help(openActionHelpText(for: primarySelection, isDefault: true))
       }
-
-      Menu {
-        ForEach(availableActions) { action in
-          let isDefault = action == primarySelection
-          Button {
-            onOpenActionSelectionChanged(action)
-            onOpenWorktree(action)
-          } label: {
-            OpenWorktreeActionMenuLabelView(action: action, shortcutHint: nil)
-          }
-          .buttonStyle(.plain)
-          .help(openActionHelpText(for: action, isDefault: isDefault))
-        }
-        Divider()
-        Button {
-          onRevealInFinder()
-        } label: {
-          OpenWorktreeActionMenuLabelView(action: .finder, shortcutHint: nil)
-        }
-        .help("Reveal in Finder (\(shortcutDisplay(for: AppShortcuts.revealInFinder)))")
-      } label: {
-        Image(systemName: "chevron.down")
-          .font(.caption2)
-          .accessibilityLabel("Open in menu")
-      }
-      .imageScale(.small)
-      .menuIndicator(.hidden)
-      .fixedSize()
-      .help("Open in…")
-    }
-
-    private func shortcutDisplay(for shortcut: AppShortcut, fallback: String = "none") -> String {
-      @Shared(.settingsFile) var settingsFile
-      return shortcut.effective(from: settingsFile.global.shortcutOverrides)?.display ?? fallback
     }
 
     private func openActionHelpText(for action: OpenWorktreeAction, isDefault: Bool) -> String {
       guard isDefault else { return action.title }
-      return "\(action.title) (\(shortcutDisplay(for: AppShortcuts.openWorktree)))"
+      return "\(action.title) (\(resolveShortcutDisplay(for: AppShortcuts.openWorktree)))"
     }
   }
 
@@ -590,12 +590,13 @@ private struct ToolbarPlaceholderContent: ToolbarContent {
     ToolbarItem {
       Button {
       } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "play.fill")
+        Label {
           Text("Run")
+        } icon: {
+          Image(systemName: "play")
         }
+        .labelStyle(.titleAndIcon)
       }
-      .font(.caption)
       .redacted(reason: .placeholder)
       .shimmer(isActive: true)
     }
@@ -606,6 +607,13 @@ private struct MultiSelectedWorktreeSummary: Identifiable {
   let id: Worktree.ID
   let name: String
   let repositoryName: String?
+}
+
+/// Resolves a shortcut's display string from the user's settings.
+private func resolveShortcutDisplay(for shortcut: AppShortcut, fallback: String = "none") -> String {
+  @Shared(.settingsFile) var settingsFile
+  let display = shortcut.effective(from: settingsFile.global.shortcutOverrides)?.display ?? fallback
+  return display.isEmpty ? fallback : display
 }
 
 private struct MultiSelectedWorktreesDetailView: View {
@@ -655,70 +663,91 @@ private struct MultiSelectedWorktreesDetailView: View {
   }
 }
 
-private struct RunScriptToolbarButton: View {
-  let isRunning: Bool
-  let isEnabled: Bool
-  let runHelpText: String
-  let stopHelpText: String
-  let runShortcut: String
-  let stopShortcut: String
-  let runAction: () -> Void
-  let stopAction: () -> Void
+/// Menu with primary action for running scripts in the toolbar.
+/// Click runs the default script, stops running scripts, or opens settings;
+/// long-press/arrow opens the full script list.
+private struct ScriptMenu: View {
+  let toolbarState: WorktreeDetailView.WorktreeToolbarState
+  let onRunScript: () -> Void
+  let onRunNamedScript: (ScriptDefinition) -> Void
+  let onStopScript: (ScriptDefinition) -> Void
+  let onStopRunScripts: () -> Void
+  let onManageScripts: () -> Void
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
+  private var primaryScript: ScriptDefinition? {
+    toolbarState.primaryScript
+  }
+
   var body: some View {
-    if isRunning {
-      button(
-        config: RunScriptButtonConfig(
-          title: "Stop",
-          systemImage: "stop.fill",
-          helpText: stopHelpText,
-          shortcut: stopShortcut,
-          isEnabled: true,
-          action: stopAction
-        ))
-    } else {
-      button(
-        config: RunScriptButtonConfig(
-          title: "Run",
-          systemImage: "play.fill",
-          helpText: runHelpText,
-          shortcut: runShortcut,
-          isEnabled: isEnabled,
-          action: runAction
-        ))
+    let hasRunning = toolbarState.hasRunningRunScript
+    Menu {
+      ForEach(toolbarState.scripts) { script in
+        let isRunning = toolbarState.runningScriptIDs.contains(script.id)
+        Button {
+          if isRunning {
+            onStopScript(script)
+          } else {
+            onRunNamedScript(script)
+          }
+        } label: {
+          Label {
+            Text(isRunning ? "Stop \(script.displayName)" : script.displayName)
+          } icon: {
+            Image.tintedSymbol(
+              isRunning ? "stop" : script.resolvedSystemImage,
+              color: script.resolvedTintColor.nsColor,
+            )
+          }
+        }
+        .help(isRunning ? "Stop \(script.displayName)." : "Run \(script.displayName).")
+      }
+      if !toolbarState.scripts.isEmpty {
+        Divider()
+      }
+      Button("Manage Scripts…") {
+        onManageScripts()
+      }
+      .help("Open repository settings to manage scripts.")
+    } label: {
+      scriptLabel(hasRunning: hasRunning)
+    } primaryAction: {
+      if hasRunning {
+        onStopRunScripts()
+      } else if primaryScript != nil {
+        onRunScript()
+      } else {
+        onManageScripts()
+      }
     }
+    .help(primaryHelpText(hasRunning: hasRunning))
   }
 
   @ViewBuilder
-  private func button(config: RunScriptButtonConfig) -> some View {
-    Button {
-      config.action()
-    } label: {
-      HStack(spacing: 6) {
-        Image(systemName: config.systemImage)
-          .accessibilityHidden(true)
-        Text(config.title)
-
-        if commandKeyObserver.isPressed {
-          Text(config.shortcut)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-      }
-    }
-    .font(.caption)
-    .help(config.helpText)
-    .disabled(!config.isEnabled)
+  private func scriptLabel(hasRunning: Bool) -> some View {
+    let icon = hasRunning ? "stop" : (primaryScript?.resolvedSystemImage ?? "play")
+    let label = hasRunning ? "Stop" : (primaryScript?.displayName ?? "Run")
+    let shortcut = hasRunning ? AppShortcuts.stopRunScript : AppShortcuts.runScript
+    Label {
+      Text(
+        commandKeyObserver.isPressed
+          ? resolveShortcutDisplay(for: shortcut, fallback: label)
+          : label
+      )
+    } icon: {
+      Image(systemName: icon)
+        .accessibilityHidden(true)
+    }.labelStyle(.titleAndIcon)
   }
 
-  private struct RunScriptButtonConfig {
-    let title: String
-    let systemImage: String
-    let helpText: String
-    let shortcut: String
-    let isEnabled: Bool
-    let action: () -> Void
+  private func primaryHelpText(hasRunning: Bool) -> String {
+    if hasRunning {
+      return toolbarState.stopRunScriptHelpText
+    }
+    guard primaryScript != nil else {
+      return "Configure scripts in Settings."
+    }
+    return toolbarState.runScriptHelpText
   }
 }
 
@@ -736,8 +765,8 @@ private struct WorktreeToolbarPreview: View {
       unseenNotificationWorktreeCount: 0,
       openActionSelection: .finder,
       showExtras: false,
-      runScriptEnabled: true,
-      runScriptIsRunning: false
+      scripts: [ScriptDefinition(kind: .run, command: "npm run dev")],
+      runningScriptIDs: [],
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false
@@ -759,7 +788,10 @@ private struct WorktreeToolbarPreview: View {
         onSelectNotification: { _, _ in },
         onDismissAllNotifications: {},
         onRunScript: {},
-        onStopRunScript: {}
+        onRunNamedScript: { _ in },
+        onStopScript: { _ in },
+        onStopRunScripts: {},
+        onManageScripts: {}
       )
     }
     .environment(commandKeyObserver)

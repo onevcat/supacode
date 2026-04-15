@@ -546,7 +546,7 @@ public struct SettingsFeature {
       state.repositorySettings = nil
       return
     }
-    guard case .repository(let repositoryID) = selection else {
+    guard let repositoryID = selection.repositoryID else {
       state.repositorySettings = nil
       return
     }
