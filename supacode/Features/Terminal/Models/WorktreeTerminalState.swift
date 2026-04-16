@@ -878,11 +878,11 @@ final class WorktreeTerminalState {
     return formatCommandInput(script)
   }
 
+  // Env vars are injected into the surface's shell process via
+  // `GhosttySurfaceView(environment:)`, so scripts no longer need a shell
+  // export prefix.
   private func formatCommandInput(_ script: String) -> String? {
-    makeCommandInput(
-      script: script,
-      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
-    )
+    makeCommandInput(script: script)
   }
 
   private func runScriptInput(_ script: String) -> String? {
@@ -894,10 +894,7 @@ final class WorktreeTerminalState {
   // Without this, the interactive shell stays alive after the script finishes
   // and GHOSTTY_ACTION_SHOW_CHILD_EXITED never fires for completion detection.
   private func blockingScriptInput(_ script: String) -> String? {
-    makeBlockingScriptInput(
-      script: script,
-      environmentExportPrefix: worktree.scriptEnvironmentExportPrefix
-    )
+    makeBlockingScriptInput(script: script)
   }
 
   private func setRunScriptTabId(_ tabId: TerminalTabID?) {
@@ -927,7 +924,8 @@ final class WorktreeTerminalState {
       workingDirectory: workingDirectoryOverride ?? inherited.workingDirectory ?? worktree.workingDirectory,
       initialInput: initialInput,
       fontSize: resolvedFontSize,
-      context: context
+      context: context,
+      environment: worktree.scriptEnvironment
     )
     // Sending a no-op font size action marks the Ghostty surface as
     // "font_size_adjusted", which prevents config reloads (triggered by
@@ -1696,26 +1694,13 @@ extension WorktreeTerminalState {
   }
 }
 
-nonisolated func makeCommandInput(
-  script: String,
-  environmentExportPrefix: String
-) -> String? {
+nonisolated func makeCommandInput(script: String) -> String? {
   let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
   guard !trimmed.isEmpty else { return nil }
-  return environmentExportPrefix + trimmed + "\n"
+  return trimmed + "\n"
 }
 
-nonisolated func makeBlockingScriptInput(
-  script: String,
-  environmentExportPrefix: String
-) -> String? {
-  guard
-    let input = makeCommandInput(
-      script: script,
-      environmentExportPrefix: environmentExportPrefix
-    )
-  else {
-    return nil
-  }
+nonisolated func makeBlockingScriptInput(script: String) -> String? {
+  guard let input = makeCommandInput(script: script) else { return nil }
   return input + "exit\n"
 }

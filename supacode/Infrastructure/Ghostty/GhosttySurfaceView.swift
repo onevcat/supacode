@@ -108,6 +108,9 @@ final class GhosttySurfaceView: NSView, Identifiable {
   private var surfaceRef: GhosttyRuntime.SurfaceReference?
   private let workingDirectoryCString: UnsafeMutablePointer<CChar>?
   private let initialInputCString: UnsafeMutablePointer<CChar>?
+  private let envVarCStrings: [UnsafeMutablePointer<CChar>]
+  private let envVarEntries: UnsafeMutablePointer<ghostty_env_var_s>?
+  private let envVarCount: Int
   private let fontSize: Float32
   private let context: ghostty_surface_context_e
   private let skipsSurfaceCreationForTesting: Bool
@@ -222,6 +225,7 @@ final class GhosttySurfaceView: NSView, Identifiable {
     initialInput: String? = nil,
     fontSize: Float32? = nil,
     context: ghostty_surface_context_e,
+    environment: [String: String] = [:],
     skipsSurfaceCreationForTesting: Bool = false
   ) {
     self.runtime = runtime
@@ -241,6 +245,32 @@ final class GhosttySurfaceView: NSView, Identifiable {
       initialInputCString = initialInput.withCString { strdup($0) }
     } else {
       initialInputCString = nil
+    }
+    let sortedEnv = environment.sorted { $0.key < $1.key }
+    var allocatedStrings: [UnsafeMutablePointer<CChar>] = []
+    allocatedStrings.reserveCapacity(sortedEnv.count * 2)
+    for (key, value) in sortedEnv {
+      guard let keyPtr = key.withCString({ strdup($0) }),
+        let valuePtr = value.withCString({ strdup($0) })
+      else { continue }
+      allocatedStrings.append(keyPtr)
+      allocatedStrings.append(valuePtr)
+    }
+    envVarCStrings = allocatedStrings
+    let pairCount = allocatedStrings.count / 2
+    if pairCount > 0 {
+      let entries = UnsafeMutablePointer<ghostty_env_var_s>.allocate(capacity: pairCount)
+      for index in 0..<pairCount {
+        entries[index] = ghostty_env_var_s(
+          key: UnsafePointer(allocatedStrings[index * 2]),
+          value: UnsafePointer(allocatedStrings[index * 2 + 1])
+        )
+      }
+      envVarEntries = entries
+      envVarCount = pairCount
+    } else {
+      envVarEntries = nil
+      envVarCount = 0
     }
     super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
     wantsLayer = true
@@ -280,6 +310,12 @@ final class GhosttySurfaceView: NSView, Identifiable {
     }
     if let initialInputCString {
       free(initialInputCString)
+    }
+    if let envVarEntries {
+      envVarEntries.deallocate()
+    }
+    for pointer in envVarCStrings {
+      free(pointer)
     }
   }
 
@@ -1047,6 +1083,10 @@ final class GhosttySurfaceView: NSView, Identifiable {
     config.working_directory = workingDirectoryCString.map { UnsafePointer($0) }
     config.initial_input = initialInputCString.map { UnsafePointer($0) }
     config.context = context
+    if let envVarEntries, envVarCount > 0 {
+      config.env_vars = envVarEntries
+      config.env_var_count = envVarCount
+    }
     surface = ghostty_surface_new(app, &config)
     bridge.surface = surface
     occlusionState.reset()
