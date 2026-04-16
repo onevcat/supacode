@@ -536,6 +536,18 @@ final class WorktreeTerminalState {
     autoCloseSurfaceIds.contains(surfaceId)
   }
 
+  // Short delay lets the user see the final output before the pane disappears.
+  private static let autoCloseDelay: Duration = .milliseconds(800)
+
+  private func scheduleAutoClose(surfaceId: UUID) {
+    Task { [weak self] in
+      try? await Task.sleep(for: Self.autoCloseDelay)
+      guard let self else { return }
+      guard let view = self.surfaces[surfaceId] else { return }
+      self.handleCloseRequest(for: view, processAlive: false)
+    }
+  }
+
   func performSplitAction(_ action: GhosttySplitAction, for surfaceId: UUID) -> Bool {
     guard let tabId = tabId(containing: surfaceId), var tree = trees[tabId] else {
       return false
@@ -1294,8 +1306,8 @@ final class WorktreeTerminalState {
 
     // Auto-close on success (exit 0). One-shot: the id is removed regardless of outcome.
     if autoCloseSurfaceIds.remove(surfaceId) != nil {
-      if exitCode == 0, let view = surfaces[surfaceId] {
-        handleCloseRequest(for: view, processAlive: false)
+      if exitCode == 0, surfaces[surfaceId] != nil {
+        scheduleAutoClose(surfaceId: surfaceId)
         return
       }
     }
