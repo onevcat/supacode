@@ -165,6 +165,40 @@ struct CommandFinishedNotificationTests {
     #expect(state.notifications.count == 1)
   }
 
+  // MARK: - Auto-close on success
+
+  @Test func autoCloseFlagIsConsumedOnSuccess() {
+    let state = makeState()
+    state.markSurfaceForAutoClose(surfaceId)
+    #expect(state.isMarkedForAutoClose(surfaceId))
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 1_000_000_000, surfaceId: surfaceId)
+
+    #expect(!state.isMarkedForAutoClose(surfaceId))
+  }
+
+  @Test func autoCloseFlagIsConsumedOnFailureButDoesNotClose() {
+    let state = makeState()
+    state.markSurfaceForAutoClose(surfaceId)
+
+    state.handleCommandFinished(exitCode: 1, durationNs: 30_000_000_000, surfaceId: surfaceId)
+
+    #expect(!state.isMarkedForAutoClose(surfaceId))
+    // Standard failure notification still fires since close was not triggered.
+    #expect(state.notifications.count == 1)
+    #expect(state.notifications.first?.title == "Command failed")
+  }
+
+  @Test func unmarkedSurfaceDoesNotConsumeAutoCloseState() {
+    let state = makeState()
+    let otherSurfaceId = UUID()
+    state.markSurfaceForAutoClose(otherSurfaceId)
+
+    state.handleCommandFinished(exitCode: 0, durationNs: 15_000_000_000, surfaceId: surfaceId)
+
+    #expect(state.isMarkedForAutoClose(otherSurfaceId))
+  }
+
   // MARK: - Helpers
 
   private func makeState(threshold: Int = 10) -> WorktreeTerminalState {

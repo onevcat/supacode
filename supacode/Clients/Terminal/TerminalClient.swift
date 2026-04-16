@@ -8,7 +8,13 @@ struct TerminalClient {
 
   enum Command: Equatable {
     case createTab(Worktree, runSetupScriptIfNew: Bool)
-    case createTabWithInput(Worktree, input: String, runSetupScriptIfNew: Bool)
+    case createTabWithInput(Worktree, input: String, runSetupScriptIfNew: Bool, autoCloseOnSuccess: Bool)
+    case createSplitWithInput(
+      Worktree,
+      direction: UserCustomSplitDirection,
+      input: String,
+      autoCloseOnSuccess: Bool
+    )
     case createTabInDirectory(Worktree, directory: URL)
     case ensureInitialTab(Worktree, runSetupScriptIfNew: Bool, focusing: Bool)
     case runScript(Worktree, script: String)

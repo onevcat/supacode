@@ -649,6 +649,8 @@ struct RepositorySettingsView: View {
       return "New Tab"
     case .terminalInput:
       return "In Place"
+    case .split:
+      return "New Split"
     }
   }
 
@@ -720,8 +722,20 @@ struct RepositorySettingsView: View {
           .tag(UserCustomCommandExecution.shellScript)
         Text("In Place")
           .tag(UserCustomCommandExecution.terminalInput)
+        Text("New Split")
+          .tag(UserCustomCommandExecution.split)
       }
       .pickerStyle(.segmented)
+
+      if command.wrappedValue.execution == .split {
+        Picker("Split Direction", selection: command.splitDirection) {
+          ForEach(UserCustomSplitDirection.allCases) { direction in
+            Text(direction.title).tag(direction)
+          }
+        }
+        .pickerStyle(.menu)
+        .help("Direction to split the focused terminal pane.")
+      }
 
       PlainTextEditor(
         text: command.command,
@@ -734,6 +748,11 @@ struct RepositorySettingsView: View {
       Text(scriptDescription(for: command.wrappedValue.execution))
         .font(.caption)
         .foregroundStyle(.secondary)
+
+      if command.wrappedValue.execution.supportsCloseOnSuccess {
+        Toggle("Close on success", isOn: command.closeOnSuccess)
+          .help("Automatically closes the tab or split when the command exits with code 0.")
+      }
     }
     .padding(12)
     .frame(width: 420)
@@ -853,6 +872,8 @@ struct RepositorySettingsView: View {
       return "npm test && swift test"
     case .terminalInput:
       return "pnpm test --watch"
+    case .split:
+      return "tail -f logs/app.log"
     }
   }
 
@@ -862,6 +883,8 @@ struct RepositorySettingsView: View {
       return "Runs in a new terminal tab."
     case .terminalInput:
       return "Sends input to the currently focused terminal."
+    case .split:
+      return "Runs in a new split of the focused terminal."
     }
   }
 

@@ -42,6 +42,9 @@ final class WorktreeTerminalState {
   private var commandFinishedNotificationThreshold = 10
   private var lastKeyInputTimeBySurface: [UUID: ContinuousClock.Instant] = [:]
   private var commandFinishedWaiters: [UUID: AsyncStream<(exitCode: Int?, durationMs: Int)>.Continuation] = [:]
+  /// Surfaces that should auto-close on the next `command_finished` event with exit code 0.
+  /// Populated by `markSurfaceForAutoClose` and consumed (one-shot) in `handleCommandFinished`.
+  private var autoCloseSurfaceIds: Set<UUID> = []
   var hasUnseenNotification: Bool {
     notifications.contains { !$0.isRead }
   }
@@ -479,6 +482,60 @@ final class WorktreeTerminalState {
     return tree
   }
 
+  /// Splits the currently focused surface and seeds the new pane with `initialInput`.
+  /// Returns the new surface id, or nil if the split could not be created.
+  @discardableResult
+  func createSplitOnFocusedSurface(
+    direction: UserCustomSplitDirection,
+    initialInput: String
+  ) -> UUID? {
+    guard let tabId = tabManager.selectedTabId,
+      let parentSurfaceId = focusedSurfaceIdByTab[tabId],
+      let tree = trees[tabId],
+      let parentSurface = surfaces[parentSurfaceId]
+    else {
+      return nil
+    }
+    let newSurface = createSurface(
+      tabId: tabId,
+      initialInput: runScriptInput(initialInput),
+      inheritingFromSurfaceId: parentSurfaceId,
+      context: GHOSTTY_SURFACE_CONTEXT_SPLIT
+    )
+    do {
+      let newTree = try tree.inserting(
+        view: newSurface,
+        at: parentSurface,
+        direction: mapUserSplitDirection(direction)
+      )
+      updateTree(newTree, for: tabId)
+      if isCanvasManaged {
+        newSurface.setOcclusion(true)
+      }
+      focusSurface(newSurface, in: tabId)
+      return newSurface.id
+    } catch {
+      newSurface.closeSurface()
+      surfaces.removeValue(forKey: newSurface.id)
+      return nil
+    }
+  }
+
+  /// Returns the focused surface id for a given tab, if any.
+  func focusedSurfaceId(in tabId: TerminalTabID) -> UUID? {
+    focusedSurfaceIdByTab[tabId]
+  }
+
+  /// Marks a surface so that its next successful `command_finished` event (exit 0)
+  /// will trigger a one-shot close of that surface.
+  func markSurfaceForAutoClose(_ surfaceId: UUID) {
+    autoCloseSurfaceIds.insert(surfaceId)
+  }
+
+  func isMarkedForAutoClose(_ surfaceId: UUID) -> Bool {
+    autoCloseSurfaceIds.contains(surfaceId)
+  }
+
   func performSplitAction(_ action: GhosttySplitAction, for surfaceId: UUID) -> Bool {
     guard let tabId = tabId(containing: surfaceId), var tree = trees[tabId] else {
       return false
@@ -607,6 +664,7 @@ final class WorktreeTerminalState {
     trees.removeAll()
     focusedSurfaceIdByTab.removeAll()
     tabIsRunningById.removeAll()
+    autoCloseSurfaceIds.removeAll()
     setRunScriptTabId(nil)
     tabManager.closeAll()
   }
@@ -1236,6 +1294,14 @@ final class WorktreeTerminalState {
       continuation.finish()
     }
 
+    // Auto-close on success (exit 0). One-shot: the id is removed regardless of outcome.
+    if autoCloseSurfaceIds.remove(surfaceId) != nil {
+      if exitCode == 0, let view = surfaces[surfaceId] {
+        handleCloseRequest(for: view, processAlive: false)
+        return
+      }
+    }
+
     guard commandFinishedNotificationEnabled else { return }
     let durationSeconds = Int(durationNs / 1_000_000_000)
     guard durationSeconds >= commandFinishedNotificationThreshold else { return }
@@ -1278,6 +1344,7 @@ final class WorktreeTerminalState {
     for surface in tree.leaves() {
       surface.closeSurface()
       surfaces.removeValue(forKey: surface.id)
+      autoCloseSurfaceIds.remove(surface.id)
     }
     focusedSurfaceIdByTab.removeValue(forKey: tabId)
     tabIsRunningById.removeValue(forKey: tabId)
@@ -1365,6 +1432,21 @@ final class WorktreeTerminalState {
     }
   }
 
+  private func mapUserSplitDirection(_ direction: UserCustomSplitDirection)
+    -> SplitTree<GhosttySurfaceView>.NewDirection
+  {
+    switch direction {
+    case .left:
+      return .left
+    case .right:
+      return .right
+    case .top:
+      return .top
+    case .down:
+      return .down
+    }
+  }
+
   private func mapFocusDirection(_ direction: GhosttySplitAction.FocusDirection)
     -> SplitTree<GhosttySurfaceView>.FocusDirection
   {
@@ -1404,11 +1486,13 @@ final class WorktreeTerminalState {
     guard let tabId = tabId(containing: view.id), let tree = trees[tabId] else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      autoCloseSurfaceIds.remove(view.id)
       return
     }
     guard let node = tree.find(id: view.id) else {
       view.closeSurface()
       surfaces.removeValue(forKey: view.id)
+      autoCloseSurfaceIds.remove(view.id)
       return
     }
     let nextSurface =
@@ -1418,6 +1502,7 @@ final class WorktreeTerminalState {
     let newTree = tree.removing(node)
     view.closeSurface()
     surfaces.removeValue(forKey: view.id)
+    autoCloseSurfaceIds.remove(view.id)
     if newTree.isEmpty {
       trees.removeValue(forKey: tabId)
       focusedSurfaceIdByTab.removeValue(forKey: tabId)

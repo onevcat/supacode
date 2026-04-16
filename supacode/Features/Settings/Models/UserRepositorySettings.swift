@@ -34,6 +34,8 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
   var systemImage: String
   var command: String
   var execution: UserCustomCommandExecution
+  var splitDirection: UserCustomSplitDirection
+  var closeOnSuccess: Bool
   var shortcut: UserCustomShortcut?
 
   init(
@@ -42,6 +44,8 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     systemImage: String,
     command: String,
     execution: UserCustomCommandExecution,
+    splitDirection: UserCustomSplitDirection = .right,
+    closeOnSuccess: Bool = false,
     shortcut: UserCustomShortcut?
   ) {
     self.id = id
@@ -49,7 +53,27 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
     self.systemImage = systemImage
     self.command = command
     self.execution = execution
+    self.splitDirection = splitDirection
+    self.closeOnSuccess = closeOnSuccess
     self.shortcut = shortcut?.normalized()
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, title, systemImage, command, execution, splitDirection, closeOnSuccess, shortcut
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.id = try container.decode(String.self, forKey: .id)
+    self.title = try container.decode(String.self, forKey: .title)
+    self.systemImage = try container.decode(String.self, forKey: .systemImage)
+    self.command = try container.decode(String.self, forKey: .command)
+    self.execution = try container.decode(UserCustomCommandExecution.self, forKey: .execution)
+    self.splitDirection =
+      try container.decodeIfPresent(UserCustomSplitDirection.self, forKey: .splitDirection) ?? .right
+    self.closeOnSuccess = try container.decodeIfPresent(Bool.self, forKey: .closeOnSuccess) ?? false
+    // Preserves raw shortcut so downstream migration/validation can inspect the original key.
+    self.shortcut = try container.decodeIfPresent(UserCustomShortcut.self, forKey: .shortcut)
   }
 
   static func `default`(index: Int) -> UserCustomCommand {
@@ -69,6 +93,8 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
       systemImage: systemImage,
       command: command,
       execution: execution,
+      splitDirection: splitDirection,
+      closeOnSuccess: closeOnSuccess,
       shortcut: shortcut?.normalized()
     )
   }
@@ -97,6 +123,7 @@ nonisolated struct UserCustomCommand: Codable, Equatable, Sendable, Identifiable
 nonisolated enum UserCustomCommandExecution: String, Codable, CaseIterable, Identifiable, Sendable {
   case shellScript
   case terminalInput
+  case split
 
   var id: String { rawValue }
 
@@ -106,6 +133,35 @@ nonisolated enum UserCustomCommandExecution: String, Codable, CaseIterable, Iden
       return "New Tab"
     case .terminalInput:
       return "In Place"
+    case .split:
+      return "New Split"
+    }
+  }
+
+  var supportsCloseOnSuccess: Bool {
+    switch self {
+    case .shellScript, .split:
+      return true
+    case .terminalInput:
+      return false
+    }
+  }
+}
+
+nonisolated enum UserCustomSplitDirection: String, Codable, CaseIterable, Identifiable, Sendable {
+  case right
+  case left
+  case down
+  case top
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .right: return "Right"
+    case .left: return "Left"
+    case .down: return "Down"
+    case .top: return "Up"
     }
   }
 }

@@ -534,7 +534,8 @@ struct AppFeature {
               .createTabWithInput(
                 worktree,
                 input: "$EDITOR",
-                runSetupScriptIfNew: shouldRunSetupScript
+                runSetupScriptIfNew: shouldRunSetupScript,
+                autoCloseOnSuccess: false
               )
             )
           }
@@ -625,6 +626,7 @@ struct AppFeature {
           return .none
         }
         let command = customCommand.command
+        let closeOnSuccess = customCommand.closeOnSuccess
         switch customCommand.execution {
         case .shellScript:
           return .run { _ in
@@ -632,7 +634,20 @@ struct AppFeature {
               .createTabWithInput(
                 worktree,
                 input: command,
-                runSetupScriptIfNew: false
+                runSetupScriptIfNew: false,
+                autoCloseOnSuccess: closeOnSuccess
+              )
+            )
+          }
+        case .split:
+          let direction = customCommand.splitDirection
+          return .run { _ in
+            await terminalClient.send(
+              .createSplitWithInput(
+                worktree,
+                direction: direction,
+                input: command,
+                autoCloseOnSuccess: closeOnSuccess
               )
             )
           }
