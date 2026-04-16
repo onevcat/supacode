@@ -32,6 +32,10 @@ final class WorktreeTerminalState {
   private var lastEmittedFocusSurfaceId: UUID?
   private var lastWindowIsKey: Bool?
   private var lastWindowIsVisible: Bool?
+  /// When `true`, Canvas owns occlusion management for this state's surfaces.
+  /// `syncFocusIfNeeded` skips `applySurfaceActivity` to avoid overriding
+  /// Canvas-set occlusion with stale normal-mode window activity values.
+  var isCanvasManaged = false
   var notifications: [WorktreeTerminalNotification] = []
   var notificationsEnabled = true
   private var commandFinishedNotificationEnabled = true
@@ -497,6 +501,10 @@ final class WorktreeTerminalState {
           direction: mapSplitDirection(direction)
         )
         updateTree(newTree, for: tabId)
+        // Canvas manages occlusion directly; ensure the new pane renders.
+        if isCanvasManaged {
+          newSurface.setOcclusion(true)
+        }
         focusSurface(newSurface, in: tabId)
         return true
       } catch {
@@ -1320,6 +1328,7 @@ final class WorktreeTerminalState {
   }
 
   private func syncFocusIfNeeded() {
+    guard !isCanvasManaged else { return }
     guard lastWindowIsKey != nil, lastWindowIsVisible != nil else { return }
     applySurfaceActivity()
   }

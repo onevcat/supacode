@@ -644,6 +644,13 @@ struct CanvasView: View {
 
     let activeStates = terminalManager.activeWorktreeStates
 
+    // Mark all states as canvas-managed so that tree updates (e.g. split
+    // creation) don't trigger applySurfaceActivity with stale normal-mode
+    // window visibility, which would occlude every surface.
+    for state in activeStates {
+      state.isCanvasManaged = true
+    }
+
     // Auto-focus the card that was active before entering canvas.
     if let selectedID = terminalManager.selectedWorktreeID,
       let state = activeStates.first(where: { $0.worktreeID == selectedID }),
@@ -670,7 +677,11 @@ struct CanvasView: View {
   }
 
   private func deactivateCanvas() {
-    clearBroadcastCallbacks(states: terminalManager.activeWorktreeStates)
+    let activeStates = terminalManager.activeWorktreeStates
+    for state in activeStates {
+      state.isCanvasManaged = false
+    }
+    clearBroadcastCallbacks(states: activeStates)
     selectionState.clear()
     // Don't occlude surfaces here. In SwiftUI's if/else view swap,
     // onAppear fires before onDisappear, so occluding here would undo
