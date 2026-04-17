@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.4.17](https://github.com/onevcat/Prowl/releases/tag/v2026.4.17)
+
+This release focuses on Custom Command power-ups and two Canvas reliability fixes.
+
+## New
+
+- **Custom Commands can now open a New Split**, running your command in a new pane alongside the current terminal. Choose split direction (left, right, up, down) per command in Settings.
+- **Close on success** toggle for New Tab and New Split targets: when enabled, the tab or split is automatically dismissed after the command exits with code 0, leaving it open on failure so you can inspect the output.
+- The toolbar status badge now animates in and out smoothly, and a brief toast appears when a Custom Command completes successfully.
+
+## Fixed
+
+- Creating split panes with Cmd+D or Cmd+Shift+D while in Canvas mode no longer freezes rendering. All panes now display and accept input correctly.
+- Two-finger pan on the Canvas is no longer interrupted when the cursor drifts over a focused terminal card mid-gesture. Scrolling on a card with no scrollback content now pans the canvas instead of being silently consumed.
+
 ## [2026.4.16](https://github.com/onevcat/Prowl/releases/tag/v2026.4.16)
 
 **Fixed**
