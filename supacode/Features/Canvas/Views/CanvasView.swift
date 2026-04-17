@@ -753,11 +753,119 @@ private class CanvasScrollCoordinator {
 private class CanvasScrollContainerView: NSView {
   var scrollCoordinator: CanvasScrollCoordinator?
 
+  /// Whether the container is actively redirecting scroll events to canvas
+  /// panning (as opposed to the brief bounce period after a gesture ends).
+  private var isPanning = false
+  private var scrollMonitor: Any?
+  /// Brief delay after finger-up to wait for momentum events.
+  private var momentumTimer: Timer?
+  /// Grace period after a pan gesture ends. A follow-up gesture that begins
+  /// during this window is still treated as canvas panning, even if the
+  /// cursor now sits on a focused terminal.
+  private var bounceTimer: Timer?
+
   override func scrollWheel(with event: NSEvent) {
+    if event.phase == .began {
+      startPanning()
+    }
     if event.phase == .began || event.phase == .changed || event.phase == .mayBegin || event.momentumPhase != [] {
       scrollCoordinator?.handleScroll(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY)
       return
     }
     super.scrollWheel(with: event)
+  }
+
+  // MARK: - Pan lifecycle
+
+  private func startPanning() {
+    isPanning = true
+    momentumTimer?.invalidate()
+    momentumTimer = nil
+    bounceTimer?.invalidate()
+    bounceTimer = nil
+    guard scrollMonitor == nil else { return }
+    installMonitor()
+  }
+
+  private func installMonitor() {
+    scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+      guard let self, event.window === self.window else { return event }
+
+      // --- New gesture ------------------------------------------------
+      if event.phase == .began {
+        if self.isPanning {
+          // Already panning (edge case). Let normal dispatch decide.
+          return event
+        }
+        // Within the bounce window — treat as a continuation of panning.
+        self.startPanning()
+        self.scrollCoordinator?.handleScroll(
+          deltaX: event.scrollingDeltaX,
+          deltaY: event.scrollingDeltaY
+        )
+        return nil
+      }
+
+      // Only intercept while actively panning (not during bounce).
+      guard self.isPanning else { return event }
+
+      // --- Ongoing gesture / momentum --------------------------------
+      self.momentumTimer?.invalidate()
+      self.momentumTimer = nil
+
+      if event.phase == .changed || event.momentumPhase != [] {
+        self.scrollCoordinator?.handleScroll(
+          deltaX: event.scrollingDeltaX,
+          deltaY: event.scrollingDeltaY
+        )
+      }
+
+      // Finger lifted — momentum may follow shortly.
+      if event.phase == .ended || event.phase == .cancelled {
+        self.momentumTimer = Timer.scheduledTimer(
+          withTimeInterval: 0.1, repeats: false
+        ) { [weak self] _ in
+          MainActor.assumeIsolated { self?.enterBounce() }
+        }
+      }
+
+      // Momentum finished.
+      if event.momentumPhase == .ended || event.momentumPhase == .cancelled {
+        self.enterBounce()
+      }
+
+      return nil
+    }
+  }
+
+  /// Transition from active panning to the bounce (grace) period.
+  /// The monitor stays alive so a quick follow-up gesture resumes panning.
+  private func enterBounce() {
+    isPanning = false
+    momentumTimer?.invalidate()
+    momentumTimer = nil
+    bounceTimer?.invalidate()
+    bounceTimer = Timer.scheduledTimer(
+      withTimeInterval: 0.3, repeats: false
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.tearDownMonitor() }
+    }
+  }
+
+  private func tearDownMonitor() {
+    isPanning = false
+    momentumTimer?.invalidate()
+    momentumTimer = nil
+    bounceTimer?.invalidate()
+    bounceTimer = nil
+    if let monitor = scrollMonitor {
+      scrollMonitor = nil
+      DispatchQueue.main.async { MainActor.assumeIsolated { NSEvent.removeMonitor(monitor) } }
+    }
+  }
+
+  override func removeFromSuperview() {
+    tearDownMonitor()
+    super.removeFromSuperview()
   }
 }
