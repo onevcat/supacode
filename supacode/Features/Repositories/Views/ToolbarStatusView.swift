@@ -4,10 +4,23 @@ struct ToolbarStatusView: View {
   let toast: RepositoriesFeature.StatusToast?
   let pullRequest: GithubPullRequest?
 
+  @State private var measuredSize: CGSize?
+
+  // Sequential crossfade: old content fades out first, then the width retargets
+  // and the new content fades in. Avoids the messy middle state where both
+  // messages sit on top of each other at partial opacity.
+  private static let fadeOutDuration: Double = 0.14
+  private static let widthDuration: Double = 0.22
+  private static let fadeInDuration: Double = 0.18
+
   private static let transition: AnyTransition = .asymmetric(
-    insertion: .opacity.combined(with: .offset(y: -4)),
-    removal: .opacity.combined(with: .offset(y: 4))
+    insertion: .opacity.animation(
+      .easeOut(duration: fadeInDuration).delay(fadeOutDuration + widthDuration * 0.5)
+    ),
+    removal: .opacity.animation(.easeIn(duration: fadeOutDuration))
   )
+  private static let sizeAnimation: Animation = .easeInOut(duration: widthDuration)
+    .delay(fadeOutDuration)
 
   var body: some View {
     ZStack {
@@ -15,7 +28,27 @@ struct ToolbarStatusView: View {
         .id(identityKey)
         .transition(Self.transition)
     }
-    .animation(.easeInOut(duration: 0.28), value: identityKey)
+    .frame(width: measuredSize?.width, height: measuredSize?.height)
+    .clipped()
+    // Hidden probe renders the current content at its intrinsic size so we
+    // can drive `measuredSize` with an animation, yielding a smooth width
+    // interpolation between consecutive toast messages.
+    .background(
+      content
+        .fixedSize()
+        .hidden()
+        .accessibilityHidden(true)
+        .background(
+          GeometryReader { proxy in
+            Color.clear.onChange(of: proxy.size, initial: true) { _, newSize in
+              withAnimation(Self.sizeAnimation) {
+                measuredSize = newSize
+              }
+            }
+          }
+        )
+    )
+    .animation(Self.sizeAnimation, value: identityKey)
   }
 
   @ViewBuilder
