@@ -19,6 +19,9 @@ struct UpdatesFeature {
     )
     case checkForUpdates
     case updaterEvent(UpdaterClient.Event)
+    #if DEBUG
+      case debugSimulateUpdateFound
+    #endif
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
@@ -57,6 +60,13 @@ struct UpdatesFeature {
         state.isUpdateAvailable = true
         state.availableVersion = version
         return .none
+
+      #if DEBUG
+        case .debugSimulateUpdateFound:
+          state.isUpdateAvailable = true
+          state.availableVersion = "9999.1.1"
+          return .none
+      #endif
       }
     }
   }

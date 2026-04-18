@@ -12,6 +12,12 @@ struct UpdateCommands: Commands {
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.checkForUpdates)))
       .help(helpText(title: "Check for Updates", commandID: AppShortcuts.CommandID.checkForUpdates))
+      #if DEBUG
+        Button("Debug: Simulate Update Found") {
+          store.send(.debugSimulateUpdateFound)
+        }
+        .help("Force the toolbar update badge to appear without querying Sparkle.")
+      #endif
     }
   }
 
