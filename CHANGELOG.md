@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.4.18](https://github.com/onevcat/Prowl/releases/tag/v2026.4.18)
+
+This release focuses on tab customization and a less-interrupting update experience.
+
+## New
+
+- **Tab icons**: Right-click any terminal tab and choose "Change Tab Icon..." to pick from a curated SF Symbol preset grid or enter any SF Symbol name directly. You can also invoke this from the Command Palette (Cmd+P, search "icon"). Custom icons survive app restarts when *Restore Terminal Layout on Launch* is enabled.
+- **Rename from context menu**: "Change Tab Title..." is now available directly in the tab right-click menu, in addition to the existing keyboard shortcut flow.
+- **Quiet update notifications**: Available updates no longer interrupt your session with a dialog. A badge appears in the toolbar instead; click it (or use "Check for Updates...") when you are ready to install.
+- **Anonymous quality telemetry**: To help improve Prowl, this release adds lightweight anonymous crash reporting and memory usage telemetry. No personal data is collected. If you prefer not to participate, you can opt out in Settings.
+
+## Fixed
+
+- The "Download and install automatically" setting has been removed; it conflicted with the new silent update detection flow and was not functional in this build.
+
 ## [2026.4.17](https://github.com/onevcat/Prowl/releases/tag/v2026.4.17)
 
 This release focuses on Custom Command power-ups and two Canvas reliability fixes.
