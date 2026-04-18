@@ -52,6 +52,7 @@ struct AppFeature {
     var lastKnownSystemNotificationsEnabled: Bool
     var launchRestoreMode: LaunchRestoreMode
     var suppressLayoutSaveUntilRelaunch = false
+    var launchedAt: Date?
     @Presents var alert: AlertState<Alert>?
 
     init(
@@ -104,6 +105,7 @@ struct AppFeature {
   }
 
   @Dependency(AnalyticsClient.self) private var analyticsClient
+  @Dependency(\.date.now) private var now
   @Dependency(RepositoryPersistenceClient.self) private var repositoryPersistence
   @Dependency(WorkspaceClient.self) private var workspaceClient
   @Dependency(SettingsWindowClient.self) private var settingsWindowClient
@@ -112,6 +114,16 @@ struct AppFeature {
   @Dependency(TerminalClient.self) private var terminalClient
   @Dependency(WorktreeInfoWatcherClient.self) private var worktreeInfoWatcher
   @Dependency(CustomShortcutRegistryClient.self) private var customShortcutRegistryClient
+
+  private func appQuitProperties(launchedAt: Date?) -> [String: Any]? {
+    guard let seconds = Self.sessionDurationSeconds(launchedAt: launchedAt, now: now) else { return nil }
+    return ["session_duration_seconds": seconds]
+  }
+
+  static func sessionDurationSeconds(launchedAt: Date?, now: Date) -> Int? {
+    guard let launchedAt else { return nil }
+    return max(0, Int(now.timeIntervalSince(launchedAt)))
+  }
 
   private func resolvedKeybindings(
     settings: SettingsFeature.State,
@@ -152,7 +164,9 @@ struct AppFeature {
       case .appLaunched:
         try? SupacodePaths.migrateLegacyCacheFilesIfNeeded()
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
+        state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
+        analyticsClient.capture("app_activated", nil)
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
@@ -177,7 +191,6 @@ struct AppFeature {
       case .scenePhaseChanged(let phase):
         switch phase {
         case .active:
-          analyticsClient.capture("app_activated", nil)
           return .merge(
             .send(.repositories(.refreshWorktrees)),
             .run { send in
@@ -562,7 +575,7 @@ struct AppFeature {
       case .requestQuit:
         #if !DEBUG
           guard state.settings.confirmBeforeQuit else {
-            analyticsClient.capture("app_quit", nil)
+            analyticsClient.capture("app_quit", appQuitProperties(launchedAt: state.launchedAt))
             return .run { @MainActor _ in
               NSApplication.shared.terminate(nil)
             }
@@ -825,7 +838,7 @@ struct AppFeature {
         return .none
 
       case .alert(.presented(.confirmQuit)):
-        analyticsClient.capture("app_quit", nil)
+        analyticsClient.capture("app_quit", appQuitProperties(launchedAt: state.launchedAt))
         state.alert = nil
         return .run { @MainActor _ in
           NSApplication.shared.terminate(nil)

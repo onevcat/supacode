@@ -116,6 +116,36 @@ struct SupacodeApp: App {
     return value
   }
 
+  private static func bootstrapTelemetry(initialSettings: GlobalSettings) {
+    #if !DEBUG
+      let infoDictionary = Bundle.main.infoDictionary ?? [:]
+      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
+      let environment = initialSettings.updateChannel == .tip ? "tip" : "production"
+
+      if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
+        SentrySDK.start { options in
+          options.dsn = dsn
+          options.environment = environment
+          if let releaseName { options.releaseName = releaseName }
+          options.tracesSampleRate = 0.05
+          options.enableAppHangTracking = true
+        }
+      }
+      if initialSettings.analyticsEnabled,
+        let apiKey = infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
+        let host = infoPlistSecret(infoDictionary, key: "ProwlPostHogHost")
+      {
+        let config = PostHogConfig(apiKey: apiKey, host: host)
+        config.enableSwizzling = false
+        config.captureApplicationLifecycleEvents = false
+        config.captureScreenViews = false
+        PostHogSDK.shared.setup(config)
+        PostHogSDK.shared.register(AnalyticsContext.superProperties)
+        PostHogSDK.shared.identify(InstallIdentifier.current)
+      }
+    #endif
+  }
+
   @MainActor init() {
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
@@ -125,29 +155,7 @@ struct SupacodeApp: App {
       schema: .appResolverSchema(),
       userOverrides: initialSettings.keybindingUserOverrides
     )
-    #if !DEBUG
-      let infoDictionary = Bundle.main.infoDictionary ?? [:]
-      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
-
-      if initialSettings.crashReportsEnabled, let dsn = Self.infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
-        SentrySDK.start { options in
-          options.dsn = dsn
-          options.environment = "production"
-          if let releaseName { options.releaseName = releaseName }
-          options.tracesSampleRate = 0.05
-          options.enableAppHangTracking = true
-        }
-      }
-      if initialSettings.analyticsEnabled,
-        let apiKey = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
-        let host = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogHost")
-      {
-        let config = PostHogConfig(apiKey: apiKey, host: host)
-        config.enableSwizzling = false
-        PostHogSDK.shared.setup(config)
-        PostHogSDK.shared.identify(InstallIdentifier.current)
-      }
-    #endif
+    Self.bootstrapTelemetry(initialSettings: initialSettings)
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
