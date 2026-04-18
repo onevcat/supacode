@@ -363,9 +363,13 @@ struct SettingsFeature {
   ) -> Effect<Action> {
     let settings = state.globalSettings
     @Shared(.settingsFile) var settingsFile
+    let previouslyAnalyticsEnabled = settingsFile.global.analyticsEnabled
     $settingsFile.withLock { $0.global = settings }
     if captureAnalytics, settings.analyticsEnabled {
       analyticsClient.capture("settings_changed", nil)
+    }
+    if previouslyAnalyticsEnabled, !settings.analyticsEnabled {
+      analyticsClient.reset()
     }
     if emitSettingsChanged {
       return .send(.delegate(.settingsChanged(settings)))

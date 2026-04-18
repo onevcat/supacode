@@ -364,6 +364,58 @@ struct SettingsFeatureTests {
     #expect(settingsFile.global.keybindingUserOverrides == overrides)
   }
 
+  @Test(.dependencies) func disablingAnalyticsResetsClient() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let resetCount = LockIsolated(0)
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.analyticsClient.reset = {
+        resetCount.withValue { $0 += 1 }
+      }
+    }
+
+    await store.send(.binding(.set(\.analyticsEnabled, false))) {
+      $0.analyticsEnabled = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.finish()
+
+    #expect(resetCount.value == 1)
+    #expect(settingsFile.global.analyticsEnabled == false)
+  }
+
+  @Test(.dependencies) func togglingOtherSettingWhileAnalyticsOffDoesNotReset() async {
+    var initialSettings = GlobalSettings.default
+    initialSettings.analyticsEnabled = false
+    initialSettings.confirmBeforeQuit = true
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock { $0.global = initialSettings }
+    let resetCount = LockIsolated(0)
+
+    let store = TestStore(initialState: SettingsFeature.State(settings: initialSettings)) {
+      SettingsFeature()
+    } withDependencies: {
+      $0.analyticsClient.capture = { _, _ in }
+      $0.analyticsClient.reset = {
+        resetCount.withValue { $0 += 1 }
+      }
+    }
+
+    await store.send(.binding(.set(\.confirmBeforeQuit, false))) {
+      $0.confirmBeforeQuit = false
+    }
+    await store.receive(\.delegate.settingsChanged)
+    await store.finish()
+
+    #expect(resetCount.value == 0)
+  }
+
   @Test(.dependencies) func clearTerminalLayoutSnapshotSendsDelegate() async {
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()

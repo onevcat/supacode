@@ -36,6 +36,12 @@
 	<false/>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
+	<key>ProwlSentryDSN</key>
+	<string>$(PROWL_SENTRY_DSN)</string>
+	<key>ProwlPostHogAPIKey</key>
+	<string>$(PROWL_POSTHOG_API_KEY)</string>
+	<key>ProwlPostHogHost</key>
+	<string>$(PROWL_POSTHOG_HOST)</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

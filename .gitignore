@@ -74,3 +74,6 @@ Resources/terminfo
 .env
 build/
 .DS_Store
+
+# Release-only credentials (analytics, crash reporting)
+Config/Secrets.env
