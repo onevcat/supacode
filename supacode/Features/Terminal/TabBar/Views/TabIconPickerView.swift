@@ -98,7 +98,7 @@ struct TabIconPickerView: View {
       }
     }
     .padding(24)
-    .frame(width: 460)
+    .frame(width: 410)
     .onAppear {
       symbolFieldFocused = true
     }
