@@ -16,7 +16,7 @@ struct ToolbarUpdateButton: View {
       onCheckForUpdates()
     } label: {
       Image(systemName: "arrow.down.circle.fill")
-        .foregroundStyle(.tint)
+        .foregroundStyle(Color("ProwlAccent"))
         .accessibilityHidden(true)
     }
     .help(tooltip)
