@@ -52,32 +52,29 @@ struct TabIconPickerView: View {
         }
       }
 
-      ScrollView {
-        LazyVGrid(
-          columns: Array(repeating: GridItem(.fixed(32), spacing: 10), count: 8),
-          spacing: 10
-        ) {
-          ForEach(Self.symbolPresets, id: \.self) { symbol in
-            Button {
-              symbolName = symbol
-              symbolFieldFocused = true
-            } label: {
-              Image(systemName: symbol)
-                .imageScale(.medium)
-                .frame(width: 32, height: 32)
-                .background(
-                  RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(symbolName == symbol ? Color.accentColor : Color.clear, lineWidth: 2)
-                )
-                .accessibilityHidden(true)
-            }
-            .buttonStyle(.plain)
-            .help(symbol)
+      LazyVGrid(
+        columns: Array(repeating: GridItem(.fixed(32), spacing: 6), count: 8),
+        spacing: 6
+      ) {
+        ForEach(Self.symbolPresets, id: \.self) { symbol in
+          Button {
+            symbolName = symbol
+            symbolFieldFocused = true
+          } label: {
+            Image(systemName: symbol)
+              .imageScale(.medium)
+              .frame(width: 32, height: 32)
+              .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                  .stroke(symbolName == symbol ? Color.accentColor : Color.clear, lineWidth: 2)
+              )
+              .accessibilityHidden(true)
           }
+          .buttonStyle(.plain)
+          .help(symbol)
         }
-        .padding(12)
       }
-      .frame(maxHeight: 220)
+      .padding(8)
       .background(
         RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(Color.secondary.opacity(0.08))
