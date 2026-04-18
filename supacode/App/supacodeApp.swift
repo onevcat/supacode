@@ -129,6 +129,8 @@ struct SupacodeApp: App {
           if let releaseName { options.releaseName = releaseName }
           options.tracesSampleRate = 0.05
           options.enableAppHangTracking = true
+          options.appHangTimeoutInterval = 3
+          options.beforeSend = SentryEventFilter.filterSystemHang
         }
       }
       if initialSettings.analyticsEnabled,
