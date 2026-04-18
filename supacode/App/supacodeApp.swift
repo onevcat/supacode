@@ -95,6 +95,7 @@ struct SupacodeApp: App {
   @State private var commandKeyObserver: CommandKeyObserver
   @State private var cliSocketServer: CLISocketServer
   @State private var store: StoreOf<AppFeature>
+  @State private var memoryWatchdog: MemoryWatchdog
 
   private static func cliLaunchOpenPath() -> String? {
     let args = ProcessInfo.processInfo.arguments
@@ -216,6 +217,22 @@ struct SupacodeApp: App {
 
     let cliServer = Self.makeCLISocketServer(appStore: appStore, terminalManager: terminalManager)
     _cliSocketServer = State(initialValue: cliServer)
+
+    let watchdog = MemoryWatchdog(
+      analyticsCapture: AnalyticsClient.liveValue.capture,
+      contextProvider: { [appStore, terminalManager] in
+        let state = appStore.state
+        return MemoryWatchdog.Context(
+          repositoryCount: state.repositories.repositories.count,
+          openedWorktreeCount: state.repositories.repositories.flatMap(\.worktrees).count,
+          terminalTabCount: terminalManager.activeWorktreeStates.flatMap(\.tabManager.tabs).count
+        )
+      }
+    )
+    #if !DEBUG
+      watchdog.start()
+    #endif
+    _memoryWatchdog = State(initialValue: watchdog)
 
     runtime.onQuit = { [weak appStore] in
       appStore?.send(.requestQuit)
