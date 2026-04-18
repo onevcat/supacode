@@ -24,6 +24,9 @@ struct WorktreeTerminalTabsView: View {
           _ = state.performBindingActionOnFocusedSurface("new_split:right")
         },
         canSplit: state.tabManager.selectedTabId != nil,
+        changeTitle: { tabId in
+          state.promptChangeTabTitle(tabId)
+        },
         closeTab: { tabId in
           state.closeTab(tabId)
         },
