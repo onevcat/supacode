@@ -13,6 +13,8 @@ struct WorktreeDetailView: View {
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
     let customCommands: [UserCustomCommand]
+    let isUpdateAvailable: Bool
+    let availableUpdateVersion: String?
   }
 
   @Bindable var store: StoreOf<AppFeature>
@@ -61,14 +63,12 @@ struct WorktreeDetailView: View {
     .toolbar(removing: repositories.isShowingCanvas ? nil : .title)
     .toolbar {
       if repositories.isShowingCanvas {
-        ToolbarItem(placement: .primaryAction) {
-          ToolbarNotificationsPopoverButton(
-            groups: notificationGroups,
-            unseenWorktreeCount: unseenNotificationWorktreeCount,
-            onSelectNotification: selectToolbarNotification,
-            onDismissAll: { dismissAllToolbarNotifications(in: notificationGroups) }
-          )
-        }
+        canvasToolbarContent(
+          notificationGroups: notificationGroups,
+          unseenNotificationWorktreeCount: unseenNotificationWorktreeCount,
+          isUpdateAvailable: state.updates.isUpdateAvailable,
+          availableUpdateVersion: state.updates.availableVersion
+        )
       } else if hasActiveTerminalTarget,
         let toolbarState = toolbarState(
           input: ToolbarStateInput(
@@ -80,7 +80,9 @@ struct WorktreeDetailView: View {
             showExtras: commandKeyObserver.isPressed,
             runScriptEnabled: runScriptEnabled,
             runScriptIsRunning: runScriptIsRunning,
-            customCommands: customCommands
+            customCommands: customCommands,
+            isUpdateAvailable: state.updates.isUpdateAvailable,
+            availableUpdateVersion: state.updates.availableVersion
           )
         )
       {
@@ -107,7 +109,8 @@ struct WorktreeDetailView: View {
           onStopRunScript: { store.send(.stopRunScript) },
           onRunCustomCommand: { index in
             store.send(.runCustomCommand(index))
-          }
+          },
+          onCheckForUpdates: { store.send(.updates(.checkForUpdates)) }
         )
       }
     }
@@ -118,6 +121,28 @@ struct WorktreeDetailView: View {
       runScriptIsRunning: runScriptIsRunning
     )
     return applyFocusedActions(content: content, actions: actions)
+  }
+
+  @ToolbarContentBuilder
+  private func canvasToolbarContent(
+    notificationGroups: [ToolbarNotificationRepositoryGroup],
+    unseenNotificationWorktreeCount: Int,
+    isUpdateAvailable: Bool,
+    availableUpdateVersion: String?
+  ) -> some ToolbarContent {
+    ToolbarItemGroup(placement: .primaryAction) {
+      ToolbarNotificationsPopoverButton(
+        groups: notificationGroups,
+        unseenWorktreeCount: unseenNotificationWorktreeCount,
+        onSelectNotification: selectToolbarNotification,
+        onDismissAll: { dismissAllToolbarNotifications(in: notificationGroups) }
+      )
+      if isUpdateAvailable {
+        ToolbarUpdateButton(availableVersion: availableUpdateVersion) {
+          store.send(.updates(.checkForUpdates))
+        }
+      }
+    }
   }
 
   private func toolbarState(input: ToolbarStateInput) -> WorktreeToolbarState? {
@@ -146,7 +171,9 @@ struct WorktreeDetailView: View {
       showExtras: input.showExtras,
       runScriptEnabled: input.runScriptEnabled,
       runScriptIsRunning: input.runScriptIsRunning,
-      customCommands: input.customCommands
+      customCommands: input.customCommands,
+      isUpdateAvailable: input.isUpdateAvailable,
+      availableUpdateVersion: input.availableUpdateVersion
     )
   }
 
@@ -391,6 +418,8 @@ struct WorktreeDetailView: View {
     let runScriptEnabled: Bool
     let runScriptIsRunning: Bool
     let customCommands: [UserCustomCommand]
+    let isUpdateAvailable: Bool
+    let availableUpdateVersion: String?
   }
 
   fileprivate struct WorktreeToolbarContent: ToolbarContent {
@@ -404,6 +433,7 @@ struct WorktreeDetailView: View {
     let onRunScript: () -> Void
     let onStopRunScript: () -> Void
     let onRunCustomCommand: (Int) -> Void
+    let onCheckForUpdates: () -> Void
     @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
     var body: some ToolbarContent {
@@ -432,6 +462,12 @@ struct WorktreeDetailView: View {
           onSelectNotification: onSelectNotification,
           onDismissAll: onDismissAllNotifications
         )
+        if toolbarState.isUpdateAvailable {
+          ToolbarUpdateButton(
+            availableVersion: toolbarState.availableUpdateVersion,
+            onCheckForUpdates: onCheckForUpdates
+          )
+        }
       }
 
       ToolbarSpacer(.flexible)
@@ -865,7 +901,9 @@ private struct WorktreeToolbarPreview: View {
             modifiers: UserCustomShortcutModifiers()
           )
         ),
-      ]
+      ],
+      isUpdateAvailable: true,
+      availableUpdateVersion: "2026.5.1"
     )
     let observer = CommandKeyObserver()
     observer.isPressed = false
@@ -888,7 +926,8 @@ private struct WorktreeToolbarPreview: View {
         onDismissAllNotifications: {},
         onRunScript: {},
         onStopRunScript: {},
-        onRunCustomCommand: { _ in }
+        onRunCustomCommand: { _ in },
+        onCheckForUpdates: {}
       )
     }
     .environment(commandKeyObserver)

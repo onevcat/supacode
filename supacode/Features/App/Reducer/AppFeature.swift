@@ -156,6 +156,7 @@ struct AppFeature {
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
+          .send(.updates(.task)),
           .run { _ in
             await MainActor.run {
               NSApplication.shared.dockTile.badgeLabel = nil

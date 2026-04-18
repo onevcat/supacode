@@ -14,16 +14,20 @@ struct UpdatesSettingsView: View {
             Text("Tip").tag(UpdateChannel.tip)
           }
         }
-        Section("Automatic Updates") {
+        Section {
           Toggle(
             "Check for updates automatically",
             isOn: $settingsStore.updatesAutomaticallyCheckForUpdates
           )
-          Toggle(
-            "Download and install updates automatically",
-            isOn: $settingsStore.updatesAutomaticallyDownloadUpdates
+        } header: {
+          Text("Automatic Updates")
+        } footer: {
+          Text(
+            "When a new version is available, a small badge appears next to the notifications bell. "
+              + "Click it to review and install the update."
           )
-          .disabled(!settingsStore.updatesAutomaticallyCheckForUpdates)
+          .font(.callout)
+          .foregroundStyle(.secondary)
         }
       }
       .formStyle(.grouped)
