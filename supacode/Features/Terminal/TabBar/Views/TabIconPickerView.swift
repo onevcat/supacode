@@ -68,6 +68,7 @@ struct TabIconPickerView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                   .stroke(symbolName == symbol ? Color.accentColor : Color.clear, lineWidth: 2)
               )
+              .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
               .accessibilityHidden(true)
           }
           .buttonStyle(.plain)
