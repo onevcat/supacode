@@ -116,21 +116,13 @@ struct SupacodeApp: App {
     return value
   }
 
-  @MainActor init() {
-    NSWindow.allowsAutomaticWindowTabbing = false
-    UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
-    @Shared(.settingsFile) var settingsFile
-    let initialSettings = settingsFile.global
-    let initialResolvedKeybindings = KeybindingResolver.resolve(
-      schema: .appResolverSchema(),
-      userOverrides: initialSettings.keybindingUserOverrides
-    )
+  private static func bootstrapTelemetry(initialSettings: GlobalSettings) {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
       let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
       let environment = initialSettings.updateChannel == .tip ? "tip" : "production"
 
-      if initialSettings.crashReportsEnabled, let dsn = Self.infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
+      if initialSettings.crashReportsEnabled, let dsn = infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
         SentrySDK.start { options in
           options.dsn = dsn
           options.environment = environment
@@ -140,8 +132,8 @@ struct SupacodeApp: App {
         }
       }
       if initialSettings.analyticsEnabled,
-        let apiKey = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
-        let host = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogHost")
+        let apiKey = infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
+        let host = infoPlistSecret(infoDictionary, key: "ProwlPostHogHost")
       {
         let config = PostHogConfig(apiKey: apiKey, host: host)
         config.enableSwizzling = false
@@ -152,6 +144,18 @@ struct SupacodeApp: App {
         PostHogSDK.shared.identify(InstallIdentifier.current)
       }
     #endif
+  }
+
+  @MainActor init() {
+    NSWindow.allowsAutomaticWindowTabbing = false
+    UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
+    @Shared(.settingsFile) var settingsFile
+    let initialSettings = settingsFile.global
+    let initialResolvedKeybindings = KeybindingResolver.resolve(
+      schema: .appResolverSchema(),
+      userOverrides: initialSettings.keybindingUserOverrides
+    )
+    Self.bootstrapTelemetry(initialSettings: initialSettings)
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
