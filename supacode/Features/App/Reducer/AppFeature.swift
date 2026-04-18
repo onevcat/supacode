@@ -166,7 +166,7 @@ struct AppFeature {
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
-        analyticsClient.capture("app_activated", nil)
+        analyticsClient.capture("app_launched", nil)
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),

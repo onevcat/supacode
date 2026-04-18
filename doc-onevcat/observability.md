@@ -93,7 +93,7 @@ Token scopes: `event:read`, `project:read`, `project:releases`. Generate at <htt
 1. PostHog Insights → filter by `environment = "tip"` (Sentry equivalent) or by super property `app_version = "prowl@X.Y.Z"`
 2. DAU proxy: count unique `distinctId` with ≥ 1 event
 3. Session lengths: `app_quit.session_duration_seconds` distribution (dropped events that leak past quit are rare on macOS since we capture at confirm-quit, but keep in mind)
-4. Cold-start count: `app_activated` (since PR #208, fires once per cold launch only — not on window focus changes)
+4. Cold-start count: `app_launched` (since PR #208, fires once per cold launch only — not on window focus changes)
 
 ## Event catalog
 
@@ -117,7 +117,7 @@ Everything is hand-instrumented via `analyticsClient.capture(...)`. Events marke
 
 | Event | Extra properties | Fires when |
 |---|---|---|
-| `app_activated` ✱ | — | cold launch (`.appLaunched` action) |
+| `app_launched` ✱ | — | cold launch (`.appLaunched` action) |
 | `app_quit` ✱ | `session_duration_seconds` | user confirms quit |
 | `worktree_opened` ✱ | `action` (editor/finder/terminal/IDE) | open worktree flow |
 | `repository_added` ✱ | `count` | N repos added at once |
@@ -199,7 +199,7 @@ Disabled via `captureApplicationLifecycleEvents = false` + `captureScreenViews =
 ## Related PRs
 
 - [#207](https://github.com/onevcat/Prowl/pull/207) Credentials pipeline (`Secrets.env` → `Info.plist` → `Bundle`)
-- [#208](https://github.com/onevcat/Prowl/pull/208) Event quality — super properties, Sentry environment, `session_duration_seconds`, autocapture off, `app_activated` moved to cold start
+- [#208](https://github.com/onevcat/Prowl/pull/208) Event quality — super properties, Sentry environment, `session_duration_seconds`, autocapture off, `app_launched` (renamed from `app_activated`) moved to cold start
 - [#210](https://github.com/onevcat/Prowl/pull/210) dSYM upload + Sentry release tracking in `release.sh`
 - [#211](https://github.com/onevcat/Prowl/pull/211) System hang filter + 3s `appHangTimeoutInterval`
 - [#212](https://github.com/onevcat/Prowl/pull/212) Memory watchdog (baseline + threshold crossings + Sentry escalation at 4GB)
