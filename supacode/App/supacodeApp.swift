@@ -128,11 +128,12 @@ struct SupacodeApp: App {
     #if !DEBUG
       let infoDictionary = Bundle.main.infoDictionary ?? [:]
       let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
+      let environment = initialSettings.updateChannel == .tip ? "tip" : "production"
 
       if initialSettings.crashReportsEnabled, let dsn = Self.infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
         SentrySDK.start { options in
           options.dsn = dsn
-          options.environment = "production"
+          options.environment = environment
           if let releaseName { options.releaseName = releaseName }
           options.tracesSampleRate = 0.05
           options.enableAppHangTracking = true
@@ -145,6 +146,7 @@ struct SupacodeApp: App {
         let config = PostHogConfig(apiKey: apiKey, host: host)
         config.enableSwizzling = false
         PostHogSDK.shared.setup(config)
+        PostHogSDK.shared.register(AnalyticsContext.superProperties)
         PostHogSDK.shared.identify(InstallIdentifier.current)
       }
     #endif
