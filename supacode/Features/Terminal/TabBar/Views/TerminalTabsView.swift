@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TerminalTabsView: View {
   @Bindable var manager: TerminalTabManager
+  let changeTitle: (TerminalTabID) -> Void
   let closeTab: (TerminalTabID) -> Void
   let closeOthers: (TerminalTabID) -> Void
   let closeToRight: (TerminalTabID) -> Void
@@ -28,6 +29,7 @@ struct TerminalTabsView: View {
             draggingStartLocation: $draggingStartLocation,
             closeButtonGestureActive: $closeButtonGestureActive,
             fixedTabWidth: effectiveTabWidth,
+            changeTitle: changeTitle,
             closeTab: closeTab,
             closeOthers: closeOthers,
             closeToRight: closeToRight,

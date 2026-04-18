@@ -1120,6 +1120,12 @@ final class WorktreeTerminalState {
     }
   }
 
+  func promptChangeTabTitle(_ tabId: TerminalTabID) {
+    let surfaceWindow = focusedSurfaceIdByTab[tabId].flatMap { surfaces[$0]?.window }
+    guard let window = surfaceWindow ?? NSApp.keyWindow else { return }
+    promptTabTitle(for: tabId, in: window)
+  }
+
   private func promptTabTitle(for tabId: TerminalTabID, in window: NSWindow) {
     guard let tabIndex = tabManager.tabs.firstIndex(where: { $0.id == tabId }) else { return }
 
