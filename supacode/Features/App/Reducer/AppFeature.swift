@@ -166,6 +166,7 @@ struct AppFeature {
         appLogger.info("[LayoutRestore] appLaunched: launchRestoreMode=\(String(describing: state.launchRestoreMode))")
         state.launchedAt = now
         state.repositories.launchRestoreMode = state.launchRestoreMode
+        analyticsClient.capture("app_activated", nil)
         return .merge(
           .send(.repositories(.task)),
           .send(.settings(.task)),
@@ -189,7 +190,6 @@ struct AppFeature {
       case .scenePhaseChanged(let phase):
         switch phase {
         case .active:
-          analyticsClient.capture("app_activated", nil)
           return .merge(
             .send(.repositories(.refreshWorktrees)),
             .run { send in
