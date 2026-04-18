@@ -99,12 +99,21 @@ struct SupacodeApp: App {
   private static func cliLaunchOpenPath() -> String? {
     let args = ProcessInfo.processInfo.arguments
     guard let flagIndex = args.firstIndex(of: ProwlSocket.cliOpenPathArgument),
-          args.indices.contains(flagIndex + 1)
+      args.indices.contains(flagIndex + 1)
     else {
       return nil
     }
     let path = args[flagIndex + 1]
     return path.isEmpty ? nil : path
+  }
+
+  /// Reads a secret from Info.plist, returning nil when the value is empty or
+  /// still contains an unsubstituted `$(VAR)` placeholder (the Makefile did not
+  /// inject a value for that key).
+  private static func infoPlistSecret(_ dictionary: [String: Any], key: String) -> String? {
+    guard let value = dictionary[key] as? String else { return nil }
+    guard !value.isEmpty, !value.hasPrefix("$(") else { return nil }
+    return value
   }
 
   @MainActor init() {
@@ -117,22 +126,26 @@ struct SupacodeApp: App {
       userOverrides: initialSettings.keybindingUserOverrides
     )
     #if !DEBUG
-      if initialSettings.crashReportsEnabled {
+      let infoDictionary = Bundle.main.infoDictionary ?? [:]
+      let releaseName = (infoDictionary["CFBundleShortVersionString"] as? String).map { "prowl@\($0)" }
+
+      if initialSettings.crashReportsEnabled, let dsn = Self.infoPlistSecret(infoDictionary, key: "ProwlSentryDSN") {
         SentrySDK.start { options in
-          options.dsn = "__SENTRY_DSN__"
-          options.tracesSampleRate = 1.0
-          options.enableAppHangTracking = false
+          options.dsn = dsn
+          options.environment = "production"
+          if let releaseName { options.releaseName = releaseName }
+          options.tracesSampleRate = 0.05
+          options.enableAppHangTracking = true
         }
       }
-      if initialSettings.analyticsEnabled {
-        let posthogAPIKey = "__POSTHOG_API_KEY__"
-        let posthogHost = "__POSTHOG_HOST__"
-        let config = PostHogConfig(apiKey: posthogAPIKey, host: posthogHost)
+      if initialSettings.analyticsEnabled,
+        let apiKey = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogAPIKey"),
+        let host = Self.infoPlistSecret(infoDictionary, key: "ProwlPostHogHost")
+      {
+        let config = PostHogConfig(apiKey: apiKey, host: host)
         config.enableSwizzling = false
         PostHogSDK.shared.setup(config)
-        if let hardwareUUID = HardwareInfo.uuid {
-          PostHogSDK.shared.identify(hardwareUUID)
-        }
+        PostHogSDK.shared.identify(InstallIdentifier.current)
       }
     #endif
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
@@ -451,8 +464,8 @@ struct SupacodeApp: App {
       let repoRoot = repository.rootURL
         .standardizedFileURL.path(percentEncoded: false)
       if repoRoot == normalized,
-         !repository.capabilities.supportsWorktrees,
-         repository.capabilities.supportsRunnableFolderActions
+        !repository.capabilities.supportsWorktrees,
+        repository.capabilities.supportsRunnableFolderActions
       {
         return OpenResolverResult(
           resolution: .exactRoot, worktreeID: repository.id,
@@ -479,7 +492,7 @@ struct SupacodeApp: App {
         }
       }
       if !repository.capabilities.supportsWorktrees,
-         repository.capabilities.supportsRunnableFolderActions
+        repository.capabilities.supportsRunnableFolderActions
       {
         let repoRoot = repository.rootURL
           .standardizedFileURL.path(percentEncoded: false)
@@ -509,8 +522,8 @@ struct SupacodeApp: App {
         return worktree
       }
       if repository.id == id,
-         repository.capabilities.supportsRunnableFolderActions,
-         !repository.capabilities.supportsWorktrees
+        repository.capabilities.supportsRunnableFolderActions,
+        !repository.capabilities.supportsWorktrees
       {
         return Worktree(
           id: repository.id,
