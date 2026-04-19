@@ -48,6 +48,36 @@ struct SentryEventFilterTests {
     #expect(SentryEventFilter.filterSystemHang(event) === event)
   }
 
+  /// Regression guard for PROWL-MACOS-5 / Sentry issue 7424130201.
+  ///
+  /// Sentry's `SentryANRTrackerV1` invokes `beforeSend` synchronously from a
+  /// background thread. Because the project sets
+  /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, un-annotated members of
+  /// `SentryEventFilter` are implicitly `@MainActor` and Swift 6.2's executor
+  /// check aborts the process via libdispatch when called off-main.
+  ///
+  /// This test exercises the exact off-main invocation path. If
+  /// `filterSystemHang` ever loses `nonisolated`, the `@Sendable` closure below
+  /// will fail to compile — turning the runtime crash into a build-time error.
+  @Test func filterIsInvokableFromBackgroundThread() async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      DispatchQueue.global(qos: .userInitiated).async {
+        let event = Event()
+        let exception = Exception(value: "test", type: "test")
+        exception.mechanism = Mechanism(type: "AppHang")
+        let frame = Frame()
+        frame.function = "_NSMenuBarDisplayManagerActiveSpaceChanged"
+        frame.inApp = NSNumber(value: false)
+        exception.stacktrace = SentryStacktrace(frames: [frame], registers: [:])
+        event.exceptions = [exception]
+
+        #expect(!Thread.isMainThread)
+        #expect(SentryEventFilter.filterSystemHang(event) == nil)
+        continuation.resume()
+      }
+    }
+  }
+
   private func makeEvent(mechanismType: String, frames: [Frame]) -> Event {
     let event = Event()
     let exception = Exception(value: "test", type: "test")
