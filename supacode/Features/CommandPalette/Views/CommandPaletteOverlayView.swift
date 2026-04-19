@@ -349,7 +349,8 @@ private struct CommandPaletteRowView: View {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .ghosttyCommand,
-      .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
+      .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+      .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .worktreeSelect, .changeFocusedTabIcon:
       return nil
@@ -380,7 +381,7 @@ private struct CommandPaletteRowView: View {
       return "arrow.clockwise"
     case .ghosttyCommand:
       return "terminal"
-    case .openPullRequest:
+    case .openPullRequest, .openRepositoryOnCodeHost:
       return "arrow.up.right.square"
     case .markPullRequestReady:
       return "checkmark.seal"
@@ -419,7 +420,8 @@ private struct CommandPaletteRowView: View {
     switch row.kind {
     case .checkForUpdates, .openRepository, .openSettings, .newWorktree, .viewArchivedWorktrees,
       .refreshWorktrees, .installCLI, .ghosttyCommand,
-      .openPullRequest, .markPullRequestReady, .mergePullRequest, .closePullRequest, .copyFailingJobURL,
+      .openPullRequest, .openRepositoryOnCodeHost, .markPullRequestReady, .mergePullRequest, .closePullRequest,
+      .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs, .openFailingCheckDetails, .changeFocusedTabIcon:
       return true
@@ -519,7 +521,7 @@ private struct CommandPaletteRowView: View {
       base = "Remove \(row.title)"
     case .archiveWorktree:
       base = "Archive \(row.title)"
-    case .openPullRequest:
+    case .openPullRequest, .openRepositoryOnCodeHost:
       base = "Open on Code Host"
     case .markPullRequestReady:
       base = "Mark pull request ready for review"

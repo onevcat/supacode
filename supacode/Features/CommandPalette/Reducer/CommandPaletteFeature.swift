@@ -304,7 +304,7 @@ private func selectedCodeHostItems(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
       title: "Open Repository on Code Host",
       subtitle: repository.name,
-      kind: .openPullRequest(selectedWorktreeID),
+      kind: .openRepositoryOnCodeHost(selectedWorktreeID),
       priorityTier: 2
     ),
   ]
@@ -622,6 +622,7 @@ private func delegateAction(for kind: CommandPaletteItem.Kind) -> CommandPalette
   case .changeFocusedTabIcon(let worktreeID):
     return .changeFocusedTabIcon(worktreeID)
   case .openPullRequest,
+    .openRepositoryOnCodeHost,
     .markPullRequestReady,
     .mergePullRequest,
     .closePullRequest,
@@ -643,7 +644,8 @@ private func pullRequestDelegateAction(
   for kind: CommandPaletteItem.Kind
 ) -> CommandPaletteFeature.Delegate? {
   switch kind {
-  case .openPullRequest(let worktreeID):
+  case .openPullRequest(let worktreeID),
+    .openRepositoryOnCodeHost(let worktreeID):
     return .openPullRequest(worktreeID)
   case .markPullRequestReady(let worktreeID):
     return .markPullRequestReady(worktreeID)
