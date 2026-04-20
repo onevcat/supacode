@@ -137,12 +137,21 @@ struct ShelfSpineView: View {
     }
   }
 
+  /// Visual treatment splits into two bands:
+  ///
+  /// - **Closed spines** get a subtle material tint so the collected
+  ///   stack reads as "books on the shelf" rather than leaking into the
+  ///   terminal-area background.
+  /// - **The open spine** gets an accent tint and no trailing divider,
+  ///   so it reads as the left edge of the "open page" (per the
+  ///   Open Book Visual Distinction section of the design doc).
   @ViewBuilder
   private var spineBackground: some View {
     if isOpen {
       Color.accentColor.opacity(0.12)
     } else {
-      Color.clear
+      Rectangle()
+        .fill(.thinMaterial)
     }
   }
 }
