@@ -923,6 +923,17 @@ private enum ShortcutGroup: String, CaseIterable, Identifiable {
       AppShortcuts.CommandID.showDiff,
       AppShortcuts.CommandID.toggleCanvas,
       AppShortcuts.CommandID.toggleShelf,
+      AppShortcuts.CommandID.selectNextShelfBook,
+      AppShortcuts.CommandID.selectPreviousShelfBook,
+      AppShortcuts.CommandID.selectShelfBook1,
+      AppShortcuts.CommandID.selectShelfBook2,
+      AppShortcuts.CommandID.selectShelfBook3,
+      AppShortcuts.CommandID.selectShelfBook4,
+      AppShortcuts.CommandID.selectShelfBook5,
+      AppShortcuts.CommandID.selectShelfBook6,
+      AppShortcuts.CommandID.selectShelfBook7,
+      AppShortcuts.CommandID.selectShelfBook8,
+      AppShortcuts.CommandID.selectShelfBook9,
       AppShortcuts.CommandID.selectAllCanvasCards,
       AppShortcuts.CommandID.archivedWorktrees:
       return .scripts

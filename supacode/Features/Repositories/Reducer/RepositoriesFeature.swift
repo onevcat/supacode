@@ -274,6 +274,9 @@ struct RepositoriesFeature {
     case selectCanvas
     case toggleCanvas
     case toggleShelf
+    case selectNextShelfBook
+    case selectPreviousShelfBook
+    case selectShelfBook(Int)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
@@ -653,6 +656,20 @@ struct RepositoriesFeature {
             guard !state.orderedWorktreeRows().isEmpty else { return .none }
             return .send(.selectCanvas)
           }
+
+        case .selectNextShelfBook:
+          guard let book = shelfBook(atOffset: 1, state: state) else { return .none }
+          return shelfBookSelectionEffect(for: book)
+
+        case .selectPreviousShelfBook:
+          guard let book = shelfBook(atOffset: -1, state: state) else { return .none }
+          return shelfBookSelectionEffect(for: book)
+
+        case .selectShelfBook(let index):
+          let books = state.orderedShelfBooks()
+          let zeroBased = index - 1
+          guard books.indices.contains(zeroBased) else { return .none }
+          return shelfBookSelectionEffect(for: books[zeroBased])
 
         case .toggleShelf:
           if state.isShelfActive {
@@ -2122,6 +2139,39 @@ func isSelectionValid(
   state: RepositoriesFeature.State
 ) -> Bool {
   state.selectedRow(for: id) != nil
+}
+
+/// Returns the Shelf book at `offset` positions from the currently open
+/// book (wrapping around the book list). Returns nil if there are no
+/// books. When there is no open book, offset > 0 picks the first book
+/// and offset < 0 picks the last.
+func shelfBook(
+  atOffset offset: Int,
+  state: RepositoriesFeature.State
+) -> ShelfBook? {
+  let books = state.orderedShelfBooks()
+  guard !books.isEmpty else { return nil }
+  if let currentID = state.openShelfBookID,
+    let currentIndex = books.firstIndex(where: { $0.id == currentID })
+  {
+    let nextIndex = (currentIndex + offset + books.count) % books.count
+    return books[nextIndex]
+  }
+  return offset > 0 ? books.first : books.last
+}
+
+/// Dispatches the right selection action for a book — a worktree vs.
+/// a plain folder requires different Reducer actions even though the
+/// Shelf treats them uniformly.
+func shelfBookSelectionEffect(
+  for book: ShelfBook
+) -> Effect<RepositoriesFeature.Action> {
+  switch book.kind {
+  case .worktree:
+    return .send(.selectWorktree(book.id, focusTerminal: true))
+  case .plainFolder:
+    return .send(.selectRepository(book.repositoryID))
+  }
 }
 
 private func isSidebarSelectionValid(

@@ -100,6 +100,17 @@ enum AppShortcuts {
     static let showDiff = "show_diff"
     static let toggleCanvas = "toggle_canvas"
     static let toggleShelf = "toggle_shelf"
+    static let selectNextShelfBook = "select_next_shelf_book"
+    static let selectPreviousShelfBook = "select_previous_shelf_book"
+    static let selectShelfBook1 = "select_shelf_book_1"
+    static let selectShelfBook2 = "select_shelf_book_2"
+    static let selectShelfBook3 = "select_shelf_book_3"
+    static let selectShelfBook4 = "select_shelf_book_4"
+    static let selectShelfBook5 = "select_shelf_book_5"
+    static let selectShelfBook6 = "select_shelf_book_6"
+    static let selectShelfBook7 = "select_shelf_book_7"
+    static let selectShelfBook8 = "select_shelf_book_8"
+    static let selectShelfBook9 = "select_shelf_book_9"
     static let revealInSidebar = "reveal_in_sidebar"
     static let archivedWorktrees = "archived_worktrees"
     static let selectNextWorktree = "select_next_worktree"
@@ -179,6 +190,44 @@ enum AppShortcuts {
   static let toggleShelf = AppShortcut(
     keyEquivalent: .return, ghosttyKeyName: "return", modifiers: [.command, .shift]
   )
+  static let selectNextShelfBook = AppShortcut(
+    keyEquivalent: .rightArrow, ghosttyKeyName: "arrow_right", modifiers: [.command, .control]
+  )
+  static let selectPreviousShelfBook = AppShortcut(
+    keyEquivalent: .leftArrow, ghosttyKeyName: "arrow_left", modifiers: [.command, .control]
+  )
+  static let selectShelfBook1 = AppShortcut(key: "1", modifiers: [.control, .option])
+  static let selectShelfBook2 = AppShortcut(key: "2", modifiers: [.control, .option])
+  static let selectShelfBook3 = AppShortcut(key: "3", modifiers: [.control, .option])
+  static let selectShelfBook4 = AppShortcut(key: "4", modifiers: [.control, .option])
+  static let selectShelfBook5 = AppShortcut(key: "5", modifiers: [.control, .option])
+  static let selectShelfBook6 = AppShortcut(key: "6", modifiers: [.control, .option])
+  static let selectShelfBook7 = AppShortcut(key: "7", modifiers: [.control, .option])
+  static let selectShelfBook8 = AppShortcut(key: "8", modifiers: [.control, .option])
+  static let selectShelfBook9 = AppShortcut(key: "9", modifiers: [.control, .option])
+  static let shelfBookSelection: [AppShortcut] = [
+    selectShelfBook1,
+    selectShelfBook2,
+    selectShelfBook3,
+    selectShelfBook4,
+    selectShelfBook5,
+    selectShelfBook6,
+    selectShelfBook7,
+    selectShelfBook8,
+    selectShelfBook9,
+  ]
+
+  static let shelfBookSelectionCommandIDs: [String] = [
+    CommandID.selectShelfBook1,
+    CommandID.selectShelfBook2,
+    CommandID.selectShelfBook3,
+    CommandID.selectShelfBook4,
+    CommandID.selectShelfBook5,
+    CommandID.selectShelfBook6,
+    CommandID.selectShelfBook7,
+    CommandID.selectShelfBook8,
+    CommandID.selectShelfBook9,
+  ]
   static let revealInSidebar = AppShortcut(key: "l", modifiers: [.command, .shift])
   static let archivedWorktrees = AppShortcut(key: "a", modifiers: [.command, .control])
   static let selectNextWorktree = AppShortcut(
@@ -383,6 +432,72 @@ enum AppShortcuts {
       title: "Toggle Shelf",
       scope: .configurableAppAction,
       shortcut: toggleShelf
+    ),
+    .init(
+      id: CommandID.selectNextShelfBook,
+      title: "Select Next Book",
+      scope: .configurableAppAction,
+      shortcut: selectNextShelfBook
+    ),
+    .init(
+      id: CommandID.selectPreviousShelfBook,
+      title: "Select Previous Book",
+      scope: .configurableAppAction,
+      shortcut: selectPreviousShelfBook
+    ),
+    .init(
+      id: CommandID.selectShelfBook1,
+      title: "Select Book 1",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook1
+    ),
+    .init(
+      id: CommandID.selectShelfBook2,
+      title: "Select Book 2",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook2
+    ),
+    .init(
+      id: CommandID.selectShelfBook3,
+      title: "Select Book 3",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook3
+    ),
+    .init(
+      id: CommandID.selectShelfBook4,
+      title: "Select Book 4",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook4
+    ),
+    .init(
+      id: CommandID.selectShelfBook5,
+      title: "Select Book 5",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook5
+    ),
+    .init(
+      id: CommandID.selectShelfBook6,
+      title: "Select Book 6",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook6
+    ),
+    .init(
+      id: CommandID.selectShelfBook7,
+      title: "Select Book 7",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook7
+    ),
+    .init(
+      id: CommandID.selectShelfBook8,
+      title: "Select Book 8",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook8
+    ),
+    .init(
+      id: CommandID.selectShelfBook9,
+      title: "Select Book 9",
+      scope: .configurableAppAction,
+      shortcut: selectShelfBook9
     ),
     .init(
       id: CommandID.revealInSidebar,
@@ -731,6 +846,17 @@ enum AppShortcuts {
     showDiff,
     toggleCanvas,
     toggleShelf,
+    selectNextShelfBook,
+    selectPreviousShelfBook,
+    selectShelfBook1,
+    selectShelfBook2,
+    selectShelfBook3,
+    selectShelfBook4,
+    selectShelfBook5,
+    selectShelfBook6,
+    selectShelfBook7,
+    selectShelfBook8,
+    selectShelfBook9,
     archivedWorktrees,
     selectNextWorktree,
     selectPreviousWorktree,

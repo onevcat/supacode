@@ -31,6 +31,23 @@ struct SidebarCommands: Commands {
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleShelf)))
       .help(helpText(title: "Shelf", commandID: AppShortcuts.CommandID.toggleShelf))
+      Button("Select Next Book") {
+        store.send(.repositories(.selectNextShelfBook))
+      }
+      .modifier(
+        KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.selectNextShelfBook))
+      )
+      .help(helpText(title: "Select Next Book", commandID: AppShortcuts.CommandID.selectNextShelfBook))
+      Button("Select Previous Book") {
+        store.send(.repositories(.selectPreviousShelfBook))
+      }
+      .modifier(
+        KeyboardShortcutModifier(
+          shortcut: keyboardShortcut(for: AppShortcuts.CommandID.selectPreviousShelfBook)
+        )
+      )
+      .help(helpText(title: "Select Previous Book", commandID: AppShortcuts.CommandID.selectPreviousShelfBook))
+      shelfBookMenuButtons
       Button("Show Diff") {
         let repos = store.repositories
         guard let worktreeID = repos.selectedWorktreeID,
@@ -45,6 +62,18 @@ struct SidebarCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.showDiff)))
       .help(helpText(title: "Show Diff", commandID: AppShortcuts.CommandID.showDiff))
       .disabled(store.repositories.selectedWorktreeID == nil)
+    }
+  }
+
+  @ViewBuilder
+  private var shelfBookMenuButtons: some View {
+    ForEach(Array(AppShortcuts.shelfBookSelectionCommandIDs.enumerated()), id: \.element) { index, commandID in
+      let title = "Select Book \(index + 1)"
+      Button(title) {
+        store.send(.repositories(.selectShelfBook(index + 1)))
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: commandID)))
+      .help(helpText(title: title, commandID: commandID))
     }
   }
 

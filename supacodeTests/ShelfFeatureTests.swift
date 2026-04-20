@@ -214,6 +214,115 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func selectShelfBookByIndexDispatchesWorktreeSelection() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/feature",
+      name: "feature",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/feature"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .worktree(wt1.id)
+    state.isShelfActive = true
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectShelfBook(2))
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt2.id)
+      $0.sidebarSelectedWorktreeIDs = [wt2.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func selectShelfBookOutOfRangeIsNoOp() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .worktree(wt1.id)
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectShelfBook(5))
+    await store.finish()
+  }
+
+  @Test(.dependencies) func selectNextShelfBookWrapsAround() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let wt2 = Worktree(
+      id: "/tmp/repo/feature",
+      name: "feature",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/feature"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .worktree(wt2.id)  // Currently on the last book.
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.selectNextShelfBook)
+    // Wrapping: next-after-last lands back on the first book.
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(wt1.id)
+      $0.sidebarSelectedWorktreeIDs = [wt1.id]
+      $0.pendingTerminalFocusWorktreeIDs = [wt1.id]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
   @Test(.dependencies) func selectArchivedWorktreesClearsShelfActiveFlag() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let worktree = Worktree(
