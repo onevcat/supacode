@@ -1,7 +1,7 @@
 # Shelf View
 
 Last updated: 2026-04-21
-Status: Design final (alignment complete, ready for implementation)
+Status: Implemented (see **Implementation Decisions Journal** at the bottom for deviations taken during implementation)
 
 A new terminal presentation mode that sits alongside Canvas. Where Canvas spreads
 worktrees out as flat cards and weakens the worktree concept, Shelf preserves and
@@ -271,7 +271,8 @@ keybinding system (`scope = configurableAppAction`), exposed in
 | `toggleShelf` | `Cmd+Shift+Enter` | New command. Symmetric with `toggleCanvas` (`Cmd+Option+Enter`). |
 | `selectTerminalTab1…9` | `Cmd+1..9` | **Existing** commands. In Shelf, they switch tabs within the open book. |
 | `selectPreviousTerminalTab` / `selectNextTerminalTab` | `Cmd+Shift+[` / `Cmd+Shift+]` | **Existing** — apply within the open book. |
-| `selectNextWorktree` / `selectPreviousWorktree` | **Existing** `Cmd+Ctrl+↓` / `Cmd+Ctrl+↑` **plus** new alias `Cmd+Ctrl+→` / `Cmd+Ctrl+←` | Same command, **two equivalent bindings**. The `←/→` aliases match Shelf's horizontal book layout intuition. Requires extending the keybinding schema to support multiple bindings per command. |
+| `selectNextWorktree` / `selectPreviousWorktree` | Unchanged: `Cmd+Ctrl+↓` / `Cmd+Ctrl+↑` | Unchanged. See `selectNext/PreviousShelfBook` below for the `Cmd+Ctrl+→` / `Cmd+Ctrl+←` bindings on the Shelf. |
+| `selectNextShelfBook` / `selectPreviousShelfBook` | `Cmd+Ctrl+→` / `Cmd+Ctrl+←` | **New commands**. Operate on the ordered Shelf-book list (worktrees + plain folders), which can diverge from the worktree list if plain folders are interleaved. See the Implementation Decisions Journal for why we took this over a two-binding alias on the worktree commands. |
 | `selectShelfBook1…9` | `Ctrl+Option+1..9` | **New commands**, deliberately distinct from `selectWorktree1..9` (`Ctrl+1..9`). Books and worktrees are not 1:1 in numbering: "books on the shelf" can diverge from "items in the left navigation" (e.g. presence/absence on the shelf, plain-folder ordering). Shelf-specific. |
 
 ### Implementation note on multi-binding
@@ -315,3 +316,86 @@ cost of duplicating rows in the shortcuts settings list.
 - Empty-state visuals for an empty Shelf (no books at all).
 - Animation behavior under user interruption (e.g. clicking a third spine while
   a transition is mid-flight).
+
+---
+
+## Implementation Decisions Journal
+
+Decisions made during implementation that deviate from — or add nuance to —
+the earlier design, recorded for review.
+
+### Keyboard Shortcuts: wrapper commands over multi-binding
+
+**Design spec** had `Cmd+Ctrl+→` / `Cmd+Ctrl+←` as a second alias on the
+existing `selectNext/PreviousWorktree` commands, with a note that this
+requires a non-trivial extension to the keybinding schema (singular
+`shortcut` → collection).
+
+**Implemented** as distinct `selectNextShelfBook` / `selectPreviousShelfBook`
+commands. Reasons:
+
+- The Shelf-book ordering includes plain folders (interleaved per
+  `orderedShelfBooks()`), so "next book on the Shelf" is not semantically
+  equal to "next worktree" when plain folders exist. Aliasing would have
+  skipped plain folders when a user pressed the arrow alias.
+- The wrapper-command approach keeps `AppShortcut.Binding.shortcut` singular,
+  avoiding the schema change.
+- Both commands still live in `Settings → Shortcuts` so users can remap
+  either set independently.
+
+### Commands plumbing: merged into `SidebarCommands`
+
+Originally planned as a separate `ShelfCommands: Commands` struct. Moved into
+`SidebarCommands` because SwiftUI's `@CommandsBuilder` caps the number of
+direct children in a `.commands { }` block; adding a new top-level Commands
+struct pushed the builder past the cap and triggered a compile error on
+unrelated `CommandGroup`s. Merging keeps the external menu footprint the
+same (two visible toggles + one Worktrees menu).
+
+### `isShelfActive` as a separate flag
+
+`RepositoriesFeature.State` gained a new `isShelfActive: Bool` flag instead
+of adding a `.shelf` case to `SidebarSelection`. Reason: Shelf is a
+presentation mode that still needs `selection` to track a worktree or plain
+folder (the open book). Using a dedicated flag decouples "is Shelf active"
+from "which book is open", which lets the bidirectional sync with the left
+navigation fall out for free.
+
+### Auto-exit rules
+
+Entering Canvas or Archived Worktrees from any entry point clears
+`isShelfActive` — those two presentation modes are mutually exclusive with
+Shelf by design. Entering Shelf from Canvas / archived redirects selection
+to a compatible worktree / plain-folder before flipping the flag.
+
+### Terminal rendering in the open area
+
+Rather than reusing `WorktreeTerminalTabsView` (which includes the horizontal
+tab bar), we introduced `ShelfOpenBookView` — a leaner view that renders only
+the terminal content stack + icon picker sheet + window focus observer. In
+Shelf, the tab bar lives on the spine, so duplicating it would violate the
+design.
+
+### Plain folder spines
+
+`ShelfBook` uses `Worktree.ID` as its identity. For plain folders this is
+the repository ID, matching the synthetic worktree emitted by
+`RepositoriesFeature.State.selectedTerminalWorktree`. That way
+`openShelfBookID == selectedTerminalWorktree?.id` for both kinds without
+special-casing.
+
+### Animation: `.animation(value:)` for both entry points
+
+To make left-nav-originated book switches animate identically to
+Shelf-originated taps, the root `HStack` carries an explicit
+`.animation(.easeInOut(duration: 0.2), value: openBookID)` modifier.
+Shelf-originated taps additionally pass the same animation to
+`store.send(_, animation:)` so the TCA-side mutation carries the transaction
+along.
+
+### Close-last-tab behavior
+
+The empty-book state falls out naturally: `ShelfOpenBookView` already
+renders `EmptyTerminalPaneView(message: "No terminals open")` when
+`selectedTabId == nil`. The spine remains on the shelf, with its bottom
+controls still enabling new tab / split to recover.
