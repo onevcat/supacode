@@ -41,6 +41,9 @@ public struct SettingsFeature {
     public var claudeNotificationsState = AgentHooksInstallState.checking
     public var codexProgressState = AgentHooksInstallState.checking
     public var codexNotificationsState = AgentHooksInstallState.checking
+    public var kiroProgressState = AgentHooksInstallState.checking
+    public var kiroNotificationsState = AgentHooksInstallState.checking
+    public var kiroSkillState = AgentHooksInstallState.checking
     /// `nil` when the settings window is closed; non-nil selects the visible section.
     public var selection: SettingsSection?
     public var repositorySummaries: [SettingsRepositorySummary] = []
@@ -161,6 +164,7 @@ public struct SettingsFeature {
   @Dependency(CLISkillClient.self) private var cliSkillClient
   @Dependency(ClaudeSettingsClient.self) private var claudeSettingsClient
   @Dependency(CodexSettingsClient.self) private var codexSettingsClient
+  @Dependency(KiroSettingsClient.self) private var kiroSettingsClient
   @Dependency(ArchivedWorktreeDatesClient.self) private var archivedWorktreeDatesClient
   @Dependency(SystemNotificationClient.self) private var systemNotificationClient
   @Dependency(\.date.now) private var now
@@ -183,14 +187,18 @@ public struct SettingsFeature {
             .run { [cliSkillClient] send in
               async let claude = cliSkillClient.checkInstalled(.claude)
               async let codex = cliSkillClient.checkInstalled(.codex)
+              async let kiro = cliSkillClient.checkInstalled(.kiro)
               await send(.cliSkillChecked(agent: .claude, installed: await claude))
               await send(.cliSkillChecked(agent: .codex, installed: await codex))
+              await send(.cliSkillChecked(agent: .kiro, installed: await kiro))
             },
-            .run { [claudeSettingsClient, codexSettingsClient] send in
+            .run { [claudeSettingsClient, codexSettingsClient, kiroSettingsClient] send in
               async let claudeProgressInstalled = claudeSettingsClient.checkInstalled(true)
               async let claudeNotificationsInstalled = claudeSettingsClient.checkInstalled(false)
               async let codexProgressInstalled = codexSettingsClient.checkInstalled(true)
               async let codexNotificationsInstalled = codexSettingsClient.checkInstalled(false)
+              async let kiroProgressInstalled = kiroSettingsClient.checkInstalled(true)
+              async let kiroNotificationsInstalled = kiroSettingsClient.checkInstalled(false)
 
               await send(.agentHookChecked(.claudeProgress, installed: await claudeProgressInstalled))
               await send(
@@ -198,6 +206,9 @@ public struct SettingsFeature {
               await send(.agentHookChecked(.codexProgress, installed: await codexProgressInstalled))
               await send(
                 .agentHookChecked(.codexNotifications, installed: await codexNotificationsInstalled))
+              await send(.agentHookChecked(.kiroProgress, installed: await kiroProgressInstalled))
+              await send(
+                .agentHookChecked(.kiroNotifications, installed: await kiroNotificationsInstalled))
             }
           )
         )
@@ -372,13 +383,15 @@ public struct SettingsFeature {
       case .agentHookInstallTapped(let slot):
         guard !state[hookSlot: slot].isLoading else { return .none }
         state[hookSlot: slot] = .installing
-        return .run { [claudeSettingsClient, codexSettingsClient] send in
+        return .run { [claudeSettingsClient, codexSettingsClient, kiroSettingsClient] send in
           do {
             switch slot {
             case .claudeProgress: try await claudeSettingsClient.installProgress()
             case .claudeNotifications: try await claudeSettingsClient.installNotifications()
             case .codexProgress: try await codexSettingsClient.installProgress()
             case .codexNotifications: try await codexSettingsClient.installNotifications()
+            case .kiroProgress: try await kiroSettingsClient.installProgress()
+            case .kiroNotifications: try await kiroSettingsClient.installNotifications()
             }
             await send(.agentHookActionCompleted(slot, .success(true)))
           } catch {
@@ -389,13 +402,15 @@ public struct SettingsFeature {
       case .agentHookUninstallTapped(let slot):
         guard !state[hookSlot: slot].isLoading else { return .none }
         state[hookSlot: slot] = .uninstalling
-        return .run { [claudeSettingsClient, codexSettingsClient] send in
+        return .run { [claudeSettingsClient, codexSettingsClient, kiroSettingsClient] send in
           do {
             switch slot {
             case .claudeProgress: try await claudeSettingsClient.uninstallProgress()
             case .claudeNotifications: try await claudeSettingsClient.uninstallNotifications()
             case .codexProgress: try await codexSettingsClient.uninstallProgress()
             case .codexNotifications: try await codexSettingsClient.uninstallNotifications()
+            case .kiroProgress: try await kiroSettingsClient.uninstallProgress()
+            case .kiroNotifications: try await kiroSettingsClient.uninstallNotifications()
             }
             await send(.agentHookActionCompleted(slot, .success(false)))
           } catch {
@@ -593,12 +608,14 @@ extension SettingsFeature.State {
       switch agent {
       case .claude: claudeSkillState
       case .codex: codexSkillState
+      case .kiro: kiroSkillState
       }
     }
     set {
       switch agent {
       case .claude: claudeSkillState = newValue
       case .codex: codexSkillState = newValue
+      case .kiro: kiroSkillState = newValue
       }
     }
   }
@@ -610,6 +627,8 @@ extension SettingsFeature.State {
       case .claudeNotifications: claudeNotificationsState
       case .codexProgress: codexProgressState
       case .codexNotifications: codexNotificationsState
+      case .kiroProgress: kiroProgressState
+      case .kiroNotifications: kiroNotificationsState
       }
     }
     set {
@@ -618,6 +637,8 @@ extension SettingsFeature.State {
       case .claudeNotifications: claudeNotificationsState = newValue
       case .codexProgress: codexProgressState = newValue
       case .codexNotifications: codexNotificationsState = newValue
+      case .kiroProgress: kiroProgressState = newValue
+      case .kiroNotifications: kiroNotificationsState = newValue
       }
     }
   }

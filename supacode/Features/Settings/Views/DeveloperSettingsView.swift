@@ -5,6 +5,7 @@ import SwiftUI
 
 struct DeveloperSettingsView: View {
   let store: StoreOf<SettingsFeature>
+  @State private var kiroExpanded = false
 
   var body: some View {
     Form {
@@ -88,6 +89,40 @@ struct DeveloperSettingsView: View {
         .labelStyle(.titleTrailingIcon)
       } footer: {
         Text("Applied to `~/.codex`.")
+      }
+      Section(isExpanded: $kiroExpanded) {
+        AgentInstallRow(
+          installAction: { store.send(.agentHookInstallTapped(.kiroProgress)) },
+          uninstallAction: { store.send(.agentHookUninstallTapped(.kiroProgress)) },
+          installState: store.kiroProgressState,
+          title: "Progress Hook",
+          subtitle: "Display agent activity in tab and sidebar."
+        )
+        AgentInstallRow(
+          installAction: { store.send(.agentHookInstallTapped(.kiroNotifications)) },
+          uninstallAction: { store.send(.agentHookUninstallTapped(.kiroNotifications)) },
+          installState: store.kiroNotificationsState,
+          title: "Notifications Hook",
+          subtitle: "Forward richer notifications to Supacode."
+        )
+        AgentInstallRow(
+          installAction: { store.send(.cliSkillInstallTapped(.kiro)) },
+          uninstallAction: { store.send(.cliSkillUninstallTapped(.kiro)) },
+          installState: store.kiroSkillState,
+          title: "CLI Skill",
+          subtitle: "Teach Kiro how to use the Supacode CLI."
+        )
+      } header: {
+        Label {
+          Text("Kiro")
+        } icon: {
+          Image("kiro-mark")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 18, height: 18)
+            .accessibilityHidden(true)
+        }
+        .labelStyle(.titleTrailingIcon)
       }
     }
     .formStyle(.grouped)

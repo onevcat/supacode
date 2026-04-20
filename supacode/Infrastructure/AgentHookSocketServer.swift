@@ -142,7 +142,8 @@ final class AgentHookSocketServer {
       guard let base = buffer.baseAddress else { return }
       var totalWritten = 0
       while totalWritten < data.count {
-        let written = write(fileDescriptor, base.advanced(by: totalWritten), data.count - totalWritten)
+        let written = write(
+          fileDescriptor, base.advanced(by: totalWritten), data.count - totalWritten)
         if written < 0 {
           guard errno == EINTR else {
             socketLogger.warning("write() failed: \(String(cString: strerror(errno)))")
@@ -207,7 +208,8 @@ final class AgentHookSocketServer {
 
   nonisolated enum Message: Sendable {
     case busy(worktreeID: String, tabID: UUID, surfaceID: UUID, active: Bool)
-    case notification(worktreeID: String, tabID: UUID, surfaceID: UUID, notification: AgentHookNotification)
+    case notification(
+      worktreeID: String, tabID: UUID, surfaceID: UUID, notification: AgentHookNotification)
     /// CLI command with the client FD kept open for writing a response.
     case command(deeplinkURL: URL, clientFD: Int32)
     /// CLI query with the client FD kept open for writing data back.
@@ -219,7 +221,8 @@ final class AgentHookSocketServer {
     let json: [String: Any] = ["ok": true, "data": data]
     guard let encoded = try? JSONSerialization.data(withJSONObject: json) else {
       socketLogger.warning("Failed to encode query response")
-      writeAll(to: clientFD, data: Data("{\"ok\":false,\"error\":\"Internal encoding error.\"}".utf8))
+      writeAll(
+        to: clientFD, data: Data("{\"ok\":false,\"error\":\"Internal encoding error.\"}".utf8))
       close(clientFD)
       return
     }
@@ -228,12 +231,15 @@ final class AgentHookSocketServer {
   }
 
   /// Writes a JSON response to a command client and closes the FD.
-  nonisolated static func sendCommandResponse(clientFD: Int32, ok succeeded: Bool, error: String? = nil) {
+  nonisolated static func sendCommandResponse(
+    clientFD: Int32, ok succeeded: Bool, error: String? = nil
+  ) {
     var json: [String: Any] = ["ok": succeeded]
     if let error { json["error"] = error }
     guard let data = try? JSONSerialization.data(withJSONObject: json) else {
       socketLogger.warning("Failed to encode command response")
-      writeAll(to: clientFD, data: Data("{\"ok\":false,\"error\":\"Internal encoding error.\"}".utf8))
+      writeAll(
+        to: clientFD, data: Data("{\"ok\":false,\"error\":\"Internal encoding error.\"}".utf8))
       close(clientFD)
       return
     }
@@ -255,7 +261,10 @@ final class AgentHookSocketServer {
 
     // Set a read timeout so a misbehaving client cannot block the accept loop.
     var timeout = timeval(tv_sec: 5, tv_usec: 0)
-    guard setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size)) == 0 else {
+    guard
+      setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        == 0
+    else {
       socketLogger.warning("setsockopt(SO_RCVTIMEO) failed: \(String(cString: strerror(errno)))")
       close(clientFD)
       return nil
@@ -386,12 +395,15 @@ final class AgentHookSocketServer {
       return nil
     }
 
-    let body = payload.message ?? payload.lastAssistantMessage
+    if payload.body == nil {
+      socketLogger.warning(
+        "All body fields nil in \(agent) \(payload.hookEventName ?? "unknown") notification")
+    }
     return AgentHookNotification(
       agent: agent,
       event: payload.hookEventName ?? "unknown",
       title: payload.title,
-      body: body
+      body: payload.body
     )
   }
 
@@ -423,18 +435,48 @@ nonisolated struct AgentHookNotification: Equatable, Sendable {
   let body: String?
 }
 
-/// Raw JSON payload from a coding agent hook event.
+/// Raw JSON payload from a coding agent hook event. The `body` is decoded from
+/// whichever agent-specific field is present: Claude uses `message`, Codex uses
+/// `last_assistant_message`, Kiro uses `assistant_response`. Precedence favors
+/// `message` so unknown agents that speak the Claude shape keep working.
 private nonisolated struct AgentHookPayload: Decodable {
   let hookEventName: String?
   let title: String?
-  let message: String?
-  let lastAssistantMessage: String?
+  let body: String?
 
-  enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey {
     case hookEventName = "hook_event_name"
     case title
     case message
     case lastAssistantMessage = "last_assistant_message"
+    case assistantResponse = "assistant_response"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    hookEventName = try container.decodeIfPresent(String.self, forKey: .hookEventName)
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    // Tolerate per-field decode errors (e.g. `"message": 42`) so a single
+    // malformed field does not drop the whole notification — fall through
+    // to the next candidate instead.
+    let candidates = [CodingKeys.message, .lastAssistantMessage, .assistantResponse]
+      .map { key in Self.decodeOptionalString(container, forKey: key) }
+    // Skip empty strings too: Claude occasionally emits `"message": ""`, in
+    // which case Codex's `last_assistant_message` / Kiro's `assistant_response`
+    // still hold the useful body.
+    body = candidates.compactMap { $0 }.first { !$0.isEmpty }
+  }
+
+  private static func decodeOptionalString(
+    _ container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) -> String? {
+    do {
+      return try container.decodeIfPresent(String.self, forKey: key)
+    } catch {
+      socketLogger.warning("Failed to decode hook payload field \(key.rawValue): \(error)")
+      return nil
+    }
   }
 }
 
@@ -444,7 +486,9 @@ private nonisolated enum SocketCommandRequest {
   case query(resource: String, params: [String: String])
 
   init?(data: Data) {
-    guard let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+    guard let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return nil
+    }
     var extracted: [String: String] = [:]
     for (key, value) in dict where key != "deeplink" && key != "query" {
       if let str = value as? String { extracted[key] = str }
