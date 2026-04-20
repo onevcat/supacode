@@ -924,15 +924,6 @@ final class GhosttySurfaceView: NSView, Identifiable {
 
   override func scrollWheel(with event: NSEvent) {
     guard let surface else { return }
-
-    // In canvas mode, if the terminal has no scrollback content the scroll
-    // event is useless here. Let it bubble up to the canvas container so
-    // two-finger gestures pan the canvas instead of being swallowed.
-    if scrollWrapper?.hostKind == .canvas, !hasScrollbackContent {
-      scrollWrapper?.forwardScrollToParent(with: event)
-      return
-    }
-
     var scrollX = event.scrollingDeltaX
     var scrollY = event.scrollingDeltaY
     if event.hasPreciseScrollingDeltas {
@@ -940,11 +931,6 @@ final class GhosttySurfaceView: NSView, Identifiable {
       scrollY *= 2
     }
     ghostty_surface_mouse_scroll(surface, scrollX, scrollY, scrollMods(for: event))
-  }
-
-  private var hasScrollbackContent: Bool {
-    guard let lastScrollbar else { return false }
-    return lastScrollbar.total > lastScrollbar.length
   }
 
   override func pressureChange(with event: NSEvent) {
@@ -2594,14 +2580,6 @@ final class GhosttySurfaceScrollView: NSView {
   func updateScrollbar(total: UInt64, offset: UInt64, length: UInt64) {
     scrollbar = ScrollbarState(total: total, offset: offset, length: length)
     synchronizeScrollView()
-  }
-
-  /// Forward a scroll event to the parent responder chain, bypassing the
-  /// internal NSScrollView which would otherwise consume it.  Used in
-  /// canvas mode when the terminal has no scrollback content so the event
-  /// can reach CanvasScrollContainerView for canvas panning.
-  func forwardScrollToParent(with event: NSEvent) {
-    super.scrollWheel(with: event)
   }
 
   func refreshAppearance() {
