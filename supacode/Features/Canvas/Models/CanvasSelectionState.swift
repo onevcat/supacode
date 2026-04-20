@@ -90,4 +90,57 @@ struct CanvasSelectionState: Equatable {
       clear()
     }
   }
+
+  /// Prune against `currentOrder` and, if the primary was removed while cards
+  /// remain visible, auto-focus the nearest surviving neighbor in
+  /// `previousOrder` (searching forward first, then backward). This keeps a
+  /// card highlighted after the primary is closed so users never lose the
+  /// selection indicator for the "next" focused card.
+  mutating func pruneAutoAdvancingPrimary(
+    previousOrder: [TerminalTabID],
+    currentOrder: [TerminalTabID]
+  ) {
+    let previousPrimary = primaryTabID
+    let currentSet = Set(currentOrder)
+    prune(to: currentSet)
+
+    guard primaryTabID == nil,
+      let previousPrimary,
+      !currentSet.contains(previousPrimary),
+      !currentOrder.isEmpty
+    else {
+      return
+    }
+
+    let replacement =
+      Self.nearestSurvivor(
+        of: previousPrimary,
+        previousOrder: previousOrder,
+        currentSet: currentSet
+      ) ?? currentOrder[0]
+    focusSingle(replacement)
+  }
+
+  private static func nearestSurvivor(
+    of removedID: TerminalTabID,
+    previousOrder: [TerminalTabID],
+    currentSet: Set<TerminalTabID>
+  ) -> TerminalTabID? {
+    guard let removedIndex = previousOrder.firstIndex(of: removedID) else {
+      return nil
+    }
+    var offset = 1
+    while offset < previousOrder.count {
+      let forward = removedIndex + offset
+      if forward < previousOrder.count, currentSet.contains(previousOrder[forward]) {
+        return previousOrder[forward]
+      }
+      let backward = removedIndex - offset
+      if backward >= 0, currentSet.contains(previousOrder[backward]) {
+        return previousOrder[backward]
+      }
+      offset += 1
+    }
+    return nil
+  }
 }
