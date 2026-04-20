@@ -33,6 +33,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case refreshWorktrees
     case ghosttyCommand(String)
     case openPullRequest(Worktree.ID)
+    case openRepositoryOnCodeHost(Worktree.ID)
     case markPullRequestReady(Worktree.ID)
     case mergePullRequest(Worktree.ID)
     case closePullRequest(Worktree.ID)
@@ -62,10 +63,13 @@ struct CommandPaletteItem: Identifiable, Equatable {
       .copyFailingJobURL,
       .copyCiFailureLogs,
       .rerunFailedJobs,
-      .openFailingCheckDetails,
-      .changeFocusedTabIcon:
+      .openFailingCheckDetails:
       return true
-    case .worktreeSelect, .removeWorktree, .archiveWorktree:
+    case .worktreeSelect,
+      .removeWorktree,
+      .archiveWorktree,
+      .changeFocusedTabIcon,
+      .openRepositoryOnCodeHost:
       return false
     #if DEBUG
       case .debugTestToast, .debugSimulateUpdateFound:
@@ -82,6 +86,7 @@ struct CommandPaletteItem: Identifiable, Equatable {
     case .ghosttyCommand:
       return false
     case .openPullRequest,
+      .openRepositoryOnCodeHost,
       .markPullRequestReady,
       .mergePullRequest,
       .closePullRequest,
@@ -115,7 +120,8 @@ struct CommandPaletteItem: Identifiable, Equatable {
       return AppShortcuts.CommandID.archivedWorktrees
     case .refreshWorktrees:
       return AppShortcuts.CommandID.refreshWorktrees
-    case .openPullRequest:
+    case .openPullRequest,
+      .openRepositoryOnCodeHost:
       return AppShortcuts.CommandID.openPullRequest
     case .ghosttyCommand,
       .markPullRequestReady,

@@ -188,7 +188,7 @@ struct CommandPaletteFeatureTests {
 
     let items = CommandPaletteFeature.commandPaletteItems(from: state)
     let openItem = items.first {
-      if case .openPullRequest(let worktreeID) = $0.kind {
+      if case .openRepositoryOnCodeHost(let worktreeID) = $0.kind {
         return worktreeID == worktree.id
       }
       return false
@@ -196,6 +196,33 @@ struct CommandPaletteFeatureTests {
 
     #expect(openItem?.title == "Open Repository on Code Host")
     #expect(openItem?.subtitle == repository.name)
+
+    let emptyQueryItems = CommandPaletteFeature.filterItems(items: items, query: "")
+    #expect(emptyQueryItems.contains(where: { $0.id == openItem?.id }) == false)
+
+    let searchedItems = CommandPaletteFeature.filterItems(items: items, query: "code host")
+    #expect(searchedItems.contains(where: { $0.id == openItem?.id }))
+  }
+
+  @Test func emptyQueryHidesChangeFocusedTabIcon() {
+    let rootPath = "/tmp/repo"
+    let worktree = makeWorktree(id: rootPath, name: "repo", repoRoot: rootPath)
+    let repository = makeRepository(rootPath: rootPath, name: "Repo", worktrees: [worktree])
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.selection = .worktree(worktree.id)
+
+    let items = CommandPaletteFeature.commandPaletteItems(from: state)
+    let changeIconItem = items.first {
+      if case .changeFocusedTabIcon = $0.kind { return true }
+      return false
+    }
+    #expect(changeIconItem != nil)
+
+    let emptyQueryItems = CommandPaletteFeature.filterItems(items: items, query: "")
+    #expect(emptyQueryItems.contains(where: { $0.id == changeIconItem?.id }) == false)
+
+    let searchedItems = CommandPaletteFeature.filterItems(items: items, query: "tab icon")
+    #expect(searchedItems.contains(where: { $0.id == changeIconItem?.id }))
   }
 
   @Test func emptyQueryHidesGhosttyCommands() {
