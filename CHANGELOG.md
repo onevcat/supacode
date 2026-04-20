@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026.4.20](https://github.com/onevcat/Prowl/releases/tag/v2026.4.20)
+
+This release focuses on canvas usability improvements and broader code host support.
+
+## New
+
+- Canvas cards now show close and expand buttons in the title bar when you hover over them, letting you act on any card without focusing it first.
+- When a focused canvas card is closed (via button, Cmd+W, or any other method), focus automatically moves to the nearest surviving card so the highlighted state stays consistent.
+- The "Open on Code Host" action now works beyond GitHub and beyond open pull requests. Worktrees with a PR still open the PR; others fall back to the repository homepage. GitLab-style remotes are supported.
+- Code host actions in the toolbar and command palette are now labeled with the detected host name (e.g., "Open on GitHub" vs. "Open on GitLab").
+- "Change Tab Icon..." and "Open Repository on Code Host" are now hidden from the command palette's empty-query list to reduce noise. Type to search for either action.
+
+## Fixed
+
+- Restored two-finger scroll for TUI programs (pagers, editors, etc.) inside canvas mode. A previous optimization incorrectly forwarded scroll events to the canvas when Ghostty reported no scrollback buffer, breaking apps like `nvim`, `less`, and `htop`.
+- Fixed a crash (EXC_BREAKPOINT abort) that could occur during ANR detection due to Sentry invoking a Swift concurrency callback off the main thread.
+
 ## [2026.4.18](https://github.com/onevcat/Prowl/releases/tag/v2026.4.18)
 
 This release focuses on tab customization and a less-interrupting update experience.
