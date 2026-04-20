@@ -26,6 +26,11 @@ struct SidebarCommands: Commands {
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleCanvas)))
       .help(helpText(title: "Canvas", commandID: AppShortcuts.CommandID.toggleCanvas))
+      Button("Shelf") {
+        store.send(.repositories(.toggleShelf))
+      }
+      .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.toggleShelf)))
+      .help(helpText(title: "Shelf", commandID: AppShortcuts.CommandID.toggleShelf))
       Button("Show Diff") {
         let repos = store.repositories
         guard let worktreeID = repos.selectedWorktreeID,

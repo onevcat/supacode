@@ -184,11 +184,18 @@ struct SidebarListView: View {
         }
       }
       .safeAreaInset(edge: .top) {
-        CanvasSidebarButton(
-          store: store,
-          isSelected: state.isShowingCanvas
-        )
+        HStack(spacing: 4) {
+          CanvasSidebarButton(
+            store: store,
+            isSelected: state.isShowingCanvas
+          )
+          ShelfSidebarButton(
+            store: store,
+            isSelected: state.isShowingShelf
+          )
+        }
         .padding(.top, 4)
+        .padding(.horizontal, 4)
         .background(.bar)
         .overlay(alignment: .bottom) {
           Divider()
@@ -319,7 +326,7 @@ struct SidebarListView: View {
       state.repositories = [repo1, repo2]
       state.pinnedWorktreeIDs = ["/tmp/wt/auth"]
       state.worktreeInfoByID = [
-        "/tmp/wt/sidebar": WorktreeInfoEntry(addedLines: 120, removedLines: 45, pullRequest: nil),
+        "/tmp/wt/sidebar": WorktreeInfoEntry(addedLines: 120, removedLines: 45, pullRequest: nil)
       ]
       return state
     }

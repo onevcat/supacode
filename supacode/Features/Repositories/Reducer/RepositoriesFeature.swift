@@ -206,6 +206,7 @@ struct RepositoriesFeature {
     var lastFocusedWorktreeID: Worktree.ID?
     var preCanvasWorktreeID: Worktree.ID?
     var preCanvasTerminalTargetID: Worktree.ID?
+    var isShelfActive: Bool = false
     var launchRestoreMode: LaunchRestoreMode = .lastFocusedWorktree
     var shouldRestoreLastFocusedWorktree = false
     var shouldSelectFirstAfterReload = false
@@ -272,6 +273,7 @@ struct RepositoriesFeature {
     case selectArchivedWorktrees
     case selectCanvas
     case toggleCanvas
+    case toggleShelf
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
@@ -611,6 +613,7 @@ struct RepositoriesFeature {
           return .none
 
         case .selectArchivedWorktrees:
+          state.isShelfActive = false
           state.selection = .archivedWorktrees
           state.sidebarSelectedWorktreeIDs = []
           return .send(.delegate(.selectedWorktreeChanged(nil)))
@@ -619,6 +622,7 @@ struct RepositoriesFeature {
           // Remember the current worktree so toggleCanvas can restore it.
           state.preCanvasWorktreeID = state.selectedWorktreeID
           state.preCanvasTerminalTargetID = state.selectedTerminalWorktree?.id
+          state.isShelfActive = false
           state.selection = .canvas
           state.sidebarSelectedWorktreeIDs = []
           return .run { _ in
@@ -649,6 +653,35 @@ struct RepositoriesFeature {
             guard !state.orderedWorktreeRows().isEmpty else { return .none }
             return .send(.selectCanvas)
           }
+
+        case .toggleShelf:
+          if state.isShelfActive {
+            state.isShelfActive = false
+            return .none
+          }
+          // Entering Shelf requires at least one book to render.
+          guard !state.orderedWorktreeRows().isEmpty else { return .none }
+          // Shelf is mutually exclusive with Canvas / archived views: when entering
+          // Shelf we need a worktree- or repository-scoped selection.
+          let needsRedirect: Bool
+          switch state.selection {
+          case .some(.worktree), .some(.repository):
+            needsRedirect = false
+          case .some(.canvas), .some(.archivedWorktrees), .none:
+            needsRedirect = true
+          }
+          state.isShelfActive = true
+          guard needsRedirect else { return .none }
+          let targetID = state.lastFocusedWorktreeID ?? state.orderedWorktreeRows().first?.id
+          guard let targetID else { return .none }
+          if state.worktree(for: targetID) == nil,
+            let repository = state.repositories[id: targetID],
+            repository.kind == .plain
+          {
+            state.pendingTerminalFocusWorktreeIDs.insert(targetID)
+            return .send(.selectRepository(targetID))
+          }
+          return .send(.selectWorktree(targetID, focusTerminal: true))
 
         case .setSidebarSelectedWorktreeIDs(let worktreeIDs):
           let validWorktreeIDs = Set(state.orderedWorktreeRows().map(\.id))
@@ -1385,6 +1418,10 @@ extension RepositoriesFeature.State {
 
   var isShowingCanvas: Bool {
     selection == .canvas
+  }
+
+  var isShowingShelf: Bool {
+    isShelfActive
   }
 
   var archivedWorktreeIDSet: Set<Worktree.ID> {
