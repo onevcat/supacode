@@ -147,6 +147,9 @@ extension RepositoriesFeature {
           }
         )
       }
+      if let effect = detectCodeHostsEffect(for: state.repositories) {
+        allEffects.append(effect)
+      }
       return .merge(allEffects)
 
     case .requestRemoveRepository(let repositoryID):

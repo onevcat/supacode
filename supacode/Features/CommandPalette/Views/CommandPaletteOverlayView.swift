@@ -522,7 +522,7 @@ private struct CommandPaletteRowView: View {
     case .archiveWorktree:
       base = "Archive \(row.title)"
     case .openPullRequest, .openRepositoryOnCodeHost:
-      base = "Open on Code Host"
+      base = row.title
     case .markPullRequestReady:
       base = "Mark pull request ready for review"
     case .mergePullRequest:

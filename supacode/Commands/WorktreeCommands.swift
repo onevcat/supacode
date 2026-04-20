@@ -21,6 +21,7 @@ struct WorktreeCommands: Commands {
     let hasActiveWorktree = repositories.worktree(for: repositories.selectedWorktreeID) != nil
     let orderedRows = visibleHotkeyWorktreeRows ?? repositories.orderedWorktreeRows()
     let codeHostWorktreeID = selectedCodeHostWorktreeID
+    let codeHostLabel = "Open on \(repositories.codeHost(forWorktreeID: codeHostWorktreeID).displayName)"
     let deleteShortcut = KeyboardShortcut(.delete, modifiers: [.command, .shift]).display
     let customCommands = store.selectedCustomCommands
     CommandMenu("Worktrees") {
@@ -73,13 +74,13 @@ struct WorktreeCommands: Commands {
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openWorktree)))
       .help(helpText(title: "Open Worktree", commandID: AppShortcuts.CommandID.openWorktree))
       .disabled(openSelectedWorktreeAction == nil)
-      Button("Open on Code Host") {
+      Button(codeHostLabel) {
         if let codeHostWorktreeID {
           store.send(.repositories(.githubIntegration(.pullRequestAction(codeHostWorktreeID, .openOnCodeHost))))
         }
       }
       .modifier(KeyboardShortcutModifier(shortcut: keyboardShortcut(for: AppShortcuts.CommandID.openPullRequest)))
-      .help(helpText(title: "Open on Code Host", commandID: AppShortcuts.CommandID.openPullRequest))
+      .help(helpText(title: codeHostLabel, commandID: AppShortcuts.CommandID.openPullRequest))
       .disabled(codeHostWorktreeID == nil)
       Button("New Worktree", systemImage: "plus") {
         store.send(.repositories(.worktreeCreation(.createRandomWorktree)))

@@ -216,6 +216,7 @@ struct RepositoriesFeature {
     var pendingPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
     var inFlightPullRequestRefreshRepositoryIDs: Set<Repository.ID> = []
     var queuedPullRequestRefreshByRepositoryID: [Repository.ID: PendingPullRequestRefresh] = [:]
+    var codeHostByRepositoryID: [Repository.ID: CodeHost] = [:]
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     var nextPendingSidebarRevealID = 0
     var pendingSidebarReveal: PendingSidebarReveal?
@@ -267,6 +268,7 @@ struct RepositoriesFeature {
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
+    case codeHostsDetected([Repository.ID: CodeHost])
     case selectArchivedWorktrees
     case selectCanvas
     case toggleCanvas
@@ -592,7 +594,21 @@ struct RepositoriesFeature {
           if state.archivedAutoDeletePeriod != nil {
             allEffects.append(.send(.autoDeleteExpiredArchivedWorktrees))
           }
+          if repositoriesChanged,
+            let effect = detectCodeHostsEffect(for: state.repositories)
+          {
+            allEffects.append(effect)
+          }
           return .merge(allEffects)
+
+        case .codeHostsDetected(let codeHostByRepositoryID):
+          let knownIDs = Set(state.repositories.ids)
+          var updated = state.codeHostByRepositoryID.filter { knownIDs.contains($0.key) }
+          for (id, host) in codeHostByRepositoryID where knownIDs.contains(id) {
+            updated[id] = host
+          }
+          state.codeHostByRepositoryID = updated
+          return .none
 
         case .selectArchivedWorktrees:
           state.selection = .archivedWorktrees
@@ -872,6 +888,34 @@ struct RepositoriesFeature {
     }
     .ifLet(\.$worktreeCreationPrompt, action: \.worktreeCreationPrompt) {
       WorktreeCreationPromptFeature()
+    }
+  }
+
+  func detectCodeHostsEffect(for repositories: IdentifiedArrayOf<Repository>) -> Effect<Action>? {
+    let targets =
+      repositories
+      .filter { $0.capabilities.supportsCodeHost }
+      .map { (id: $0.id, rootURL: $0.rootURL) }
+    guard !targets.isEmpty else { return nil }
+    let gitClient = gitClient
+    return .run { send in
+      var detected: [Repository.ID: CodeHost] = [:]
+      await withTaskGroup(of: (Repository.ID, CodeHost).self) { group in
+        for target in targets {
+          group.addTask {
+            let host = await gitClient.repositoryWebURL(target.rootURL)?.host
+            return (target.id, CodeHost.from(host: host))
+          }
+        }
+        for await (id, host) in group {
+          detected[id] = host
+        }
+      }
+      // `codeHost(for:)` defaults to `.unknown`, so storing `.unknown`
+      // explicitly is a no-op. Skip the round trip when nothing is known.
+      let meaningful = detected.filter { $0.value != .unknown }
+      guard !meaningful.isEmpty else { return }
+      await send(.codeHostsDetected(meaningful))
     }
   }
 
@@ -1353,6 +1397,17 @@ extension RepositoriesFeature.State {
 
   func worktreeInfo(for worktreeID: Worktree.ID) -> WorktreeInfoEntry? {
     worktreeInfoByID[worktreeID]
+  }
+
+  func codeHost(for repositoryID: Repository.ID) -> CodeHost {
+    codeHostByRepositoryID[repositoryID] ?? .unknown
+  }
+
+  func codeHost(forWorktreeID worktreeID: Worktree.ID?) -> CodeHost {
+    guard let worktreeID, let repositoryID = repositoryID(containing: worktreeID) else {
+      return .unknown
+    }
+    return codeHost(for: repositoryID)
   }
 
   func worktreesForInfoWatcher() -> [Worktree] {

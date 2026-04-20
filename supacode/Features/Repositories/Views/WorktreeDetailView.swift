@@ -165,6 +165,7 @@ struct WorktreeDetailView: View {
       title: title,
       statusToast: input.repositories.statusToast,
       pullRequest: matchesBranch ? pullRequest : nil,
+      codeHost: input.repositories.codeHost(forWorktreeID: input.selectedWorktree?.id),
       notificationGroups: input.notificationGroups,
       unseenNotificationWorktreeCount: input.unseenNotificationWorktreeCount,
       openActionSelection: input.openActionSelection,
@@ -411,6 +412,7 @@ struct WorktreeDetailView: View {
     let title: DetailToolbarTitle
     let statusToast: RepositoriesFeature.StatusToast?
     let pullRequest: GithubPullRequest?
+    let codeHost: CodeHost
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
     let unseenNotificationWorktreeCount: Int
     let openActionSelection: OpenWorktreeAction
@@ -449,7 +451,8 @@ struct WorktreeDetailView: View {
       ToolbarItemGroup {
         ToolbarStatusView(
           toast: toolbarState.statusToast,
-          pullRequest: toolbarState.pullRequest
+          pullRequest: toolbarState.pullRequest,
+          codeHost: toolbarState.codeHost
         )
         .padding(.horizontal)
       }
@@ -884,6 +887,7 @@ private struct WorktreeToolbarPreview: View {
       title: DetailToolbarTitle(kind: .branch(name: "feature/toolbar-preview")),
       statusToast: nil,
       pullRequest: nil,
+      codeHost: .github,
       notificationGroups: [],
       unseenNotificationWorktreeCount: 0,
       openActionSelection: .finder,

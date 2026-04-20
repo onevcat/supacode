@@ -282,6 +282,7 @@ private func selectedCodeHostItems(
     return []
   }
 
+  let codeHost = repositories.codeHost(for: repositoryID)
   let pullRequest = repositories.worktreeInfo(for: selectedWorktreeID)?.pullRequest
   if repository.capabilities.supportsPullRequests,
     let pullRequest,
@@ -291,7 +292,8 @@ private func selectedCodeHostItems(
     return pullRequestItems(
       pullRequest: pullRequest,
       worktreeID: selectedWorktreeID,
-      repositoryID: repositoryID
+      repositoryID: repositoryID,
+      codeHost: codeHost
     )
   }
 
@@ -302,7 +304,7 @@ private func selectedCodeHostItems(
   return [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open Repository on Code Host",
+      title: "Open Repository on \(codeHost.displayName)",
       subtitle: repository.name,
       kind: .openRepositoryOnCodeHost(selectedWorktreeID),
       priorityTier: 2
@@ -313,7 +315,8 @@ private func selectedCodeHostItems(
 private func pullRequestItems(
   pullRequest: GithubPullRequest,
   worktreeID: Worktree.ID,
-  repositoryID: Repository.ID
+  repositoryID: Repository.ID,
+  codeHost: CodeHost
 ) -> [CommandPaletteItem] {
   let state = pullRequest.state.uppercased()
   let isOpen = state == "OPEN"
@@ -387,7 +390,7 @@ private func pullRequestItems(
   var items: [CommandPaletteItem] = [
     CommandPaletteItem(
       id: CommandPaletteItemID.pullRequestOpen(repositoryID),
-      title: "Open Pull Request on GitHub",
+      title: "Open Pull Request on \(codeHost.displayName)",
       subtitle: pullRequest.title,
       kind: .openPullRequest(worktreeID),
       priorityTier: 2

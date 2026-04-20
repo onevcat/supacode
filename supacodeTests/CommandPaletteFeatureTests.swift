@@ -202,6 +202,15 @@ struct CommandPaletteFeatureTests {
 
     let searchedItems = CommandPaletteFeature.filterItems(items: items, query: "code host")
     #expect(searchedItems.contains(where: { $0.id == openItem?.id }))
+
+    var githubState = state
+    githubState.codeHostByRepositoryID[repository.id] = .github
+    let githubItems = CommandPaletteFeature.commandPaletteItems(from: githubState)
+    let githubOpenItem = githubItems.first {
+      if case .openRepositoryOnCodeHost = $0.kind { return true }
+      return false
+    }
+    #expect(githubOpenItem?.title == "Open Repository on GitHub")
   }
 
   @Test func emptyQueryHidesChangeFocusedTabIcon() {

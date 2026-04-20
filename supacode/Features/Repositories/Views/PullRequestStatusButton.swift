@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PullRequestStatusButton: View {
   let model: PullRequestStatusModel
+  let codeHost: CodeHost
   @Environment(CommandKeyObserver.self) private var commandKeyObserver
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
@@ -38,14 +39,15 @@ struct PullRequestStatusButton: View {
   }
 
   private var openPullRequestLabel: String {
+    let base = "Open on \(codeHost.displayName)"
     let shortcut = AppShortcuts.resolvedShortcut(
       for: AppShortcuts.CommandID.openPullRequest,
       in: resolvedKeybindings
     )?.display
     if let shortcut {
-      return "Open on GitHub \(shortcut)"
+      return "\(base) \(shortcut)"
     }
-    return "Open on GitHub"
+    return base
   }
 }
 
