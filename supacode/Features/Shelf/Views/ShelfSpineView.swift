@@ -54,9 +54,14 @@ struct ShelfSpineView: View {
     if let terminalState {
       ScrollView(.vertical, showsIndicators: false) {
         VStack(spacing: ShelfMetrics.slotSpacing) {
-          ForEach(terminalState.tabManager.tabs) { tab in
+          ForEach(Array(terminalState.tabManager.tabs.enumerated()), id: \.element.id) { index, tab in
+            // 1-based hotkey number that matches Cmd+1..9. Tabs at
+            // positions 10+ intentionally have no hotkey: they keep
+            // showing their icon even while ⌘ is held.
+            let hotkeyIndex = index < 9 ? index + 1 : nil
             ShelfSpineTabSlot(
               tab: tab,
+              hotkeyIndex: hotkeyIndex,
               isActive: terminalState.tabManager.selectedTabId == tab.id,
               hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
               onTap: { onSelectTab(tab.id) }
@@ -123,24 +128,47 @@ private struct ShelfSpineHeader: View {
 
 private struct ShelfSpineTabSlot: View {
   let tab: TerminalTabItem
+  let hotkeyIndex: Int?
   let isActive: Bool
   let hasUnseenNotification: Bool
   let onTap: () -> Void
+
+  @Environment(CommandKeyObserver.self) private var commandKeyObserver
 
   var body: some View {
     Button(action: onTap) {
       ZStack {
         backgroundFill
-        Image(systemName: tab.icon ?? ShelfMetrics.defaultTabIcon)
-          .imageScale(.small)
-          .foregroundStyle(foregroundTint)
-          .accessibilityHidden(true)
+        slotContent
       }
       .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
     .help(tab.title)
+  }
+
+  /// When ⌘ is held AND this tab has a `Cmd+N` hotkey, swap the icon
+  /// for the digit in-place. Slot frame stays the same either way so
+  /// nothing reflows.
+  @ViewBuilder
+  private var slotContent: some View {
+    let showsHotkey = commandKeyObserver.isPressed && hotkeyIndex != nil
+    if let hotkeyIndex, showsHotkey {
+      Text("\(hotkeyIndex)")
+        .font(.callout.weight(.semibold).monospacedDigit())
+        .foregroundStyle(foregroundTint)
+        .accessibilityHidden(true)
+    } else {
+      Image(systemName: tab.icon ?? ShelfMetrics.defaultTabIcon)
+        .imageScale(.small)
+        .foregroundStyle(foregroundTint)
+        // Dim tabs without a hotkey when ⌘ is held, so the "this slot
+        // can't be jumped to via Cmd+N" affordance is legible without
+        // shifting any layout.
+        .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil ? 0.45 : 1)
+        .accessibilityHidden(true)
+    }
   }
 
   @ViewBuilder
