@@ -12,6 +12,7 @@ import SwiftUI
 struct ShelfView: View {
   let store: StoreOf<RepositoriesFeature>
   let terminalManager: WorktreeTerminalManager
+  let createTab: () -> Void
 
   var body: some View {
     let state = store.state
@@ -47,10 +48,20 @@ struct ShelfView: View {
           isOpen: isOpen(book),
           terminalState: terminalManager.stateIfExists(for: book.id),
           onOpenBook: { openBook(book, selectingTab: nil) },
-          onSelectTab: { tabID in openBook(book, selectingTab: tabID) }
+          onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
+          onNewTab: isOpen(book) ? createTab : nil,
+          onSplitVertical: isOpen(book) ? { performSplit(direction: "new_split:right") } : nil,
+          onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil
         )
       }
     }
+  }
+
+  private func performSplit(direction: String) {
+    guard let openID = store.state.openShelfBookID,
+      let state = terminalManager.stateIfExists(for: openID)
+    else { return }
+    _ = state.performBindingActionOnFocusedSurface(direction)
   }
 
   private func isOpen(_ book: ShelfBook) -> Bool {

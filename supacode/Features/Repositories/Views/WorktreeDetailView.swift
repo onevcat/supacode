@@ -227,7 +227,8 @@ struct WorktreeDetailView: View {
     } else if repositories.isShowingShelf {
       ShelfView(
         store: store.scope(state: \.repositories, action: \.repositories),
-        terminalManager: terminalManager
+        terminalManager: terminalManager,
+        createTab: { store.send(.newTerminal) }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if repositories.isShowingArchivedWorktrees {

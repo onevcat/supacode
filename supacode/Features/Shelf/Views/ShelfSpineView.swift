@@ -13,18 +13,25 @@ struct ShelfSpineView: View {
   let terminalState: WorktreeTerminalState?
   let onOpenBook: () -> Void
   let onSelectTab: (TerminalTabID) -> Void
+  /// Bottom controls — provided only for the open book's spine. `nil`
+  /// suppresses the trio entirely.
+  let onNewTab: (() -> Void)?
+  let onSplitVertical: (() -> Void)?
+  let onSplitHorizontal: (() -> Void)?
 
   var body: some View {
     VStack(spacing: 0) {
       headerButton
       tabList
       // Flexible spacer keeps the tap target for "open this book" filling
-      // any leftover vertical space below the tab list.
+      // any leftover vertical space between the tab list and the bottom
+      // controls.
       Button(action: onOpenBook) {
         Color.clear
           .contentShape(.rect)
       }
       .buttonStyle(.plain)
+      bottomControls
     }
     .frame(width: ShelfMetrics.spineWidth)
     .background(spineBackground)
@@ -34,6 +41,32 @@ struct ShelfSpineView: View {
       }
     }
     .help(book.displayName)
+  }
+
+  @ViewBuilder
+  private var bottomControls: some View {
+    if let onNewTab, let onSplitVertical, let onSplitHorizontal {
+      VStack(spacing: ShelfMetrics.slotSpacing) {
+        Divider().opacity(0.3)
+        ShelfSpineControlButton(
+          systemImage: "plus",
+          label: "New Tab",
+          action: onNewTab
+        )
+        ShelfSpineControlButton(
+          systemImage: "square.split.2x1",
+          label: "Split Vertically",
+          action: onSplitVertical
+        )
+        ShelfSpineControlButton(
+          systemImage: "square.split.1x2",
+          label: "Split Horizontally",
+          action: onSplitHorizontal
+        )
+      }
+      .padding(.horizontal, ShelfMetrics.slotHorizontalPadding)
+      .padding(.bottom, ShelfMetrics.slotSpacing)
+    }
   }
 
   @ViewBuilder
@@ -191,6 +224,25 @@ private struct ShelfSpineTabSlot: View {
     if hasUnseenNotification { return .primary }
     if isActive { return .primary }
     return .secondary
+  }
+}
+
+private struct ShelfSpineControlButton: View {
+  let systemImage: String
+  let label: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: systemImage)
+        .imageScale(.small)
+        .foregroundStyle(.secondary)
+        .frame(width: ShelfMetrics.slotSize, height: ShelfMetrics.slotSize)
+        .contentShape(.rect)
+        .accessibilityHidden(true)
+    }
+    .buttonStyle(.plain)
+    .help(label)
   }
 }
 
