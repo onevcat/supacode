@@ -840,6 +840,16 @@ final class WorktreeTerminalState {
       lastEmittedFocusSurfaceId = nil
     }
     emitTaskStatusIfChanged()
+    // Signal "this worktree now has tabs" so downstream Shelf
+    // bookkeeping (`markWorktreeOpened` via `terminalEvent(.tabCreated)`)
+    // adds the restored worktree to `openedWorktreeIDs`. Without this
+    // emit, only the active worktree (which goes through
+    // `.selectWorktree` on `.layoutRestored`) shows as a book on the
+    // Shelf — every other restored worktree is missing, even though
+    // the sidebar lists it and its terminal state is live.
+    if !restoredTabs.isEmpty {
+      onTabCreated?()
+    }
     terminalStateLogger.info(
       "[LayoutRestore] applySnapshot: success, restored \(restoredTabs.count) tab(s)"
         + " selectedTab=\(selectedTabID?.rawValue.uuidString ?? "nil")"

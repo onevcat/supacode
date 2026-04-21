@@ -32,6 +32,7 @@ struct SettingsFeature {
     var restoreTerminalLayoutOnLaunch: Bool
     var terminalFontSize: Float32?
     var keybindingUserOverrides: KeybindingUserOverrideStore
+    var defaultViewMode: DefaultViewMode
     var cliInstallStatus: CLIInstallStatus = .notInstalled
     var cliInstallShowAlert: Bool = true
     var selection: SettingsSection? = .general
@@ -68,6 +69,7 @@ struct SettingsFeature {
       restoreTerminalLayoutOnLaunch = settings.restoreTerminalLayoutOnLaunch
       terminalFontSize = settings.terminalFontSize
       keybindingUserOverrides = settings.keybindingUserOverrides
+      defaultViewMode = settings.defaultViewMode
     }
 
     var globalSettings: GlobalSettings {
@@ -100,7 +102,8 @@ struct SettingsFeature {
         restoreTerminalLayoutOnLaunch: restoreTerminalLayoutOnLaunch,
         archivedAutoDeletePeriod: archivedAutoDeletePeriod,
         terminalFontSize: terminalFontSize,
-        keybindingUserOverrides: keybindingUserOverrides
+        keybindingUserOverrides: keybindingUserOverrides,
+        defaultViewMode: defaultViewMode
       )
     }
   }
@@ -200,6 +203,7 @@ struct SettingsFeature {
         state.restoreTerminalLayoutOnLaunch = normalizedSettings.restoreTerminalLayoutOnLaunch
         state.terminalFontSize = normalizedSettings.terminalFontSize
         state.keybindingUserOverrides = normalizedSettings.keybindingUserOverrides
+        state.defaultViewMode = normalizedSettings.defaultViewMode
         state.syncGlobalDefaults(from: normalizedSettings)
         return .send(.delegate(.settingsChanged(normalizedSettings)))
 

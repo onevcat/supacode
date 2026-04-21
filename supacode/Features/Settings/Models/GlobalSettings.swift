@@ -26,6 +26,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
   var terminalFontSize: Float32?
   var archivedAutoDeletePeriod: AutoDeletePeriod?
   var keybindingUserOverrides: KeybindingUserOverrideStore
+  var defaultViewMode: DefaultViewMode
 
   static let `default` = GlobalSettings(
     appearanceMode: .dark,
@@ -54,7 +55,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch: false,
     archivedAutoDeletePeriod: nil,
     terminalFontSize: nil,
-    keybindingUserOverrides: .empty
+    keybindingUserOverrides: .empty,
+    defaultViewMode: .normal
   )
 
   init(
@@ -84,7 +86,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     restoreTerminalLayoutOnLaunch: Bool = false,
     archivedAutoDeletePeriod: AutoDeletePeriod? = nil,
     terminalFontSize: Float32? = nil,
-    keybindingUserOverrides: KeybindingUserOverrideStore = .empty
+    keybindingUserOverrides: KeybindingUserOverrideStore = .empty,
+    defaultViewMode: DefaultViewMode = .normal
   ) {
     self.appearanceMode = appearanceMode
     self.defaultEditorID = defaultEditorID
@@ -113,6 +116,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     self.archivedAutoDeletePeriod = archivedAutoDeletePeriod
     self.terminalFontSize = terminalFontSize
     self.keybindingUserOverrides = keybindingUserOverrides
+    self.defaultViewMode = defaultViewMode
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -144,6 +148,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     try container.encodeIfPresent(archivedAutoDeletePeriod?.rawValue, forKey: .archivedAutoDeletePeriod)
     try container.encodeIfPresent(terminalFontSize, forKey: .terminalFontSize)
     try container.encode(keybindingUserOverrides, forKey: .keybindingUserOverrides)
+    try container.encode(defaultViewMode, forKey: .defaultViewMode)
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -174,6 +179,7 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     case archivedAutoDeletePeriod
     case terminalFontSize
     case keybindingUserOverrides
+    case defaultViewMode
     // Legacy key for migration
     case automaticallyArchiveMergedWorktrees
   }
@@ -263,5 +269,8 @@ nonisolated struct GlobalSettings: Codable, Equatable, Sendable {
     keybindingUserOverrides =
       try container.decodeIfPresent(KeybindingUserOverrideStore.self, forKey: .keybindingUserOverrides)
       ?? Self.default.keybindingUserOverrides
+    defaultViewMode =
+      try container.decodeIfPresent(DefaultViewMode.self, forKey: .defaultViewMode)
+      ?? Self.default.defaultViewMode
   }
 }

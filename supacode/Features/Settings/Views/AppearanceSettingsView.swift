@@ -30,6 +30,14 @@ struct AppearanceSettingsView: View {
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
         }
+        Section("Default View") {
+          Picker("Launch in", selection: $store.defaultViewMode) {
+            ForEach(DefaultViewMode.allCases) { mode in
+              Text(mode.title).tag(mode)
+            }
+          }
+          .help("View Prowl starts in on launch. Shelf requires at least one worktree or folder.")
+        }
         Section("Default Editor") {
           Picker(
             "Default editor",

@@ -1009,16 +1009,31 @@ struct AppFeature {
 
       case .terminalEvent(.layoutRestored(let selectedWorktreeID)):
         appLogger.info("[LayoutRestore] layoutRestored: selectedWorktreeID=\(selectedWorktreeID ?? "nil")")
+        // Once layout is restored the saved tabs have all been re-created
+        // (each emits `tabCreated` → `markWorktreeOpened`) and a valid
+        // active worktree is in hand — the right moment to honor the
+        // "Default View = Shelf" preference for Layout-Restore launches,
+        // which the `repositorySnapshotLoaded` hook intentionally
+        // deferred to avoid a selection flash.
+        @Shared(.settingsFile) var settingsFile
+        let shouldEnterShelf =
+          settingsFile.global.defaultViewMode == .shelf
+          && !state.repositories.isShelfActive
+        var effects: [Effect<Action>] = []
         if let selectedWorktreeID {
           // Plain folders use .repository selection, not .worktree
           if let repo = state.repositories.repositories[id: selectedWorktreeID],
             repo.kind == .plain
           {
-            return .send(.repositories(.selectRepository(selectedWorktreeID)))
+            effects.append(.send(.repositories(.selectRepository(selectedWorktreeID))))
+          } else {
+            effects.append(.send(.repositories(.selectWorktree(selectedWorktreeID))))
           }
-          return .send(.repositories(.selectWorktree(selectedWorktreeID)))
         }
-        return .none
+        if shouldEnterShelf {
+          effects.append(.send(.repositories(.toggleShelf)))
+        }
+        return effects.isEmpty ? .none : .merge(effects)
 
       case .terminalEvent(.layoutRestoreFailed(let message)):
         appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")

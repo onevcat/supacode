@@ -2,6 +2,7 @@ import ComposableArchitecture
 import DependenciesTestSupport
 import Foundation
 import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import supacode
@@ -640,6 +641,127 @@ struct ShelfFeatureTests {
       $0.sidebarSelectedWorktreeIDs = []
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  @Test(.dependencies) func defaultViewShelfPreferenceDispatchesToggleAfterSnapshot() async {
+    let repoRoot = "/tmp/default-shelf-repo"
+    let rootURL = URL(fileURLWithPath: repoRoot)
+    let worktree = Worktree(
+      id: "\(repoRoot)/main",
+      name: "main",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "\(repoRoot)/main"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      var updated = $0.global
+      updated.defaultViewMode = .shelf
+      $0.global = updated
+    }
+    // Restore settings after the test so `@Shared` state doesn't leak
+    // across parallel test runs in the same process.
+    defer {
+      $settingsFile.withLock {
+        var updated = $0.global
+        updated.defaultViewMode = .normal
+        $0.global = updated
+      }
+    }
+
+    // Drive only the reducer action under test, not the full `.task`
+    // flow — the launch pipeline is covered elsewhere. This isolates
+    // the new "default view shelf" hook from unrelated effects and
+    // keeps the assertion surface minimal.
+    var initialState = RepositoriesFeature.State()
+    initialState.lastFocusedWorktreeID = worktree.id
+    initialState.shouldRestoreLastFocusedWorktree = true
+    initialState.snapshotPersistencePhase = .restoring
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositorySnapshotLoaded([repository])) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [rootURL]
+      $0.selection = .worktree(worktree.id)
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.receive(\.toggleShelf) {
+      $0.isShelfActive = true
+      $0.openedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
+    }
+    await store.finish()
+  }
+
+  @Test(.dependencies) func defaultViewShelfDefersDuringLayoutRestore() async {
+    // When Layout Restore is active the snapshot-load hook must stay
+    // quiet: Layout Restore clears selection and replays tabs, so
+    // entering Shelf here would flash an empty open area and leave a
+    // stray spine if the restored active book differs from
+    // `lastFocusedWorktreeID`. The AppFeature hook on `.layoutRestored`
+    // takes over once Layout Restore has settled.
+    let repoRoot = "/tmp/default-shelf-restore-repo"
+    let rootURL = URL(fileURLWithPath: repoRoot)
+    let worktree = Worktree(
+      id: "\(repoRoot)/main",
+      name: "main",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "\(repoRoot)/main"),
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: repoRoot,
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+
+    @Shared(.settingsFile) var settingsFile
+    $settingsFile.withLock {
+      var updated = $0.global
+      updated.defaultViewMode = .shelf
+      $0.global = updated
+    }
+    defer {
+      $settingsFile.withLock {
+        var updated = $0.global
+        updated.defaultViewMode = .normal
+        $0.global = updated
+      }
+    }
+
+    var initialState = RepositoriesFeature.State()
+    initialState.lastFocusedWorktreeID = worktree.id
+    initialState.shouldRestoreLastFocusedWorktree = true
+    initialState.snapshotPersistencePhase = .restoring
+    initialState.launchRestoreMode = .restoreLayout
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.repositorySnapshotLoaded([repository])) {
+      $0.repositories = [repository]
+      $0.repositoryRoots = [rootURL]
+      $0.selection = .worktree(worktree.id)
+      $0.shouldRestoreLastFocusedWorktree = false
+      $0.isInitialLoadComplete = true
+    }
+    await store.receive(\.delegate.repositoriesChanged)
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    // No `.toggleShelf` here — the Layout Restore path is responsible.
     await store.finish()
   }
 }
