@@ -98,13 +98,20 @@ struct ShelfView: View {
   @ViewBuilder
   private func openBookArea(for book: ShelfBook, state: RepositoriesFeature.State) -> some View {
     if let worktree = state.selectedTerminalWorktree, worktree.id == book.id {
+      let shouldFocus = state.shouldFocusTerminal(for: worktree.id)
       ShelfOpenBookView(
         worktree: worktree,
         manager: terminalManager,
-        shouldRunSetupScript: state.pendingSetupScriptWorktreeIDs.contains(worktree.id)
+        shouldRunSetupScript: state.pendingSetupScriptWorktreeIDs.contains(worktree.id),
+        forceAutoFocus: shouldFocus
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .id(worktree.id)
+      .onAppear {
+        if shouldFocus {
+          store.send(.worktreeCreation(.consumeTerminalFocus(worktree.id)))
+        }
+      }
     } else {
       emptyOpenArea()
     }
