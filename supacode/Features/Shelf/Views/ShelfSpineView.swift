@@ -28,6 +28,8 @@ struct ShelfSpineView: View {
   /// the spine header / empty body. Nil disables the menu.
   let onRemoveBook: (() -> Void)?
 
+  @State private var isHovering = false
+
   var body: some View {
     VStack(spacing: 0) {
       headerButton
@@ -52,6 +54,8 @@ struct ShelfSpineView: View {
     .onTapGesture { onOpenBook() }
     .accessibilityAddTraits(.isButton)
     .contextMenu { bookContextMenu }
+    .onHover { isHovering = $0 }
+    .animation(.easeOut(duration: 0.12), value: isHovering)
     .overlay(alignment: .trailing) {
       if !isOpen {
         // Explicit 1pt vertical rule. `Divider()` used here before
@@ -81,12 +85,16 @@ struct ShelfSpineView: View {
 
   /// When no book is open (empty shelf), fall back to the neutral gray
   /// used everywhere else so spines don't become invisible; otherwise
-  /// derive from the proximity ladder.
+  /// derive from the proximity ladder. Hovering an unselected spine
+  /// bumps its tint to 80% of the selected book's intensity — a clear
+  /// "this is interactable" affordance that sits just below the open
+  /// book and animates in/out smoothly.
   private var spineBackgroundColor: Color {
     guard distanceFromOpen != nil else {
       return Color.primary.opacity(0.06)
     }
-    return Color.accentColor.opacity(0.20 * accentProximityMultiplier)
+    let multiplier = isHovering && !isOpen ? 0.8 : accentProximityMultiplier
+    return Color.accentColor.opacity(0.20 * multiplier)
   }
 
   /// Active-tab highlight fades more gently than the spine background —
