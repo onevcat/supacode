@@ -704,12 +704,24 @@ struct RepositoriesFeature {
             // registered as opened so the Shelf renders at least this
             // spine. Guards the case where `selection` was set without
             // going through `.selectWorktree` / `.selectRepository`.
+            //
+            // Also request terminal focus for this worktree so that
+            // `ShelfOpenBookView.onAppear` forces focus onto the
+            // surface (`forceAutoFocus: shouldFocusTerminal(for:)`).
+            // Without this, entering Shelf via keyboard shortcut
+            // leaves the first responder on the (now-dismissed) menu
+            // path, and `applySurfaceActivity`'s "only refocus if the
+            // current responder is a GhosttySurfaceView" guard skips
+            // the surface — user can't type until a second
+            // interaction (tab switch, etc.) forces focus through.
             switch state.selection {
             case .some(.worktree(let id)):
               state.openedWorktreeIDs.insert(id)
+              state.pendingTerminalFocusWorktreeIDs.insert(id)
             case .some(.repository(let id))
             where state.repositories[id: id]?.kind == .plain:
               state.openedWorktreeIDs.insert(id)
+              state.pendingTerminalFocusWorktreeIDs.insert(id)
             default:
               break
             }

@@ -32,6 +32,7 @@ struct ShelfFeatureTests {
     await store.send(.toggleShelf) {
       $0.isShelfActive = true
       $0.openedWorktreeIDs = [worktree.id]
+      $0.pendingTerminalFocusWorktreeIDs = [worktree.id]
     }
     await store.finish()
   }
