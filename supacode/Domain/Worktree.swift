@@ -7,6 +7,7 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
   let workingDirectory: URL
   let repositoryRootURL: URL
   let createdAt: Date?
+  let isMain: Bool
 
   nonisolated init(
     id: String,
@@ -22,6 +23,14 @@ nonisolated struct Worktree: Identifiable, Hashable, Sendable {
     self.workingDirectory = workingDirectory
     self.repositoryRootURL = repositoryRootURL
     self.createdAt = createdAt
+    // Pre-compute the main-worktree flag at construction time so that hot SwiftUI
+    // paths never call the expensive `URL.standardizedFileURL` getter during view
+    // updates. The fast equality check covers the common case where callers
+    // already pass normalized URLs; the standardized fallback protects against
+    // any future call site that forgets to normalize first.
+    self.isMain =
+      workingDirectory == repositoryRootURL
+      || workingDirectory.standardizedFileURL == repositoryRootURL.standardizedFileURL
   }
 }
 
