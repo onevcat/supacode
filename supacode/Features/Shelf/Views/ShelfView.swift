@@ -60,13 +60,32 @@ struct ShelfView: View {
           terminalState: terminalManager.stateIfExists(for: book.id),
           onOpenBook: { openBook(book, selectingTab: nil) },
           onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
-          onNewTab: isOpen(book) ? createTab : nil,
+          onNewTab: {
+            // On a closed spine, `+` doubles as "pull this book out and
+            // start a fresh tab". Sequencing is fine because TCA runs
+            // reducers synchronously — `newTerminal` will observe the
+            // new `selectedTerminalWorktree` set by `selectWorktree`.
+            switchToBookIfNeeded(book)
+            createTab()
+          },
           onSplitVertical: isOpen(book) ? { performSplit(direction: "new_split:right") } : nil,
           onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil,
           onRemoveBook: { removeBook(book) }
         )
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
+    }
+  }
+
+  /// Dispatch the open-book action only when `book` isn't already the open
+  /// one — idempotent helper for taps that imply a book change.
+  private func switchToBookIfNeeded(_ book: ShelfBook) {
+    guard !isOpen(book) else { return }
+    switch book.kind {
+    case .worktree:
+      store.send(.selectWorktree(book.id, focusTerminal: true), animation: .easeInOut(duration: 0.2))
+    case .plainFolder:
+      store.send(.selectRepository(book.repositoryID), animation: .easeInOut(duration: 0.2))
     }
   }
 

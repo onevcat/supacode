@@ -17,6 +17,9 @@ struct ShelfBook: Identifiable, Equatable, Hashable, Sendable {
   let id: Worktree.ID
   let repositoryID: Repository.ID
   let displayName: String
+  /// Project/repository name shown as the primary part of the spine
+  /// header. For plain folders this equals the folder name.
+  let projectName: String
   let branchName: String?
   let kind: Kind
 
@@ -46,6 +49,7 @@ extension RepositoriesFeature.State {
             id: repository.id,
             repositoryID: repository.id,
             displayName: repository.name,
+            projectName: repository.name,
             branchName: nil,
             kind: .plainFolder
           ))
@@ -58,6 +62,7 @@ extension RepositoriesFeature.State {
             id: row.id,
             repositoryID: repositoryID,
             displayName: row.name,
+            projectName: repository.name,
             branchName: row.name,
             kind: .worktree
           ))
