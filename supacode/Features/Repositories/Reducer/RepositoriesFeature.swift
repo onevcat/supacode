@@ -1573,7 +1573,7 @@ extension RepositoriesFeature.State {
   }
 
   func isMainWorktree(_ worktree: Worktree) -> Bool {
-    worktree.workingDirectory.standardizedFileURL == worktree.repositoryRootURL.standardizedFileURL
+    worktree.isMain
   }
 
   func isWorktreeMerged(_ worktree: Worktree) -> Bool {
