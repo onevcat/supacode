@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-private let windowFocusLogger = SupaLogger("WindowFocus")
-
 struct WindowActivityState: Equatable {
   let isKeyWindow: Bool
   let isVisible: Bool
@@ -51,7 +49,16 @@ final class WindowFocusObserverNSView: NSView {
     clearObservers()
     observedWindow = window
     guard let window else {
-      emitActivityIfNeeded(force: true)
+      // View is being torn down from its window (e.g. a sibling view
+      // swap in SwiftUI). The window itself is not going away — other
+      // observers watching the same `WorktreeTerminalState` are still
+      // live and reflect the real window activity. Emitting an
+      // inactive signal here would poison the shared state's
+      // `lastWindowIsKey`/`lastWindowIsVisible`, causing
+      // `applySurfaceActivity` to demote focus even though the window
+      // is still key. Just stop observing silently and let the
+      // surviving observer drive state. This branch is covered by
+      // `WindowFocusObserverViewTests.detachFromWindowEmitsNothingNew`.
       return
     }
     let center = NotificationCenter.default
@@ -94,11 +101,6 @@ final class WindowFocusObserverNSView: NSView {
       return
     }
     lastEmittedActivity = activity
-    windowFocusLogger.info(
-      "[TerminalWake] activityChanged key=\(activity.isKeyWindow) "
-        + "visible=\(activity.isVisible) force=\(force) "
-        + "windowNumber=\(window?.windowNumber ?? -1)"
-    )
     onWindowActivityChanged(activity)
   }
 
