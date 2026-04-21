@@ -686,20 +686,19 @@ struct RepositoriesFeature {
         case .markWorktreeClosed(let worktreeID):
           // Closing the last tab of a book retires the book from the
           // Shelf. If this book was the one currently open on the
-          // Shelf, move focus to the next remaining book (by Shelf
-          // order) so the user lands on something useful rather than
-          // an empty-Shelf placeholder.
+          // Shelf, move focus to the neighboring book — the one after
+          // the closed book if there is one, otherwise the one before
+          // — so the user lands close to where they were instead of
+          // always snapping back to the first spine.
+          let replacement = replacementBookAfterClosing(
+            worktreeID: worktreeID,
+            state: state
+          )
           state.openedWorktreeIDs.remove(worktreeID)
-          guard state.isShelfActive,
-            state.selectedTerminalWorktree?.id == worktreeID
-          else {
-            return .none
+          if let replacement {
+            return shelfBookSelectionEffect(for: replacement)
           }
-          let remaining = state.orderedShelfBooks()
-          guard let next = remaining.first else {
-            return .none
-          }
-          return shelfBookSelectionEffect(for: next)
+          return .none
 
         case .toggleShelf:
           if state.isShelfActive {
@@ -2216,6 +2215,33 @@ func isSelectionValid(
   state: RepositoriesFeature.State
 ) -> Bool {
   state.selectedRow(for: id) != nil
+}
+
+/// Choose the next book to open after `worktreeID`'s book is retired.
+/// Prefer the book immediately *after* the closed one in Shelf order;
+/// fall back to the one immediately *before* it; return `nil` when
+/// Shelf is inactive, when the closed book isn't the currently open
+/// one, or when no other books remain.
+func replacementBookAfterClosing(
+  worktreeID: Worktree.ID,
+  state: RepositoriesFeature.State
+) -> ShelfBook? {
+  guard state.isShelfActive,
+    state.selectedTerminalWorktree?.id == worktreeID
+  else { return nil }
+  let books = state.orderedShelfBooks()
+  guard let index = books.firstIndex(where: { $0.id == worktreeID }) else {
+    return nil
+  }
+  let remaining = books.enumerated().filter { $0.offset != index }.map(\.element)
+  guard !remaining.isEmpty else { return nil }
+  // After removing index `index`, the "next" book is now at position
+  // `index` in the reduced list (if it exists); otherwise the last one
+  // is the "previous" relative to what was closed.
+  if index < remaining.count {
+    return remaining[index]
+  }
+  return remaining.last
 }
 
 /// Returns the Shelf book at `offset` positions from the currently open

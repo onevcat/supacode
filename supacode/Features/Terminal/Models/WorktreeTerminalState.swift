@@ -1585,6 +1585,12 @@ final class WorktreeTerminalState {
       if tabId == runScriptTabId {
         setRunScriptTabId(nil)
       }
+      // Mirror `state.closeTab(_:)`'s `onTabClosed` emit: this path
+      // fires when the shell process exits (ghostty-driven close)
+      // and historically skipped the callback, which meant the
+      // Shelf's "retire the book when its last tab closes" logic
+      // never saw this very common path.
+      onTabClosed?()
       return
     }
     updateTree(newTree, for: tabId)

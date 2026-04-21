@@ -462,52 +462,88 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
-  @Test(.dependencies) func markWorktreeClosedAutoAdvancesToNextBookWhenOpen() async {
-    let rootURL = URL(fileURLWithPath: "/tmp/repo")
-    let wt1 = Worktree(
-      id: "/tmp/repo/wt1",
-      name: "wt1",
-      detail: "",
-      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
-      repositoryRootURL: rootURL
-    )
-    let wt2 = Worktree(
-      id: "/tmp/repo/wt2",
-      name: "wt2",
-      detail: "",
-      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt2"),
-      repositoryRootURL: rootURL
-    )
-    let repo = Repository(
-      id: rootURL.path(percentEncoded: false),
-      rootURL: rootURL,
-      name: "repo",
-      worktrees: IdentifiedArray(uniqueElements: [wt1, wt2])
-    )
-    var state = RepositoriesFeature.State(repositories: [repo])
-    state.repositoryRoots = [rootURL]
-    state.repositoryOrderIDs = [repo.id]
-    state.selection = .worktree(wt1.id)
+  @Test(.dependencies) func markWorktreeClosedAdvancesToNextBookWhenAvailable() async {
+    let fixture = threeWorktreeFixture()
+    var state = RepositoriesFeature.State(repositories: [fixture.repo])
+    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryOrderIDs = [fixture.repo.id]
+    state.selection = .worktree(fixture.worktrees[1].id)  // Middle book open.
     state.isShelfActive = true
-    state.openedWorktreeIDs = [wt1.id, wt2.id]
+    state.openedWorktreeIDs = Set(fixture.worktrees.map(\.id))
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
     }
 
-    // Close wt1 (the open book on the Shelf). wt2 is the only remaining
-    // book → reducer should auto-select wt2 so the user lands on
-    // content rather than an empty-Shelf placeholder.
-    await store.send(.markWorktreeClosed(wt1.id)) {
-      $0.openedWorktreeIDs = [wt2.id]
+    // Closing the middle book → replacement is the one AFTER it (wt3),
+    // not the first book (wt1). The user stays close to where they
+    // were on the shelf.
+    let closingID = fixture.worktrees[1].id
+    let nextID = fixture.worktrees[2].id
+    await store.send(.markWorktreeClosed(closingID)) {
+      $0.openedWorktreeIDs = [fixture.worktrees[0].id, nextID]
     }
     await store.receive(\.selectWorktree) {
-      $0.selection = .worktree(wt2.id)
-      $0.sidebarSelectedWorktreeIDs = [wt2.id]
-      $0.pendingTerminalFocusWorktreeIDs = [wt2.id]
-      $0.openedWorktreeIDs = [wt2.id]
+      $0.selection = .worktree(nextID)
+      $0.sidebarSelectedWorktreeIDs = [nextID]
+      $0.pendingTerminalFocusWorktreeIDs = [nextID]
+      $0.openedWorktreeIDs = [fixture.worktrees[0].id, nextID]
     }
     await store.receive(\.delegate.selectedWorktreeChanged)
     await store.finish()
+  }
+
+  @Test(.dependencies) func markWorktreeClosedFallsBackToPreviousBookWhenClosingLast() async {
+    let fixture = threeWorktreeFixture()
+    var state = RepositoriesFeature.State(repositories: [fixture.repo])
+    state.repositoryRoots = [fixture.repo.rootURL]
+    state.repositoryOrderIDs = [fixture.repo.id]
+    state.selection = .worktree(fixture.worktrees[2].id)  // Last book open.
+    state.isShelfActive = true
+    state.openedWorktreeIDs = Set(fixture.worktrees.map(\.id))
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Closing the last book → no book after it, so the replacement is
+    // the book BEFORE it (wt2).
+    let closingID = fixture.worktrees[2].id
+    let prevID = fixture.worktrees[1].id
+    await store.send(.markWorktreeClosed(closingID)) {
+      $0.openedWorktreeIDs = [fixture.worktrees[0].id, prevID]
+    }
+    await store.receive(\.selectWorktree) {
+      $0.selection = .worktree(prevID)
+      $0.sidebarSelectedWorktreeIDs = [prevID]
+      $0.pendingTerminalFocusWorktreeIDs = [prevID]
+      $0.openedWorktreeIDs = [fixture.worktrees[0].id, prevID]
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
+  private struct ThreeWorktreeFixture {
+    let repo: Repository
+    let worktrees: [Worktree]
+  }
+
+  private func threeWorktreeFixture() -> ThreeWorktreeFixture {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktrees = (1...3).map { index in
+      Worktree(
+        id: "/tmp/repo/wt\(index)",
+        name: "wt\(index)",
+        detail: "",
+        workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt\(index)"),
+        repositoryRootURL: rootURL
+      )
+    }
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: worktrees)
+    )
+    return ThreeWorktreeFixture(repo: repo, worktrees: worktrees)
   }
 
   @Test(.dependencies) func markWorktreeClosedLeavesSelectionAloneInNormalView() async {
