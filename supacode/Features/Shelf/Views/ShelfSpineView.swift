@@ -37,6 +37,11 @@ struct ShelfSpineView: View {
       bottomControls
     }
     .frame(width: ShelfMetrics.spineWidth)
+    // `maxHeight: .infinity` binds the spine to the parent Shelf's
+    // available height (set by `ShelfView.frame(maxHeight: .infinity)`).
+    // Without this, a long tab list would let the spine VStack grow to
+    // its intrinsic size and push the entire window taller.
+    .frame(maxHeight: .infinity, alignment: .top)
     .background(
       // Single `Rectangle` with a computed fill so the color change
       // interpolates in place as `distanceFromOpen` shifts, rather than
@@ -176,18 +181,22 @@ struct ShelfSpineView: View {
   @ViewBuilder
   private var tabList: some View {
     if let terminalState {
-      // We avoid wrapping the slots in a `ScrollView` here. On macOS 26,
-      // a vertical `ScrollView` renders a faint horizontal hairline at
-      // its content/clip-bounds boundary even with `showsIndicators` off
-      // and `scrollBounceBehavior(.basedOnSize)` set. Because the
-      // ScrollView's frame is identical across sibling spines (the
-      // header and bottom controls share height), that hairline lines
-      // up across every spine and looks like one continuous horizontal
-      // white bar cutting through the whole Shelf. Short tab lists
-      // don't need scrolling anyway; for very long lists we'll layer
-      // scrolling back in once the rendering issue is understood.
-      tabListContent(state: terminalState)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      // Scroll the tab slots when they overflow the spine so the window
+      // height stays capped instead of growing unbounded with tab count.
+      // `.scrollIndicators(.never)` — stronger than `.hidden`, which
+      // still shows scroll bars when the user has "Always show scroll
+      // bars" enabled in System Settings. The 34pt-wide spine has no
+      // room to donate to a scroll bar, so we always hide it.
+      // `.scrollBounceBehavior(.basedOnSize)` keeps short lists static.
+      // `.clipped()` eats any overdraw at the scroll-view edges so the
+      // spine boundary stays crisp.
+      ScrollView(.vertical) {
+        tabListContent(state: terminalState)
+      }
+      .scrollIndicators(.never)
+      .scrollBounceBehavior(.basedOnSize)
+      .clipped()
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
   }
 
