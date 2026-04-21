@@ -513,13 +513,13 @@ enum AppShortcuts {
     ),
     .init(
       id: CommandID.selectNextWorktree,
-      title: "Select Next Worktree",
+      title: "Select Next Worktree (Tab in Shelf View)",
       scope: .configurableAppAction,
       shortcut: selectNextWorktree
     ),
     .init(
       id: CommandID.selectPreviousWorktree,
-      title: "Select Previous Worktree",
+      title: "Select Previous Worktree (Tab in Shelf View)",
       scope: .configurableAppAction,
       shortcut: selectPreviousWorktree
     ),
