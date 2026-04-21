@@ -163,7 +163,7 @@ struct ShelfView: View {
         .accessibilityHidden(true)
       Text("No book selected")
         .font(.headline)
-      Text("Click a spine to open a book.")
+      Text("Click a worktree to open it.")
         .font(.callout)
         .foregroundStyle(.secondary)
     }
