@@ -10,6 +10,12 @@ import SwiftUI
 struct ShelfSpineView: View {
   let book: ShelfBook
   let isOpen: Bool
+  /// Absolute distance along the ordered book list between this spine and
+  /// the currently open book (0 = this *is* the open book, 1 = immediate
+  /// neighbor, …). Nil when no book is open. Drives the step-wise accent
+  /// tint that fades outward from the open book, so proximity reads at a
+  /// glance instead of every non-open spine looking identical.
+  let distanceFromOpen: Int?
   let terminalState: WorktreeTerminalState?
   let onOpenBook: () -> Void
   let onSelectTab: (TerminalTabID) -> Void
@@ -30,11 +36,12 @@ struct ShelfSpineView: View {
     }
     .frame(width: ShelfMetrics.spineWidth)
     .background(
-      // Single `Rectangle` with a ternary fill so the open↔closed color
-      // change interpolates in place rather than swapping one view for
-      // another (which the previous `@ViewBuilder` if/else did).
-      Rectangle()
-        .fill(isOpen ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.06))
+      // Single `Rectangle` with a computed fill so the color change
+      // interpolates in place as `distanceFromOpen` shifts, rather than
+      // swapping one view for another (which the previous `@ViewBuilder`
+      // if/else did). Fill is derived from a stepped accent-alpha ladder
+      // so the open book glows strongest and neighbors fade outward.
+      Rectangle().fill(spineBackgroundColor)
     )
     // Whole-spine tap target. Inner Buttons (header, tab slots, controls)
     // absorb their own clicks; clicks that fall on empty areas (scroll
@@ -58,6 +65,42 @@ struct ShelfSpineView: View {
       }
     }
     .help(book.displayName)
+  }
+
+  /// Step-wise accent-alpha ladder keyed by `distanceFromOpen`. 100%
+  /// (selected) → 50% → 30% → 20% → 10% → 5%; beyond the ladder the
+  /// multiplier is 0 so the halo is bounded. The sharp drop at distance
+  /// 1 keeps the open book clearly dominant rather than blending into
+  /// its neighbors. Shared by the spine background and the per-tab
+  /// active-highlight fill so they fade in lockstep.
+  private var accentProximityMultiplier: Double {
+    guard let distance = distanceFromOpen else { return 0 }
+    let ladder: [Double] = [1.0, 0.5, 0.3, 0.2, 0.1, 0.05]
+    return distance < ladder.count ? ladder[distance] : 0
+  }
+
+  /// When no book is open (empty shelf), fall back to the neutral gray
+  /// used everywhere else so spines don't become invisible; otherwise
+  /// derive from the proximity ladder.
+  private var spineBackgroundColor: Color {
+    guard distanceFromOpen != nil else {
+      return Color.primary.opacity(0.06)
+    }
+    return Color.accentColor.opacity(0.20 * accentProximityMultiplier)
+  }
+
+  /// Active-tab highlight fades more gently than the spine background —
+  /// the tab-selection indicator has to stay legible even on far-away
+  /// books so users can still see which tab would open. Uses absolute
+  /// alpha stops (0.20 / 0.15 / 0.10) rather than the spine's multiplier
+  /// ladder; the two axes are tuned independently for their own roles.
+  private var activeTabHighlightAlpha: Double {
+    guard let distance = distanceFromOpen else { return 0.2 }
+    switch distance {
+    case 0: return 0.2
+    case 1: return 0.15
+    default: return 0.1
+    }
   }
 
   @ViewBuilder
@@ -153,6 +196,7 @@ struct ShelfSpineView: View {
           hotkeyIndex: hotkeyIndex,
           isActive: terminalState.tabManager.selectedTabId == tab.id,
           hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
+          activeHighlightAlpha: activeTabHighlightAlpha,
           onTap: { onSelectTab(tab.id) },
           onClose: { terminalState.closeTab(tab.id) }
         )
@@ -229,6 +273,13 @@ private struct ShelfSpineTabSlot: View {
   let hotkeyIndex: Int?
   let isActive: Bool
   let hasUnseenNotification: Bool
+  /// Absolute alpha for the active-tab accent fill, supplied by the
+  /// enclosing spine so it can fade with proximity on its own curve
+  /// (which decays more gently than the spine background — selection
+  /// indicators must stay legible even on far books). Orange
+  /// notification tint is left untouched so unread signals remain
+  /// attention-grabbing regardless of distance.
+  let activeHighlightAlpha: Double
   let onTap: () -> Void
   let onClose: () -> Void
 
@@ -303,7 +354,7 @@ private struct ShelfSpineTabSlot: View {
         .fill(Color.orange.opacity(0.3))
     } else if isActive {
       RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
-        .fill(Color.accentColor.opacity(0.2))
+        .fill(Color.accentColor.opacity(activeHighlightAlpha))
     } else {
       Color.clear
     }

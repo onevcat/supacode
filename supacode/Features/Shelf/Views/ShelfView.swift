@@ -29,15 +29,19 @@ struct ShelfView: View {
 
     HStack(spacing: 0) {
       if let openIndex {
-        spineStack(books: Array(books[0...openIndex]))
+        spineStack(books: Array(books[0...openIndex]), openIndex: openIndex, baseOffset: 0)
         openBookArea(for: books[openIndex], state: state)
           .transition(.opacity)
         let rightStart = openIndex + 1
         if rightStart < books.count {
-          spineStack(books: Array(books[rightStart..<books.count]))
+          spineStack(
+            books: Array(books[rightStart..<books.count]),
+            openIndex: openIndex,
+            baseOffset: rightStart
+          )
         }
       } else {
-        spineStack(books: books)
+        spineStack(books: books, openIndex: nil, baseOffset: 0)
         emptyOpenArea()
       }
     }
@@ -50,13 +54,20 @@ struct ShelfView: View {
     .animation(.easeInOut(duration: 0.2), value: openBookID)
   }
 
+  /// `baseOffset` is the index of `books.first` within the full ordered
+  /// list, so we can reconstruct each spine's global index and compute
+  /// its distance to `openIndex` without re-scanning the full list.
   @ViewBuilder
-  private func spineStack(books: [ShelfBook]) -> some View {
+  private func spineStack(books: [ShelfBook], openIndex: Int?, baseOffset: Int) -> some View {
     HStack(spacing: 0) {
-      ForEach(books) { book in
+      ForEach(Array(books.enumerated()), id: \.element.id) { localIndex, book in
+        let globalIndex = baseOffset + localIndex
+        let distance = openIndex.map { abs(globalIndex - $0) }
+        let open = globalIndex == openIndex
         ShelfSpineView(
           book: book,
-          isOpen: isOpen(book),
+          isOpen: open,
+          distanceFromOpen: distance,
           terminalState: terminalManager.stateIfExists(for: book.id),
           onOpenBook: { openBook(book, selectingTab: nil) },
           onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
@@ -68,8 +79,8 @@ struct ShelfView: View {
             switchToBookIfNeeded(book)
             createTab()
           },
-          onSplitVertical: isOpen(book) ? { performSplit(direction: "new_split:right") } : nil,
-          onSplitHorizontal: isOpen(book) ? { performSplit(direction: "new_split:down") } : nil,
+          onSplitVertical: open ? { performSplit(direction: "new_split:right") } : nil,
+          onSplitHorizontal: open ? { performSplit(direction: "new_split:down") } : nil,
           onRemoveBook: { removeBook(book) }
         )
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
