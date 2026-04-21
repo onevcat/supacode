@@ -414,15 +414,26 @@ controls still enabling new tab / split to recover.
 
 `RepositoriesFeature.State.openedWorktreeIDs: Set<Worktree.ID>` tracks
 which worktrees/plain folders are currently part of the Shelf's book list.
-It's updated by the reducer in three places:
+It's updated by the reducer in four places:
 
-- `.selectWorktree(id, _)` handler inserts `id` (covers user click in
-  sidebar, Shelf click, CLI open, layout restore)
+- `.selectWorktree(id, _)` handler inserts `id` (covers sidebar click,
+  Shelf click, most CLI opens, layout restore of the *active* worktree)
 - `.selectRepository(id)` handler inserts `id` when the repository is a
-  plain folder (same semantics for plain folders)
+  plain folder
 - `.toggleShelf` entry path inserts the currently selected ID when the
   selection is already compatible with Shelf (rare path, but guards
-  against state that was set without going through the two actions above)
+  against state set without going through the two actions above)
+- `.markWorktreeOpened(id)` — a dedicated action that AppFeature
+  dispatches in response to `.terminalEvent(.tabCreated(worktreeID:))`.
+  This is the *critical* catch-all for every path that sets
+  `state.selection` directly without going through `.selectWorktree` —
+  in particular, the cold-launch auto-selection that restores the last
+  focused worktree (`state.selection = state.lastFocusedWorktreeID…` in
+  `applyRepositories`) and the "first available after reload" fallback.
+  Layout restore is a third such path. The common downstream signal in
+  all of them is that the newly-focused worktree ends up materializing
+  its first tab, emitting `.tabCreated`, which this forwarder converts
+  into an `openedWorktreeIDs` insertion.
 
 `orderedShelfBooks()` filters against this set. The set is pure
 additive in this iteration — archived / removed worktrees still drop off

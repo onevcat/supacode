@@ -1024,6 +1024,13 @@ struct AppFeature {
         appLogger.warning("[LayoutRestore] layoutRestoreFailed: \(message)")
         return .send(.repositories(.showToast(.warning(message))))
 
+      case .terminalEvent(.tabCreated(let worktreeID)):
+        // Every tab creation (user +, CLI open, layout restore, …)
+        // marks its worktree as Shelf-visible. Layout restore in
+        // particular only calls `selectWorktree` for the one active
+        // worktree; other restored worktrees only surface here.
+        return .send(.repositories(.markWorktreeOpened(worktreeID)))
+
       case .terminalEvent:
         return .none
       }

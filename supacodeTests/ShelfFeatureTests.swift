@@ -329,6 +329,34 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func markWorktreeOpenedAddsToOpenedSet() async {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let wt1 = Worktree(
+      id: "/tmp/repo/wt1",
+      name: "wt1",
+      detail: "",
+      workingDirectory: URL(fileURLWithPath: "/tmp/repo/wt1"),
+      repositoryRootURL: rootURL
+    )
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [wt1])
+    )
+    let store = TestStore(initialState: RepositoriesFeature.State(repositories: [repo])) {
+      RepositoriesFeature()
+    }
+
+    // Mirrors the AppFeature forwarding `terminalEvent(.tabCreated)` →
+    // `.markWorktreeOpened`. Any tab creation (including restored
+    // layouts) adds its worktree to the Shelf's visible book set.
+    await store.send(.markWorktreeOpened(wt1.id)) {
+      $0.openedWorktreeIDs = [wt1.id]
+    }
+    await store.finish()
+  }
+
   @Test(.dependencies) func selectArchivedWorktreesClearsShelfActiveFlag() async {
     let rootURL = URL(fileURLWithPath: "/tmp/repo")
     let worktree = Worktree(

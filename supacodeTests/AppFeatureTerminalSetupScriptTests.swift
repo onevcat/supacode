@@ -81,6 +81,9 @@ struct AppFeatureTerminalSetupScriptTests {
     }
 
     await store.send(.terminalEvent(.tabCreated(worktreeID: worktree.id)))
+    await store.receive(\.repositories.markWorktreeOpened) {
+      $0.repositories.openedWorktreeIDs = [worktree.id]
+    }
     #expect(store.state.repositories.pendingSetupScriptWorktreeIDs.contains(worktree.id))
     await store.finish()
   }

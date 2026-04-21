@@ -283,6 +283,7 @@ struct RepositoriesFeature {
     case selectNextShelfBook
     case selectPreviousShelfBook
     case selectShelfBook(Int)
+    case markWorktreeOpened(Worktree.ID)
     case setSidebarSelectedWorktreeIDs(Set<Worktree.ID>)
     case selectRepository(Repository.ID?)
     case selectWorktree(Worktree.ID?, focusTerminal: Bool = false)
@@ -676,6 +677,10 @@ struct RepositoriesFeature {
           let zeroBased = index - 1
           guard books.indices.contains(zeroBased) else { return .none }
           return shelfBookSelectionEffect(for: books[zeroBased])
+
+        case .markWorktreeOpened(let worktreeID):
+          state.openedWorktreeIDs.insert(worktreeID)
+          return .none
 
         case .toggleShelf:
           if state.isShelfActive {
