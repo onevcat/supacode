@@ -50,12 +50,19 @@ enum CommandIconMap {
       assetName: "VSCode"
     ),
 
-    // Package managers
+    // Package managers / runners — `npx` and `bunx` are the
+    // ad-hoc-package execution counterparts to `npm` and `bun`,
+    // share the icons. `pip` is Python's package manager and rides
+    // on the Python asset.
     "npm": TabIconSource(systemSymbol: "shippingbox", assetName: "Npm"),
+    "npx": TabIconSource(systemSymbol: "shippingbox", assetName: "Npm"),
     "pnpm": TabIconSource(systemSymbol: "shippingbox", assetName: "Pnpm"),
     "yarn": TabIconSource(systemSymbol: "shippingbox", assetName: "Yarn"),
     "bun": TabIconSource(systemSymbol: "shippingbox", assetName: "Bun"),
+    "bunx": TabIconSource(systemSymbol: "shippingbox", assetName: "Bun"),
     "brew": TabIconSource(systemSymbol: "shippingbox", assetName: "Homebrew"),
+    "pip": TabIconSource(systemSymbol: "shippingbox", assetName: "Python"),
+    "pip3": TabIconSource(systemSymbol: "shippingbox", assetName: "Python"),
 
     // Runtime / version managers
     "mise": TabIconSource(systemSymbol: "arrow.up.arrow.down"),
@@ -81,6 +88,7 @@ enum CommandIconMap {
     "cargo": TabIconSource(systemSymbol: "hammer", assetName: "Rust"),
     "xcodebuild": TabIconSource(systemSymbol: "hammer", assetName: "Xcode"),
     "gradle": TabIconSource(systemSymbol: "hammer", assetName: "Gradle"),
+    "tsc": TabIconSource(systemSymbol: "hammer", assetName: "TypeScript"),
 
     // Container / orchestration — `lazydocker` is a TUI for docker,
     // shares the icon.
