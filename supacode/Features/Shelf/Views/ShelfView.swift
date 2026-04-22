@@ -161,7 +161,7 @@ struct ShelfView: View {
         .font(.system(size: 40))
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
-      Text("No book selected")
+      Text("No worktree selected")
         .font(.headline)
       Text("Click a worktree to open it.")
         .font(.callout)
