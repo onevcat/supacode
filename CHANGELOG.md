@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.4.23](https://github.com/onevcat/Prowl/releases/tag/v2026.4.23)
+
+Tab icons now update automatically based on the running command, making it easy to tell at a glance what each terminal tab is doing.
+
+## New
+
+- **Auto-detecting tab icons**: Prowl now detects the running command from the terminal title and displays a matching icon in the tab bar and Shelf spine. Brand icons are available for coding agents (Claude, Codex, Gemini, Copilot, Amp, and more), editors, package managers, runtimes, VCS tools, containers, and databases — over 55 command mappings in total. The icon stays visible after a short-lived command finishes as a "what is this tab for" hint, and is never overridden if you have manually locked an icon via the Icon Picker.
+- **Context-aware Shelf close action**: The Shelf spine context menu now shows "Close Worktree" or "Close Folder" depending on the book type, replacing the old "Remove Book" entry. Closing removes the book from the Shelf without touching the underlying directory or worktree. This also works on the main worktree, which previously showed the option but did nothing.
+
+## Fixed
+
+- Staggered background refresh schedules across worktrees so periodic git and pull-request checks no longer fire simultaneously, reducing CPU spikes when many repos are open.
+- Shelf empty-state wording now consistently refers to worktrees, matching the rest of the UI.
+
 ## [2026.4.22](https://github.com/onevcat/Prowl/releases/tag/v2026.4.22)
 
 This release introduces Shelf, a new way to view and navigate your worktrees, along with a significant performance improvement that eliminates a source of main-thread hangs.
