@@ -378,9 +378,6 @@ final class WorktreeInfoWatcherManager {
         return
       }
       while !Task.isCancelled {
-        guard !Task.isCancelled else {
-          return
-        }
         await MainActor.run {
           self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
         }
@@ -460,9 +457,6 @@ final class WorktreeInfoWatcherManager {
         return
       }
       while !Task.isCancelled {
-        guard !Task.isCancelled else {
-          return
-        }
         await MainActor.run {
           self?.emit(request.makeEvent(worktreeID))
         }
@@ -492,7 +486,7 @@ final class WorktreeInfoWatcherManager {
 
   nonisolated private static func stablePhaseOffset(seed: String, interval: Duration) -> Duration {
     let intervalMilliseconds = durationMilliseconds(interval)
-    guard intervalMilliseconds > 1 else {
+    guard intervalMilliseconds > 0 else {
       return .zero
     }
     let hash = stableHash(seed)
