@@ -176,6 +176,26 @@ struct RepositoriesFeatureTests {
     await store.finish()
   }
 
+  @Test func filesChangedSkipsLineChangeActionWhenEntryExplicitlyHoldsZeros() async {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 0,
+      removedLines: 0,
+      pullRequest: nil
+    )
+
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    } withDependencies: {
+      $0.gitClient.lineChanges = { _ in (0, 0) }
+    }
+
+    await store.send(.worktreeInfoEvent(.filesChanged(worktreeID: worktree.id)))
+    await store.finish()
+  }
+
   @Test func filesChangedEmitsLineChangeActionWhenGitCountsDiffer() async {
     let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])

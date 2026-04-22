@@ -2208,7 +2208,7 @@ nonisolated private func normalizedLineChanges(_ entry: WorktreeInfoEntry?) -> (
   guard let added = entry?.addedLines, let removed = entry?.removedLines else {
     return nil
   }
-  return (added, removed)
+  return normalizedLineChanges(added: added, removed: removed)
 }
 
 nonisolated private func normalizedLineChanges(
