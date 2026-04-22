@@ -33,6 +33,8 @@ struct WorktreeInfoWatcherManagerTests {
     let manager = WorktreeInfoWatcherManager(
       focusedInterval: .milliseconds(80),
       unfocusedInterval: .milliseconds(80),
+      lineChangePhaseOffset: { _, _ in .zero },
+      pullRequestPhaseOffset: { _, _ in .zero },
       clock: clock
     )
     let (collector, task) = startCollecting(manager.eventStream())
@@ -57,6 +59,116 @@ struct WorktreeInfoWatcherManagerTests {
     manager.handleCommand(.stop)
     await task.value
     try FileManager.default.removeItem(at: tempRepository.tempRoot)
+  }
+
+  @Test func staggersDeferredLineChangesAcrossWorktrees() async throws {
+    let clock = TestClock()
+    let tempRepository = try makeTempRepository(worktreeNames: ["sparrow", "swift", "eagle"])
+    let firstWorktree = try #require(tempRepository.worktrees.first)
+    let secondWorktree = try #require(tempRepository.worktrees.dropFirst().first)
+    let thirdWorktree = try #require(tempRepository.worktrees.dropFirst(2).first)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .milliseconds(80),
+      unfocusedInterval: .milliseconds(80),
+      lineChangePhaseOffset: { worktreeID, _ in
+        switch worktreeID {
+        case secondWorktree.id:
+          return .milliseconds(10)
+        case thirdWorktree.id:
+          return .milliseconds(40)
+        default:
+          return .zero
+        }
+      },
+      pullRequestPhaseOffset: { _, _ in .zero },
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setPullRequestTrackingEnabled(false))
+    manager.handleCommand(.setWorktrees([firstWorktree]))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: firstWorktree.id) == 1)
+
+    manager.handleCommand(.setWorktrees([firstWorktree, secondWorktree, thirdWorktree]))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: secondWorktree.id) == 0)
+    #expect(await collector.filesChangedCount(worktreeID: thirdWorktree.id) == 0)
+
+    await clock.advance(by: .milliseconds(89))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: secondWorktree.id) == 0)
+    #expect(await collector.filesChangedCount(worktreeID: thirdWorktree.id) == 0)
+
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: secondWorktree.id) == 1)
+    #expect(await collector.filesChangedCount(worktreeID: thirdWorktree.id) == 0)
+
+    await clock.advance(by: .milliseconds(29))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: thirdWorktree.id) == 0)
+
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.filesChangedCount(worktreeID: thirdWorktree.id) == 1)
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: tempRepository.tempRoot)
+  }
+
+  @Test func staggersPeriodicPullRequestRefreshAcrossRepositories() async throws {
+    let clock = TestClock()
+    let firstRepository = try makeTempRepository(worktreeNames: ["sparrow"])
+    let secondRepository = try makeTempRepository(worktreeNames: ["swift"])
+    let firstWorktree = try #require(firstRepository.worktrees.first)
+    let secondWorktree = try #require(secondRepository.worktrees.first)
+    let manager = WorktreeInfoWatcherManager(
+      focusedInterval: .milliseconds(80),
+      unfocusedInterval: .milliseconds(80),
+      lineChangePhaseOffset: { _, _ in .zero },
+      pullRequestPhaseOffset: { repositoryRootURL, _ in
+        switch repositoryRootURL {
+        case firstRepository.tempRoot:
+          return .milliseconds(10)
+        case secondRepository.tempRoot:
+          return .milliseconds(40)
+        default:
+          return .zero
+        }
+      },
+      clock: clock
+    )
+    let (collector, task) = startCollecting(manager.eventStream())
+
+    manager.handleCommand(.setWorktrees([firstWorktree, secondWorktree]))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: firstRepository.tempRoot) == 1)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: secondRepository.tempRoot) == 1)
+
+    await clock.advance(by: .milliseconds(89))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: firstRepository.tempRoot) == 1)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: secondRepository.tempRoot) == 1)
+
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: firstRepository.tempRoot) == 2)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: secondRepository.tempRoot) == 1)
+
+    await clock.advance(by: .milliseconds(29))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: secondRepository.tempRoot) == 1)
+
+    await clock.advance(by: .milliseconds(1))
+    await drainAsyncEvents(120)
+    #expect(await collector.pullRequestRefreshCount(repositoryRootURL: secondRepository.tempRoot) == 2)
+
+    manager.handleCommand(.stop)
+    await task.value
+    try FileManager.default.removeItem(at: firstRepository.tempRoot)
+    try FileManager.default.removeItem(at: secondRepository.tempRoot)
   }
 
   @Test func selectionRefreshUsesCooldownWithinRepository() async throws {

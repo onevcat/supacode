@@ -4,6 +4,9 @@ import Foundation
 
 @MainActor
 final class WorktreeInfoWatcherManager {
+  typealias WorktreePhaseOffset = @Sendable (Worktree.ID, Duration) -> Duration
+  typealias RepositoryPhaseOffset = @Sendable (URL, Duration) -> Duration
+
   private struct HeadWatcher {
     let headURL: URL
     let source: DispatchSourceFileSystemObject
@@ -22,6 +25,7 @@ final class WorktreeInfoWatcherManager {
   private struct RepeatingTaskRequest {
     let worktreeID: Worktree.ID
     let interval: Duration
+    let initialDelay: Duration
     let immediate: Bool
     let forceReschedule: Bool
     let makeEvent: (Worktree.ID) -> WorktreeInfoWatcherClient.Event
@@ -35,6 +39,8 @@ final class WorktreeInfoWatcherManager {
   private let filesChangedDebounceInterval: Duration
   private let pullRequestSelectionRefreshCooldown: Duration
   private let refreshTiming: RefreshTiming
+  private let lineChangePhaseOffset: WorktreePhaseOffset
+  private let pullRequestPhaseOffset: RepositoryPhaseOffset
   private let sleep: @Sendable (Duration) async throws -> Void
   private var worktrees: [Worktree.ID: Worktree] = [:]
   private var headWatchers: [Worktree.ID: HeadWatcher] = [:]
@@ -55,11 +61,15 @@ final class WorktreeInfoWatcherManager {
     unfocusedInterval: Duration = .seconds(60),
     filesChangedDebounceInterval: Duration = .seconds(5),
     pullRequestSelectionRefreshCooldown: Duration = .seconds(5),
+    lineChangePhaseOffset: @escaping WorktreePhaseOffset = WorktreeInfoWatcherManager.defaultLineChangePhaseOffset,
+    pullRequestPhaseOffset: @escaping RepositoryPhaseOffset = WorktreeInfoWatcherManager.defaultPullRequestPhaseOffset,
     clock: C = ContinuousClock()
   ) {
     refreshTiming = RefreshTiming(focused: focusedInterval, unfocused: unfocusedInterval)
     self.filesChangedDebounceInterval = filesChangedDebounceInterval
     self.pullRequestSelectionRefreshCooldown = pullRequestSelectionRefreshCooldown
+    self.lineChangePhaseOffset = lineChangePhaseOffset
+    self.pullRequestPhaseOffset = pullRequestPhaseOffset
     self.sleep = { duration in
       try await clock.sleep(for: duration)
     }
@@ -359,19 +369,25 @@ final class WorktreeInfoWatcherManager {
     if immediate {
       emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
     }
+    let initialDelay = interval + pullRequestPhaseOffset(repositoryRootURL, interval)
     let sleep = self.sleep
     let task = Task { [weak self, sleep] in
+      do {
+        try await sleep(initialDelay)
+      } catch {
+        return
+      }
       while !Task.isCancelled {
-        do {
-          try await sleep(interval)
-        } catch {
-          break
-        }
         guard !Task.isCancelled else {
-          break
+          return
         }
         await MainActor.run {
           self?.emitPullRequestRefresh(repositoryRootURL: repositoryRootURL)
+        }
+        do {
+          try await sleep(interval)
+        } catch {
+          return
         }
       }
     }
@@ -410,6 +426,7 @@ final class WorktreeInfoWatcherManager {
     let request = RepeatingTaskRequest(
       worktreeID: worktreeID,
       interval: interval,
+      initialDelay: interval + lineChangePhaseOffset(worktreeID, interval),
       immediate: shouldEmit,
       forceReschedule: forceReschedule,
       makeEvent: { [weak self] worktreeID in
@@ -437,21 +454,65 @@ final class WorktreeInfoWatcherManager {
     }
     let sleep = self.sleep
     let task = Task { [weak self, sleep] in
+      do {
+        try await sleep(request.initialDelay)
+      } catch {
+        return
+      }
       while !Task.isCancelled {
-        do {
-          try await sleep(request.interval)
-        } catch {
-          break
-        }
         guard !Task.isCancelled else {
-          break
+          return
         }
         await MainActor.run {
           self?.emit(request.makeEvent(worktreeID))
         }
+        do {
+          try await sleep(request.interval)
+        } catch {
+          return
+        }
       }
     }
     tasks[worktreeID] = RefreshTask(interval: request.interval, task: task)
+  }
+
+  nonisolated private static func defaultLineChangePhaseOffset(
+    worktreeID: Worktree.ID,
+    interval: Duration
+  ) -> Duration {
+    stablePhaseOffset(seed: worktreeID, interval: interval)
+  }
+
+  nonisolated private static func defaultPullRequestPhaseOffset(
+    repositoryRootURL: URL,
+    interval: Duration
+  ) -> Duration {
+    stablePhaseOffset(seed: repositoryRootURL.path(percentEncoded: false), interval: interval)
+  }
+
+  nonisolated private static func stablePhaseOffset(seed: String, interval: Duration) -> Duration {
+    let intervalMilliseconds = durationMilliseconds(interval)
+    guard intervalMilliseconds > 1 else {
+      return .zero
+    }
+    let hash = stableHash(seed)
+    return .milliseconds(Int64(hash % UInt64(intervalMilliseconds)))
+  }
+
+  nonisolated private static func durationMilliseconds(_ duration: Duration) -> Int64 {
+    let components = duration.components
+    let millisecondsFromSeconds = components.seconds * 1_000
+    let millisecondsFromAttoseconds = Int64(components.attoseconds / 1_000_000_000_000_000)
+    return millisecondsFromSeconds + millisecondsFromAttoseconds
+  }
+
+  nonisolated private static func stableHash(_ string: String) -> UInt64 {
+    var hash: UInt64 = 14_695_981_039_346_656_037
+    for byte in string.utf8 {
+      hash ^= UInt64(byte)
+      hash &*= 1_099_511_628_211
+    }
+    return hash
   }
 
   private func emit(_ event: WorktreeInfoWatcherClient.Event) {
