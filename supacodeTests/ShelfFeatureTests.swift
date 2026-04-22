@@ -569,6 +569,87 @@ struct ShelfFeatureTests {
     await store.finish()
   }
 
+  @Test(.dependencies) func markWorktreeClosedRemovesPlainFolderBookFromOpenedSet() async {
+    // Plain-folder books live in `openedWorktreeIDs` under their
+    // `Repository.ID`. The Shelf "Close Folder" menu dispatches
+    // `.markWorktreeClosed(book.id)` for this path, so the reducer must
+    // handle a plain-folder ID the same way it handles a worktree ID.
+    let rootURL = URL(fileURLWithPath: "/tmp/folder")
+    let repo = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repo.id]
+    state.selection = .repository(repo.id)
+    state.isShelfActive = true
+    state.openedWorktreeIDs = [repo.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    // Only book on the Shelf — closing it leaves the opened set empty
+    // and produces no replacement selection, so the Shelf falls back to
+    // the empty state.
+    await store.send(.markWorktreeClosed(repo.id)) {
+      $0.openedWorktreeIDs = []
+    }
+    await store.finish()
+  }
+
+  @Test(.dependencies) func markWorktreeClosedAdvancesToPlainFolderNeighbor() async {
+    // Closing a worktree book whose neighbor is a plain folder must
+    // route through the `.selectRepository` branch of
+    // `shelfBookSelectionEffect`, not `.selectWorktree`. Covers the
+    // plain-folder path of the replacement dispatch that the new
+    // Shelf "Close Worktree/Folder" menu relies on.
+    let gitRootURL = URL(fileURLWithPath: "/tmp/git")
+    let worktree = Worktree(
+      id: "/tmp/git",
+      name: "main",
+      detail: "",
+      workingDirectory: gitRootURL,
+      repositoryRootURL: gitRootURL
+    )
+    let gitRepo = Repository(
+      id: gitRootURL.path(percentEncoded: false),
+      rootURL: gitRootURL,
+      name: "git",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    let plainRootURL = URL(fileURLWithPath: "/tmp/plain")
+    let plainRepo = Repository(
+      id: plainRootURL.path(percentEncoded: false),
+      rootURL: plainRootURL,
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+    var state = RepositoriesFeature.State(repositories: [gitRepo, plainRepo])
+    state.repositoryRoots = [gitRootURL, plainRootURL]
+    state.repositoryOrderIDs = [gitRepo.id, plainRepo.id]
+    state.selection = .worktree(worktree.id)
+    state.isShelfActive = true
+    state.openedWorktreeIDs = [worktree.id, plainRepo.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.markWorktreeClosed(worktree.id)) {
+      $0.openedWorktreeIDs = [plainRepo.id]
+    }
+    await store.receive(\.selectRepository) {
+      $0.selection = .repository(plainRepo.id)
+      $0.sidebarSelectedWorktreeIDs = []
+    }
+    await store.receive(\.delegate.selectedWorktreeChanged)
+    await store.finish()
+  }
+
   private struct ThreeWorktreeFixture {
     let repo: Repository
     let worktrees: [Worktree]
