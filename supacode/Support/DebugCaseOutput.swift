@@ -16,9 +16,9 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
   private let logger = SupaLogger("TCA")
 
   func reduce(into state: inout Base.State, action: Base.Action) -> Effect<Base.Action> {
-    let actionLabel = debugCaseOutput(action)
-    logger.debug("Action: \(actionLabel)")
     #if DEBUG
+      let actionLabel = debugCaseOutput(action)
+      logger.debug("Action: \(actionLabel)")
       let previousState = state
       let effects = base.reduce(into: &state, action: action)
       if previousState != state, let diff = CustomDump.diff(previousState, state) {
@@ -26,6 +26,8 @@ struct LogActionsReducer<Base: Reducer>: Reducer where Base.State: Equatable {
       }
       return effects
     #else
+      let actionLabel = releaseActionLabel(action)
+      logger.debug("Action: \(actionLabel)")
       SentrySDK.logger.info("Action: \(actionLabel)")
       let breadcrumb = Breadcrumb(level: .debug, category: "action")
       breadcrumb.message = actionLabel
@@ -66,8 +68,55 @@ func debugCaseOutput(
     ?? "\(abbreviated ? "" : typeName(type(of: value)))\(debugCaseOutputHelp(value))"
 }
 
+func releaseActionLabel(_ value: Any) -> String {
+  let rootType = shortTypeName(type(of: value))
+  let casePath = releaseEnumCasePath(value)
+  guard !casePath.isEmpty else {
+    return rootType
+  }
+  return "\(rootType).\(casePath.joined(separator: "."))"
+}
+
 private func isUnlabeledArgument(_ label: String) -> Bool {
   label.firstIndex(where: { $0 != "." && !$0.isNumber }) == nil
+}
+
+private func releaseEnumCasePath(_ value: Any) -> [String] {
+  var labels: [String] = []
+  var currentValue = value
+
+  while true {
+    let mirror = Mirror(reflecting: currentValue)
+    guard mirror.displayStyle == .enum else {
+      return labels
+    }
+    if let child = mirror.children.first, let label = child.label {
+      labels.append(label)
+      let childMirror = Mirror(reflecting: child.value)
+      guard childMirror.displayStyle == .enum else {
+        return labels
+      }
+      currentValue = child.value
+    } else {
+      labels.append(caseName(String(describing: currentValue)))
+      return labels
+    }
+  }
+}
+
+private func caseName(_ description: String) -> String {
+  if let parenIndex = description.firstIndex(of: "(") {
+    return String(description[..<parenIndex])
+  }
+  return description
+}
+
+private func shortTypeName(_ type: Any.Type) -> String {
+  let components = String(reflecting: type)
+    .split(separator: ".")
+    .filter { !$0.hasPrefix("(unknown context at $") }
+    .suffix(2)
+  return components.isEmpty ? String(reflecting: type) : components.joined(separator: ".")
 }
 
 private func typeName(
