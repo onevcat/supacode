@@ -2155,12 +2155,13 @@ private func updateWorktreeName(
   }
 }
 
-private func updateWorktreeLineChanges(
+@discardableResult
+func updateWorktreeLineChanges(
   worktreeID: Worktree.ID,
   added: Int,
   removed: Int,
   state: inout RepositoriesFeature.State
-) {
+) -> Bool {
   var entry = state.worktreeInfoByID[worktreeID] ?? WorktreeInfoEntry()
   if added == 0 && removed == 0 {
     entry.addedLines = nil
@@ -2169,11 +2170,19 @@ private func updateWorktreeLineChanges(
     entry.addedLines = added
     entry.removedLines = removed
   }
+  let previousEntry = state.worktreeInfoByID[worktreeID]
   if entry.isEmpty {
+    guard previousEntry != nil else {
+      return false
+    }
     state.worktreeInfoByID.removeValue(forKey: worktreeID)
-  } else {
-    state.worktreeInfoByID[worktreeID] = entry
+    return true
   }
+  guard previousEntry != entry else {
+    return false
+  }
+  state.worktreeInfoByID[worktreeID] = entry
+  return true
 }
 
 func updateWorktreePullRequest(

@@ -67,6 +67,74 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func updateWorktreeLineChangesReturnsFalseWhenCountsMatchExistingEntry() {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: 12,
+      removedLines: 4,
+      pullRequest: nil
+    )
+
+    let changed = updateWorktreeLineChanges(
+      worktreeID: worktree.id,
+      added: 12,
+      removed: 4,
+      state: &state
+    )
+
+    #expect(changed == false)
+    #expect(
+      state.worktreeInfoByID[worktree.id]
+        == WorktreeInfoEntry(addedLines: 12, removedLines: 4, pullRequest: nil)
+    )
+  }
+
+  @Test func updateWorktreeLineChangesReturnsFalseWhenClearingAlreadyEmptyDiffs() {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+    let pullRequest = makePullRequest(state: "OPEN", headRefName: worktree.name)
+    state.worktreeInfoByID[worktree.id] = WorktreeInfoEntry(
+      addedLines: nil,
+      removedLines: nil,
+      pullRequest: pullRequest
+    )
+
+    let changed = updateWorktreeLineChanges(
+      worktreeID: worktree.id,
+      added: 0,
+      removed: 0,
+      state: &state
+    )
+
+    #expect(changed == false)
+    #expect(
+      state.worktreeInfoByID[worktree.id]
+        == WorktreeInfoEntry(addedLines: nil, removedLines: nil, pullRequest: pullRequest)
+    )
+  }
+
+  @Test func updateWorktreeLineChangesReturnsTrueWhenCountsChange() {
+    let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
+    let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
+    var state = makeState(repositories: [repository])
+
+    let changed = updateWorktreeLineChanges(
+      worktreeID: worktree.id,
+      added: 12,
+      removed: 4,
+      state: &state
+    )
+
+    #expect(changed == true)
+    #expect(
+      state.worktreeInfoByID[worktree.id]
+        == WorktreeInfoEntry(addedLines: 12, removedLines: 4, pullRequest: nil)
+    )
+  }
+
   @Test func repositoriesLoadedEmitsChangedDelegateWhenTransitioningFromRestoring() async {
     let worktree = makeWorktree(id: "/tmp/repo/main", name: "main")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
