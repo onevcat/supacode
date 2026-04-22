@@ -17,8 +17,7 @@ struct TerminalTabLabelView: View {
               .controlSize(.small)
               .tint(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
           } else if let icon = tab.icon {
-            Image(systemName: icon)
-              .imageScale(.small)
+            TabIconImage(rawName: icon, pointSize: 12)
               .foregroundStyle(isActive ? TerminalTabBarColors.activeText : TerminalTabBarColors.inactiveText)
           }
         }

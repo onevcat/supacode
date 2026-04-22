@@ -350,14 +350,16 @@ private struct ShelfSpineTabSlot: View {
       }
       .accessibilityHidden(true)
     } else {
-      Image(systemName: tab.icon ?? ShelfMetrics.defaultTabIcon)
-        .imageScale(.medium)
-        .foregroundStyle(foregroundTint)
-        // Dim tabs without a hotkey when ⌘ is held, so the "this slot
-        // can't be jumped to via Cmd+N" affordance is legible without
-        // shifting any layout.
-        .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil ? 0.45 : 1)
-        .accessibilityHidden(true)
+      TabIconImage(
+        rawName: tab.icon ?? ShelfMetrics.defaultTabIcon,
+        pointSize: ShelfMetrics.tabIconPointSize
+      )
+      .foregroundStyle(foregroundTint)
+      // Dim tabs without a hotkey when ⌘ is held, so the "this slot
+      // can't be jumped to via Cmd+N" affordance is legible without
+      // shifting any layout.
+      .opacity(commandKeyObserver.isPressed && hotkeyIndex == nil ? 0.45 : 1)
+      .accessibilityHidden(true)
     }
   }
 
@@ -418,4 +420,8 @@ enum ShelfMetrics {
   static let headerMaxLength: CGFloat = 160
   /// Fallback icon when a tab has no custom icon set.
   static let defaultTabIcon: String = "terminal"
+  /// Point size used by `TabIconImage` for both the SF Symbol
+  /// (`.font(.system(size:))`) and the asset (`.frame`) branches so
+  /// branded artwork visually matches the SF-Symbol fallback.
+  static let tabIconPointSize: CGFloat = 18
 }
