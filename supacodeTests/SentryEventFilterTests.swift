@@ -32,6 +32,52 @@ struct SentryEventFilterTests {
     #expect(SentryEventFilter.filterSystemHang(event) === event)
   }
 
+  @Test func appHangWithSkyLightEventLoopIdleIsDropped() {
+    let event = makeEvent(
+      mechanismType: "AppHang",
+      frames: [
+        makeFrame(function: "mach_msg2_trap", inApp: false),
+        makeFrame(function: "CGSSnarfAndDispatchDatagrams", inApp: false),
+        makeFrame(function: "SLSGetNextEventRecordInternal", inApp: false),
+      ]
+    )
+    #expect(SentryEventFilter.filterSystemHang(event) == nil)
+  }
+
+  @Test func appHangWithKeyboardLayoutInitIsDropped() {
+    let event = makeEvent(
+      mechanismType: "AppHang",
+      frames: [
+        makeFrame(function: "OpenCCFFile", inApp: false),
+        makeFrame(function: "InitializeInputSourceCache", inApp: false),
+        makeFrame(function: "TSMCurrentKeyboardLayoutInputSourceRefCreate.cold.1", inApp: false),
+      ]
+    )
+    #expect(SentryEventFilter.filterSystemHang(event) == nil)
+  }
+
+  @Test func appHangWithSFSymbolLoadIsDropped() {
+    let event = makeEvent(
+      mechanismType: "AppHang",
+      frames: [
+        makeFrame(function: "-[NSImage bestRepresentationForHints:]", inApp: false),
+        makeFrame(function: "-[NSImageSymbolRepProvider init]", inApp: false),
+      ]
+    )
+    #expect(SentryEventFilter.filterSystemHang(event) == nil)
+  }
+
+  @Test func appHangWithRunningBoardXPCIsDropped() {
+    let event = makeEvent(
+      mechanismType: "AppHang",
+      frames: [
+        makeFrame(function: "_RBSXPCEncodeObjectForKey", inApp: false),
+        makeFrame(function: "-[RBSDomainAttribute encodeWithRBSXPCCoder:]", inApp: false),
+      ]
+    )
+    #expect(SentryEventFilter.filterSystemHang(event) == nil)
+  }
+
   @Test func appHangWithNoKnownSystemSignatureIsKept() {
     let event = makeEvent(
       mechanismType: "AppHang",

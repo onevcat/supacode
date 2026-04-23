@@ -15,11 +15,33 @@ enum SentryEventFilter {
   /// App Hang (wake-from-sleep, active space change, external display connect,
   /// menu bar redraw, etc.). These hangs are observable but have no app-level
   /// remedy — filter them out to avoid drowning real hangs in noise.
+  ///
+  /// Matched via substring containment, so prefer distinctive fragments that
+  /// won't collide with app code.
   nonisolated static let systemHangSignatures = [
+    // Menu bar rebuild on active-space change / wake-from-sleep.
     "_NSMenuBarDisplayManagerActiveSpaceChanged",
     "NSMenuBarLocalDisplayWindow",
     "NSMenuBarPresentationInstance",
     "NSMenuBarReplicantWindow",
+    // SkyLight window-server event delivery. When the main run loop is idle
+    // waiting on the WindowServer mach port, SentryANRTracker can sample the
+    // thread mid-mach_msg and misreport the wait as a hang.
+    "CGSSnarfAndDispatchDatagrams",
+    "SLSGetNextEventRecordInternal",
+    "_CGSFindWindow",
+    "SLSFindWindowAndOwner",
+    // HIToolbox keyboard layout / input-source cache first-touch init. First
+    // query after boot or after a layout change walks the component catalog
+    // on the main thread.
+    "TSMCurrentKeyboardLayoutInputSourceRefCreate",
+    "InitializeInputSourceCache",
+    // SF Symbol image-rep loading on first access of a given symbol.
+    "NSImageSymbolRepProvider",
+    // RunningBoardServices XPC encoding on process-state transitions
+    // (e.g. assertion renewal); the main thread blocks on the XPC round trip.
+    "_RBSXPCEncodeObjectForKey",
+    "RBSDomainAttribute",
   ]
 
   /// Drop App Hang events whose stack contains zero in-app frames AND matches
