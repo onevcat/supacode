@@ -3,16 +3,18 @@ import GhosttyKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-private let ghosttyLogger = SupaLogger("GhosttyRuntime")
+nonisolated private let ghosttyLogger = SupaLogger("GhosttyRuntime")
 
 final class GhosttyRuntime {
-  private static let ghosttyExecutableCandidates = [
+  nonisolated private static let ghosttyExecutableCandidates = [
     "/Applications/Ghostty.app/Contents/MacOS/ghostty",
     "/opt/homebrew/bin/ghostty",
     "/usr/local/bin/ghostty",
   ]
-  private static var cachedGhosttyExecutablePath: String?
-  private static var cachedFallbackThemePair: GhosttyThemePair?
+  nonisolated private static let ghosttyCLICacheLock = NSLock()
+  nonisolated(unsafe) private static var cachedGhosttyExecutablePath: String?
+  nonisolated(unsafe) private static var ghosttyExecutableResolutionAttempted = false
+  nonisolated(unsafe) private static var cachedFallbackThemePair: GhosttyThemePair?
 
   final class SurfaceReference {
     let surface: ghostty_surface_t
@@ -572,11 +574,30 @@ final class GhosttyRuntime {
   }
 
   private func reconcileThemeFallback(for scheme: ColorScheme) {
-    guard let snapshot = Self.userConfigSnapshotFromCLI() else {
+    // Subprocess discovery of the user's Ghostty CLI can block the main
+    // thread (and in XCTest host bringup it has timed out the test runner
+    // preparation phase). Short-circuit under test, and dispatch the
+    // lookup off-main in all other cases.
+    guard !Self.isRunningInTestEnvironment() else {
       setThemeFallbackOverride("")
       return
     }
-    guard snapshot.themeMode == .single else {
+    Task { [weak self] in
+      let snapshot = await Self.probeUserConfigSnapshot()
+      let pair: GhosttyThemePair? =
+        snapshot?.themeMode == .single ? await Self.probeFallbackThemePair() : nil
+      self?.applyResolvedThemeFallback(for: scheme, snapshot: snapshot, pair: pair)
+    }
+  }
+
+  @MainActor
+  private func applyResolvedThemeFallback(
+    for scheme: ColorScheme,
+    snapshot: GhosttyUserConfigSnapshot?,
+    pair: GhosttyThemePair?
+  ) {
+    guard currentColorScheme == scheme else { return }
+    guard let snapshot, snapshot.themeMode == .single else {
       setThemeFallbackOverride("")
       return
     }
@@ -592,12 +613,19 @@ final class GhosttyRuntime {
       return
     }
 
-    guard let pair = Self.resolveFallbackThemePair() else {
+    guard let pair else {
       setThemeFallbackOverride("")
       return
     }
 
     setThemeFallbackOverride("theme = light:\(pair.light),dark:\(pair.dark)")
+  }
+
+  nonisolated private static func isRunningInTestEnvironment() -> Bool {
+    let env = ProcessInfo.processInfo.environment
+    return env["XCTestConfigurationFilePath"] != nil
+      || env["XCTestBundlePath"] != nil
+      || env["XCTestSessionIdentifier"] != nil
   }
 
   private func setThemeFallbackOverride(_ contents: String) {
@@ -657,12 +685,25 @@ final class GhosttyRuntime {
     NotificationCenter.default.post(name: .ghosttyRuntimeConfigDidChange, object: self)
   }
 
-  private static func userConfigSnapshotFromCLI() -> GhosttyUserConfigSnapshot? {
+  nonisolated private static func probeUserConfigSnapshot() async -> GhosttyUserConfigSnapshot? {
+    // `await` ensures this runs on a cooperative executor rather than on the
+    // caller's MainActor, so the synchronous subprocess calls below never block
+    // the main thread.
+    await Task.yield()
+    return userConfigSnapshotFromCLI()
+  }
+
+  nonisolated private static func probeFallbackThemePair() async -> GhosttyThemePair? {
+    await Task.yield()
+    return resolveFallbackThemePair()
+  }
+
+  nonisolated private static func userConfigSnapshotFromCLI() -> GhosttyUserConfigSnapshot? {
     guard let output = runGhosttyCommand(arguments: ["+show-config"]) else { return nil }
     return GhosttyUserConfigSnapshot.parse(showConfigOutput: output)
   }
 
-  private static func runGhosttyCommand(arguments: [String]) -> String? {
+  nonisolated private static func runGhosttyCommand(arguments: [String]) -> String? {
     guard let executablePath = resolveGhosttyExecutablePath() else { return nil }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executablePath)
@@ -686,52 +727,74 @@ final class GhosttyRuntime {
     return String(data: data, encoding: .utf8)
   }
 
-  private static func resolveGhosttyExecutablePath() -> String? {
+  nonisolated private static func resolveGhosttyExecutablePath() -> String? {
+    ghosttyCLICacheLock.lock()
     if let cachedGhosttyExecutablePath,
       FileManager.default.isExecutableFile(atPath: cachedGhosttyExecutablePath)
     {
+      defer { ghosttyCLICacheLock.unlock() }
       return cachedGhosttyExecutablePath
     }
+    if ghosttyExecutableResolutionAttempted {
+      ghosttyCLICacheLock.unlock()
+      return nil
+    }
+    ghosttyCLICacheLock.unlock()
 
+    var resolvedPath: String?
     for candidate in ghosttyExecutableCandidates where FileManager.default.isExecutableFile(atPath: candidate) {
-      cachedGhosttyExecutablePath = candidate
-      return candidate
+      resolvedPath = candidate
+      break
     }
 
-    let which = Process()
-    which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-    which.arguments = ["ghostty"]
-    let outputPipe = Pipe()
-    which.standardOutput = outputPipe
-    which.standardError = Pipe()
-    do {
-      try which.run()
-      which.waitUntilExit()
-    } catch {
-      return nil
+    if resolvedPath == nil {
+      let which = Process()
+      which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+      which.arguments = ["ghostty"]
+      let outputPipe = Pipe()
+      which.standardOutput = outputPipe
+      which.standardError = Pipe()
+      do {
+        try which.run()
+        which.waitUntilExit()
+      } catch {
+        ghosttyCLICacheLock.lock()
+        ghosttyExecutableResolutionAttempted = true
+        ghosttyCLICacheLock.unlock()
+        return nil
+      }
+
+      if which.terminationStatus == 0 {
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        if let path = String(data: data, encoding: .utf8)?
+          .trimmingCharacters(in: .whitespacesAndNewlines),
+          !path.isEmpty,
+          FileManager.default.isExecutableFile(atPath: path)
+        {
+          resolvedPath = path
+        }
+      }
     }
 
-    guard which.terminationStatus == 0 else { return nil }
-    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-    guard let path = String(data: data, encoding: .utf8)?
-      .trimmingCharacters(in: .whitespacesAndNewlines),
-      !path.isEmpty,
-      FileManager.default.isExecutableFile(atPath: path)
-    else {
-      return nil
-    }
-    cachedGhosttyExecutablePath = path
-    return path
+    ghosttyCLICacheLock.lock()
+    defer { ghosttyCLICacheLock.unlock() }
+    ghosttyExecutableResolutionAttempted = true
+    cachedGhosttyExecutablePath = resolvedPath
+    return resolvedPath
   }
 
-  private static func resolveFallbackThemePair() -> GhosttyThemePair? {
+  nonisolated private static func resolveFallbackThemePair() -> GhosttyThemePair? {
+    ghosttyCLICacheLock.lock()
     if let cachedFallbackThemePair {
+      defer { ghosttyCLICacheLock.unlock() }
       return cachedFallbackThemePair
     }
+    ghosttyCLICacheLock.unlock()
 
     let knownLightCandidates = ["Ghostty Default Style Light", "Catppuccin Latte"]
     let knownDarkCandidates = ["Ghostty Default Style Dark", "Catppuccin Frappe"]
 
+    var resolvedPair: GhosttyThemePair?
     if let output = runGhosttyCommand(arguments: ["+list-themes"]) {
       let availableThemes = Set(
         output
@@ -749,14 +812,15 @@ final class GhosttyRuntime {
       if let light = knownLightCandidates.first(where: { availableThemes.contains($0) }),
         let dark = knownDarkCandidates.first(where: { availableThemes.contains($0) })
       {
-        let pair = GhosttyThemePair(light: light, dark: dark)
-        cachedFallbackThemePair = pair
-        return pair
+        resolvedPair = GhosttyThemePair(light: light, dark: dark)
       }
     }
 
-    let pair = GhosttyThemePair(light: "Catppuccin Latte", dark: "Ghostty Default Style Dark")
+    let pair = resolvedPair
+      ?? GhosttyThemePair(light: "Catppuccin Latte", dark: "Ghostty Default Style Dark")
+    ghosttyCLICacheLock.lock()
     cachedFallbackThemePair = pair
+    ghosttyCLICacheLock.unlock()
     return pair
   }
 
@@ -924,24 +988,24 @@ final class GhosttyRuntime {
   ]
 }
 
-struct GhosttyThemePair: Equatable {
+nonisolated struct GhosttyThemePair: Equatable, Sendable {
   let light: String
   let dark: String
 }
 
-enum GhosttyThemeMode: Equatable {
+nonisolated enum GhosttyThemeMode: Equatable, Sendable {
   case none
   case single
   case dual
 }
 
-enum GhosttyTerminalTone: Equatable {
+nonisolated enum GhosttyTerminalTone: Equatable, Sendable {
   case light
   case dark
   case unknown
 }
 
-struct GhosttyUserConfigSnapshot: Equatable {
+nonisolated struct GhosttyUserConfigSnapshot: Equatable, Sendable {
   let themeMode: GhosttyThemeMode
   let backgroundTone: GhosttyTerminalTone
 
@@ -1019,7 +1083,7 @@ extension NSColor {
     luminance > 0.5
   }
 
-  var luminance: Double {
+  nonisolated var luminance: Double {
     var red: CGFloat = 0
     var green: CGFloat = 0
     var blue: CGFloat = 0
@@ -1029,7 +1093,7 @@ extension NSColor {
     return (0.299 * red) + (0.587 * green) + (0.114 * blue)
   }
 
-  var saturation: Double {
+  nonisolated var saturation: Double {
     var hue: CGFloat = 0
     var saturation: CGFloat = 0
     var brightness: CGFloat = 0
@@ -1039,7 +1103,7 @@ extension NSColor {
     return saturation
   }
 
-  fileprivate convenience init?(ghosttyHexColor: String) {
+  nonisolated fileprivate convenience init?(ghosttyHexColor: String) {
     let cleaned = ghosttyHexColor
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "#", with: "")
