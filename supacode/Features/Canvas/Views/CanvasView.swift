@@ -29,7 +29,7 @@ struct CanvasView: View {
   /// Reserved height at the bottom of the viewport for the help button and
   /// layout toolbar so cards don't sit underneath them after auto-fit.
   /// Cards end up shifted upward by half of this amount.
-  private let bottomToolbarReserve: CGFloat = 30
+  private let bottomToolbarReserve: CGFloat = 50
 
   var body: some View {
     let selectAllCanvasShortcut = AppShortcuts.resolvedShortcut(
@@ -402,7 +402,7 @@ struct CanvasView: View {
 
     guard minX.isFinite else { return }
 
-    let padding: CGFloat = 40
+    let padding: CGFloat = 30
     let bboxW = maxX - minX + padding * 2
     let bboxH = maxY - minY + padding * 2
     let bboxCenterX = (minX + maxX) / 2
