@@ -20,6 +20,8 @@ struct CanvasView: View {
   @State private var hasPerformedInitialFit = false
   @State private var viewportSize: CGSize = .zero
   @State private var hasConnectedMouse: Bool = !GCMouse.mice().isEmpty
+  @State private var hasMouseWithMiddleButton: Bool =
+    GCMouse.mice().contains { $0.mouseInput?.middleButton != nil }
   @State private var showsMouseHelp = false
   @State private var mouseConnectionObservers: [NSObjectProtocol] = []
 
@@ -457,18 +459,20 @@ struct CanvasView: View {
 
       VStack(alignment: .leading, spacing: 8) {
         Label {
-          Text("Hold ⌘ + scroll wheel to zoom")
+          Text("Hold ⌘ + scroll to zoom")
         } icon: {
           Image(systemName: "plus.magnifyingglass")
             .foregroundStyle(.secondary)
             .accessibilityHidden(true)
         }
-        Label {
-          Text("Middle-click and drag to pan canvas")
-        } icon: {
-          Image(systemName: "hand.draw")
-            .foregroundStyle(.secondary)
-            .accessibilityHidden(true)
+        if hasMouseWithMiddleButton {
+          Label {
+            Text("Middle-click and drag to pan canvas")
+          } icon: {
+            Image(systemName: "hand.draw")
+              .foregroundStyle(.secondary)
+              .accessibilityHidden(true)
+          }
         }
       }
       .font(.callout)
@@ -478,12 +482,12 @@ struct CanvasView: View {
   }
 
   private func startObservingMouseConnections() {
-    hasConnectedMouse = !GCMouse.mice().isEmpty
+    refreshMouseState()
     // queue: .main guarantees main-thread delivery, so MainActor.assumeIsolated
     // is safe for touching @State from this @Sendable closure.
     let recheck: @Sendable (Notification) -> Void = { _ in
       MainActor.assumeIsolated {
-        hasConnectedMouse = !GCMouse.mice().isEmpty
+        refreshMouseState()
       }
     }
     let center = NotificationCenter.default
@@ -491,6 +495,12 @@ struct CanvasView: View {
       center.addObserver(forName: .GCMouseDidConnect, object: nil, queue: .main, using: recheck),
       center.addObserver(forName: .GCMouseDidDisconnect, object: nil, queue: .main, using: recheck),
     ]
+  }
+
+  private func refreshMouseState() {
+    let mice = GCMouse.mice()
+    hasConnectedMouse = !mice.isEmpty
+    hasMouseWithMiddleButton = mice.contains { $0.mouseInput?.middleButton != nil }
   }
 
   private func stopObservingMouseConnections() {
