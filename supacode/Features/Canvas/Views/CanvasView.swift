@@ -462,7 +462,7 @@ struct CanvasView: View {
       }
     }
     .padding()
-    .frame(maxWidth: 320, alignment: .leading)
+    .frame(width: 320, alignment: .leading)
   }
 
   private func canvasHelpRow(icon: String, title: String, detail: String) -> some View {
@@ -473,7 +473,10 @@ struct CanvasView: View {
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(.callout).fontWeight(.medium)
-        Text(detail).font(.caption).foregroundStyle(.secondary)
+        Text(detail)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
   }
