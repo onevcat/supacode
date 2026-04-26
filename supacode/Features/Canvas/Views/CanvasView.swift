@@ -1,4 +1,5 @@
 import AppKit
+import Sharing
 import SwiftUI
 
 struct CanvasView: View {
@@ -8,6 +9,7 @@ struct CanvasView: View {
   let terminalManager: WorktreeTerminalManager
   var onExitToTab: () -> Void = {}
   @State private var layoutStore = CanvasLayoutStore()
+  @Shared(.repositoryAppearances) private var repositoryAppearances
 
   @State private var canvasOffset: CGSize = .zero
   @State private var lastCanvasOffset: CGSize = .zero
@@ -82,9 +84,13 @@ struct CanvasView: View {
               let screenCenter = screenPosition(for: resized.center)
               let cardTotalHeight = resized.size.height + titleBarHeight
 
+              let repositoryAppearance = appearance(for: state.repositoryRootURL)
               CanvasCardView(
                 repositoryName: Repository.name(for: state.repositoryRootURL),
                 worktreeName: tab.title,
+                repositoryIcon: repositoryAppearance.icon,
+                repositoryColor: repositoryAppearance.color?.color,
+                repositoryRootURL: state.repositoryRootURL,
                 tree: tree,
                 isFocused: selectionState.primaryTabID == tab.id,
                 isSelected: selectionState.selectedTabIDs.contains(tab.id),
@@ -766,6 +772,19 @@ struct CanvasView: View {
     // WorktreeTerminalTabsView.onAppear's syncFocus() and cause blank
     // surfaces. Cleanup of non-selected worktrees is handled by
     // setSelectedWorktreeID in the async exit flow.
+  }
+
+  /// Looks up the user-pinned `RepositoryAppearance` for a given repo
+  /// root URL by deriving the canonical `Repository.ID` (the
+  /// path-policy-normalized path string) and querying the @Shared
+  /// dict. Returns `.empty` when no entry exists, which keeps cards
+  /// visually identical to before the appearance feature shipped.
+  private func appearance(for repositoryRootURL: URL) -> RepositoryAppearance {
+    let id =
+      PathPolicy.normalizePath(
+        repositoryRootURL.path(percentEncoded: false), resolvingSymlinks: true
+      ) ?? repositoryRootURL.path(percentEncoded: false)
+    return repositoryAppearances[id] ?? .empty
   }
 }
 

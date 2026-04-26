@@ -4,6 +4,17 @@ import SwiftUI
 struct CanvasCardView: View {
   let repositoryName: String
   let worktreeName: String
+  /// User-pinned icon for this card's repository, drawn before the
+  /// repo name in the title bar. `nil` keeps the historical text-only
+  /// title bar.
+  var repositoryIcon: RepositoryIconSource?
+  /// User-pinned color for this card's repository. When set, it tints
+  /// both the icon (if tintable) and the title-bar background as an
+  /// always-on identity strip.
+  var repositoryColor: Color?
+  /// Repo root URL, needed by `RepositoryIconImage` to resolve user
+  /// PNG/SVG filenames against the per-repo icons directory.
+  var repositoryRootURL: URL?
   let tree: SplitTree<GhosttySurfaceView>
   let isFocused: Bool
   let isSelected: Bool
@@ -109,6 +120,14 @@ struct CanvasCardView: View {
 
   private var titleBar: some View {
     HStack(spacing: 6) {
+      if let repositoryIcon, let repositoryRootURL {
+        RepositoryIconImage(
+          icon: repositoryIcon,
+          repositoryRootURL: repositoryRootURL,
+          tintColor: repositoryColor,
+          size: 12
+        )
+      }
       Text(repositoryName)
         .font(.caption.bold())
         .lineLimit(1)
@@ -178,6 +197,12 @@ struct CanvasCardView: View {
 
   @ViewBuilder
   private var titleBarBackground: some View {
+    // Layering: existing notification orange + selected accent stay
+    // BELOW the `.bar` material so their behavior is unchanged from
+    // before this feature shipped. The repo color sits ABOVE the bar
+    // as a thin always-on identity strip — putting it below would
+    // dilute it to invisibility against the 0.9-opaque material, and
+    // moving the bar to the bottom would amplify the existing tints.
     ZStack {
       if hasUnseenNotification {
         Color.orange.opacity(0.3)
@@ -188,6 +213,9 @@ struct CanvasCardView: View {
       Rectangle()
         .fill(.bar)
         .opacity(0.9)
+      if let repositoryColor {
+        repositoryColor.opacity(isFocused ? 0.18 : 0.10)
+      }
     }
   }
 

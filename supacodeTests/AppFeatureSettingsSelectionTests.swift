@@ -26,6 +26,7 @@ struct AppFeatureSettingsSelectionTests {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
         rootURL: repository.rootURL,
+        repositoryID: repository.id,
         repositoryKind: repository.kind,
         settings: .default,
         userSettings: .default
@@ -70,6 +71,7 @@ struct AppFeatureSettingsSelectionTests {
       $0.settings.selection = .repository(repository.id)
       $0.settings.repositorySettings = RepositorySettingsFeature.State(
         rootURL: repository.rootURL,
+        repositoryID: repository.id,
         repositoryKind: .plain,
         settings: .default,
         userSettings: .default

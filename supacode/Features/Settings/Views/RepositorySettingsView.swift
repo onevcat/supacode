@@ -66,6 +66,18 @@ struct RepositorySettingsView: View {
     let exampleWorktreePath = store.exampleWorktreePath
 
     Form {
+      Section {
+        RepositoryAppearancePickerView(store: store)
+      } header: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Appearance")
+          Text(
+            "Pick an icon and color to make this repository easy to spot in the sidebar, shelf, and canvas."
+          )
+          .foregroundStyle(.secondary)
+        }
+      }
+
       if store.showsWorktreeSettings {
         Section {
           if store.isBranchDataLoaded {

@@ -4,6 +4,9 @@ import SwiftUI
 struct TabIconPickerView: View {
   let initialIcon: String?
   let defaultIcon: String
+  let title: String
+  let subtitle: String
+  let presets: [String]
   let onApply: (String?) -> Void
   let onCancel: () -> Void
 
@@ -13,11 +16,17 @@ struct TabIconPickerView: View {
   init(
     initialIcon: String?,
     defaultIcon: String,
+    title: String = "Tab Icon",
+    subtitle: String = "Pick a preset or enter any SF Symbol name available in your system.",
+    presets: [String] = TabIconPickerView.symbolPresets,
     onApply: @escaping (String?) -> Void,
     onCancel: @escaping () -> Void
   ) {
     self.initialIcon = initialIcon
     self.defaultIcon = defaultIcon
+    self.title = title
+    self.subtitle = subtitle
+    self.presets = presets
     self.onApply = onApply
     self.onCancel = onCancel
     _symbolName = State(initialValue: initialIcon ?? "")
@@ -26,9 +35,9 @@ struct TabIconPickerView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
-        Text("Tab Icon")
+        Text(title)
           .font(.headline)
-        Text("Pick a preset or enter any SF Symbol name available in your system.")
+        Text(subtitle)
           .font(.caption)
           .foregroundStyle(.secondary)
       }
@@ -56,7 +65,7 @@ struct TabIconPickerView: View {
         columns: Array(repeating: GridItem(.fixed(32), spacing: 6), count: 8),
         spacing: 6
       ) {
-        ForEach(Self.symbolPresets, id: \.self) { symbol in
+        ForEach(presets, id: \.self) { symbol in
           Button {
             symbolName = symbol
             symbolFieldFocused = true

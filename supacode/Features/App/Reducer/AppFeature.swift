@@ -393,6 +393,7 @@ struct AppFeature {
           @Shared(.userRepositorySettings(repository.rootURL)) var userRepositorySettings
           var repoSettingsState = RepositorySettingsFeature.State(
             rootURL: repository.rootURL,
+            repositoryID: repository.id,
             repositoryKind: repository.kind,
             settings: repositorySettings,
             userSettings: userRepositorySettings

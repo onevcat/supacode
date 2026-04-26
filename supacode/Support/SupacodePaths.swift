@@ -113,6 +113,26 @@ nonisolated enum SupacodePaths {
     baseDirectory.appending(path: "repository-entries.json", directoryHint: .notDirectory)
   }
 
+  static var repositoryAppearancesURL: URL {
+    baseDirectory.appending(path: "repository-appearances.json", directoryHint: .notDirectory)
+  }
+
+  /// Directory where user-imported repository icon images live, scoped
+  /// per-repo so cleanup is automatic when the per-repo settings
+  /// directory is removed.
+  static func repositoryIconsDirectory(for rootURL: URL) -> URL {
+    repositorySettingsDirectory(for: rootURL)
+      .appending(path: "icons", directoryHint: .isDirectory)
+  }
+
+  /// Resolved file URL for a stored icon filename. The filename is the
+  /// only thing persisted in `RepositoryAppearance` so that moving a
+  /// repository (or renaming its directory) leaves the artifact alone.
+  static func repositoryIconFileURL(filename: String, repositoryRootURL rootURL: URL) -> URL {
+    repositoryIconsDirectory(for: rootURL)
+      .appending(path: filename, directoryHint: .notDirectory)
+  }
+
   static func migrateLegacyCacheFilesIfNeeded(
     fileManager: FileManager = .default,
     legacyDirectory: URL? = nil,

@@ -1,3 +1,4 @@
+import Sharing
 import SwiftUI
 
 /// Vertical spine rendering for a single book on the Shelf.
@@ -33,6 +34,7 @@ struct ShelfSpineView: View {
   let onCloseBook: (() -> Void)?
 
   @State private var isHovering = false
+  @Shared(.repositoryAppearances) private var repositoryAppearances
 
   var body: some View {
     VStack(spacing: 0) {
@@ -98,12 +100,28 @@ struct ShelfSpineView: View {
   /// bumps its tint to 80% of the selected book's intensity — a clear
   /// "this is interactable" affordance that sits just below the open
   /// book and animates in/out smoothly.
+  ///
+  /// When the book's repository has a user-pinned color, that color
+  /// replaces `Color.accentColor` as the proximity-tint base so the
+  /// shelf reads as "books on shelves" instead of one continuous
+  /// accent ribbon. The proximity ladder is unchanged — we only swap
+  /// the hue.
   private var spineBackgroundColor: Color {
     guard distanceFromOpen != nil else {
       return Color.primary.opacity(0.06)
     }
     let multiplier = isHovering && !isOpen ? 0.8 : accentProximityMultiplier
-    return Color.accentColor.opacity(0.20 * multiplier)
+    return effectiveTintColor.opacity(0.20 * multiplier)
+  }
+
+  /// Repo's pinned color, or `.accentColor` when none — used as the
+  /// proximity-tint base and as the icon tint in the header.
+  private var effectiveTintColor: Color {
+    appearance.color?.color ?? .accentColor
+  }
+
+  private var appearance: RepositoryAppearance {
+    repositoryAppearances[book.repositoryID] ?? .empty
   }
 
   /// Active-tab highlight fades more gently than the spine background —
@@ -173,7 +191,10 @@ struct ShelfSpineView: View {
     Button(action: onOpenBook) {
       ShelfSpineHeader(
         book: book,
-        hasAggregatedNotification: terminalState?.hasUnseenNotification == true
+        hasAggregatedNotification: terminalState?.hasUnseenNotification == true,
+        icon: appearance.icon,
+        iconTint: effectiveTintColor,
+        repositoryRootURL: URL(fileURLWithPath: book.repositoryID)
       )
       .frame(maxWidth: .infinity)
       .contentShape(.rect)
@@ -244,16 +265,28 @@ struct ShelfSpineView: View {
 private struct ShelfSpineHeader: View {
   let book: ShelfBook
   let hasAggregatedNotification: Bool
+  let icon: RepositoryIconSource?
+  let iconTint: Color
+  let repositoryRootURL: URL
 
   var body: some View {
     VStack(spacing: 6) {
+      if let icon {
+        RepositoryIconImage(
+          icon: icon,
+          repositoryRootURL: repositoryRootURL,
+          tintColor: iconTint,
+          size: 14
+        )
+        .padding(.top, 6)
+      }
       Circle()
         .fill(.orange)
         .frame(width: ShelfMetrics.aggregatedDotSize, height: ShelfMetrics.aggregatedDotSize)
         .opacity(hasAggregatedNotification ? 1 : 0)
         .accessibilityLabel("Unread notifications")
         .accessibilityHidden(!hasAggregatedNotification)
-        .padding(.top, 6)
+        .padding(.top, icon == nil ? 6 : 0)
       rotatedTitle
     }
   }

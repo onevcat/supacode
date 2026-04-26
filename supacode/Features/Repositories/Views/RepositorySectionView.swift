@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Sharing
 import SwiftUI
 
 struct RepositorySectionView: View {
@@ -14,6 +15,7 @@ struct RepositorySectionView: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @State private var isHovering = false
+  @Shared(.repositoryAppearances) private var repositoryAppearances
 
   var body: some View {
     let state = store.state
@@ -34,6 +36,7 @@ struct RepositorySectionView: View {
     }
     let isDragging = isDragActive
 
+    let appearance = repositoryAppearances[repository.id] ?? .empty
     let header = HStack {
       RepoHeaderRow(
         name: repository.name,
@@ -42,6 +45,9 @@ struct RepositorySectionView: View {
           for: repository,
           terminalManager: terminalManager
         ),
+        icon: appearance.icon,
+        iconTint: appearance.color?.color,
+        repositoryRootURL: repository.rootURL,
         nameTooltip: repository.capabilities.supportsWorktrees
           ? (isExpanded ? "Collapse" : "Expand")
           : "Open terminal in folder"
@@ -70,6 +76,13 @@ struct RepositorySectionView: View {
                 }
             }
           }
+      }
+      if let color = appearance.color {
+        Circle()
+          .fill(color.color)
+          .frame(width: 8, height: 8)
+          .help(color.displayName)
+          .accessibilityLabel(Text("Repo color: \(color.displayName)"))
       }
       if isHovering && !isDragging {
         Menu {
