@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.4.27](https://github.com/onevcat/Prowl/releases/tag/v2026.4.27)
+
+**Fixed**
+
+- Fixed a bug where terminal windows could open in the wrong Light or Dark appearance at startup.
+
 ## [2026.4.25](https://github.com/onevcat/Prowl/releases/tag/v2026.4.25)
 
 This release brings mouse-driven Canvas navigation and improves reliability for long-running sessions.
