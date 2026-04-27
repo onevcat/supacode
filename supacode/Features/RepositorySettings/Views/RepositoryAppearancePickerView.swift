@@ -19,8 +19,9 @@ struct RepositoryAppearancePickerView: View {
 
   @State private var isSymbolPickerPresented = false
   @State private var isImageImporterPresented = false
+  @State private var isHoveringIconTile = false
 
-  private let previewSize: CGFloat = 36
+  private let previewSize: CGFloat = 40
   private let dotSize: CGFloat = 22
 
   var body: some View {
@@ -58,7 +59,7 @@ struct RepositoryAppearancePickerView: View {
   @ViewBuilder
   private var iconRow: some View {
     HStack(alignment: .center, spacing: 12) {
-      iconPreview
+      iconMenu
       VStack(alignment: .leading, spacing: 4) {
         Text("Icon")
           .font(.headline)
@@ -67,13 +68,42 @@ struct RepositoryAppearancePickerView: View {
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
-      Spacer(minLength: 8)
-      iconButtons
+      Spacer(minLength: 0)
     }
   }
 
+  /// Click target + menu trigger for the icon. The whole preview tile
+  /// is the action surface — clicking opens a popover menu with the
+  /// three options. Drops the trailing button cluster so narrow
+  /// Settings windows don't truncate "Choose Symbol…" / "Clear Icon".
+  /// Pattern matches macOS native flows (System Settings user picture,
+  /// Finder "Get Info" icon).
   @ViewBuilder
-  private var iconPreview: some View {
+  private var iconMenu: some View {
+    Menu {
+      Button("Choose Symbol…") {
+        isSymbolPickerPresented = true
+      }
+      Button("Choose Image…") {
+        isImageImporterPresented = true
+      }
+      if store.appearance.icon != nil {
+        Divider()
+        Button("Clear Icon", role: .destructive) {
+          store.send(.setAppearanceIcon(nil))
+        }
+      }
+    } label: {
+      iconPreviewTile
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help("Click to choose an icon for this repository")
+  }
+
+  @ViewBuilder
+  private var iconPreviewTile: some View {
     let frame = RoundedRectangle(cornerRadius: 8, style: .continuous)
     let fill = Color.secondary.opacity(0.12)
     Group {
@@ -88,31 +118,25 @@ struct RepositoryAppearancePickerView: View {
         Image(systemName: "questionmark")
           .font(.system(size: 16, weight: .semibold))
           .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
       }
     }
     .frame(width: previewSize, height: previewSize)
     .background(fill, in: frame)
-    .accessibilityLabel("Icon preview")
-  }
-
-  @ViewBuilder
-  private var iconButtons: some View {
-    HStack(spacing: 6) {
-      Button("Choose Symbol…") {
-        isSymbolPickerPresented = true
-      }
-      .help("Pick from a preset SF Symbol or enter any symbol name.")
-      Button("Choose Image…") {
-        isImageImporterPresented = true
-      }
-      .help("Import a PNG or SVG file as this repository's icon.")
-      if store.appearance.icon != nil {
-        Button("Clear Icon") {
-          store.send(.setAppearanceIcon(nil))
-        }
-        .help("Remove the current icon and stop showing one for this repo.")
-      }
+    .overlay {
+      // Hover affordance: a 1.5pt accent border tells the user the
+      // tile is actionable. We pair this with the link pointer style
+      // below so the cursor change reinforces it.
+      frame.stroke(
+        Color.accentColor.opacity(isHoveringIconTile ? 0.65 : 0),
+        lineWidth: 1.5
+      )
     }
+    .contentShape(.rect(cornerRadius: 8, style: .continuous))
+    .onHover { isHoveringIconTile = $0 }
+    .pointerStyle(.link)
+    .animation(.easeOut(duration: 0.12), value: isHoveringIconTile)
+    .accessibilityLabel("Icon picker")
   }
 
   private var iconHelpText: String {
@@ -126,7 +150,7 @@ struct RepositoryAppearancePickerView: View {
     case .bundledAsset:
       return "Bundled icons keep their original artwork."
     case nil:
-      return "No icon set — the row in the sidebar shows just the repo name."
+      return "No icon set. Click the tile to pick a symbol or import an image."
     }
   }
 
