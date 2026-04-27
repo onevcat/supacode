@@ -238,6 +238,7 @@ struct ShelfSpineView: View {
           hotkeyIndex: hotkeyIndex,
           isActive: terminalState.tabManager.selectedTabId == tab.id,
           hasUnseenNotification: terminalState.hasUnseenNotification(for: tab.id),
+          activeHighlightTint: effectiveTintColor,
           activeHighlightAlpha: activeTabHighlightAlpha,
           onTap: { onSelectTab(tab.id) },
           onClose: { terminalState.closeTab(tab.id) }
@@ -379,6 +380,12 @@ private struct ShelfSpineTabSlot: View {
   let hotkeyIndex: Int?
   let isActive: Bool
   let hasUnseenNotification: Bool
+  /// Hue used for the active-tab background fill — repo color when
+  /// the owning book has one pinned, otherwise `Color.accentColor`.
+  /// Threaded from the spine so the active-tab indicator stays in
+  /// the same color family as the surrounding spine background
+  /// instead of clashing with a contrasting accent.
+  let activeHighlightTint: Color
   /// Absolute alpha for the active-tab accent fill, supplied by the
   /// enclosing spine so it can fade with proximity on its own curve
   /// (which decays more gently than the spine background — selection
@@ -462,7 +469,7 @@ private struct ShelfSpineTabSlot: View {
         .fill(Color.orange.opacity(0.3))
     } else if isActive {
       RoundedRectangle(cornerRadius: ShelfMetrics.slotCornerRadius, style: .continuous)
-        .fill(Color.accentColor.opacity(activeHighlightAlpha))
+        .fill(activeHighlightTint.opacity(activeHighlightAlpha))
     } else {
       Color.clear
     }
