@@ -18,7 +18,6 @@ struct RepositoryAppearancePickerView: View {
   @Bindable var store: StoreOf<RepositorySettingsFeature>
 
   @State private var isSymbolPickerPresented = false
-  @State private var isImageImporterPresented = false
   @State private var isHoveringIconTile = false
 
   private let previewSize: CGFloat = 40
@@ -55,19 +54,6 @@ struct RepositoryAppearancePickerView: View {
         onApply: { applySymbolFromPicker($0) },
         onCancel: { isSymbolPickerPresented = false }
       )
-    }
-    // Accept any image UTType — PNG / JPEG / WebP / HEIC / TIFF / GIF
-    // / etc. all flow through the same `NSImage(contentsOf:)` render
-    // path. SVG is listed explicitly because it's a structured-text
-    // format that doesn't always conform to `.image` in older
-    // UTType conformance tables. Anything that fails to decode falls
-    // back to the dashed placeholder at render time.
-    .fileImporter(
-      isPresented: $isImageImporterPresented,
-      allowedContentTypes: [.image, .svg],
-      allowsMultipleSelection: false
-    ) { result in
-      handleImageImportResult(result)
     }
   }
 
@@ -112,7 +98,7 @@ struct RepositoryAppearancePickerView: View {
         isSymbolPickerPresented = true
       }
       Button("Choose Image…") {
-        isImageImporterPresented = true
+        presentImageImporter()
       }
       if store.appearance.icon != nil {
         Divider()
@@ -338,22 +324,27 @@ struct RepositoryAppearancePickerView: View {
     }
   }
 
-  private func handleImageImportResult(_ result: Result<[URL], Error>) {
-    isImageImporterPresented = false
-    switch result {
-    case .success(let urls):
-      guard let url = urls.first else { return }
-      // `fileImporter` returns security-scoped URLs on macOS — we need
-      // to start access before reading and stop it on the way out so
-      // the import store can copy the bytes into the sandboxed app
-      // support directory.
-      let needsScope = url.startAccessingSecurityScopedResource()
-      defer {
-        if needsScope { url.stopAccessingSecurityScopedResource() }
-      }
+  // Uses `NSOpenPanel` (rather than SwiftUI's `.fileImporter`) so the
+  // panel can open at the repo's working directory — most users keep
+  // their icon assets next to the project. Accepts any image UTType —
+  // PNG / JPEG / WebP / HEIC / TIFF / GIF / etc. all flow through the
+  // same `NSImage(contentsOf:)` render path. SVG is listed explicitly
+  // because it's a structured-text format that doesn't always conform
+  // to `.image` in older UTType conformance tables. Anything that fails
+  // to decode falls back to the dashed placeholder at render time.
+  private func presentImageImporter() {
+    let panel = NSOpenPanel()
+    panel.directoryURL = store.rootURL
+    panel.allowedContentTypes = [.image, .svg]
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Choose"
+    panel.message = "Choose an image to use as this repository's icon."
+
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else { return }
       store.send(.importUserImage(url))
-    case .failure(let error):
-      store.send(.userImageImportFailed(error.localizedDescription))
     }
   }
 }
