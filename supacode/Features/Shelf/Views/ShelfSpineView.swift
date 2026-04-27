@@ -269,26 +269,78 @@ private struct ShelfSpineHeader: View {
   let iconTint: Color
   let repositoryRootURL: URL
 
+  /// Reserved slot for the top decoration (icon and/or notification),
+  /// sized at the maximum expected configuration (14pt icon plus a
+  /// 6pt badge nudged 3pt outward at the top-trailing corner).
+  /// Holding the slot at a constant size — whether or not an icon is
+  /// set — keeps every spine's header at the same total height so the
+  /// rotated titles align horizontally across the shelf row. When the
+  /// repo has no icon AND no notification, the slot is just empty
+  /// reserved space.
+  private let slotSize: CGFloat = 18
+  private let iconSize: CGFloat = 14
+  private let badgeSize: CGFloat = 6
+  private let badgeOffset: CGFloat = 3
+
   var body: some View {
-    VStack(spacing: 6) {
+    VStack(spacing: 8) {
+      slot
+      rotatedTitle
+    }
+    .padding(.top, 8)
+  }
+
+  /// Three rendering paths driven by the (icon, notification) matrix:
+  /// - icon set: render the icon, hang the notification on it as a
+  ///   small badge in the top-trailing corner (macOS app-icon style).
+  /// - no icon, has notification: fall back to the original
+  ///   standalone orange dot, centered in the slot.
+  /// - no icon, no notification: slot stays empty but reserved.
+  @ViewBuilder
+  private var slot: some View {
+    ZStack {
+      Color.clear
+        .frame(width: slotSize, height: slotSize)
+
       if let icon {
         RepositoryIconImage(
           icon: icon,
           repositoryRootURL: repositoryRootURL,
           tintColor: iconTint,
-          size: 14
+          size: iconSize
         )
-        .padding(.top, 6)
+        .overlay(alignment: .topTrailing) {
+          if hasAggregatedNotification {
+            notificationBadge
+          }
+        }
+      } else if hasAggregatedNotification {
+        Circle()
+          .fill(.orange)
+          .frame(
+            width: ShelfMetrics.aggregatedDotSize,
+            height: ShelfMetrics.aggregatedDotSize
+          )
       }
-      Circle()
-        .fill(.orange)
-        .frame(width: ShelfMetrics.aggregatedDotSize, height: ShelfMetrics.aggregatedDotSize)
-        .opacity(hasAggregatedNotification ? 1 : 0)
-        .accessibilityLabel("Unread notifications")
-        .accessibilityHidden(!hasAggregatedNotification)
-        .padding(.top, icon == nil ? 6 : 0)
-      rotatedTitle
     }
+    .accessibilityElement()
+    .accessibilityLabel(hasAggregatedNotification ? "Unread notifications" : "")
+    .accessibilityHidden(!hasAggregatedNotification)
+  }
+
+  /// Notification dot rendered as a corner badge over the icon. The
+  /// thin dark stroke keeps the orange visible on light spine
+  /// backgrounds; without it the badge would disappear on
+  /// orange-tinted repos.
+  @ViewBuilder
+  private var notificationBadge: some View {
+    Circle()
+      .fill(.orange)
+      .frame(width: badgeSize, height: badgeSize)
+      .overlay {
+        Circle().stroke(Color.black.opacity(0.25), lineWidth: 0.5)
+      }
+      .offset(x: badgeOffset, y: -badgeOffset)
   }
 
   /// Composed title rendered vertically (top-to-bottom reading direction).
