@@ -24,8 +24,31 @@ private final class ScratchDirectory {
 struct RepositoryIconAssetStoreTests {
   // MARK: - Helpers
 
+  private struct StoreFixture {
+    let store: RepositoryIconAssetStore
+    let repoRoot: ScratchDirectory
+    let iconStoreRoot: ScratchDirectory
+
+    func iconsDirectory() -> URL {
+      iconStoreRoot.url
+        .appending(path: repoRoot.url.lastPathComponent, directoryHint: .isDirectory)
+        .appending(path: "icons", directoryHint: .isDirectory)
+    }
+  }
+
   private func makeRepoRootScratch() -> ScratchDirectory {
     ScratchDirectory(prefix: "prowl-icon-store")
+  }
+
+  private func makeStoreFixture() -> StoreFixture {
+    let repoRoot = makeRepoRootScratch()
+    let iconStoreRoot = ScratchDirectory(prefix: "prowl-icon-store-home")
+    let store = RepositoryIconAssetStore.fileSystemValue { rootURL in
+      iconStoreRoot.url
+        .appending(path: rootURL.lastPathComponent, directoryHint: .isDirectory)
+        .appending(path: "icons", directoryHint: .isDirectory)
+    }
+    return StoreFixture(store: store, repoRoot: repoRoot, iconStoreRoot: iconStoreRoot)
   }
 
   private func writeSourceFile(
@@ -41,42 +64,42 @@ struct RepositoryIconAssetStoreTests {
   // MARK: - importImage
 
   @Test func importImageCopiesFileWithUUIDName() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(
       in: source, extension: "png", contents: Data([0x01, 0x02, 0x03])
     )
 
-    let filename = try store.importImage(sourceFile, repoRoot.url)
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
 
     #expect(filename.hasSuffix(".png"))
     #expect(UUID(uuidString: String(filename.dropLast(4))) != nil)
 
-    let resolved = SupacodePaths.repositoryIconFileURL(
-      filename: filename, repositoryRootURL: repoRoot.url
-    )
+    let resolved = fixture.iconsDirectory().appending(path: filename, directoryHint: .notDirectory)
     let copied = try Data(contentsOf: resolved)
     #expect(copied == Data([0x01, 0x02, 0x03]))
+
+    let productionURL = SupacodePaths.repositoryIconFileURL(
+      filename: filename, repositoryRootURL: fixture.repoRoot.url
+    )
+    #expect(!FileManager.default.fileExists(atPath: productionURL.path(percentEncoded: false)))
   }
 
   @Test func importImageNormalizesUppercaseExtension() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "PNG")
 
-    let filename = try store.importImage(sourceFile, repoRoot.url)
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
     #expect(filename.hasSuffix(".png"))
   }
 
   @Test func importImageAcceptsSVG() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "svg")
 
-    let filename = try store.importImage(sourceFile, repoRoot.url)
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
     #expect(filename.hasSuffix(".svg"))
   }
 
@@ -87,13 +110,12 @@ struct RepositoryIconAssetStoreTests {
     // render time. JPG / WebP / HEIC / GIF / TIFF / etc. all flow
     // through the same byte-copy path and round-trip through
     // `repositoryIconFileURL` like PNG does.
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
 
     for ext in ["jpg", "jpeg", "webp", "heic", "gif", "tiff", "bmp"] {
       let source = ScratchDirectory(prefix: "prowl-icon-source")
       let sourceFile = try writeSourceFile(in: source, extension: ext)
-      let filename = try store.importImage(sourceFile, repoRoot.url)
+      let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
       #expect(filename.hasSuffix(".\(ext)"))
     }
   }
@@ -102,27 +124,25 @@ struct RepositoryIconAssetStoreTests {
     // Defensive: a dragged-in file without an extension shouldn't
     // crash the importer. The destination filename gets a generic
     // fallback so the round-trip still works.
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = source.url.appending(path: "icon", directoryHint: .notDirectory)
     try Data([0xDE, 0xAD]).write(to: sourceFile)
 
-    let filename = try store.importImage(sourceFile, repoRoot.url)
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
     #expect(!filename.isEmpty)
   }
 
   @Test func importImageCreatesIconsDirectoryWhenMissing() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     // Don't pre-create the icons directory — importImage should make
     // it itself, otherwise first-time imports would fail.
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "png")
 
-    _ = try store.importImage(sourceFile, repoRoot.url)
+    _ = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
 
-    let iconsDir = SupacodePaths.repositoryIconsDirectory(for: repoRoot.url)
+    let iconsDir = fixture.iconsDirectory()
     var isDirectory: ObjCBool = false
     let exists = FileManager.default.fileExists(
       atPath: iconsDir.path(percentEncoded: false), isDirectory: &isDirectory
@@ -132,51 +152,46 @@ struct RepositoryIconAssetStoreTests {
   }
 
   @Test func importImageGeneratesUniqueFilenamePerCall() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "png")
 
-    let first = try store.importImage(sourceFile, repoRoot.url)
-    let second = try store.importImage(sourceFile, repoRoot.url)
+    let first = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
+    let second = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
     #expect(first != second)
   }
 
   // MARK: - exists
 
   @Test func existsReportsFalseWhenMissing() {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
-    #expect(!store.exists("nonexistent.png", repoRoot.url))
+    let fixture = makeStoreFixture()
+    #expect(!fixture.store.exists("nonexistent.png", fixture.repoRoot.url))
   }
 
   @Test func existsReportsTrueAfterImport() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "png")
-    let filename = try store.importImage(sourceFile, repoRoot.url)
-    #expect(store.exists(filename, repoRoot.url))
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
+    #expect(fixture.store.exists(filename, fixture.repoRoot.url))
   }
 
   // MARK: - remove
 
   @Test func removeDeletesImportedFile() throws {
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
+    let fixture = makeStoreFixture()
     let source = ScratchDirectory(prefix: "prowl-icon-source")
     let sourceFile = try writeSourceFile(in: source, extension: "png")
-    let filename = try store.importImage(sourceFile, repoRoot.url)
+    let filename = try fixture.store.importImage(sourceFile, fixture.repoRoot.url)
 
-    try store.remove(filename, repoRoot.url)
-    #expect(!store.exists(filename, repoRoot.url))
+    try fixture.store.remove(filename, fixture.repoRoot.url)
+    #expect(!fixture.store.exists(filename, fixture.repoRoot.url))
   }
 
   @Test func removeIsIdempotent() throws {
     // Reset / replace flows can call remove repeatedly; missing files
     // shouldn't throw or the reducer would have to track existence.
-    let store = RepositoryIconAssetStore.liveValue
-    let repoRoot = makeRepoRootScratch()
-    try store.remove("never-existed.png", repoRoot.url)
+    let fixture = makeStoreFixture()
+    try fixture.store.remove("never-existed.png", fixture.repoRoot.url)
   }
 }

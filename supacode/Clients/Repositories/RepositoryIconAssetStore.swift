@@ -41,6 +41,12 @@ nonisolated struct RepositoryIconAssetStore: Sendable {
 
 nonisolated extension RepositoryIconAssetStore {
   static var liveValue: RepositoryIconAssetStore {
+    fileSystemValue(repositoryIconsDirectory: SupacodePaths.repositoryIconsDirectory(for:))
+  }
+
+  static func fileSystemValue(
+    repositoryIconsDirectory: @escaping @Sendable (_ repositoryRootURL: URL) -> URL
+  ) -> RepositoryIconAssetStore {
     RepositoryIconAssetStore(
       importImage: { sourceURL, rootURL in
         // No extension whitelist — the file picker filters down to
@@ -54,7 +60,7 @@ nonisolated extension RepositoryIconAssetStore {
           sourceURL.pathExtension.lowercased().isEmpty
           ? "img"
           : sourceURL.pathExtension.lowercased()
-        let directory = SupacodePaths.repositoryIconsDirectory(for: rootURL)
+        let directory = repositoryIconsDirectory(rootURL)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let filename = "\(UUID().uuidString.lowercased()).\(normalizedExt)"
         let destination = directory.appending(path: filename, directoryHint: .notDirectory)
@@ -63,17 +69,15 @@ nonisolated extension RepositoryIconAssetStore {
         return filename
       },
       remove: { filename, rootURL in
-        let url = SupacodePaths.repositoryIconFileURL(
-          filename: filename, repositoryRootURL: rootURL
-        )
+        let url = repositoryIconsDirectory(rootURL)
+          .appending(path: filename, directoryHint: .notDirectory)
         if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
           try FileManager.default.removeItem(at: url)
         }
       },
       exists: { filename, rootURL in
-        let url = SupacodePaths.repositoryIconFileURL(
-          filename: filename, repositoryRootURL: rootURL
-        )
+        let url = repositoryIconsDirectory(rootURL)
+          .appending(path: filename, directoryHint: .notDirectory)
         return FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
       }
     )
