@@ -167,7 +167,7 @@ struct SupacodeApp: App {
         preconditionFailure("ghostty_init failed")
       }
     }
-    let runtime = GhosttyRuntime()
+    let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
     _ghosttyShortcuts = State(initialValue: shortcuts)
@@ -605,7 +605,10 @@ struct SupacodeApp: App {
 
   var body: some Scene {
     Window("Prowl", id: "main") {
-      GhosttyColorSchemeSyncView(ghostty: ghostty) {
+      GhosttyColorSchemeSyncView(
+        ghostty: ghostty,
+        preferredColorScheme: store.settings.appearanceMode.colorScheme
+      ) {
         ContentView(store: store, terminalManager: terminalManager)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)

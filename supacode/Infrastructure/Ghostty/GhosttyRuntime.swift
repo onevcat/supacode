@@ -48,7 +48,7 @@ final class GhosttyRuntime {
   var onConfigChange: (() -> Void)?
   var onQuit: (() -> Void)?
 
-  init() {
+  init(initialColorScheme: ColorScheme? = nil) {
     guard let config = Self.loadConfig() else {
       preconditionFailure("ghostty_config_new failed")
     }
@@ -81,9 +81,16 @@ final class GhosttyRuntime {
       preconditionFailure("ghostty_app_new failed")
     }
     self.app = app
+    if let initialColorScheme {
+      setColorScheme(initialColorScheme)
+    }
 
     Self.shared = self
     registerNotificationObservers()
+  }
+
+  var appliedColorSchemeForTesting: ColorScheme? {
+    currentColorScheme
   }
 
   private func registerNotificationObservers() {
