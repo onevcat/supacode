@@ -56,7 +56,7 @@ struct TerminalLayoutSnapshotPayloadTests {
           worktreeID: "wt-1",
           selectedTabID: "tab-0",
           tabs: tabs
-        ),
+        )
       ]
     )
     let data = try JSONEncoder().encode(payload)
@@ -120,7 +120,7 @@ struct TerminalLayoutSnapshotPayloadTests {
           tabs: [
             makeTab(tabID: "tab-1")
           ]
-        ),
+        )
       ]
     )
     let data = try JSONEncoder().encode(payload)
@@ -231,7 +231,7 @@ struct TerminalLayoutSnapshotPayloadTests {
           worktreeID: "wt-1",
           selectedTabID: "tab-1",
           tabs: [tab]
-        ),
+        )
       ]
     )
     let data = try JSONEncoder().encode(payload)
@@ -251,7 +251,7 @@ struct TerminalLayoutSnapshotPayloadTests {
           worktreeID: "wt-1",
           selectedTabID: "tab-1",
           tabs: [tab]
-        ),
+        )
       ]
     )
     let data = try JSONEncoder().encode(payload)
@@ -320,7 +320,7 @@ private func makePayload(
         tabs: [
           makeTab(tabID: tabID, splitRoot: splitRoot)
         ]
-      ),
+      )
     ]
   )
 }

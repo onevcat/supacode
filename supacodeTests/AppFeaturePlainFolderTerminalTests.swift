@@ -35,7 +35,7 @@ struct AppFeaturePlainFolderTerminalTests {
           command: "pnpm test --watch",
           execution: .terminalInput,
           shortcut: nil
-        ),
+        )
       ]
     )
     try localStorage.save(
@@ -116,7 +116,7 @@ struct AppFeaturePlainFolderTerminalTests {
         .createTab(
           makePlainTerminalTarget(repository: repository),
           runSetupScriptIfNew: false
-        ),
+        )
       ]
     )
   }
@@ -154,7 +154,7 @@ struct AppFeaturePlainFolderTerminalTests {
             key: "y",
             modifiers: UserCustomShortcutModifiers(command: true, shift: true)
           )
-        ),
+        )
       ]
     )
 
@@ -193,7 +193,7 @@ struct AppFeaturePlainFolderTerminalTests {
         command: "pnpm test --watch",
         execution: .terminalInput,
         shortcut: nil
-      ),
+      )
     ]
     let store = TestStore(initialState: state) {
       AppFeature()
@@ -211,7 +211,7 @@ struct AppFeaturePlainFolderTerminalTests {
         .insertText(
           makePlainTerminalTarget(repository: repository),
           text: "pnpm test --watch"
-        ),
+        )
       ]
     )
   }

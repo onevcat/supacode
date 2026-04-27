@@ -328,10 +328,12 @@ final class OpenCommandHandler: CommandHandler {
       createTabAtPath(worktreeID, subpath)
     }
     bringAppToFront()
-    guard let target = await waitForOpenTarget(
-      selector: .worktree(worktreeID),
-      preferredPaneCWD: result.resolvedPath ?? input.path
-    ) else {
+    guard
+      let target = await waitForOpenTarget(
+        selector: .worktree(worktreeID),
+        preferredPaneCWD: result.resolvedPath ?? input.path
+      )
+    else {
       return makeFailure(message: "Failed to resolve the focused target for '\(worktreeID)'.")
     }
     return makeSuccess(
@@ -365,10 +367,12 @@ final class OpenCommandHandler: CommandHandler {
 
     selectWorktree(worktreeID)
     createTabAtPath(worktreeID, path)
-    guard let target = await waitForOpenTarget(
-      selector: .worktree(worktreeID),
-      preferredPaneCWD: path
-    ) else {
+    guard
+      let target = await waitForOpenTarget(
+        selector: .worktree(worktreeID),
+        preferredPaneCWD: path
+      )
+    else {
       return makeFailure(message: "Failed to resolve the newly opened target for '\(path)'.")
     }
 

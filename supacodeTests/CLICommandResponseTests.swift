@@ -81,7 +81,7 @@ struct CLICommandResponseTests {
       "items": [
         ["id": "a", "value": 1],
         ["id": "b", "value": 2],
-      ],
+      ]
     ]
     let rawData = try JSONSerialization.data(withJSONObject: nested)
     let raw = RawJSON(rawData)

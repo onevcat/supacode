@@ -47,7 +47,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.configurable": .init(binding: binding("z"))])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -64,7 +64,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .disallowUserOverride,
         allowOverride: false,
         defaultBinding: binding("q")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.fixed": .init(binding: binding("z"))])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -81,7 +81,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .disallowUserOverride,
         allowOverride: false,
         defaultBinding: binding("q")
-      ),
+      )
     ])
     let migrated = ["cmd.fixed": KeybindingUserOverride(binding: binding("z"))]
     let resolved = KeybindingResolver.resolve(schema: schema, migratedOverrides: migrated)
@@ -98,7 +98,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .localOnly,
         allowOverride: true,
         defaultBinding: binding("r")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.local": .init(binding: binding("t"))])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -115,7 +115,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: nil
-      ),
+      )
     ])
     let overrides = overrideStore(["custom_command.build": .init(binding: binding("b", shift: true))])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -134,7 +134,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.configurable": .init(binding: nil, isEnabled: false)])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -151,7 +151,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .disallowUserOverride,
         allowOverride: false,
         defaultBinding: binding("q")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.fixed": .init(binding: nil, isEnabled: false)])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -168,7 +168,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .localOnly,
         allowOverride: true,
         defaultBinding: binding("r")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.local": .init(binding: nil, isEnabled: false)])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -187,7 +187,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let migrated = ["cmd.alpha": KeybindingUserOverride(binding: binding("m"))]
     let resolved = KeybindingResolver.resolve(schema: schema, migratedOverrides: migrated)
@@ -204,7 +204,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let migrated = ["cmd.alpha": KeybindingUserOverride(binding: binding("m"))]
     let overrides = overrideStore(["cmd.alpha": .init(binding: binding("u"))])
@@ -226,7 +226,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let migrated = ["cmd.alpha": KeybindingUserOverride(binding: binding("m"))]
     let overrides = overrideStore(["cmd.alpha": .init(binding: nil, isEnabled: false)])
@@ -248,7 +248,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .disallowUserOverride,
         allowOverride: false,
         defaultBinding: binding("q")
-      ),
+      )
     ])
     let migrated = ["cmd.fixed": KeybindingUserOverride(binding: binding("m"))]
     let resolved = KeybindingResolver.resolve(schema: schema, migratedOverrides: migrated)
@@ -265,7 +265,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     // Migrated binding is identical to default — source stays appDefault because didChange is false
     let migrated = ["cmd.alpha": KeybindingUserOverride(binding: binding("a"))]
@@ -465,7 +465,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.one": .init(binding: binding("z"))])
 
@@ -623,7 +623,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     let overrides = overrideStore(["cmd.nonexistent": .init(binding: binding("z"))])
     let resolved = KeybindingResolver.resolve(schema: schema, userOverrides: overrides)
@@ -641,7 +641,7 @@ struct KeybindingBehaviorMatrixTests {
         policy: .warnAndPreferUserOverride,
         allowOverride: true,
         defaultBinding: binding("a")
-      ),
+      )
     ])
     // isEnabled=true but binding=nil → no change, preserves default
     let overrides = overrideStore(["cmd.one": .init(binding: nil, isEnabled: true)])

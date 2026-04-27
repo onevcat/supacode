@@ -42,7 +42,7 @@ struct UserRepositorySettingsKeyTests {
             key: "u",
             modifiers: UserCustomShortcutModifiers(command: true)
           )
-        ),
+        )
       ]
     )
 
@@ -77,7 +77,7 @@ struct UserRepositorySettingsKeyTests {
             key: "u",
             modifiers: UserCustomShortcutModifiers(command: true)
           )
-        ),
+        )
       ]
     )
     let encoder = JSONEncoder()

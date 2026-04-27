@@ -102,7 +102,7 @@ extension RepositoriesFeature {
       var effects: [Effect<Action>] = [
         .run { _ in
           await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
-        },
+        }
       ]
       if didUpdateWorktreeOrder {
         let worktreeOrderByRepository = state.worktreeOrderByRepository
@@ -129,7 +129,7 @@ extension RepositoriesFeature {
       var effects: [Effect<Action>] = [
         .run { _ in
           await repositoryPersistence.savePinnedWorktreeIDs(pinnedWorktreeIDs)
-        },
+        }
       ]
       if didUpdateWorktreeOrder {
         let worktreeOrderByRepository = state.worktreeOrderByRepository

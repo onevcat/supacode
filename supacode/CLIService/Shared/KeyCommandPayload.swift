@@ -289,13 +289,15 @@ public enum KeyTokens {
   }
 
   public static func descriptor(for raw: String) -> KeyTokenDescriptor? {
-    let normalizedInput = raw
+    let normalizedInput =
+      raw
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .replacing("+", with: "-")
 
     guard !normalizedInput.isEmpty else { return nil }
 
-    let parts = normalizedInput
+    let parts =
+      normalizedInput
       .split(separator: "-", omittingEmptySubsequences: false)
       .map(String.init)
     guard !parts.isEmpty, !parts.contains(where: \.isEmpty) else { return nil }
@@ -307,10 +309,12 @@ public enum KeyTokens {
     for baseLength in baseLengths where parts.count >= baseLength {
       let baseRaw = parts.suffix(baseLength).joined(separator: "-")
       guard let resolvedBase = baseDescriptor(for: baseRaw) else { continue }
-      guard let modifiers = modifiers(
-        from: parts.dropLast(baseLength),
-        implicitModifiers: resolvedBase.implicitModifiers
-      ) else {
+      guard
+        let modifiers = modifiers(
+          from: parts.dropLast(baseLength),
+          implicitModifiers: resolvedBase.implicitModifiers
+        )
+      else {
         return nil
       }
 

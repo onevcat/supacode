@@ -308,7 +308,7 @@ private func selectedCodeHostItems(
       subtitle: repository.name,
       kind: .openRepositoryOnCodeHost(selectedWorktreeID),
       priorityTier: 2
-    ),
+    )
   ]
 }
 
@@ -394,7 +394,7 @@ private func pullRequestItems(
       subtitle: pullRequest.title,
       kind: .openPullRequest(worktreeID),
       priorityTier: 2
-    ),
+    )
   ]
 
   if let readyItem = makeReadyItem() {

@@ -21,7 +21,7 @@ struct KeybindingSchemaTests {
             key: "s",
             modifiers: KeybindingModifiers(command: true, control: true)
           )
-        ),
+        )
       ]
     )
 
@@ -99,7 +99,7 @@ struct KeybindingSchemaTests {
     let migratedOverrides: [String: KeybindingUserOverride] = [
       "command.alpha": KeybindingUserOverride(
         binding: Keybinding(key: "m", modifiers: KeybindingModifiers(command: true))
-      ),
+      )
     ]
 
     let userOverrides = KeybindingUserOverrideStore(
@@ -207,7 +207,7 @@ struct KeybindingSchemaTests {
           allowUserOverride: true,
           conflictPolicy: .warnAndPreferUserOverride,
           defaultBinding: defaultBinding
-        ),
+        )
       ]
     )
     let overrides = KeybindingUserOverrideStore(

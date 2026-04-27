@@ -348,7 +348,7 @@ struct SettingsFeatureTests {
       overrides: [
         AppShortcuts.CommandID.openSettings: KeybindingUserOverride(
           binding: Keybinding(key: ";", modifiers: .init(command: true))
-        ),
+        )
       ]
     )
 

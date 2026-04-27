@@ -840,7 +840,8 @@ final class GhosttyRuntime {
       }
     }
 
-    let pair = resolvedPair
+    let pair =
+      resolvedPair
       ?? GhosttyThemePair(light: "Catppuccin Latte", dark: "Ghostty Default Style Dark")
     ghosttyCLICacheLock.lock()
     cachedFallbackThemePair = pair
@@ -1118,7 +1119,8 @@ extension NSColor {
   }
 
   nonisolated fileprivate convenience init?(ghosttyHexColor: String) {
-    let cleaned = ghosttyHexColor
+    let cleaned =
+      ghosttyHexColor
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "#", with: "")
     guard cleaned.count == 6, let value = Int(cleaned, radix: 16) else {

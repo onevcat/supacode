@@ -113,7 +113,8 @@ private nonisolated func cliSymlinkInstall(source: String, destination: String) 
   }
 
   // Privilege escalation via osascript
-  let script = "mkdir -p '\(shellEscape(dir))' && "
+  let script =
+    "mkdir -p '\(shellEscape(dir))' && "
     + "rm -f '\(shellEscape(destination))' && "
     + "ln -s '\(shellEscape(source))' '\(shellEscape(destination))'"
   try runPrivileged(script: script)

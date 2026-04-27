@@ -4,27 +4,30 @@ import Testing
 
 struct GhosttyUserConfigSnapshotTests {
   @Test func detectsDualTheme() {
-    let snapshot = GhosttyUserConfigSnapshot.parse(showConfigOutput: """
-      theme = light:Catppuccin Latte,dark:Catppuccin Frappe
-      background = #1f1f28
-      """)
+    let snapshot = GhosttyUserConfigSnapshot.parse(
+      showConfigOutput: """
+        theme = light:Catppuccin Latte,dark:Catppuccin Frappe
+        background = #1f1f28
+        """)
 
     #expect(snapshot.themeMode == .dual)
   }
 
   @Test func detectsSingleTheme() {
-    let snapshot = GhosttyUserConfigSnapshot.parse(showConfigOutput: """
-      theme = kanagawabones
-      background = #f2f2f2
-      """)
+    let snapshot = GhosttyUserConfigSnapshot.parse(
+      showConfigOutput: """
+        theme = kanagawabones
+        background = #f2f2f2
+        """)
 
     #expect(snapshot.themeMode == .single)
   }
 
   @Test func detectsUnsetTheme() {
-    let snapshot = GhosttyUserConfigSnapshot.parse(showConfigOutput: """
-      background = #1f1f28
-      """)
+    let snapshot = GhosttyUserConfigSnapshot.parse(
+      showConfigOutput: """
+        background = #1f1f28
+        """)
 
     #expect(snapshot.themeMode == .none)
   }

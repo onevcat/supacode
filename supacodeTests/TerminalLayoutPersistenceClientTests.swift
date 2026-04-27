@@ -72,9 +72,9 @@ private func makePayload() -> TerminalLayoutSnapshotPayload {
             title: nil,
             icon: nil,
             splitRoot: .leaf(surfaceID: "9B2F6D8C-44A4-42C5-8F9E-962108301901")
-          ),
+          )
         ]
-      ),
+      )
     ]
   )
 }

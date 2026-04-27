@@ -21,7 +21,7 @@ struct AppFeatureCustomCommandTests {
         command: "swift test",
         execution: .shellScript,
         shortcut: nil,
-      ),
+      )
     ]
 
     let store = TestStore(initialState: state) {
@@ -44,7 +44,7 @@ struct AppFeatureCustomCommandTests {
           autoCloseOnSuccess: false,
           customCommandName: "Test",
           customCommandIcon: "checkmark.circle"
-        ),
+        )
       ],
     )
   }
@@ -63,7 +63,7 @@ struct AppFeatureCustomCommandTests {
         command: "pnpm test --watch",
         execution: .terminalInput,
         shortcut: nil,
-      ),
+      )
     ]
 
     let store = TestStore(initialState: state) {
@@ -99,7 +99,7 @@ struct AppFeatureCustomCommandTests {
         execution: .split,
         splitDirection: .down,
         shortcut: nil,
-      ),
+      )
     ]
 
     let store = TestStore(initialState: state) {
@@ -122,7 +122,7 @@ struct AppFeatureCustomCommandTests {
           autoCloseOnSuccess: false,
           customCommandName: "Tail",
           customCommandIcon: "doc.text"
-        ),
+        )
       ],
     )
   }
@@ -292,7 +292,7 @@ struct AppFeatureCustomCommandTests {
           autoCloseOnSuccess: false,
           customCommandName: "Five",
           customCommandIcon: "5.circle"
-        ),
+        )
       ],
     )
   }
@@ -311,7 +311,7 @@ struct AppFeatureCustomCommandTests {
         command: "npm test",
         execution: .shellScript,
         shortcut: nil,
-      ),
+      )
     ]
 
     let store = TestStore(initialState: state) {
@@ -337,7 +337,7 @@ struct AppFeatureCustomCommandTests {
           autoCloseOnSuccess: false,
           customCommandName: "Default",
           customCommandIcon: nil
-        ),
+        )
       ],
     )
   }
@@ -356,7 +356,7 @@ struct AppFeatureCustomCommandTests {
         command: "swift test",
         execution: .shellScript,
         shortcut: nil,
-      ),
+      )
     ]
 
     let store = TestStore(initialState: state) {
@@ -379,7 +379,7 @@ struct AppFeatureCustomCommandTests {
           autoCloseOnSuccess: false,
           customCommandName: "Blank",
           customCommandIcon: nil
-        ),
+        )
       ],
     )
   }

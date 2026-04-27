@@ -77,7 +77,7 @@ struct WorktreeTerminalManagerTests {
         title: "Unread",
         body: "body",
         isRead: false
-      ),
+      )
     ]
     state.onNotificationIndicatorChanged?()
     state.notifications = [
@@ -86,7 +86,7 @@ struct WorktreeTerminalManagerTests {
         title: "Read",
         body: "body",
         isRead: true
-      ),
+      )
     ]
 
     let stream = manager.eventStream()
@@ -237,9 +237,9 @@ struct WorktreeTerminalManagerTests {
               title: nil,
               icon: nil,
               splitRoot: .leaf(surfaceID: "9B2F6D8C-44A4-42C5-8F9E-962108301901")
-            ),
+            )
           ]
-        ),
+        )
       ]
     )
     let manager = WorktreeTerminalManager(
