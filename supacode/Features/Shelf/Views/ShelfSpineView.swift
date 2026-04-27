@@ -39,6 +39,7 @@ struct ShelfSpineView: View {
 
   @State private var isHovering = false
   @Shared(.repositoryAppearances) private var repositoryAppearances
+  @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
 
   var body: some View {
     VStack(spacing: 0) {
@@ -83,7 +84,6 @@ struct ShelfSpineView: View {
           .frame(width: 1)
       }
     }
-    .help(book.displayName)
   }
 
   /// Step-wise accent-alpha ladder keyed by `distanceFromOpen`. 100%
@@ -173,6 +173,7 @@ struct ShelfSpineView: View {
           ShelfSpineControlButton(
             systemImage: "plus",
             label: "New Tab",
+            shortcut: ghosttyShortcuts.display(for: "new_tab"),
             action: onNewTab
           )
         }
@@ -180,6 +181,7 @@ struct ShelfSpineView: View {
           ShelfSpineControlButton(
             systemImage: "square.split.2x1",
             label: "Split Vertically",
+            shortcut: ghosttyShortcuts.display(for: "new_split:right"),
             action: onSplitVertical
           )
         }
@@ -187,6 +189,7 @@ struct ShelfSpineView: View {
           ShelfSpineControlButton(
             systemImage: "square.split.1x2",
             label: "Split Horizontally",
+            shortcut: ghosttyShortcuts.display(for: "new_split:down"),
             action: onSplitHorizontal
           )
         }
@@ -212,6 +215,7 @@ struct ShelfSpineView: View {
     }
     .buttonStyle(.plain)
     .contextMenu { bookContextMenu }
+    .help(book.displayName)
   }
 
   @ViewBuilder
@@ -496,6 +500,7 @@ private struct ShelfSpineTabSlot: View {
 private struct ShelfSpineControlButton: View {
   let systemImage: String
   let label: String
+  let shortcut: String?
   let action: () -> Void
 
   var body: some View {
@@ -508,7 +513,12 @@ private struct ShelfSpineControlButton: View {
         .accessibilityHidden(true)
     }
     .buttonStyle(.plain)
-    .help(label)
+    .help(helpText)
+  }
+
+  private var helpText: String {
+    guard let shortcut else { return label }
+    return "\(label) (\(shortcut))"
   }
 }
 
