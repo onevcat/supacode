@@ -107,13 +107,11 @@ struct RepositorySettingsFeature {
       switch action {
       case .task:
         let rootURL = state.rootURL
-        let repositoryID = state.repositoryID
         guard state.capabilities.supportsRepositoryGitSettings else {
           return .run { send in
             @Shared(.repositorySettings(rootURL)) var repositorySettings
             @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
             @Shared(.settingsFile) var settingsFile
-            @Shared(.repositoryAppearances) var appearances
             let global = settingsFile.global
             await send(
               .settingsLoaded(
@@ -127,9 +125,6 @@ struct RepositorySettingsFeature {
                 keybindingUserOverrides: global.keybindingUserOverrides
               )
             )
-            if let appearance = appearances[repositoryID], !appearance.isEmpty {
-              await send(.appearanceLoaded(appearance))
-            }
           }
         }
         let gitClient = gitClient
@@ -138,7 +133,6 @@ struct RepositorySettingsFeature {
           @Shared(.repositorySettings(rootURL)) var repositorySettings
           @Shared(.userRepositorySettings(rootURL)) var userRepositorySettings
           @Shared(.settingsFile) var settingsFile
-          @Shared(.repositoryAppearances) var appearances
           let global = settingsFile.global
           await send(
             .settingsLoaded(
@@ -152,9 +146,6 @@ struct RepositorySettingsFeature {
               keybindingUserOverrides: global.keybindingUserOverrides
             )
           )
-          if let appearance = appearances[repositoryID], !appearance.isEmpty {
-            await send(.appearanceLoaded(appearance))
-          }
           let branches: [String]
           do {
             branches = try await gitClient.branchRefs(rootURL)

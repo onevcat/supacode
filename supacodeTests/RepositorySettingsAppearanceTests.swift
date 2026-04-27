@@ -268,6 +268,43 @@ struct RepositorySettingsAppearanceTests {
     }
   }
 
+  // MARK: - Regression
+
+  @Test func pickingColorKeepsExistingIcon() async throws {
+    // Regression: appearance used to be loaded via `.task` async, which
+    // raced with the first click after reopening Settings — picking a
+    // color before `.task` finished would write `{icon: nil, color: x}`
+    // and wipe the previously-saved icon. The fix seeds appearance
+    // synchronously when the State is built, so the user's first click
+    // sees the right baseline. This test pins the new behavior: with
+    // an icon pre-set in initial state, setting a color must preserve
+    // the icon.
+    let store = makeStore(
+      initialAppearance: RepositoryAppearance(icon: .sfSymbol("hammer.fill"), color: nil)
+    )
+
+    await store.send(.setAppearanceColor(.blue)) {
+      $0.appearance.color = .blue
+    }
+
+    #expect(store.state.appearance.icon == .sfSymbol("hammer.fill"))
+    #expect(store.state.appearance.color == .blue)
+  }
+
+  @Test func pickingIconKeepsExistingColor() async throws {
+    // Mirror of the above for the symmetric case.
+    let store = makeStore(
+      initialAppearance: RepositoryAppearance(icon: nil, color: .red)
+    )
+
+    await store.send(.setAppearanceIcon(.sfSymbol("folder.fill"))) {
+      $0.appearance.icon = .sfSymbol("folder.fill")
+    }
+
+    #expect(store.state.appearance.color == .red)
+    #expect(store.state.appearance.icon == .sfSymbol("folder.fill"))
+  }
+
   // MARK: - Persistence helpers
 
   private func readAppearances(
