@@ -42,7 +42,8 @@ struct AppFeatureCustomCommandTests {
           input: "swift test",
           runSetupScriptIfNew: false,
           autoCloseOnSuccess: false,
-          customCommandName: "Test"
+          customCommandName: "Test",
+          customCommandIcon: "checkmark.circle"
         ),
       ],
     )
@@ -119,7 +120,8 @@ struct AppFeatureCustomCommandTests {
           direction: .down,
           input: "tail -f logs",
           autoCloseOnSuccess: false,
-          customCommandName: "Tail"
+          customCommandName: "Tail",
+          customCommandIcon: "doc.text"
         ),
       ],
     )
@@ -171,14 +173,16 @@ struct AppFeatureCustomCommandTests {
           input: "make build",
           runSetupScriptIfNew: false,
           autoCloseOnSuccess: true,
-          customCommandName: "Build"
+          customCommandName: "Build",
+          customCommandIcon: "hammer"
         ),
         .createSplitWithInput(
           worktree,
           direction: .right,
           input: "make lint",
           autoCloseOnSuccess: true,
-          customCommandName: "Lint"
+          customCommandName: "Lint",
+          customCommandIcon: "checkmark"
         ),
       ],
     )
@@ -286,7 +290,95 @@ struct AppFeatureCustomCommandTests {
           input: "echo five",
           runSetupScriptIfNew: false,
           autoCloseOnSuccess: false,
-          customCommandName: "Five"
+          customCommandName: "Five",
+          customCommandIcon: "5.circle"
+        ),
+      ],
+    )
+  }
+
+  @Test(.dependencies) func defaultTerminalIconIsTreatedAsUnsetForAutoDetection() async {
+    let worktree = makeWorktree()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(worktree: worktree),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      UserCustomCommand(
+        title: "Default",
+        systemImage: "terminal",
+        command: "npm test",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+    ]
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.runCustomCommand(0))
+    await store.finish()
+
+    // The model's "terminal" placeholder should not be pinned as a
+    // script icon — the auto-detector should remain free to brand the
+    // tab from the executed command itself.
+    #expect(
+      sent.value == [
+        .createTabWithInput(
+          worktree,
+          input: "npm test",
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Default",
+          customCommandIcon: nil
+        ),
+      ],
+    )
+  }
+
+  @Test(.dependencies) func emptyIconIsTreatedAsUnsetForAutoDetection() async {
+    let worktree = makeWorktree()
+    let sent = LockIsolated<[TerminalClient.Command]>([])
+    var state = AppFeature.State(
+      repositories: makeRepositoriesState(worktree: worktree),
+      settings: SettingsFeature.State()
+    )
+    state.selectedCustomCommands = [
+      UserCustomCommand(
+        title: "Blank",
+        systemImage: "   ",
+        command: "swift test",
+        execution: .shellScript,
+        shortcut: nil,
+      ),
+    ]
+
+    let store = TestStore(initialState: state) {
+      AppFeature()
+    } withDependencies: {
+      $0.terminalClient.send = { command in
+        sent.withValue { $0.append(command) }
+      }
+    }
+
+    await store.send(.runCustomCommand(0))
+    await store.finish()
+
+    #expect(
+      sent.value == [
+        .createTabWithInput(
+          worktree,
+          input: "swift test",
+          runSetupScriptIfNew: false,
+          autoCloseOnSuccess: false,
+          customCommandName: "Blank",
+          customCommandIcon: nil
         ),
       ],
     )

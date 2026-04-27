@@ -645,6 +645,15 @@ struct AppFeature {
         let command = customCommand.command
         let closeOnSuccess = customCommand.closeOnSuccess
         let commandName = customCommand.resolvedTitle
+        // Treat the model's "terminal" placeholder (and an empty value)
+        // as "no icon configured", so the auto-detector can still brand
+        // the tab from the command itself. Anything else is a deliberate
+        // user pick and gets pinned for the duration of the run.
+        let commandIcon: String? = {
+          let trimmed = customCommand.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
+          guard !trimmed.isEmpty, trimmed != "terminal" else { return nil }
+          return trimmed
+        }()
         switch customCommand.execution {
         case .shellScript:
           return .run { _ in
@@ -654,7 +663,8 @@ struct AppFeature {
                 input: command,
                 runSetupScriptIfNew: false,
                 autoCloseOnSuccess: closeOnSuccess,
-                customCommandName: commandName
+                customCommandName: commandName,
+                customCommandIcon: commandIcon
               )
             )
           }
@@ -667,7 +677,8 @@ struct AppFeature {
                 direction: direction,
                 input: command,
                 autoCloseOnSuccess: closeOnSuccess,
-                customCommandName: commandName
+                customCommandName: commandName,
+                customCommandIcon: commandIcon
               )
             )
           }

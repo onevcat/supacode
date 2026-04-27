@@ -13,14 +13,16 @@ struct TerminalClient {
       input: String,
       runSetupScriptIfNew: Bool,
       autoCloseOnSuccess: Bool,
-      customCommandName: String? = nil
+      customCommandName: String? = nil,
+      customCommandIcon: String? = nil
     )
     case createSplitWithInput(
       Worktree,
       direction: UserCustomSplitDirection,
       input: String,
       autoCloseOnSuccess: Bool,
-      customCommandName: String? = nil
+      customCommandName: String? = nil,
+      customCommandIcon: String? = nil
     )
     case createTabInDirectory(Worktree, directory: URL)
     case ensureInitialTab(Worktree, runSetupScriptIfNew: Bool, focusing: Bool)

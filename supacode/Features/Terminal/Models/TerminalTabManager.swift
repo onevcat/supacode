@@ -41,21 +41,36 @@ final class TerminalTabManager {
     tabs[index].isTitleLocked = false
   }
 
+  /// Auto-detection write path (e.g. `CommandIconMap`). Only applies
+  /// when nothing has claimed the icon slot.
   func updateIcon(_ id: TerminalTabID, icon: String?) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-    guard !tabs[index].isIconLocked else { return }
+    guard tabs[index].iconLock == .auto else { return }
     tabs[index].icon = icon
   }
 
+  /// User picker path. Always wins, transitioning the slot to `.user`.
   func overrideIcon(_ id: TerminalTabID, icon: String) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
     tabs[index].icon = icon
-    tabs[index].isIconLocked = true
+    tabs[index].iconLock = .user
   }
 
+  /// "Reset to default" from the icon picker. Drops back to `.none`
+  /// so the next auto-detected match can take over.
   func clearIconOverride(_ id: TerminalTabID) {
     guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-    tabs[index].isIconLocked = false
+    tabs[index].iconLock = .auto
+  }
+
+  /// Run Script / Custom Command write path. Pins the icon to `.script`
+  /// — strong enough to block auto-detection, weak enough to yield to
+  /// a user-set `.user` lock.
+  func setScriptIcon(_ id: TerminalTabID, icon: String) {
+    guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+    guard tabs[index].iconLock != .user else { return }
+    tabs[index].icon = icon
+    tabs[index].iconLock = .script
   }
 
   func updateDirty(_ id: TerminalTabID, isDirty: Bool) {

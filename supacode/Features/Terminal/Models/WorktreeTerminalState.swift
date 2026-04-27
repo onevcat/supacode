@@ -259,6 +259,12 @@ final class WorktreeTerminalState {
         workingDirectoryOverride: nil
       )
     )
+    if let tabId {
+      // Lock in the play glyph as a script-level override so OSC-2
+      // titles emitted by the script (e.g. `npm run dev`) can't swap
+      // the icon out from under it.
+      tabManager.setScriptIcon(tabId, icon: "play.fill")
+    }
     setRunScriptTabId(tabId)
     return tabId
   }
@@ -562,6 +568,17 @@ final class WorktreeTerminalState {
     pendingCustomCommands[surfaceId] = name
   }
 
+  /// Pin a Custom Command's configured icon onto its host tab so the
+  /// auto-detector can't swap it out when the script's OSC-2 title
+  /// matches a known command. Yields to a user-set icon lock — manual
+  /// picker selections always win.
+  func applyCustomCommandIcon(_ icon: String, surfaceId: UUID) {
+    let trimmed = icon.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    guard let tabId = tabId(containing: surfaceId) else { return }
+    tabManager.setScriptIcon(tabId, icon: trimmed)
+  }
+
   // Short delay lets the user see the final output before the pane disappears.
   private static let autoCloseDelay: Duration = .milliseconds(800)
 
@@ -735,9 +752,9 @@ final class WorktreeTerminalState {
       }
       // Skip title/icon for blocking-script tabs as they are transient.
       // Persist the icon only when the user has explicitly overridden it; otherwise
-      // restore should pick up the current default ("terminal").
+      // restore should pick up the current default ("terminal") or auto-detection.
       let isBlockingScriptTab = tab.id == runScriptTabId
-      let snapshotIcon: String? = (isBlockingScriptTab || !tab.isIconLocked) ? nil : tab.icon
+      let snapshotIcon: String? = (isBlockingScriptTab || tab.iconLock != .user) ? nil : tab.icon
       snapshotTabs.append(
         TerminalLayoutSnapshotPayload.SnapshotTab(
           tabID: tab.id.rawValue.uuidString,
@@ -831,7 +848,7 @@ final class WorktreeTerminalState {
           title: entry.snapshotTab.title ?? "\(worktree.name) \(index + 1)",
           icon: entry.snapshotTab.icon ?? "terminal",
           isTitleLocked: entry.snapshotTab.title != nil,
-          isIconLocked: entry.snapshotTab.icon != nil
+          iconLock: entry.snapshotTab.icon != nil ? .user : .auto
         )
       )
     }
@@ -1495,10 +1512,11 @@ final class WorktreeTerminalState {
     return false
   }
 
-  /// Apply an already-resolved icon to the tab. Honours focus and
-  /// user-icon-lock; encodes the icon through `storageString` so
-  /// `assetName`-bearing entries pick up the `@asset:` marker the
-  /// renderers parse via `ResolvedTabIcon`.
+  /// Apply an already-resolved icon to the tab. Honours focus, the user
+  /// icon lock, and the Run Script / Custom Command override; encodes
+  /// the icon through `storageString` so `assetName`-bearing entries
+  /// pick up the `@asset:` marker the renderers parse via
+  /// `ResolvedTabIcon`.
   private func applyResolvedIcon(
     _ icon: TabIconSource,
     surfaceId: UUID,
@@ -1510,7 +1528,7 @@ final class WorktreeTerminalState {
     // user is currently looking at.
     guard focusedSurfaceIdByTab[tabId] == surfaceId else { return }
     guard let tab = tabManager.tabs.first(where: { $0.id == tabId }) else { return }
-    guard !tab.isIconLocked else { return }
+    guard tab.iconLock == .auto else { return }
     let serialised = icon.storageString
     guard tab.icon != serialised else { return }
     tabManager.updateIcon(tabId, icon: serialised)

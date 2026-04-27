@@ -53,24 +53,28 @@ final class WorktreeTerminalManager {
     case .createTab(let worktree, let runSetupScriptIfNew):
       Task { createTabAsync(in: worktree, runSetupScriptIfNew: runSetupScriptIfNew) }
     case .createTabWithInput(
-      let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName):
+      let worktree, let input, let runSetupScriptIfNew, let autoCloseOnSuccess, let customCommandName,
+      let customCommandIcon):
       Task {
         createTabAsync(
           in: worktree,
           runSetupScriptIfNew: runSetupScriptIfNew,
           initialInput: input,
           autoCloseOnSuccess: autoCloseOnSuccess,
-          customCommandName: customCommandName
+          customCommandName: customCommandName,
+          customCommandIcon: customCommandIcon
         )
       }
-    case .createSplitWithInput(let worktree, let direction, let input, let autoCloseOnSuccess, let customCommandName):
+    case .createSplitWithInput(
+      let worktree, let direction, let input, let autoCloseOnSuccess, let customCommandName, let customCommandIcon):
       Task {
         createSplitAsync(
           in: worktree,
           direction: direction,
           initialInput: input,
           autoCloseOnSuccess: autoCloseOnSuccess,
-          customCommandName: customCommandName
+          customCommandName: customCommandName,
+          customCommandIcon: customCommandIcon
         )
       }
     case .createTabInDirectory(let worktree, let directory):
@@ -268,7 +272,8 @@ final class WorktreeTerminalManager {
     initialInput: String? = nil,
     workingDirectory: URL? = nil,
     autoCloseOnSuccess: Bool = false,
-    customCommandName: String? = nil
+    customCommandName: String? = nil,
+    customCommandIcon: String? = nil
   ) {
     let state = state(for: worktree) { runSetupScriptIfNew }
     let setupScript: String?
@@ -293,6 +298,9 @@ final class WorktreeTerminalManager {
       if let customCommandName {
         state.markSurfaceForCustomCommand(surfaceId, name: customCommandName)
       }
+      if let customCommandIcon {
+        state.applyCustomCommandIcon(customCommandIcon, surfaceId: surfaceId)
+      }
     }
   }
 
@@ -301,7 +309,8 @@ final class WorktreeTerminalManager {
     direction: UserCustomSplitDirection,
     initialInput: String,
     autoCloseOnSuccess: Bool,
-    customCommandName: String? = nil
+    customCommandName: String? = nil,
+    customCommandIcon: String? = nil
   ) {
     let state = state(for: worktree)
     guard
@@ -317,6 +326,9 @@ final class WorktreeTerminalManager {
     }
     if let customCommandName {
       state.markSurfaceForCustomCommand(newSurfaceId, name: customCommandName)
+    }
+    if let customCommandIcon {
+      state.applyCustomCommandIcon(customCommandIcon, surfaceId: newSurfaceId)
     }
   }
 
