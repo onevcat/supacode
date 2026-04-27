@@ -78,6 +78,16 @@ struct RepositoryAppearancePickerView: View {
   /// Settings windows don't truncate "Choose Symbol…" / "Clear Icon".
   /// Pattern matches macOS native flows (System Settings user picture,
   /// Finder "Get Info" icon).
+  ///
+  /// Implementation notes — `.buttonStyle(.plain)` (NOT
+  /// `.menuStyle(.borderlessButton)`) is critical: the borderless
+  /// menu style applies its own padding and a system tint that
+  /// silently overrides the icon's `foregroundStyle`, so the user's
+  /// chosen color stops appearing on the preview. Plain button style
+  /// lets the label render exactly as authored. Hover detection,
+  /// overlay border, pointer style, and tooltip all sit on the
+  /// **outer** Menu — `.onHover` placed inside the Menu's label is
+  /// swallowed by the menu's pointer interception.
   @ViewBuilder
   private var iconMenu: some View {
     Menu {
@@ -96,16 +106,39 @@ struct RepositoryAppearancePickerView: View {
     } label: {
       iconPreviewTile
     }
-    .menuStyle(.borderlessButton)
+    .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Click to choose an icon for this repository")
+    .overlay {
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(
+          Color.accentColor.opacity(isHoveringIconTile ? 0.65 : 0),
+          lineWidth: 1.5
+        )
+    }
+    .onHover { isHoveringIconTile = $0 }
+    .pointerStyle(.link)
+    .animation(.easeOut(duration: 0.12), value: isHoveringIconTile)
+    .help("Click the icon preview to pick a symbol or import an image")
   }
 
+  /// Visual label for the menu trigger. The frame is locked to
+  /// `previewSize × previewSize` so the row layout (and the title /
+  /// description text alignment to its right) doesn't shift when the
+  /// inner content swaps between the user's icon and the
+  /// no-icon placeholder. `.contentShape` confines the click hit-test
+  /// to the rounded rectangle so clicks just outside the visible
+  /// tile don't open the menu.
+  ///
+  /// When no icon is set, a dashed border replaces the questionmark's
+  /// silence with a "drop zone"-style affordance — the same pattern
+  /// macOS uses for empty avatar / drag-target slots — so users see
+  /// the tile is interactive even before they hover.
   @ViewBuilder
   private var iconPreviewTile: some View {
     let frame = RoundedRectangle(cornerRadius: 8, style: .continuous)
     let fill = Color.secondary.opacity(0.12)
+    let hasIcon = store.appearance.icon != nil
     Group {
       if let icon = store.appearance.icon {
         RepositoryIconImage(
@@ -124,18 +157,14 @@ struct RepositoryAppearancePickerView: View {
     .frame(width: previewSize, height: previewSize)
     .background(fill, in: frame)
     .overlay {
-      // Hover affordance: a 1.5pt accent border tells the user the
-      // tile is actionable. We pair this with the link pointer style
-      // below so the cursor change reinforces it.
-      frame.stroke(
-        Color.accentColor.opacity(isHoveringIconTile ? 0.65 : 0),
-        lineWidth: 1.5
-      )
+      if !hasIcon {
+        frame.stroke(
+          Color.secondary.opacity(0.55),
+          style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+        )
+      }
     }
     .contentShape(.rect(cornerRadius: 8, style: .continuous))
-    .onHover { isHoveringIconTile = $0 }
-    .pointerStyle(.link)
-    .animation(.easeOut(duration: 0.12), value: isHoveringIconTile)
     .accessibilityLabel("Icon picker")
   }
 
@@ -150,7 +179,7 @@ struct RepositoryAppearancePickerView: View {
     case .bundledAsset:
       return "Bundled icons keep their original artwork."
     case nil:
-      return "No icon set. Click the tile to pick a symbol or import an image."
+      return "No icon set. Click the icon preview to pick a symbol or import an image."
     }
   }
 
