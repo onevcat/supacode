@@ -37,25 +37,45 @@ struct ShelfView: View {
       books.firstIndex(where: { $0.id == id })
     }
 
+    ZStack(alignment: .leading) {
+      spineFlow(books: books, openBookID: openBookID, openIndex: openIndex)
+      openBookOverlay(books: books, openIndex: openIndex, state: state)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
+  }
+
+  @ViewBuilder
+  private func spineFlow(books: [ShelfBook], openBookID: ShelfBook.ID?, openIndex: Int?)
+    -> some View
+  {
     HStack(spacing: 0) {
       ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
         spine(book: book, index: index, openIndex: openIndex)
         if book.id == openBookID {
-          openBookArea(for: book, state: state)
-            .transition(.opacity)
+          terminalPlaceholder()
         }
       }
       if openBookID == nil {
-        emptyOpenArea()
+        terminalPlaceholder()
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
     // Animate on every openBookID change — covers both Shelf-originated
     // book switches (which also set their own TCA animation) and
     // left-nav-originated switches, so the spine flow is consistent
-    // regardless of entry point.
+    // regardless of entry point. The real terminal is rendered in a
+    // non-layout overlay, so this animation only moves spines and the
+    // lightweight placeholder.
     .animation(.easeInOut(duration: 0.2), value: openBookID)
+  }
+
+  @ViewBuilder
+  private func terminalPlaceholder() -> some View {
+    Color.clear
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .layoutPriority(1)
+      .accessibilityHidden(true)
   }
 
   @ViewBuilder
@@ -85,6 +105,46 @@ struct ShelfView: View {
         store.send(.repositoryManagement(.openRepositorySettings(book.repositoryID)))
       }
     )
+  }
+
+  @ViewBuilder
+  private func openBookOverlay(
+    books: [ShelfBook], openIndex: Int?, state: RepositoriesFeature.State
+  ) -> some View {
+    GeometryReader { proxy in
+      let frame = openBookOverlayFrame(in: proxy.size, bookCount: books.count, openIndex: openIndex)
+      openBookOverlayContent(books: books, openIndex: openIndex, state: state)
+        .frame(width: frame.width, height: proxy.size.height)
+        .clipped()
+        .offset(x: frame.minX)
+    }
+  }
+
+  private func openBookOverlayFrame(in size: CGSize, bookCount: Int, openIndex: Int?) -> (
+    minX: CGFloat, width: CGFloat
+  ) {
+    let leftSpineCount = openIndex.map { $0 + 1 } ?? bookCount
+    let rightSpineCount = openIndex.map { bookCount - $0 - 1 } ?? 0
+    let minX = CGFloat(leftSpineCount) * ShelfMetrics.spineWidth
+    let occupiedWidth = CGFloat(leftSpineCount + rightSpineCount) * ShelfMetrics.spineWidth
+    return (minX, max(0, size.width - occupiedWidth))
+  }
+
+  @ViewBuilder
+  private func openBookOverlayContent(
+    books: [ShelfBook],
+    openIndex: Int?,
+    state: RepositoriesFeature.State
+  ) -> some View {
+    if let openIndex {
+      openBookArea(for: books[openIndex], state: state)
+        .id(books[openIndex].id)
+        .transition(.opacity.animation(.easeInOut(duration: 0.12)))
+    } else {
+      emptyOpenArea()
+        .id("__empty__")
+        .transition(.opacity.animation(.easeInOut(duration: 0.12)))
+    }
   }
 
   /// Dispatch the open-book action only when `book` isn't already the open
