@@ -1,6 +1,8 @@
 import ComposableArchitecture
 import SwiftUI
 
+private let shelfLogger = SupaLogger("Shelf")
+
 /// Root view for Shelf presentation mode.
 ///
 /// Phase 3 layout: three horizontal segments — a left stack of passed
@@ -27,6 +29,10 @@ struct ShelfView: View {
   @Environment(\.surfaceBackgroundOpacity) private var surfaceBackgroundOpacity
 
   var body: some View {
+    // Note: `body` is a `@ViewBuilder` getter so we can't add a
+    // `defer`-based signpost interval directly here. Body-level cost is
+    // already visible via the SwiftUI instrument's "View Body" track —
+    // signposts in this file focus on user-input moments instead.
     let state = store.state
     let books = state.orderedShelfBooks()
     let openBookID = state.openShelfBookID
@@ -101,13 +107,21 @@ struct ShelfView: View {
 
   /// Dispatch the open-book action only when `book` isn't already the open
   /// one — idempotent helper for taps that imply a book change.
+  ///
+  /// No `animation:` is passed to `store.send` because the visible
+  /// spine-flow animation is already driven by the view-level
+  /// `.animation(.easeInOut(duration: 0.2), value: openBookID)` modifier
+  /// on the root container — wrapping the dispatch in another animation
+  /// transaction would double-run layout / transition machinery for the
+  /// same change.
   private func switchToBookIfNeeded(_ book: ShelfBook) {
     guard !isOpen(book) else { return }
+    shelfLogger.event("BookClick.NewTabSpine")
     switch book.kind {
     case .worktree:
-      store.send(.selectWorktree(book.id, focusTerminal: true), animation: .easeInOut(duration: 0.2))
+      store.send(.selectWorktree(book.id, focusTerminal: true))
     case .plainFolder:
-      store.send(.selectRepository(book.repositoryID), animation: .easeInOut(duration: 0.2))
+      store.send(.selectRepository(book.repositoryID))
     }
   }
 
@@ -190,17 +204,20 @@ struct ShelfView: View {
   private func openBook(_ book: ShelfBook, selectingTab tabID: TerminalTabID?) {
     let isAlreadyOpen = store.state.openShelfBookID == book.id
     if let tabID, isAlreadyOpen, let state = terminalManager.stateIfExists(for: book.id) {
+      shelfLogger.event("BookClick.TabSwitchSameBook")
       state.tabManager.selectTab(tabID)
       return
     }
-    // Animate the spine flow and terminal crossfade. The duration and
-    // curve mirror the Shelf design doc: ~200ms ease-in-out, snappy but
-    // legible so the user can read each spine's movement.
+    shelfLogger.event("BookClick.SwitchBook")
+    // The spine flow / terminal crossfade animation is already driven
+    // by the view-level `.animation(_:value: openBookID)` on the root
+    // container (~200ms ease-in-out per the Shelf design doc), so the
+    // dispatch itself does not pass an `animation:` argument here.
     switch book.kind {
     case .worktree:
-      store.send(.selectWorktree(book.id, focusTerminal: true), animation: .easeInOut(duration: 0.2))
+      store.send(.selectWorktree(book.id, focusTerminal: true))
     case .plainFolder:
-      store.send(.selectRepository(book.repositoryID), animation: .easeInOut(duration: 0.2))
+      store.send(.selectRepository(book.repositoryID))
     }
     if let tabID {
       // Apply tab selection eagerly; the target book's state already exists

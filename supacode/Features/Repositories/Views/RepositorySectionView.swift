@@ -38,20 +38,27 @@ struct RepositorySectionView: View {
 
     let appearance = repositoryAppearances[repository.id] ?? .empty
     let header = HStack {
-      RepoHeaderRow(
-        name: repository.name,
-        isRemoving: isRemovingRepository,
-        tabCount: Self.openTabCount(
-          for: repository,
+      // Inner HStack groups the name row and the tab-count badge so they
+      // share the leading-aligned region of the outer header. Crucially
+      // the badge is its own leaf view (`RepoHeaderTabCountBadge`) — it
+      // owns the `terminalManager` read so this view never subscribes
+      // to the manager-wide states dictionary.
+      HStack {
+        RepoHeaderRow(
+          name: repository.name,
+          isRemoving: isRemovingRepository,
+          icon: appearance.icon,
+          iconTint: appearance.color?.color,
+          repositoryRootURL: repository.rootURL,
+          nameTooltip: repository.capabilities.supportsWorktrees
+            ? (isExpanded ? "Collapse" : "Expand")
+            : "Open terminal in folder"
+        )
+        RepoHeaderTabCountBadge(
+          repository: repository,
           terminalManager: terminalManager
-        ),
-        icon: appearance.icon,
-        iconTint: appearance.color?.color,
-        repositoryRootURL: repository.rootURL,
-        nameTooltip: repository.capabilities.supportsWorktrees
-          ? (isExpanded ? "Collapse" : "Expand")
-          : "Open terminal in folder"
-      )
+        )
+      }
       .frame(maxWidth: .infinity, alignment: .leading)
       .background {
         if Self.debugHeaderLayers {
