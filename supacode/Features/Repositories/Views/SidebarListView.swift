@@ -78,7 +78,9 @@ struct SidebarListView: View {
           return
         }
         sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
-        if let selectedWorktreeID = state.selectedWorktreeID, worktreeIDs.contains(selectedWorktreeID) {
+        if let selectedWorktreeID = state.selectedWorktreeID,
+          worktreeIDs.contains(selectedWorktreeID)
+        {
           return
         }
         let nextPrimarySelection =
@@ -210,28 +212,14 @@ struct SidebarListView: View {
         store.send(.repositoryManagement(.openRepositories(fileURLs)))
         return true
       }
-      .onKeyPress { keyPress in
-        guard !keyPress.characters.isEmpty else { return .ignored }
-        let isNavigationKey =
-          keyPress.key == .upArrow
-          || keyPress.key == .downArrow
-          || keyPress.key == .leftArrow
-          || keyPress.key == .rightArrow
-          || keyPress.key == .home
-          || keyPress.key == .end
-          || keyPress.key == .pageUp
-          || keyPress.key == .pageDown
-        if isNavigationKey { return .ignored }
-        let hasCommandModifier = keyPress.modifiers.contains(.command)
-        if hasCommandModifier { return .ignored }
-        guard let worktreeID = store.selectedWorktreeID,
-          state.sidebarSelectedWorktreeIDs.count == 1,
-          state.sidebarSelectedWorktreeIDs.contains(worktreeID),
-          let terminalState = terminalManager.stateIfExists(for: worktreeID)
-        else { return .ignored }
-        terminalState.focusAndInsertText(keyPress.characters)
-        return .handled
-      }
+      .modifier(
+        SidebarKeyForwardingModifier(
+          isEnabled: !state.isShelfActive,
+          selectedWorktreeID: state.selectedWorktreeID,
+          sidebarSelectedWorktreeIDs: state.sidebarSelectedWorktreeIDs,
+          terminalManager: terminalManager
+        )
+      )
       .focused($isSidebarFocused)
       .task(id: pendingSidebarReveal?.id) {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
@@ -253,6 +241,48 @@ struct SidebarListView: View {
       scrollProxy.scrollTo(pendingSidebarReveal.worktreeID, anchor: .center)
     }
     store.send(.consumePendingSidebarReveal(pendingSidebarReveal.id))
+  }
+}
+
+private struct SidebarKeyForwardingModifier: ViewModifier {
+  let isEnabled: Bool
+  let selectedWorktreeID: Worktree.ID?
+  let sidebarSelectedWorktreeIDs: Set<Worktree.ID>
+  let terminalManager: WorktreeTerminalManager
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content
+        .onKeyPress { keyPress in
+          handleKeyPress(keyPress)
+        }
+    } else {
+      content
+    }
+  }
+
+  private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+    guard !keyPress.characters.isEmpty else { return .ignored }
+    let isNavigationKey =
+      keyPress.key == .upArrow
+      || keyPress.key == .downArrow
+      || keyPress.key == .leftArrow
+      || keyPress.key == .rightArrow
+      || keyPress.key == .home
+      || keyPress.key == .end
+      || keyPress.key == .pageUp
+      || keyPress.key == .pageDown
+    if isNavigationKey { return .ignored }
+    let hasCommandModifier = keyPress.modifiers.contains(.command)
+    if hasCommandModifier { return .ignored }
+    guard let worktreeID = selectedWorktreeID,
+      sidebarSelectedWorktreeIDs.count == 1,
+      sidebarSelectedWorktreeIDs.contains(worktreeID),
+      let terminalState = terminalManager.stateIfExists(for: worktreeID)
+    else { return .ignored }
+    terminalState.focusAndInsertText(keyPress.characters)
+    return .handled
   }
 }
 
