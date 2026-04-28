@@ -44,55 +44,46 @@ struct ShelfView: View {
 
     HStack(spacing: 0) {
       if let openIndex {
-        spineStack(
-          books: Array(books[0...openIndex]),
-          openIndex: openIndex,
-          baseOffset: 0,
-          animationValue: openBookID
-        )
+        spineStack(books: Array(books[0...openIndex]), openIndex: openIndex, baseOffset: 0)
         openBookArea(for: books[openIndex], state: state)
           .transition(.opacity)
-          .transaction { transaction in
-            transaction.animation = nil
-          }
         let rightStart = openIndex + 1
         if rightStart < books.count {
           spineStack(
             books: Array(books[rightStart..<books.count]),
             openIndex: openIndex,
-            baseOffset: rightStart,
-            animationValue: openBookID
+            baseOffset: rightStart
           )
         }
       } else {
-        spineStack(books: books, openIndex: nil, baseOffset: 0, animationValue: openBookID)
+        spineStack(books: books, openIndex: nil, baseOffset: 0)
         emptyOpenArea()
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor).opacity(surfaceBackgroundOpacity))
+    // Animate on every openBookID change — covers both Shelf-originated
+    // book switches (which also set their own TCA animation) and
+    // left-nav-originated switches, so the spine flow is consistent
+    // regardless of entry point.
+    .animation(.easeInOut(duration: 0.2), value: openBookID)
   }
 
   /// `baseOffset` is the index of `books.first` within the full ordered
   /// list, so we can reconstruct each spine's global index and compute
   /// its distance to `openIndex` without re-scanning the full list.
   @ViewBuilder
-  private func spineStack(
-    books: [ShelfBook],
-    openIndex: Int?,
-    baseOffset: Int,
-    animationValue: Worktree.ID?
-  ) -> some View {
+  private func spineStack(books: [ShelfBook], openIndex: Int?, baseOffset: Int) -> some View {
     HStack(spacing: 0) {
       ForEach(Array(books.enumerated()), id: \.element.id) { localIndex, book in
         let globalIndex = baseOffset + localIndex
         let distance = openIndex.map { abs(globalIndex - $0) }
         let open = globalIndex == openIndex
-        ShelfSpineContainer(
+        ShelfSpineView(
           book: book,
           isOpen: open,
           distanceFromOpen: distance,
-          terminalManager: terminalManager,
+          terminalState: terminalManager.stateIfExists(for: book.id),
           onOpenBook: { openBook(book, selectingTab: nil) },
           onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
           onNewTab: {
@@ -114,11 +105,6 @@ struct ShelfView: View {
         .matchedGeometryEffect(id: book.id, in: spineNamespace)
       }
     }
-    // Keep the visual spine-flow animation scoped to the lightweight
-    // spine layer. The terminal content area is intentionally outside
-    // this transaction so Ghostty/AppKit representables do not inherit a
-    // book-switch animation.
-    .animation(.easeInOut(duration: 0.2), value: animationValue)
   }
 
   /// Dispatch the open-book action only when `book` isn't already the open
@@ -241,37 +227,5 @@ struct ShelfView: View {
       // manager seeds a default tab which we won't override.
       terminalManager.stateIfExists(for: book.id)?.tabManager.selectTab(tabID)
     }
-  }
-}
-
-private struct ShelfSpineContainer: View {
-  let book: ShelfBook
-  let isOpen: Bool
-  let distanceFromOpen: Int?
-  let terminalManager: WorktreeTerminalManager
-  let onOpenBook: () -> Void
-  let onSelectTab: (TerminalTabID) -> Void
-  let onNewTab: () -> Void
-  let onSplitVertical: (() -> Void)?
-  let onSplitHorizontal: (() -> Void)?
-  let closeMenuTitle: String
-  let onCloseBook: () -> Void
-  let onOpenRepositorySettings: () -> Void
-
-  var body: some View {
-    ShelfSpineView(
-      book: book,
-      isOpen: isOpen,
-      distanceFromOpen: distanceFromOpen,
-      terminalState: terminalManager.stateIfExists(for: book.id),
-      onOpenBook: onOpenBook,
-      onSelectTab: onSelectTab,
-      onNewTab: onNewTab,
-      onSplitVertical: onSplitVertical,
-      onSplitHorizontal: onSplitHorizontal,
-      closeMenuTitle: closeMenuTitle,
-      onCloseBook: onCloseBook,
-      onOpenRepositorySettings: onOpenRepositorySettings
-    )
   }
 }
