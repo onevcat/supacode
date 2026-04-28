@@ -16,11 +16,6 @@ struct ShelfView: View {
   let terminalManager: WorktreeTerminalManager
   let createTab: () -> Void
 
-  /// Shared namespace so each spine's `matchedGeometryEffect` can bridge
-  /// the left-stack ForEach and the right-stack ForEach without breaking
-  /// visual identity while it moves between them.
-  @Namespace private var spineNamespace
-
   /// Mirrors the Ghostty `background-opacity` setting so the Shelf can
   /// honor the same window transparency as normal view mode. A previous
   /// plain `.background(.background)` defeated transparency entirely by
@@ -43,20 +38,14 @@ struct ShelfView: View {
     }
 
     HStack(spacing: 0) {
-      if let openIndex {
-        spineStack(books: Array(books[0...openIndex]), openIndex: openIndex, baseOffset: 0)
-        openBookArea(for: books[openIndex], state: state)
-          .transition(.opacity)
-        let rightStart = openIndex + 1
-        if rightStart < books.count {
-          spineStack(
-            books: Array(books[rightStart..<books.count]),
-            openIndex: openIndex,
-            baseOffset: rightStart
-          )
+      ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
+        spine(book: book, index: index, openIndex: openIndex)
+        if book.id == openBookID {
+          openBookArea(for: book, state: state)
+            .transition(.opacity)
         }
-      } else {
-        spineStack(books: books, openIndex: nil, baseOffset: 0)
+      }
+      if openBookID == nil {
         emptyOpenArea()
       }
     }
@@ -69,42 +58,33 @@ struct ShelfView: View {
     .animation(.easeInOut(duration: 0.2), value: openBookID)
   }
 
-  /// `baseOffset` is the index of `books.first` within the full ordered
-  /// list, so we can reconstruct each spine's global index and compute
-  /// its distance to `openIndex` without re-scanning the full list.
   @ViewBuilder
-  private func spineStack(books: [ShelfBook], openIndex: Int?, baseOffset: Int) -> some View {
-    HStack(spacing: 0) {
-      ForEach(Array(books.enumerated()), id: \.element.id) { localIndex, book in
-        let globalIndex = baseOffset + localIndex
-        let distance = openIndex.map { abs(globalIndex - $0) }
-        let open = globalIndex == openIndex
-        ShelfSpineView(
-          book: book,
-          isOpen: open,
-          distanceFromOpen: distance,
-          terminalState: terminalManager.stateIfExists(for: book.id),
-          onOpenBook: { openBook(book, selectingTab: nil) },
-          onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
-          onNewTab: {
-            // On a closed spine, `+` doubles as "pull this book out and
-            // start a fresh tab". Sequencing is fine because TCA runs
-            // reducers synchronously — `newTerminal` will observe the
-            // new `selectedTerminalWorktree` set by `selectWorktree`.
-            switchToBookIfNeeded(book)
-            createTab()
-          },
-          onSplitVertical: open ? { performSplit(direction: "new_split:right") } : nil,
-          onSplitHorizontal: open ? { performSplit(direction: "new_split:down") } : nil,
-          closeMenuTitle: closeMenuTitle(for: book),
-          onCloseBook: { closeBook(book) },
-          onOpenRepositorySettings: {
-            store.send(.repositoryManagement(.openRepositorySettings(book.repositoryID)))
-          }
-        )
-        .matchedGeometryEffect(id: book.id, in: spineNamespace)
+  private func spine(book: ShelfBook, index: Int, openIndex: Int?) -> some View {
+    let distance = openIndex.map { abs(index - $0) }
+    let open = index == openIndex
+    ShelfSpineView(
+      book: book,
+      isOpen: open,
+      distanceFromOpen: distance,
+      terminalState: terminalManager.stateIfExists(for: book.id),
+      onOpenBook: { openBook(book, selectingTab: nil) },
+      onSelectTab: { tabID in openBook(book, selectingTab: tabID) },
+      onNewTab: {
+        // On a closed spine, `+` doubles as "pull this book out and
+        // start a fresh tab". Sequencing is fine because TCA runs
+        // reducers synchronously — `newTerminal` will observe the
+        // new `selectedTerminalWorktree` set by `selectWorktree`.
+        switchToBookIfNeeded(book)
+        createTab()
+      },
+      onSplitVertical: open ? { performSplit(direction: "new_split:right") } : nil,
+      onSplitHorizontal: open ? { performSplit(direction: "new_split:down") } : nil,
+      closeMenuTitle: closeMenuTitle(for: book),
+      onCloseBook: { closeBook(book) },
+      onOpenRepositorySettings: {
+        store.send(.repositoryManagement(.openRepositorySettings(book.repositoryID)))
       }
-    }
+    )
   }
 
   /// Dispatch the open-book action only when `book` isn't already the open
