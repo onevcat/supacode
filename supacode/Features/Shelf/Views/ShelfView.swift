@@ -32,9 +32,10 @@ struct ShelfView: View {
     let _ = shelfLogger.event("ShelfView.body")
     let state = store.state
     let books = state.orderedShelfBooks(customTitles: state.repositoryCustomTitles)
-    let openBookID = state.openShelfBookID
-    let openIndex = openBookID.flatMap { id in
-      books.firstIndex(where: { $0.id == id })
+    let openBook = state.openShelfBook(in: books)
+    let openBookID = openBook?.id
+    let openIndex = openBook.flatMap { book in
+      books.firstIndex(where: { $0.id == book.id })
     }
 
     HStack(spacing: 0) {
@@ -44,7 +45,7 @@ struct ShelfView: View {
           openBookArea(for: book, state: state)
         }
       }
-      if openBookID == nil {
+      if openBook == nil {
         emptyOpenArea()
       }
     }

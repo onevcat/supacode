@@ -115,4 +115,15 @@ extension RepositoriesFeature.State {
   var openShelfBookID: Worktree.ID? {
     selectedTerminalWorktree?.id
   }
+
+  /// The rendered book matching the current Shelf selection, if any.
+  ///
+  /// `openShelfBookID` can briefly point at a worktree/folder that has
+  /// just been retired from `openedWorktreeIDs` after its last tab closes.
+  /// Views should use this lookup rather than assuming a non-nil open ID
+  /// means an open book is still present in `orderedShelfBooks()`.
+  func openShelfBook(in books: [ShelfBook]) -> ShelfBook? {
+    guard let openShelfBookID else { return nil }
+    return books.first(where: { $0.id == openShelfBookID })
+  }
 }

@@ -182,6 +182,33 @@ struct ShelfBookOrderingTests {
     #expect(state.openShelfBookID == worktree.id)
   }
 
+  @Test func openShelfBookReturnsNilWhenSelectedBookIsNoLongerRendered() {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let worktree = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [worktree])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repository.id]
+    state.selection = .worktree(worktree.id)
+    state.openedWorktreeIDs = []
+
+    let books = state.orderedShelfBooks()
+    #expect(books.isEmpty)
+    #expect(state.openShelfBookID == worktree.id)
+    #expect(state.openShelfBook(in: books) == nil)
+  }
+
   @Test func openShelfBookIDResolvesPlainFolderViaRepositoryID() {
     let rootURL = URL(fileURLWithPath: "/tmp/plain")
     let repository = Repository(
