@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.4.29](https://github.com/onevcat/Prowl/releases/tag/v2026.4.29)
+
+This release focuses on Shelf-mode responsiveness — switching books, especially via keyboard shortcuts, is noticeably snappier after a sweep of unnecessary SwiftUI invalidations.
+
+**New**
+
+- Repositories can now have a custom display name. Open Repo Settings and set a **Display Name** to override the folder-derived title in the sidebar, toolbar, and canvas. Useful when multiple checkouts share a generic folder name like `src`. Clearing the field reverts to the original folder name.
+
+**Fixed**
+
+- Switching between books in Shelf mode is noticeably smoother, particularly when using keyboard shortcuts. A cascade of unnecessary SwiftUI invalidations was traced and removed.
+- A trailing space typed at the end of the Display Name field is no longer silently dropped.
+
 ## [2026.4.28](https://github.com/onevcat/Prowl/releases/tag/v2026.4.28)
 
 This release adds per-repository visual identity across the entire app.
