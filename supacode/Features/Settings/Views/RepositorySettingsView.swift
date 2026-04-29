@@ -71,27 +71,15 @@ struct RepositorySettingsView: View {
     let folderName = Repository.name(for: store.rootURL)
 
     Form {
-      Section {
-        TextField(folderName, text: customTitle)
-          .textFieldStyle(.roundedBorder)
-      } header: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Display Name")
-          Text("Custom name shown in the sidebar. Leave empty to use the folder name.")
-            .foregroundStyle(.secondary)
-        }
-      }
+      Section("Display") {
+        VStack(alignment: .leading, spacing: 12) {
+          TextField("", text: customTitle, prompt: Text(folderName))
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
 
-      Section {
-        RepositoryAppearancePickerView(store: store)
-      } header: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Appearance")
-          Text(
-            "Pick an icon and color to make this repository easy to spot in the sidebar, shelf, and canvas."
-          )
-          .foregroundStyle(.secondary)
+          RepositoryAppearancePickerView(store: store)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       if store.showsWorktreeSettings {
