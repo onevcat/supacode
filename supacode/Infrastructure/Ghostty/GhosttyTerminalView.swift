@@ -20,11 +20,6 @@ struct GhosttyTerminalView: NSViewRepresentable {
     return terminalHostLogger.interval("Ghostty.makeNSView") {
       let view = GhosttySurfaceScrollView(surfaceView: surfaceView, hostKind: hostKind)
       view.pinnedSize = pinnedSize
-      terminalHostLogger.info(
-        "[CanvasExit] hostMake wrapper=\(view.debugIdentifier) host=\(hostKind.rawValue) "
-          + "surface=\(surfaceView.debugIdentifierForLogging) "
-          + "pinned=\(pinnedSize != nil)"
-      )
       return view
     }
   }
@@ -32,12 +27,6 @@ struct GhosttyTerminalView: NSViewRepresentable {
   func updateNSView(_ view: GhosttySurfaceScrollView, context: Context) {
     terminalHostLogger.interval("Ghostty.updateNSView") {
       view.pinnedSize = pinnedSize
-      terminalHostLogger.info(
-        "[CanvasExit] hostUpdate wrapper=\(view.debugIdentifier) host=\(hostKind.rawValue) "
-          + "surface=\(surfaceView.debugIdentifierForLogging) "
-          + "pinned=\(pinnedSize != nil) "
-          + "attached=\(view.isSurfaceAttachedToDocumentView)"
-      )
       view.ensureSurfaceAttached()
     }
   }
