@@ -46,6 +46,7 @@ struct RepositorySectionView: View {
       HStack {
         RepoHeaderRow(
           name: repository.name,
+          customTitle: store.repositoryCustomTitles[repository.id],
           isRemoving: isRemovingRepository,
           icon: appearance.icon,
           iconTint: appearance.color?.color,

@@ -67,6 +67,47 @@ struct RepositoriesFeatureTests {
     }
   }
 
+  @Test func customTitlesLoadedReplacesEntireDictionary() async {
+    let store = TestStore(initialState: RepositoriesFeature.State()) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.customTitlesLoaded(["repo-a": "Alpha", "repo-b": "Beta"])) {
+      $0.repositoryCustomTitles = ["repo-a": "Alpha", "repo-b": "Beta"]
+    }
+
+    // Re-sending the same dict is a no-op (state mutation guard avoids
+    // gratuitous TCA-driven view refreshes).
+    await store.send(.customTitlesLoaded(["repo-a": "Alpha", "repo-b": "Beta"]))
+
+    await store.send(.customTitlesLoaded(["repo-c": "Gamma"])) {
+      $0.repositoryCustomTitles = ["repo-c": "Gamma"]
+    }
+  }
+
+  @Test func customTitleUpdatedSetsAndRemovesSingleEntry() async {
+    var initialState = RepositoriesFeature.State()
+    initialState.repositoryCustomTitles = ["repo-a": "Alpha"]
+    let store = TestStore(initialState: initialState) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.customTitleUpdated("repo-b", "Beta")) {
+      $0.repositoryCustomTitles = ["repo-a": "Alpha", "repo-b": "Beta"]
+    }
+
+    // Same value → no state change
+    await store.send(.customTitleUpdated("repo-b", "Beta"))
+
+    // nil removes the entry
+    await store.send(.customTitleUpdated("repo-a", nil)) {
+      $0.repositoryCustomTitles = ["repo-b": "Beta"]
+    }
+
+    // Removing a non-existent entry is a no-op
+    await store.send(.customTitleUpdated("repo-a", nil))
+  }
+
   @Test func updateWorktreeLineChangesReturnsFalseWhenCountsMatchExistingEntry() {
     let worktree = makeWorktree(id: "/tmp/repo/feature", name: "feature", repoRoot: "/tmp/repo")
     let repository = makeRepository(id: "/tmp/repo", worktrees: [worktree])
@@ -622,7 +663,7 @@ struct RepositoriesFeatureTests {
       [
         PersistedRepositoryEntry(path: repoRoot, kind: .git),
         PersistedRepositoryEntry(path: plainRoot, kind: .plain),
-      ]
+      ],
     ]
     #expect(savedEntries.value == expectedSavedEntries)
   }
@@ -1953,7 +1994,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      )
+      ),
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -1991,7 +2032,7 @@ struct RepositoriesFeatureTests {
           stage: .checkingRepositoryMode,
           worktreeName: "swift-otter"
         )
-      )
+      ),
     ]
     let store = TestStore(initialState: state) {
       RepositoriesFeature()
@@ -2186,7 +2227,7 @@ struct RepositoriesFeatureTests {
         addedLines: nil,
         removedLines: nil,
         pullRequest: makePullRequest(state: "MERGED")
-      )
+      ),
     ]
     let fixedDate = Date(timeIntervalSince1970: 1_000_000)
     let store = TestStore(initialState: state) {
@@ -2880,7 +2921,7 @@ struct RepositoriesFeatureTests {
         id: removedWorktree.id,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .choosingWorktreeName)
-      )
+      ),
     ]
     initialState.pinnedWorktreeIDs = [removedWorktree.id]
     initialState.worktreeInfoByID = [
@@ -2967,7 +3008,7 @@ struct RepositoriesFeatureTests {
         id: pendingID,
         repositoryID: repository.id,
         progress: WorktreeCreationProgress(stage: .loadingLocalBranches)
-      )
+      ),
     ]
     initialState.selection = .worktree(pendingID)
     initialState.sidebarSelectedWorktreeIDs = [existingWorktree.id, pendingID]

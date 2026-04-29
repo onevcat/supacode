@@ -38,7 +38,16 @@ extension RepositoriesFeature.State {
   /// Clicking a previously-unopened worktree in the left navigation
   /// while in Shelf mode adds its ID here, which causes its spine to
   /// materialize (with the standard spine-flow animation).
-  func orderedShelfBooks() -> [ShelfBook] {
+  /// Builds the ordered list of shelf books from current state.
+  ///
+  /// `customTitles` is an optional dictionary providing user-defined
+  /// display names per repository. Defaults to empty for callers that
+  /// don't care (e.g. legacy tests). The resolved `projectName` (and
+  /// `displayName` for plain folders) prefers the custom title when
+  /// present and falls back to `repository.name` otherwise.
+  func orderedShelfBooks(
+    customTitles: [Repository.ID: String] = [:]
+  ) -> [ShelfBook] {
     // `ShelfView.body` re-runs on every TCA state change, so this method
     // is on the per-frame hot path. The previous implementation built a
     // `Dictionary(uniqueKeysWithValues:)` per call and routed worktree
@@ -51,14 +60,15 @@ extension RepositoriesFeature.State {
     var books: [ShelfBook] = []
     for repositoryID in orderedRepositoryIDs() {
       guard let repository = repositories[id: repositoryID] else { continue }
+      let projectName = customTitles[repositoryID] ?? repository.name
       if repository.kind == .plain {
         guard openedWorktreeIDs.contains(repository.id) else { continue }
         books.append(
           ShelfBook(
             id: repository.id,
             repositoryID: repository.id,
-            displayName: repository.name,
-            projectName: repository.name,
+            displayName: projectName,
+            projectName: projectName,
             branchName: nil,
             kind: .plainFolder
           ))
@@ -71,7 +81,7 @@ extension RepositoriesFeature.State {
             id: worktree.id,
             repositoryID: repositoryID,
             displayName: worktree.name,
-            projectName: repository.name,
+            projectName: projectName,
             branchName: worktree.name,
             kind: .worktree
           ))
@@ -90,7 +100,7 @@ extension RepositoriesFeature.State {
             id: pending.id,
             repositoryID: repositoryID,
             displayName: pending.progress.titleText,
-            projectName: repository.name,
+            projectName: projectName,
             branchName: pending.progress.titleText,
             kind: .worktree
           ))

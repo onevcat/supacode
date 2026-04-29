@@ -26,8 +26,12 @@ struct ToolbarNotificationWorktreeGroup: Identifiable, Equatable {
 }
 
 extension RepositoriesFeature.State {
+  /// `customTitles` is an optional per-repo display-name dictionary;
+  /// when an entry exists the group's `name` uses it instead of
+  /// `repository.name`. Defaults to empty for legacy callers/tests.
   func toolbarNotificationGroups(
-    terminalManager: WorktreeTerminalManager
+    terminalManager: WorktreeTerminalManager,
+    customTitles: [Repository.ID: String] = [:]
   ) -> [ToolbarNotificationRepositoryGroup] {
     let repositoriesByID = Dictionary(uniqueKeysWithValues: repositories.map { ($0.id, $0) })
     var groups: [ToolbarNotificationRepositoryGroup] = []
@@ -54,7 +58,7 @@ extension RepositoriesFeature.State {
         groups.append(
           ToolbarNotificationRepositoryGroup(
             id: repository.id,
-            name: repository.name,
+            name: customTitles[repository.id] ?? repository.name,
             worktrees: worktreeGroups
           )
         )

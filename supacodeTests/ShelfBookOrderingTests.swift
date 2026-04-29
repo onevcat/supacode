@@ -196,4 +196,76 @@ struct ShelfBookOrderingTests {
 
     #expect(state.openShelfBookID == repository.id)
   }
+
+  @Test func customTitleOverridesProjectNameForWorktreeBooks() {
+    let rootURL = URL(fileURLWithPath: "/tmp/repo")
+    let main = Worktree(
+      id: "/tmp/repo",
+      name: "main",
+      detail: "",
+      workingDirectory: rootURL,
+      repositoryRootURL: rootURL
+    )
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "repo",
+      worktrees: IdentifiedArray(uniqueElements: [main])
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repository.id]
+    state.openedWorktreeIDs = [main.id]
+
+    let books = state.orderedShelfBooks(customTitles: [repository.id: "My Custom Repo"])
+
+    #expect(books.count == 1)
+    #expect(books[0].projectName == "My Custom Repo")
+    // Worktree's own displayName stays as the worktree branch — only
+    // the repo-level project label is overridden.
+    #expect(books[0].displayName == "main")
+  }
+
+  @Test func customTitleOverridesBothNamesForPlainFolderBook() {
+    let rootURL = URL(fileURLWithPath: "/tmp/folder")
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repository.id]
+    state.openedWorktreeIDs = [repository.id]
+
+    let books = state.orderedShelfBooks(customTitles: [repository.id: "Plain Folder Alias"])
+
+    #expect(books.count == 1)
+    #expect(books[0].kind == .plainFolder)
+    #expect(books[0].projectName == "Plain Folder Alias")
+    #expect(books[0].displayName == "Plain Folder Alias")
+  }
+
+  @Test func missingCustomTitleFallsBackToRepositoryName() {
+    let rootURL = URL(fileURLWithPath: "/tmp/folder")
+    let repository = Repository(
+      id: rootURL.path(percentEncoded: false),
+      rootURL: rootURL,
+      name: "folder",
+      kind: .plain,
+      worktrees: []
+    )
+    var state = RepositoriesFeature.State(repositories: [repository])
+    state.repositoryRoots = [rootURL]
+    state.repositoryOrderIDs = [repository.id]
+    state.openedWorktreeIDs = [repository.id]
+
+    let books = state.orderedShelfBooks(customTitles: [:])
+
+    #expect(books.count == 1)
+    #expect(books[0].projectName == "folder")
+    #expect(books[0].displayName == "folder")
+  }
 }

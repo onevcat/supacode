@@ -1,5 +1,4 @@
 import ComposableArchitecture
-import Sharing
 import SwiftUI
 
 extension View {
@@ -25,6 +24,7 @@ struct SettingsView: View {
   var body: some View {
     let updatesStore = store.scope(state: \.updates, action: \.updates)
     let repositories = store.repositories.repositories
+    let customTitles = store.repositories.repositoryCustomTitles
     let selection = settingsStore.selection ?? .general
 
     NavigationSplitView(columnVisibility: .constant(.all)) {
@@ -49,7 +49,7 @@ struct SettingsView: View {
             ForEach(repositories) { repository in
               RepoDisplayName(
                 fallbackName: repository.name,
-                repositoryRootURL: repository.rootURL
+                customTitle: customTitles[repository.id]
               )
               .tag(SettingsSection.repository(repository.id))
             }
@@ -110,10 +110,10 @@ struct SettingsView: View {
             IfLetStore(
               settingsStore.scope(state: \.repositorySettings, action: \.repositorySettings)
             ) { repositorySettingsStore in
-              RepositorySettingsDetailContainer(
-                store: repositorySettingsStore,
-                repository: repository
-              )
+              RepositorySettingsView(store: repositorySettingsStore)
+                .id(repository.id)
+                .navigationTitle(customTitles[repository.id] ?? repository.name)
+                .navigationSubtitle(repository.rootURL.path(percentEncoded: false))
             }
           }
         } else {
@@ -134,31 +134,5 @@ struct SettingsView: View {
       WindowLevelSetter(level: .normal)
     }
     .ignoresSafeArea(.container, edges: .top)
-  }
-}
-
-/// Wraps `RepositorySettingsView` with a `@Shared` subscription on the
-/// repo's settings file so the navigation title can reflect the user's
-/// custom title (when set) instead of the folder-derived `Repository.name`.
-/// Lives here rather than inside `RepositorySettingsView` because the
-/// `.navigationTitle` modifier needs a `String`, not a view, and reading
-/// `@Shared` requires a struct property — wrapping at this layer keeps
-/// `RepositorySettingsView`'s interface untouched.
-private struct RepositorySettingsDetailContainer: View {
-  let store: StoreOf<RepositorySettingsFeature>
-  let repository: Repository
-  @Shared private var settings: RepositorySettings
-
-  init(store: StoreOf<RepositorySettingsFeature>, repository: Repository) {
-    self.store = store
-    self.repository = repository
-    _settings = Shared(wrappedValue: .default, .repositorySettings(repository.rootURL))
-  }
-
-  var body: some View {
-    RepositorySettingsView(store: store)
-      .id(repository.id)
-      .navigationTitle(settings.customTitle ?? repository.name)
-      .navigationSubtitle(repository.rootURL.path(percentEncoded: false))
   }
 }

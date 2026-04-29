@@ -2,6 +2,9 @@ import SwiftUI
 
 struct RepositoryDetailView: View {
   let repository: Repository
+  /// Resolved by the parent reducer. When non-nil, takes precedence
+  /// over `repository.name` for display.
+  var customTitle: String?
 
   var body: some View {
     VStack(spacing: 12) {
@@ -10,7 +13,7 @@ struct RepositoryDetailView: View {
         .accessibilityHidden(true)
       RepoDisplayName(
         fallbackName: repository.name,
-        repositoryRootURL: repository.rootURL
+        customTitle: customTitle
       )
       .font(.title3.weight(.semibold))
       Text(repository.rootURL.path(percentEncoded: false))

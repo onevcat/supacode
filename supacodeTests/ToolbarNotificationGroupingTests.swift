@@ -117,6 +117,47 @@ struct ToolbarNotificationGroupingTests {
     #expect(groups[0].unseenWorktreeCount == 0)
   }
 
+  @Test func customTitleOverridesGroupName() {
+    let repoPath = "/tmp/repo"
+    let main = makeWorktree(id: repoPath, name: "main", repoRoot: repoPath)
+    let feature = makeWorktree(id: "\(repoPath)/feature", name: "feature", repoRoot: repoPath)
+    let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, feature])
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [repo.rootURL]
+
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    manager.state(for: feature).notifications = [
+      WorktreeTerminalNotification(surfaceId: UUID(), title: "Note", body: "done")
+    ]
+
+    let groups = state.toolbarNotificationGroups(
+      terminalManager: manager,
+      customTitles: [repo.id: "Aliased Repo"]
+    )
+
+    #expect(groups.count == 1)
+    #expect(groups[0].name == "Aliased Repo")
+  }
+
+  @Test func missingCustomTitleFallsBackToRepositoryName() {
+    let repoPath = "/tmp/repo"
+    let main = makeWorktree(id: repoPath, name: "main", repoRoot: repoPath)
+    let feature = makeWorktree(id: "\(repoPath)/feature", name: "feature", repoRoot: repoPath)
+    let repo = makeRepository(id: repoPath, name: "Repo", worktrees: [main, feature])
+    var state = RepositoriesFeature.State(repositories: [repo])
+    state.repositoryRoots = [repo.rootURL]
+
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    manager.state(for: feature).notifications = [
+      WorktreeTerminalNotification(surfaceId: UUID(), title: "Note", body: "done")
+    ]
+
+    let groups = state.toolbarNotificationGroups(terminalManager: manager, customTitles: [:])
+
+    #expect(groups.count == 1)
+    #expect(groups[0].name == "Repo")
+  }
+
   private func makeWorktree(
     id: String,
     name: String,

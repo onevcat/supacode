@@ -187,6 +187,13 @@ struct RepositoriesFeature {
     var repositoryRoots: [URL] = []
     var repositoryOrderIDs: [Repository.ID] = []
     var loadFailuresByID: [Repository.ID: String] = [:]
+    /// User-defined display titles indexed by `Repository.ID`. Resolved
+    /// once on repo discovery (and refreshed when settings change) so
+    /// hot-path display sites — sidebar, shelf spine, canvas card,
+    /// toolbar notifications, settings list — read a plain dictionary
+    /// instead of subscribing to `@Shared(.repositorySettings(...))`
+    /// per row per frame. Absent entries fall back to `repository.name`.
+    var repositoryCustomTitles: [Repository.ID: String] = [:]
     var selection: SidebarSelection?
     var worktreeInfoByID: [Worktree.ID: WorktreeInfoEntry] = [:]
     var worktreeOrderByRepository: [Repository.ID: [Worktree.ID]] = [:]
@@ -276,6 +283,10 @@ struct RepositoriesFeature {
     case refreshWorktrees
     case reloadRepositories(animated: Bool)
     case repositoriesLoaded([Repository], failures: [LoadFailure], roots: [URL], animated: Bool)
+    case refreshAllCustomTitles
+    case refreshCustomTitle(URL)
+    case customTitlesLoaded([Repository.ID: String])
+    case customTitleUpdated(Repository.ID, String?)
     case codeHostsDetected([Repository.ID: CodeHost])
     case selectArchivedWorktrees
     case selectCanvas
@@ -631,6 +642,52 @@ struct RepositoriesFeature {
             allEffects.append(effect)
           }
           return .merge(allEffects)
+
+        case .refreshAllCustomTitles:
+          // Fan out across the current repository list, reading each
+          // per-repo settings file via `@Shared`. Runs in a reducer
+          // effect (not in a view body), so even when the first cache
+          // miss triggers a `settingsFile` write the resulting view
+          // re-render can't loop back into this action.
+          let repositoriesForTitleRefresh = Array(state.repositories)
+          return .run { send in
+            var dict: [Repository.ID: String] = [:]
+            for repository in repositoriesForTitleRefresh {
+              @Shared(.repositorySettings(repository.rootURL)) var settings
+              let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+              if let trimmed, !trimmed.isEmpty {
+                dict[repository.id] = trimmed
+              }
+            }
+            await send(.customTitlesLoaded(dict))
+          }
+
+        case .refreshCustomTitle(let rootURL):
+          guard let repository = state.repositories.first(where: { $0.rootURL == rootURL }) else {
+            return .none
+          }
+          let repositoryID = repository.id
+          return .run { send in
+            @Shared(.repositorySettings(rootURL)) var settings
+            let trimmed = settings.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
+            await send(.customTitleUpdated(repositoryID, normalized))
+          }
+
+        case .customTitlesLoaded(let dict):
+          guard state.repositoryCustomTitles != dict else { return .none }
+          state.repositoryCustomTitles = dict
+          return .none
+
+        case .customTitleUpdated(let id, let title):
+          if let title {
+            guard state.repositoryCustomTitles[id] != title else { return .none }
+            state.repositoryCustomTitles[id] = title
+          } else {
+            guard state.repositoryCustomTitles[id] != nil else { return .none }
+            state.repositoryCustomTitles.removeValue(forKey: id)
+          }
+          return .none
 
         case .codeHostsDetected(let codeHostByRepositoryID):
           let knownIDs = Set(state.repositories.ids)

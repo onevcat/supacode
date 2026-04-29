@@ -7,6 +7,11 @@ struct CanvasView: View {
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
 
   let terminalManager: WorktreeTerminalManager
+  /// Per-repo display titles resolved by the parent reducer. Used to
+  /// override the folder-derived `Repository.name` on each card title
+  /// bar without subscribing to per-repo settings files on the
+  /// per-frame canvas hot path.
+  var repositoryCustomTitles: [Repository.ID: String] = [:]
   var onExitToTab: () -> Void = {}
   @State private var layoutStore = CanvasLayoutStore()
   @Shared(.repositoryAppearances) private var repositoryAppearances
@@ -85,8 +90,9 @@ struct CanvasView: View {
               let cardTotalHeight = resized.size.height + titleBarHeight
 
               let repositoryAppearance = appearance(for: state.repositoryRootURL)
+              let resolvedRepositoryName = repositoryDisplayName(for: state.repositoryRootURL)
               CanvasCardView(
-                repositoryName: Repository.name(for: state.repositoryRootURL),
+                repositoryName: resolvedRepositoryName,
                 worktreeName: tab.title,
                 repositoryIcon: repositoryAppearance.icon,
                 repositoryColor: repositoryAppearance.color?.color,
@@ -780,11 +786,26 @@ struct CanvasView: View {
   /// dict. Returns `.empty` when no entry exists, which keeps cards
   /// visually identical to before the appearance feature shipped.
   private func appearance(for repositoryRootURL: URL) -> RepositoryAppearance {
-    let id =
-      PathPolicy.normalizePath(
-        repositoryRootURL.path(percentEncoded: false), resolvingSymlinks: true
-      ) ?? repositoryRootURL.path(percentEncoded: false)
+    let id = repositoryID(for: repositoryRootURL)
     return repositoryAppearances[id] ?? .empty
+  }
+
+  /// Resolves the user-defined display title for the repo at this root
+  /// URL, falling back to `Repository.name(for:)` (folder name) when no
+  /// custom title was set. Reads from the static dictionary populated
+  /// by the parent reducer — no per-call `@Shared` subscription on the
+  /// canvas hot path.
+  private func repositoryDisplayName(for repositoryRootURL: URL) -> String {
+    let id = repositoryID(for: repositoryRootURL)
+    return repositoryCustomTitles[id] ?? Repository.name(for: repositoryRootURL)
+  }
+
+  /// Mirrors the same path normalization the `Repository.ID` is built
+  /// from, so dict lookups match what the reducer stores.
+  private func repositoryID(for repositoryRootURL: URL) -> Repository.ID {
+    PathPolicy.normalizePath(
+      repositoryRootURL.path(percentEncoded: false), resolvingSymlinks: true
+    ) ?? repositoryRootURL.path(percentEncoded: false)
   }
 }
 

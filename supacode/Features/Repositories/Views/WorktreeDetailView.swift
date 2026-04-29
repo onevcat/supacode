@@ -48,7 +48,10 @@ struct WorktreeDetailView: View {
     let runScriptEnabled = hasActiveTerminalTarget
     let runScriptIsRunning = selectedTerminalWorktree.flatMap { state.runScriptStatusByWorktreeID[$0.id] } == true
     let customCommands = state.selectedCustomCommands
-    let notificationGroups = repositories.toolbarNotificationGroups(terminalManager: terminalManager)
+    let notificationGroups = repositories.toolbarNotificationGroups(
+      terminalManager: terminalManager,
+      customTitles: repositories.repositoryCustomTitles
+    )
     let unseenNotificationWorktreeCount = notificationGroups.reduce(0) { count, repository in
       count + repository.unseenWorktreeCount
     }
@@ -221,6 +224,7 @@ struct WorktreeDetailView: View {
     if repositories.isShowingCanvas {
       CanvasView(
         terminalManager: terminalManager,
+        repositoryCustomTitles: repositories.repositoryCustomTitles,
         onExitToTab: {
           store.send(.repositories(.toggleCanvas))
         })
@@ -260,7 +264,10 @@ struct WorktreeDetailView: View {
         }
       }
     } else if let selectedRepository = repositories.selectedRepository {
-      RepositoryDetailView(repository: selectedRepository)
+      RepositoryDetailView(
+        repository: selectedRepository,
+        customTitle: repositories.repositoryCustomTitles[selectedRepository.id]
+      )
     } else {
       EmptyStateView(store: store.scope(state: \.repositories, action: \.repositories))
     }
@@ -911,7 +918,7 @@ private struct WorktreeToolbarPreview: View {
             key: "u",
             modifiers: UserCustomShortcutModifiers()
           )
-        )
+        ),
       ],
       isUpdateAvailable: true,
       availableUpdateVersion: "2026.5.1"

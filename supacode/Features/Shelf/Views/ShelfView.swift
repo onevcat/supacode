@@ -31,7 +31,7 @@ struct ShelfView: View {
     // sanity-checking how often the root re-renders during animation.
     let _ = shelfLogger.event("ShelfView.body")
     let state = store.state
-    let books = state.orderedShelfBooks()
+    let books = state.orderedShelfBooks(customTitles: state.repositoryCustomTitles)
     let openBookID = state.openShelfBookID
     let openIndex = openBookID.flatMap { id in
       books.firstIndex(where: { $0.id == id })
