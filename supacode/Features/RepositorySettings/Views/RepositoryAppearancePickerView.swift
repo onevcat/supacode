@@ -201,17 +201,26 @@ struct RepositoryAppearancePickerView: View {
 
   @ViewBuilder
   private var colorRow: some View {
-    HStack(alignment: .center, spacing: 12) {
-      Text("Color")
-        .font(.headline)
-        .frame(width: previewSize, alignment: .center)
-      HStack(spacing: 8) {
-        ForEach(RepositoryColorChoice.allCases, id: \.self) { choice in
-          colorSwatch(for: choice)
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .center, spacing: 12) {
+        Text("Color")
+          .font(.headline)
+          .frame(width: previewSize, alignment: .center)
+        HStack(spacing: 8) {
+          ForEach(RepositoryColorChoice.allCases, id: \.self) { choice in
+            colorSwatch(for: choice)
+          }
+          noColorSwatch
+          Spacer(minLength: 0)
         }
-        noColorSwatch
-        Spacer(minLength: 0)
       }
+      Text(
+        "Tints the row in the sidebar, the shelf spine background, and the canvas card title bar."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.leading, previewSize + 12)
     }
   }
 
