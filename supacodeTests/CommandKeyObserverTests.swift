@@ -4,14 +4,19 @@ import Testing
 @testable import supacode
 
 struct CommandKeyObserverTests {
-  @Test func shouldShowShortcutsForCommandOrControl() {
+  @Test func shouldShowShortcutsForBareCommandOrControl() {
     #expect(CommandKeyObserver.shouldShowShortcuts(for: [.command]))
     #expect(CommandKeyObserver.shouldShowShortcuts(for: [.control]))
-    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.command, .shift]))
-    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.control, .option]))
   }
 
-  @Test func shouldNotShowShortcutsForOtherModifiers() {
+  @Test func shouldNotShowShortcutsForShortcutCombinations() {
+    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.command, .shift]) == false)
+    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.control, .option]) == false)
+    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.command, .control]) == false)
+    #expect(CommandKeyObserver.shouldShowShortcuts(for: [.command, .control, .shift]) == false)
+  }
+
+  @Test func shouldNotShowShortcutsForNonHintModifiers() {
     #expect(CommandKeyObserver.shouldShowShortcuts(for: []) == false)
     #expect(CommandKeyObserver.shouldShowShortcuts(for: [.shift]) == false)
     #expect(CommandKeyObserver.shouldShowShortcuts(for: [.option]) == false)

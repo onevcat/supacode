@@ -50,7 +50,8 @@ final class CommandKeyObserver {
   }
 
   nonisolated static func shouldShowShortcuts(for modifierFlags: NSEvent.ModifierFlags) -> Bool {
-    modifierFlags.contains(.command) || modifierFlags.contains(.control)
+    let modifiers = modifierFlags.intersection(.deviceIndependentFlagsMask)
+    return modifiers == .command || modifiers == .control
   }
 
   private func handleCommandKeyChange(isDown: Bool) {

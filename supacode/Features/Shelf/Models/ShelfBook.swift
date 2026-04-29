@@ -1,4 +1,5 @@
 import Foundation
+import IdentifiedCollections
 
 /// A book on the Shelf — the unified abstraction over a Git worktree or
 /// a plain folder repository.
@@ -38,10 +39,18 @@ extension RepositoriesFeature.State {
   /// while in Shelf mode adds its ID here, which causes its spine to
   /// materialize (with the standard spine-flow animation).
   func orderedShelfBooks() -> [ShelfBook] {
-    let repositoriesByID = Dictionary(uniqueKeysWithValues: repositories.map { ($0.id, $0) })
+    // `ShelfView.body` re-runs on every TCA state change, so this method
+    // is on the per-frame hot path. The previous implementation built a
+    // `Dictionary(uniqueKeysWithValues:)` per call and routed worktree
+    // ordering through `worktreeRowSections(in:)` — which constructs a
+    // full `WorktreeRowModel` per worktree (PR/info lookups, icon
+    // resolution, etc.) plus several intermediate `Set` allocations per
+    // repository. None of that detail is needed by the Shelf, which only
+    // consumes id/name/branch. Use direct `IdentifiedArray` lookup and
+    // `orderedWorktrees(in:)` for the lighter ordering path.
     var books: [ShelfBook] = []
     for repositoryID in orderedRepositoryIDs() {
-      guard let repository = repositoriesByID[repositoryID] else { continue }
+      guard let repository = repositories[id: repositoryID] else { continue }
       if repository.kind == .plain {
         guard openedWorktreeIDs.contains(repository.id) else { continue }
         books.append(
@@ -55,15 +64,34 @@ extension RepositoriesFeature.State {
           ))
         continue
       }
-      for row in worktreeRows(in: repository) {
-        guard openedWorktreeIDs.contains(row.id) else { continue }
+      for worktree in orderedWorktrees(in: repository)
+      where openedWorktreeIDs.contains(worktree.id) {
         books.append(
           ShelfBook(
-            id: row.id,
+            id: worktree.id,
             repositoryID: repositoryID,
-            displayName: row.name,
+            displayName: worktree.name,
             projectName: repository.name,
-            branchName: row.name,
+            branchName: worktree.name,
+            kind: .worktree
+          ))
+      }
+      // Preserve prior behavior of `worktreeRowSections` which also
+      // surfaced any pending (in-creation) worktrees that had been
+      // marked opened. The list is typically empty so the cost is
+      // negligible — the win is avoiding `makePendingWorktreeRow` which
+      // builds a full `WorktreeRowModel` per entry.
+      for pending in pendingWorktrees
+      where pending.repositoryID == repositoryID
+        && openedWorktreeIDs.contains(pending.id)
+      {
+        books.append(
+          ShelfBook(
+            id: pending.id,
+            repositoryID: repositoryID,
+            displayName: pending.progress.titleText,
+            projectName: repository.name,
+            branchName: pending.progress.titleText,
             kind: .worktree
           ))
       }

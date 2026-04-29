@@ -1,6 +1,8 @@
 import Sharing
 import SwiftUI
 
+private let shelfLogger = SupaLogger("Shelf")
+
 /// Vertical spine rendering for a single book on the Shelf.
 ///
 /// Phase 3 scope: header with book-level notification dot, a vertical
@@ -42,6 +44,12 @@ struct ShelfSpineView: View {
   @Environment(GhosttyShortcutManager.self) private var ghosttyShortcuts
 
   var body: some View {
+    // Body-invocation counter signpost. With ~10 spines visible during
+    // a book switch, the trace can multiply this event count by spine
+    // count to estimate per-click body work. Emitted as a no-arg event
+    // (instant timeline marker) so it imposes no work even when
+    // Instruments isn't attached.
+    let _ = shelfLogger.event("ShelfSpineView.body")
     VStack(spacing: 0) {
       headerButton
       tabList

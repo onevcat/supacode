@@ -10,6 +10,7 @@ nonisolated let worktreeCreationProgressLineLimit = 200
 nonisolated let worktreeCreationProgressUpdateStride = 20
 nonisolated let archiveScriptProgressLineLimit = 200
 private let secondsPerDay: Double = 86_400
+private let repositoriesLogger = SupaLogger("RepositoriesFeature")
 
 nonisolated struct WorktreeCreationProgressUpdateThrottle {
   private let stride: Int
@@ -792,6 +793,10 @@ struct RepositoriesFeature {
           return .none
 
         case .selectRepository(let repositoryID):
+          // `inout state` cannot be captured by a closure, so use the
+          // begin/end token API rather than the `interval` helper.
+          let selectRepoToken = repositoriesLogger.beginInterval("reducer.selectRepository")
+          defer { repositoriesLogger.endInterval(selectRepoToken) }
           guard let repositoryID, state.repositories[id: repositoryID] != nil else { return .none }
           state.selection = .repository(repositoryID)
           state.sidebarSelectedWorktreeIDs = []
@@ -802,6 +807,8 @@ struct RepositoriesFeature {
           return .send(.delegate(.selectedWorktreeChanged(state.selectedTerminalWorktree)))
 
         case .selectWorktree(let worktreeID, let focusTerminal):
+          let selectWtToken = repositoriesLogger.beginInterval("reducer.selectWorktree")
+          defer { repositoriesLogger.endInterval(selectWtToken) }
           setSingleWorktreeSelection(worktreeID, state: &state)
           if focusTerminal, let worktreeID {
             state.pendingTerminalFocusWorktreeIDs.insert(worktreeID)

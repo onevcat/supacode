@@ -315,8 +315,10 @@ final class WorktreeTerminalState {
   }
 
   func focusSelectedTab() {
-    guard let tabId = tabManager.selectedTabId else { return }
-    focusSurface(in: tabId)
+    terminalStateLogger.interval("focusSelectedTab") {
+      guard let tabId = tabManager.selectedTabId else { return }
+      focusSurface(in: tabId)
+    }
   }
 
   @discardableResult
@@ -345,12 +347,20 @@ final class WorktreeTerminalState {
   }
 
   func syncFocus(windowIsKey: Bool, windowIsVisible: Bool) {
-    lastWindowIsKey = windowIsKey
-    lastWindowIsVisible = windowIsVisible
-    applySurfaceActivity()
+    terminalStateLogger.interval("syncFocus") {
+      lastWindowIsKey = windowIsKey
+      lastWindowIsVisible = windowIsVisible
+      applySurfaceActivity()
+    }
   }
 
   private func applySurfaceActivity() {
+    terminalStateLogger.interval("applySurfaceActivity") {
+      applySurfaceActivityImpl()
+    }
+  }
+
+  private func applySurfaceActivityImpl() {
     let selectedTabId = tabManager.selectedTabId
     var surfaceToFocus: GhosttySurfaceView?
     for (tabId, tree) in trees {

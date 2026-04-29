@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let shelfLogger = SupaLogger("Shelf")
+
 /// Renders the terminal content for the currently open book.
 ///
 /// Mirrors the terminal-content slice of `WorktreeTerminalTabsView` without
@@ -57,19 +59,30 @@ struct ShelfOpenBookView: View {
       }
     )
     .onAppear {
-      state.ensureInitialTab(focusing: false)
-      if shouldAutoFocusTerminal {
-        state.focusSelectedTab()
+      shelfLogger.interval("OpenBook.onAppear") {
+        state.ensureInitialTab(focusing: false)
+        if shouldAutoFocusTerminal {
+          state.focusSelectedTab()
+        }
+        let activity = resolvedWindowActivity
+        state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
       }
-      let activity = resolvedWindowActivity
-      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
+    }
+    .onDisappear {
+      // Long-term diagnostic — pairs with `OpenBook.onAppear` so that
+      // any future regression in the per-book-switch teardown/remount
+      // cadence shows up as a count delta on the Points of Interest
+      // timeline.
+      shelfLogger.event("OpenBook.onDisappear")
     }
     .onChange(of: state.tabManager.selectedTabId) { _, _ in
-      if shouldAutoFocusTerminal {
-        state.focusSelectedTab()
+      shelfLogger.interval("OpenBook.onChange.selectedTabId") {
+        if shouldAutoFocusTerminal {
+          state.focusSelectedTab()
+        }
+        let activity = resolvedWindowActivity
+        state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
       }
-      let activity = resolvedWindowActivity
-      state.syncFocus(windowIsKey: activity.isKeyWindow, windowIsVisible: activity.isVisible)
     }
   }
 
