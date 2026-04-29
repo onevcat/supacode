@@ -1,4 +1,3 @@
-import Sharing
 import SwiftUI
 
 struct RepoHeaderRow: View {
@@ -26,11 +25,12 @@ struct RepoHeaderRow: View {
           size: 14
         )
       }
-      RepoHeaderTitleText(
+      RepoDisplayName(
         fallbackName: name,
         repositoryRootURL: repositoryRootURL,
-        nameTooltip: nameTooltip
+        tooltip: nameTooltip
       )
+      .foregroundStyle(.secondary)
       if isRemoving {
         Text("Removing...")
           .font(.caption)
@@ -47,48 +47,6 @@ struct RepoHeaderRow: View {
           }
       }
     }
-  }
-}
-
-/// Resolves the repo header label, preferring the user's custom
-/// title from `RepositorySettings` over the folder-derived fallback.
-/// Subscription is isolated to this leaf so the parent header view
-/// doesn't re-evaluate when unrelated settings churn.
-private struct RepoHeaderTitleText: View {
-  let fallbackName: String
-  let repositoryRootURL: URL?
-  let nameTooltip: String?
-
-  var body: some View {
-    if let repositoryRootURL {
-      RepoHeaderTitleTextResolved(
-        rootURL: repositoryRootURL,
-        fallbackName: fallbackName,
-        nameTooltip: nameTooltip
-      )
-    } else {
-      Text(fallbackName)
-        .foregroundStyle(.secondary)
-        .help(nameTooltip ?? "")
-    }
-  }
-}
-
-private struct RepoHeaderTitleTextResolved: View {
-  let fallbackName: String
-  let nameTooltip: String?
-  @Shared private var settings: RepositorySettings
-
-  init(rootURL: URL, fallbackName: String, nameTooltip: String?) {
-    self.fallbackName = fallbackName
-    self.nameTooltip = nameTooltip
-    _settings = Shared(wrappedValue: .default, .repositorySettings(rootURL))
-  }
-
-  var body: some View {
-    Text(settings.customTitle ?? fallbackName)
-      .foregroundStyle(.secondary)
-      .help(nameTooltip ?? "")
   }
 }
 

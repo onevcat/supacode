@@ -8,8 +8,11 @@ struct RepositoryDetailView: View {
       Image(systemName: repository.kind == .git ? "folder.badge.gearshape" : "folder")
         .font(.largeTitle)
         .accessibilityHidden(true)
-      Text(repository.name)
-        .font(.title3.weight(.semibold))
+      RepoDisplayName(
+        fallbackName: repository.name,
+        repositoryRootURL: repository.rootURL
+      )
+      .font(.title3.weight(.semibold))
       Text(repository.rootURL.path(percentEncoded: false))
         .font(.subheadline.monospaced())
         .foregroundStyle(.secondary)
