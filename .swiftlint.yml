@@ -10,6 +10,10 @@ disabled_rules:
   - file_length
   - closure_parameter_position
   - type_body_length
+  # swift-format owns trailing comma policy in this project. Letting
+  # swiftlint --fix add commas that swift-format then strips creates a
+  # check ↔ format ping-pong, so swiftlint stays out of trailing commas.
+  - trailing_comma
 
 opt_in_rules:
   - accessibility_label_for_image
@@ -20,9 +24,6 @@ opening_brace:
   ignore_multiline_function_signatures: true
   ignore_multiline_statement_conditions: true
   ignore_multiline_type_headers: true
-
-trailing_comma:
-  mandatory_comma: true
 
 cyclomatic_complexity:
   warning: 15
