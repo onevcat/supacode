@@ -104,6 +104,15 @@ SPARKLE_KEY_FILE="${SPARKLE_PRIVATE_KEY_FILE:-$HOME/.prowl-sparkle-private-key}"
 NOTES_FILE="build/release-notes.md"
 [[ -s "$NOTES_FILE" ]] || die "$NOTES_FILE not found — run release-notes.sh first"
 
+# Section headings must be `## New` / `## Fixed` / `## Improved` so they render
+# as <h3> on Prowl-Site (which shifts headings one level). Reject bold-paragraph
+# pseudo-headings and level-3 headings — both render as plain text on the site.
+if bad_lines="$(grep -nE '^(\*\*(New|Fixed|Improved)\*\*|### (New|Fixed|Improved))[[:space:]]*$' "$NOTES_FILE")"; then
+  echo "error: invalid section headings in $NOTES_FILE:" >&2
+  echo "$bad_lines" | sed 's/^/  /' >&2
+  die "use '## New' / '## Fixed' / '## Improved' (level-2 headings) instead"
+fi
+
 log "repository: $REPO"
 log "signing identity: $SIGNING_IDENTITY"
 log "team ID: $TEAM_ID"

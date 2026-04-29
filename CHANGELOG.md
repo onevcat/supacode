@@ -4,11 +4,11 @@
 
 This release focuses on Shelf-mode responsiveness — switching books, especially via keyboard shortcuts, is noticeably snappier after a sweep of unnecessary SwiftUI invalidations.
 
-**New**
+## New
 
 - Repositories can now have a custom display name. Open Repo Settings and set a **Display Name** to override the folder-derived title in the sidebar, toolbar, and canvas. Useful when multiple checkouts share a generic folder name like `src`. Clearing the field reverts to the original folder name.
 
-**Fixed**
+## Fixed
 
 - Switching between books in Shelf mode is noticeably smoother, particularly when using keyboard shortcuts. A cascade of unnecessary SwiftUI invalidations was traced and removed.
 - A trailing space typed at the end of the Display Name field is no longer silently dropped.
@@ -31,7 +31,7 @@ This release adds per-repository visual identity across the entire app.
 
 ## [2026.4.27](https://github.com/onevcat/Prowl/releases/tag/v2026.4.27)
 
-**Fixed**
+## Fixed
 
 - Fixed a bug where terminal windows could open in the wrong Light or Dark appearance at startup.
 
@@ -134,7 +134,7 @@ This release focuses on Custom Command power-ups and two Canvas reliability fixe
 
 ## [2026.4.16](https://github.com/onevcat/Prowl/releases/tag/v2026.4.16)
 
-**Fixed**
+## Fixed
 
 - Fixed a race condition when entering Canvas view that could leave the terminal surface blank.
 
@@ -180,7 +180,7 @@ Tab layout and Worktrees menu discoverability are the main themes of this releas
 
 ## [2026.4.7](https://github.com/onevcat/Prowl/releases/tag/v2026.4.7)
 
-**Fixed**
+## Fixed
 
 - When using a transparent background (`background-opacity < 1`) in dark mode on macOS 26, the titlebar and window border now correctly appear dark-tinted instead of showing an unwanted light glass effect.
 - The sidebar footer now displays a proper frosted glass effect when the background is transparent, rather than a plain semi-transparent fill that let the wallpaper bleed through without blur.

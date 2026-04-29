@@ -129,9 +129,11 @@ concise, user-facing changelog in Markdown.
    exclamation marks, no "we're excited".
 5. **Format**:
    - Start with a one-line summary sentence of the release theme if there is a
-     clear one; otherwise jump straight to the list.
-   - Group into two sections: **New** for features/enhancements, and **Fixed**
-     for bug fixes. Omit a section if it has no items.
+     clear one; otherwise jump straight to the section.
+   - Group items into sections using literal Markdown level-2 headings:
+     `## New` for features/enhancements, `## Fixed` for bug fixes. Omit a
+     section if it has no items. Always use the `## ` heading syntax — never
+     bold-paragraph forms like `**New**` or `**Fixed**`, and never `### `.
    - Use a flat bullet list (`-`) within each section.
    - Each bullet should be one or two sentences maximum.
    - End with nothing — no sign-off, no footer.
@@ -174,6 +176,39 @@ generate_fallback_notes() {
   fi
 }
 
+# ── Validation ───────────────────────────────────────────────────────────────
+
+# Lint a release-notes file against the CHANGELOG format used by Prowl-Site.
+# Returns 0 on clean, 1 if violations were found (also prints them).
+# Section headings must be `## New` / `## Fixed` / `## Improved` (level 2),
+# never bold paragraphs (`**Fixed**`) or level-3 headings (`### Fixed`), since
+# the site CSS targets `:global(h3)` after a one-level heading shift.
+lint_release_notes() {
+  local file="$1"
+  local violations=()
+
+  # Bold-paragraph section headers (whole-line)
+  if grep -nE '^\*\*(New|Fixed|Improved)\*\*[[:space:]]*$' "$file" >/dev/null; then
+    while IFS= read -r line; do
+      violations+=("$line  (use '## …' instead of bold paragraph)")
+    done < <(grep -nE '^\*\*(New|Fixed|Improved)\*\*[[:space:]]*$' "$file")
+  fi
+
+  # Level-3 section headers
+  if grep -nE '^### (New|Fixed|Improved)[[:space:]]*$' "$file" >/dev/null; then
+    while IFS= read -r line; do
+      violations+=("$line  (use '## …' instead of '### …')")
+    done < <(grep -nE '^### (New|Fixed|Improved)[[:space:]]*$' "$file")
+  fi
+
+  if [[ ${#violations[@]} -gt 0 ]]; then
+    echo "release-notes format violations in $file:" >&2
+    printf '  %s\n' "${violations[@]}" >&2
+    return 1
+  fi
+  return 0
+}
+
 # ── Generate ─────────────────────────────────────────────────────────────────
 
 NOTES_FILE="build/release-notes.md"
@@ -201,5 +236,12 @@ cat "$NOTES_FILE"
 echo "──────────────────────────────────"
 echo
 log "saved to $NOTES_FILE"
+
+if ! lint_release_notes "$NOTES_FILE"; then
+  log "fix the headings above (use '## New' / '## Fixed' / '## Improved'),"
+  log "then re-run this script or edit $NOTES_FILE before invoking release.sh."
+  exit 1
+fi
+
 log "review and edit the file if needed, then run:"
 log "  ./doc-onevcat/scripts/release.sh $VERSION"
