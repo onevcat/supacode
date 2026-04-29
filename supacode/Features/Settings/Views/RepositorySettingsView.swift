@@ -73,10 +73,9 @@ struct RepositorySettingsView: View {
     Form {
       Section("Display") {
         VStack(alignment: .leading, spacing: 12) {
-          TextField("", text: customTitle, prompt: Text(folderName))
-            .labelsHidden()
+          TextField("Name", text: customTitle, prompt: Text(folderName))
             .textFieldStyle(.roundedBorder)
-
+          Divider()
           RepositoryAppearancePickerView(store: store)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
