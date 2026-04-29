@@ -67,7 +67,7 @@ struct SidebarListView: View {
           } else {
             sidebarSelections = [.repository(repositoryID)]
             store.send(.selectRepository(repositoryID))
-            focusShelfTerminalAfterSidebarInteraction(worktreeID: store.state.selectedTerminalWorktree?.id)
+            focusTerminalAfterSidebarSelection(worktreeID: store.state.selectedTerminalWorktree?.id)
           }
           return
         }
@@ -78,18 +78,23 @@ struct SidebarListView: View {
           store.send(.selectWorktree(nil))
           return
         }
+        let shouldFocusTerminal = worktreeIDs.count == 1
         sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
         if let selectedWorktreeID = state.selectedWorktreeID,
           worktreeIDs.contains(selectedWorktreeID)
         {
-          focusShelfTerminalAfterSidebarInteraction(worktreeID: selectedWorktreeID)
+          if shouldFocusTerminal {
+            focusTerminalAfterSidebarSelection(worktreeID: selectedWorktreeID)
+          }
           return
         }
         let nextPrimarySelection =
           hotkeyRows.map(\.id).first(where: worktreeIDs.contains)
           ?? worktreeIDs.first
-        store.send(.selectWorktree(nextPrimarySelection, focusTerminal: true))
-        focusShelfTerminalAfterSidebarInteraction(worktreeID: nextPrimarySelection)
+        store.send(.selectWorktree(nextPrimarySelection, focusTerminal: shouldFocusTerminal))
+        if shouldFocusTerminal {
+          focusTerminalAfterSidebarSelection(worktreeID: nextPrimarySelection)
+        }
       }
     )
     let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
@@ -215,27 +220,15 @@ struct SidebarListView: View {
         store.send(.repositoryManagement(.openRepositories(fileURLs)))
         return true
       }
-      .modifier(
-        SidebarKeyForwardingModifier(
-          isEnabled: !state.isShelfActive,
-          selectedWorktreeID: state.selectedWorktreeID,
-          sidebarSelectedWorktreeIDs: state.sidebarSelectedWorktreeIDs,
-          terminalManager: terminalManager
-        )
-      )
       .focused($isSidebarFocused)
-      .onChange(of: isSidebarFocused) { _, isFocused in
-        guard isFocused else { return }
-        focusShelfTerminalAfterSidebarInteraction(worktreeID: store.state.selectedTerminalWorktree?.id)
-      }
       .task(id: pendingSidebarReveal?.id) {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
     }  // ScrollViewReader
   }
 
-  private func focusShelfTerminalAfterSidebarInteraction(worktreeID: Worktree.ID?) {
-    guard store.state.isShelfActive, let worktreeID else { return }
+  private func focusTerminalAfterSidebarSelection(worktreeID: Worktree.ID?) {
+    guard let worktreeID else { return }
     Task { @MainActor [terminalManager] in
       for _ in 0..<4 {
         await Task.yield()
@@ -261,48 +254,6 @@ struct SidebarListView: View {
       scrollProxy.scrollTo(pendingSidebarReveal.worktreeID, anchor: .center)
     }
     store.send(.consumePendingSidebarReveal(pendingSidebarReveal.id))
-  }
-}
-
-private struct SidebarKeyForwardingModifier: ViewModifier {
-  let isEnabled: Bool
-  let selectedWorktreeID: Worktree.ID?
-  let sidebarSelectedWorktreeIDs: Set<Worktree.ID>
-  let terminalManager: WorktreeTerminalManager
-
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if isEnabled {
-      content
-        .onKeyPress { keyPress in
-          handleKeyPress(keyPress)
-        }
-    } else {
-      content
-    }
-  }
-
-  private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-    guard !keyPress.characters.isEmpty else { return .ignored }
-    let isNavigationKey =
-      keyPress.key == .upArrow
-      || keyPress.key == .downArrow
-      || keyPress.key == .leftArrow
-      || keyPress.key == .rightArrow
-      || keyPress.key == .home
-      || keyPress.key == .end
-      || keyPress.key == .pageUp
-      || keyPress.key == .pageDown
-    if isNavigationKey { return .ignored }
-    let hasCommandModifier = keyPress.modifiers.contains(.command)
-    if hasCommandModifier { return .ignored }
-    guard let worktreeID = selectedWorktreeID,
-      sidebarSelectedWorktreeIDs.count == 1,
-      sidebarSelectedWorktreeIDs.contains(worktreeID),
-      let terminalState = terminalManager.stateIfExists(for: worktreeID)
-    else { return .ignored }
-    terminalState.focusAndInsertText(keyPress.characters)
-    return .handled
   }
 }
 
