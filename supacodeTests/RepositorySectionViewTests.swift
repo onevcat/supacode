@@ -6,6 +6,69 @@ import Testing
 
 @MainActor
 struct RepositorySectionViewTests {
+  @Test func sidebarHeaderActionCollapsesWhenAnyExpandableRepositoryIsOpen() {
+    let gitRepository = Repository(
+      id: "/tmp/git",
+      rootURL: URL(fileURLWithPath: "/tmp/git"),
+      name: "git",
+      kind: .git,
+      worktrees: []
+    )
+    let plainRepository = Repository(
+      id: "/tmp/plain",
+      rootURL: URL(fileURLWithPath: "/tmp/plain"),
+      name: "plain",
+      kind: .plain,
+      worktrees: []
+    )
+    let expandableIDs = SidebarListView.expandableRepositoryIDs(
+      in: [gitRepository, plainRepository]
+    )
+
+    #expect(expandableIDs == [gitRepository.id])
+    #expect(
+      SidebarListView.repositoryListHeaderAction(
+        expandedRepoIDs: [],
+        expandableRepositoryIDs: []
+      )
+        == .expandAll
+    )
+    #expect(
+      SidebarListView.repositoryListHeaderAction(
+        expandedRepoIDs: [],
+        expandableRepositoryIDs: expandableIDs
+      )
+        == .expandAll
+    )
+    #expect(
+      SidebarListView.repositoryListHeaderAction(
+        expandedRepoIDs: [gitRepository.id],
+        expandableRepositoryIDs: expandableIDs
+      )
+        == .collapseAll
+    )
+    #expect(
+      SidebarListView.repositoryListHeaderAction(
+        expandedRepoIDs: [gitRepository.id, plainRepository.id],
+        expandableRepositoryIDs: expandableIDs
+      )
+        == .collapseAll
+    )
+    #expect(
+      SidebarListView.repositoryListHeaderAction(
+        expandedRepoIDs: [plainRepository.id],
+        expandableRepositoryIDs: expandableIDs
+      )
+        == .expandAll
+    )
+  }
+
+  @Test func sidebarHeaderOnlyShowsForLongRepositoryLists() {
+    #expect(!SidebarListView.showsRepositoryListHeader(repositoryCount: 0))
+    #expect(!SidebarListView.showsRepositoryListHeader(repositoryCount: 10))
+    #expect(SidebarListView.showsRepositoryListHeader(repositoryCount: 11))
+  }
+
   @Test func openTabCountForGitRepositorySumsAllWorktrees() {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let repositoryRootURL = URL(fileURLWithPath: "/tmp/repo")
