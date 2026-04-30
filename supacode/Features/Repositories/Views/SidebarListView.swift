@@ -2,6 +2,33 @@ import ComposableArchitecture
 import SwiftUI
 
 struct SidebarListView: View {
+  enum RepositoryListHeaderAction: Equatable {
+    case expandAll
+    case collapseAll
+
+    var title: String {
+      switch self {
+      case .expandAll:
+        return "Expand All"
+      case .collapseAll:
+        return "Collapse All"
+      }
+    }
+
+    var systemImageName: String {
+      "chevron.right"
+    }
+
+    var rotation: Angle {
+      switch self {
+      case .expandAll:
+        return .zero
+      case .collapseAll:
+        return .degrees(90)
+      }
+    }
+  }
+
   @Bindable var store: StoreOf<RepositoriesFeature>
   @Binding var expandedRepoIDs: Set<Repository.ID>
   @Binding var sidebarSelections: Set<SidebarSelection>
@@ -13,6 +40,13 @@ struct SidebarListView: View {
     let state = store.state
     let hotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
     let orderedRoots = state.orderedRepositoryRoots()
+    let expandableRepositoryIDs = Self.expandableRepositoryIDs(in: state.repositories)
+    let repositoryListHeaderAction = Self.repositoryListHeaderAction(
+      expandedRepoIDs: expandedRepoIDs,
+      expandableRepositoryIDs: expandableRepositoryIDs
+    )
+    let visibleRepositoryCount = orderedRoots.isEmpty ? state.repositories.count : orderedRoots.count
+    let showsRepositoryListHeader = Self.showsRepositoryListHeader(repositoryCount: visibleRepositoryCount)
     let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
     let selection = Binding<Set<SidebarSelection>>(
       get: {
@@ -102,6 +136,14 @@ struct SidebarListView: View {
 
     ScrollViewReader { scrollProxy in
       List(selection: selection) {
+        if showsRepositoryListHeader {
+          repositoryListHeader(
+            action: repositoryListHeaderAction,
+            expandableRepositoryIDs: expandableRepositoryIDs
+          )
+          .listRowInsets(EdgeInsets())
+        }
+
         if orderedRoots.isEmpty {
           let repositories = store.repositories
           ForEach(Array(repositories.enumerated()), id: \.element.id) { index, repository in
@@ -240,6 +282,42 @@ struct SidebarListView: View {
     }
   }
 
+  private func repositoryListHeader(
+    action: RepositoryListHeaderAction,
+    expandableRepositoryIDs: Set<Repository.ID>
+  ) -> some View {
+    HStack(spacing: 8) {
+      Text("Repositories")
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if !expandableRepositoryIDs.isEmpty {
+        Button {
+          withAnimation(.easeOut(duration: 0.2)) {
+            switch action {
+            case .expandAll:
+              expandedRepoIDs.formUnion(expandableRepositoryIDs)
+            case .collapseAll:
+              expandedRepoIDs.subtract(expandableRepositoryIDs)
+            }
+          }
+        } label: {
+          Label(action.title, systemImage: action.systemImageName)
+            .labelStyle(.iconOnly)
+            .frame(width: 20, height: 20)
+            .rotationEffect(action.rotation)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help(action.title)
+      }
+    }
+    .frame(maxWidth: .infinity, minHeight: 26, alignment: .center)
+    .padding(.top, 8)
+    .padding(.bottom, 4)
+  }
+
   @MainActor
   private func revealPendingSidebarWorktree(
     _ pendingSidebarReveal: PendingSidebarReveal?,
@@ -254,6 +332,29 @@ struct SidebarListView: View {
       scrollProxy.scrollTo(pendingSidebarReveal.worktreeID, anchor: .center)
     }
     store.send(.consumePendingSidebarReveal(pendingSidebarReveal.id))
+  }
+
+  static func expandableRepositoryIDs<Repositories: Sequence>(
+    in repositories: Repositories
+  ) -> Set<Repository.ID> where Repositories.Element == Repository {
+    Set(
+      repositories
+        .filter(\.capabilities.supportsWorktrees)
+        .map(\.id)
+    )
+  }
+
+  static func repositoryListHeaderAction(
+    expandedRepoIDs: Set<Repository.ID>,
+    expandableRepositoryIDs: Set<Repository.ID>
+  ) -> RepositoryListHeaderAction {
+    !expandedRepoIDs.isDisjoint(with: expandableRepositoryIDs)
+      ? .collapseAll
+      : .expandAll
+  }
+
+  static func showsRepositoryListHeader(repositoryCount: Int) -> Bool {
+    repositoryCount > 10
   }
 }
 
