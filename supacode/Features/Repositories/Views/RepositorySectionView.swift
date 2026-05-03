@@ -182,6 +182,7 @@ struct RepositorySectionView: View {
       }
     }
     .frame(maxWidth: .infinity, minHeight: headerCellHeight, maxHeight: .infinity, alignment: .center)
+    .padding(.horizontal, 12)
     .padding(.top, hasTopSpacing ? 4 : 0)
     .padding(.bottom, hasTopSpacing && !repository.capabilities.supportsWorktrees ? 4 : 0)
     .contentShape(.interaction, .rect)

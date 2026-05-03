@@ -67,21 +67,14 @@ struct SidebarListView: View {
           }
 
           ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
-            repositoryDropZone(
-              destination: index,
-              repositoryOrderIDs: presentation.repositoryOrderIDs
-            )
             repositoryItemView(
               item,
               index: index,
+              repositoryOrderIDs: presentation.repositoryOrderIDs,
               hotkeyRows: hotkeyRows,
               selectedWorktreeIDs: selectedWorktreeIDs
             )
           }
-          repositoryDropZone(
-            destination: repositoryItems.count,
-            repositoryOrderIDs: presentation.repositoryOrderIDs
-          )
         }
         .padding(.vertical, 2)
       }
@@ -95,9 +88,7 @@ struct SidebarListView: View {
         }
         if case .dataTransferCompleted = session.phase {
           endSidebarDrag()
-          return
         }
-        beginSidebarDrag()
       }
       .safeAreaInset(edge: .top) {
         HStack(spacing: 4) {
@@ -186,82 +177,75 @@ struct SidebarListView: View {
   private func repositoryItemView(
     _ item: SidebarItem,
     index: Int,
+    repositoryOrderIDs: [Repository.ID],
     hotkeyRows: [WorktreeRowModel],
     selectedWorktreeIDs: Set<Worktree.ID>
   ) -> some View {
-    switch item {
-    case .repository(let model):
-      if let repository = store.state.repositories[id: model.repositoryID] {
-        RepositorySectionView(
-          repository: repository,
-          hasTopSpacing: index > 0,
-          isDragActive: isDragActive,
-          hotkeyRows: hotkeyRows,
-          selectedWorktreeIDs: selectedWorktreeIDs,
-          expandedRepoIDs: $expandedRepoIDs,
-          store: store,
-          terminalManager: terminalManager,
-          onRepositorySelected: {
-            selectRepository(repository)
+    Group {
+      switch item {
+      case .repository(let model):
+        if let repository = store.state.repositories[id: model.repositoryID] {
+          RepositorySectionView(
+            repository: repository,
+            hasTopSpacing: index > 0,
+            isDragActive: isDragActive,
+            hotkeyRows: hotkeyRows,
+            selectedWorktreeIDs: selectedWorktreeIDs,
+            expandedRepoIDs: $expandedRepoIDs,
+            store: store,
+            terminalManager: terminalManager,
+            onRepositorySelected: {
+              selectRepository(repository)
+            }
+          )
+          .draggableRepository(
+            id: model.repositoryID,
+            isEnabled: !model.isRemoving,
+            beginDrag: beginSidebarDrag
+          )
+        }
+
+      case .failedRepository(let model):
+        FailedRepositoryRow(
+          name: model.name,
+          path: model.path,
+          showFailure: {
+            let message = "\(model.path)\n\n\(model.failureMessage)"
+            store.send(.presentAlert(title: "Unable to load \(model.name)", message: message))
+          },
+          removeRepository: {
+            store.send(.repositoryManagement(.removeFailedRepository(model.id)))
           }
         )
+        .padding(.horizontal, 12)
+        .overlay(alignment: .top) {
+          if index > 0 {
+            Rectangle()
+              .fill(.secondary)
+              .frame(height: 1)
+              .frame(maxWidth: .infinity)
+              .accessibilityHidden(true)
+          }
+        }
         .draggableRepository(
-          id: model.repositoryID,
-          isEnabled: !model.isRemoving,
+          id: model.id,
+          isEnabled: model.isReorderable,
           beginDrag: beginSidebarDrag
         )
-      }
 
-    case .failedRepository(let model):
-      FailedRepositoryRow(
-        name: model.name,
-        path: model.path,
-        showFailure: {
-          let message = "\(model.path)\n\n\(model.failureMessage)"
-          store.send(.presentAlert(title: "Unable to load \(model.name)", message: message))
-        },
-        removeRepository: {
-          store.send(.repositoryManagement(.removeFailedRepository(model.id)))
-        }
-      )
-      .padding(.horizontal, 12)
-      .overlay(alignment: .top) {
-        if index > 0 {
-          Rectangle()
-            .fill(.secondary)
-            .frame(height: 1)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-        }
+      case .listHeader, .archivedWorktrees:
+        EmptyView()
       }
-      .draggableRepository(
-        id: model.id,
-        isEnabled: model.isReorderable,
-        beginDrag: beginSidebarDrag
-      )
-
-    case .listHeader, .archivedWorktrees:
-      EmptyView()
     }
-  }
-
-  private func repositoryDropZone(
-    destination: Int,
-    repositoryOrderIDs: [Repository.ID]
-  ) -> some View {
-    SidebarDropIndicator(isVisible: targetedRepositoryDropDestination == destination)
-      .onDrop(
-        of: [.prowlSidebarRepositoryID],
-        delegate: SidebarRepositoryDropDelegate(
-          destination: destination,
-          repositoryOrderIDs: repositoryOrderIDs,
-          targetedDestination: $targetedRepositoryDropDestination,
-          onDrop: { offsets, destination in
-            store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
-          },
-          onDragEnded: endSidebarDrag
-        )
-      )
+    .repositoryDropTarget(
+      index: index,
+      repositoryOrderIDs: repositoryOrderIDs,
+      targetedDestination: $targetedRepositoryDropDestination,
+      onDrop: { offsets, destination in
+        store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
+      },
+      onDragEnded: endSidebarDrag
+    )
   }
 
   private func beginSidebarDrag() {

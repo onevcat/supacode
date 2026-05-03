@@ -90,25 +90,22 @@ struct WorktreeRowsView: View {
   ) -> some View {
     let rowIDs = rows.map(\.id)
     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-      worktreeDropZone(
-        destination: index,
-        rowIDs: rowIDs,
-        targetedDestination: targetedDestination,
-        section: section
-      )
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
         moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
         shortcutHint: worktreeShortcutHint(for: shortcutIndexByID[row.id])
       )
+      .worktreeDropTarget(
+        index: index,
+        rowIDs: rowIDs,
+        targetedDestination: targetedDestination,
+        onDrop: { offsets, destination in
+          moveWorktrees(section: section, offsets: offsets, destination: destination)
+        },
+        onDragEnded: endWorktreeDrag
+      )
     }
-    worktreeDropZone(
-      destination: rows.count,
-      rowIDs: rowIDs,
-      targetedDestination: targetedDestination,
-      section: section
-    )
   }
 
   @ViewBuilder
@@ -224,38 +221,12 @@ struct WorktreeRowsView: View {
     didEnd: Bool
   ) {
     if didEnd {
-      draggingWorktreeIDs = []
+      endWorktreeDrag()
       return
     }
     if draggedIDs != draggingWorktreeIDs {
       draggingWorktreeIDs = draggedIDs
     }
-  }
-
-  private func worktreeDropZone(
-    destination: Int,
-    rowIDs: [Worktree.ID],
-    targetedDestination: Binding<Int?>,
-    section: SidebarWorktreeSection
-  ) -> some View {
-    SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == destination, horizontalPadding: 28)
-      .onDrop(
-        of: [.prowlSidebarWorktreeID],
-        delegate: SidebarWorktreeDropDelegate(
-          destination: destination,
-          sectionIDs: rowIDs,
-          targetedDestination: targetedDestination,
-          onDrop: { offsets, destination in
-            switch section {
-            case .pinned:
-              store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
-            case .unpinned:
-              store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
-            }
-          },
-          onDragEnded: endWorktreeDrag
-        )
-      )
   }
 
   private func selectWorktreeRow(_ worktreeID: Worktree.ID) {
@@ -299,6 +270,19 @@ struct WorktreeRowsView: View {
     targetedPinnedDropDestination = nil
     targetedUnpinnedDropDestination = nil
     store.send(.worktreeOrdering(.setSidebarDragActive(false)))
+  }
+
+  private func moveWorktrees(
+    section: SidebarWorktreeSection,
+    offsets: IndexSet,
+    destination: Int
+  ) {
+    switch section {
+    case .pinned:
+      store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
+    case .unpinned:
+      store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
+    }
   }
 
   private struct WorktreeRowViewConfig {

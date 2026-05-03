@@ -26,27 +26,27 @@ enum SidebarDragProvider {
 }
 
 struct SidebarRepositoryDropDelegate: DropDelegate {
-  let destination: Int
+  let destination: (DropInfo) -> Int
   let repositoryOrderIDs: [Repository.ID]
   @Binding var targetedDestination: Int?
   let onDrop: (IndexSet, Int) -> Void
   let onDragEnded: () -> Void
 
   func dropEntered(info: DropInfo) {
-    targetedDestination = destination
+    targetedDestination = destination(info)
   }
 
   func dropExited(info: DropInfo) {
-    if targetedDestination == destination {
-      targetedDestination = nil
-    }
+    targetedDestination = nil
   }
 
   func dropUpdated(info: DropInfo) -> DropProposal? {
-    DropProposal(operation: .move)
+    targetedDestination = destination(info)
+    return DropProposal(operation: .move)
   }
 
   func performDrop(info: DropInfo) -> Bool {
+    let dropDestination = destination(info)
     targetedDestination = nil
     guard let provider = info.itemProviders(for: [.prowlSidebarRepositoryID]).first else {
       onDragEnded()
@@ -56,14 +56,14 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
       guard let data,
         let repositoryID = String(data: data, encoding: .utf8),
         let source = repositoryOrderIDs.firstIndex(of: repositoryID),
-        source != destination,
-        source + 1 != destination
+        source != dropDestination,
+        source + 1 != dropDestination
       else {
         Task { @MainActor in onDragEnded() }
         return
       }
       Task { @MainActor in
-        onDrop(IndexSet(integer: source), destination)
+        onDrop(IndexSet(integer: source), dropDestination)
         onDragEnded()
       }
     }
@@ -72,27 +72,27 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
 }
 
 struct SidebarWorktreeDropDelegate: DropDelegate {
-  let destination: Int
+  let destination: (DropInfo) -> Int
   let sectionIDs: [Worktree.ID]
   @Binding var targetedDestination: Int?
   let onDrop: (IndexSet, Int) -> Void
   let onDragEnded: () -> Void
 
   func dropEntered(info: DropInfo) {
-    targetedDestination = destination
+    targetedDestination = destination(info)
   }
 
   func dropExited(info: DropInfo) {
-    if targetedDestination == destination {
-      targetedDestination = nil
-    }
+    targetedDestination = nil
   }
 
   func dropUpdated(info: DropInfo) -> DropProposal? {
-    DropProposal(operation: .move)
+    targetedDestination = destination(info)
+    return DropProposal(operation: .move)
   }
 
   func performDrop(info: DropInfo) -> Bool {
+    let dropDestination = destination(info)
     targetedDestination = nil
     guard let provider = info.itemProviders(for: [.prowlSidebarWorktreeID]).first else {
       onDragEnded()
@@ -102,14 +102,14 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
       guard let data,
         let worktreeID = String(data: data, encoding: .utf8),
         let source = sectionIDs.firstIndex(of: worktreeID),
-        source != destination,
-        source + 1 != destination
+        source != dropDestination,
+        source + 1 != dropDestination
       else {
         Task { @MainActor in onDragEnded() }
         return
       }
       Task { @MainActor in
-        onDrop(IndexSet(integer: source), destination)
+        onDrop(IndexSet(integer: source), dropDestination)
         onDragEnded()
       }
     }
@@ -138,6 +138,74 @@ struct SidebarDropIndicator: View {
 }
 
 extension View {
+  func repositoryDropTarget(
+    index: Int,
+    repositoryOrderIDs: [Repository.ID],
+    targetedDestination: Binding<Int?>,
+    onDrop: @escaping (IndexSet, Int) -> Void,
+    onDragEnded: @escaping () -> Void
+  ) -> some View {
+    self
+      .overlay(alignment: .top) {
+        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index)
+      }
+      .overlay(alignment: .bottom) {
+        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1)
+      }
+      .background {
+        GeometryReader { proxy in
+          Color.clear
+            .onDrop(
+              of: [.prowlSidebarRepositoryID],
+              delegate: SidebarRepositoryDropDelegate(
+                destination: { info in
+                  info.location.y < proxy.size.height / 2 ? index : index + 1
+                },
+                repositoryOrderIDs: repositoryOrderIDs,
+                targetedDestination: targetedDestination,
+                onDrop: onDrop,
+                onDragEnded: onDragEnded
+              )
+            )
+            .accessibilityHidden(true)
+        }
+      }
+  }
+
+  func worktreeDropTarget(
+    index: Int,
+    rowIDs: [Worktree.ID],
+    targetedDestination: Binding<Int?>,
+    onDrop: @escaping (IndexSet, Int) -> Void,
+    onDragEnded: @escaping () -> Void
+  ) -> some View {
+    self
+      .overlay(alignment: .top) {
+        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index, horizontalPadding: 28)
+      }
+      .overlay(alignment: .bottom) {
+        SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1, horizontalPadding: 28)
+      }
+      .background {
+        GeometryReader { proxy in
+          Color.clear
+            .onDrop(
+              of: [.prowlSidebarWorktreeID],
+              delegate: SidebarWorktreeDropDelegate(
+                destination: { info in
+                  info.location.y < proxy.size.height / 2 ? index : index + 1
+                },
+                sectionIDs: rowIDs,
+                targetedDestination: targetedDestination,
+                onDrop: onDrop,
+                onDragEnded: onDragEnded
+              )
+            )
+            .accessibilityHidden(true)
+        }
+      }
+  }
+
   @ViewBuilder
   func draggableRepository(
     id: Repository.ID,
