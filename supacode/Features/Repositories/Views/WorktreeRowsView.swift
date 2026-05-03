@@ -363,7 +363,8 @@ struct WorktreeRowsView: View {
     .tag(SidebarSelection.worktree(row.id))
     .id(SidebarScrollID.worktree(row.id))
     .typeSelectEquivalent("")
-    .padding(.horizontal, 8)
+    .padding(.leading, 20)
+    .padding(.trailing, 8)
     .background {
       if isSelected {
         RoundedRectangle(cornerRadius: 5)
