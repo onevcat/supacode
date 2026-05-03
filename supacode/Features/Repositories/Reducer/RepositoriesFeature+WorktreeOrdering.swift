@@ -142,32 +142,46 @@ extension RepositoriesFeature {
       return .merge(effects)
 
     case .worktreeNotificationReceived(let worktreeID):
-      guard let repositoryID = state.repositoryID(containing: worktreeID),
-        let repository = state.repositories[id: repositoryID],
-        let worktree = repository.worktrees[id: worktreeID]
-      else {
+      guard notificationReorderTarget(for: worktreeID, state: state) != nil else {
         return .none
       }
-      if state.isWorktreeArchived(worktree.id) {
+      if state.isSidebarDragActive {
+        state.pendingSidebarNotifyReorderIDs.removeAll { $0 == worktreeID }
+        state.pendingSidebarNotifyReorderIDs.append(worktreeID)
         return .none
       }
-      if state.moveNotifiedWorktreeToTop, !state.isMainWorktree(worktree), !state.isWorktreePinned(worktree) {
-        let reordered = reorderedUnpinnedWorktreeIDs(
-          for: worktreeID,
-          in: repository,
-          state: state
-        )
-        if state.worktreeOrderByRepository[repositoryID] != reordered {
-          withAnimation(.snappy(duration: 0.2)) {
-            state.worktreeOrderByRepository[repositoryID] = reordered
-          }
-          let worktreeOrderByRepository = state.worktreeOrderByRepository
-          return .run { _ in
-            await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
-          }
-        }
+      guard applyNotificationReorder(for: worktreeID, state: &state, animated: true) else {
+        return .none
       }
-      return .none
+      let worktreeOrderByRepository = state.worktreeOrderByRepository
+      return .run { _ in
+        await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
+      }
+
+    case .setSidebarDragActive(let isActive):
+      guard state.isSidebarDragActive != isActive else {
+        return .none
+      }
+      state.isSidebarDragActive = isActive
+      guard !isActive else {
+        return .none
+      }
+      let pendingWorktreeIDs = state.pendingSidebarNotifyReorderIDs
+      state.pendingSidebarNotifyReorderIDs = []
+      guard !pendingWorktreeIDs.isEmpty else {
+        return .none
+      }
+      var didReorder = false
+      for worktreeID in pendingWorktreeIDs {
+        didReorder = applyNotificationReorder(for: worktreeID, state: &state, animated: false) || didReorder
+      }
+      guard didReorder else {
+        return .none
+      }
+      let worktreeOrderByRepository = state.worktreeOrderByRepository
+      return .run { _ in
+        await repositoryPersistence.saveWorktreeOrderByRepository(worktreeOrderByRepository)
+      }
 
     case .setMoveNotifiedWorktreeToTop(let isEnabled):
       state.moveNotifiedWorktreeToTop = isEnabled
@@ -183,4 +197,47 @@ extension RepositoriesFeature {
       return reduceWorktreeOrdering(state: &state, action: action)
     }
   }
+}
+
+private func notificationReorderTarget(
+  for worktreeID: Worktree.ID,
+  state: RepositoriesFeature.State
+) -> (repositoryID: Repository.ID, repository: Repository)? {
+  guard state.moveNotifiedWorktreeToTop,
+    let repositoryID = state.repositoryID(containing: worktreeID),
+    let repository = state.repositories[id: repositoryID],
+    let worktree = repository.worktrees[id: worktreeID],
+    !state.isWorktreeArchived(worktree.id),
+    !state.isMainWorktree(worktree),
+    !state.isWorktreePinned(worktree)
+  else {
+    return nil
+  }
+  return (repositoryID, repository)
+}
+
+private func applyNotificationReorder(
+  for worktreeID: Worktree.ID,
+  state: inout RepositoriesFeature.State,
+  animated: Bool
+) -> Bool {
+  guard let target = notificationReorderTarget(for: worktreeID, state: state) else {
+    return false
+  }
+  let reordered = reorderedUnpinnedWorktreeIDs(
+    for: worktreeID,
+    in: target.repository,
+    state: state
+  )
+  guard state.worktreeOrderByRepository[target.repositoryID] != reordered else {
+    return false
+  }
+  if animated {
+    withAnimation(.snappy(duration: 0.2)) {
+      state.worktreeOrderByRepository[target.repositoryID] = reordered
+    }
+  } else {
+    state.worktreeOrderByRepository[target.repositoryID] = reordered
+  }
+  return true
 }

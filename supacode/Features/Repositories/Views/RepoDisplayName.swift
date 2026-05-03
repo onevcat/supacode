@@ -16,6 +16,8 @@ struct RepoDisplayName: View {
 
   var body: some View {
     Text(customTitle ?? fallbackName)
+      .lineLimit(1)
+      .truncationMode(.tail)
       .help(tooltip ?? "")
   }
 }

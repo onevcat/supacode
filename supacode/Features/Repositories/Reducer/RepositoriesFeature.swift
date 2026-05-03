@@ -146,6 +146,7 @@ struct RepositoriesFeature {
     case pinWorktree(Worktree.ID)
     case unpinWorktree(Worktree.ID)
     case worktreeNotificationReceived(Worktree.ID)
+    case setSidebarDragActive(Bool)
     case setMoveNotifiedWorktreeToTop(Bool)
   }
 
@@ -235,6 +236,8 @@ struct RepositoriesFeature {
     var sidebarSelectedWorktreeIDs: Set<Worktree.ID> = []
     var nextPendingSidebarRevealID = 0
     var pendingSidebarReveal: PendingSidebarReveal?
+    var isSidebarDragActive = false
+    var pendingSidebarNotifyReorderIDs: [Worktree.ID] = []
     @Shared(.appStorage("sidebarCollapsedRepositoryIDs")) var collapsedRepositoryIDs: [Repository.ID] = []
     @Presents var worktreeCreationPrompt: WorktreeCreationPromptFeature.State?
     @Presents var alert: AlertState<Alert>?
@@ -1977,7 +1980,7 @@ extension RepositoriesFeature.State {
   }
 }
 
-struct WorktreeRowSections {
+struct WorktreeRowSections: Equatable {
   let main: WorktreeRowModel?
   let pinned: [WorktreeRowModel]
   let pending: [WorktreeRowModel]
