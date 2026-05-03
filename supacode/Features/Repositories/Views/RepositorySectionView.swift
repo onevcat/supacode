@@ -49,7 +49,7 @@ struct RepositorySectionView: View {
           customTitle: store.repositoryCustomTitles[repository.id],
           isRemoving: isRemovingRepository,
           icon: appearance.icon,
-          iconTint: appearance.color?.color,
+          iconTint: appearance.color?.color ?? .accentColor,
           repositoryRootURL: repository.rootURL,
           nameTooltip: repository.capabilities.supportsWorktrees
             ? (isExpanded ? "Collapse" : "Expand")
