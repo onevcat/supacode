@@ -105,9 +105,10 @@ make install-release             # Build Release, sign locally, install to /Appl
 ### Develop & test
 
 ```bash
-make check                 # swift-format + swiftlint
-make format                # Format only
-make lint                  # Lint only
+make check                 # Format changed Swift files, then run swift-format lint + SwiftLint
+make format-changed        # Format changed Swift files only
+make format                # Full-tree Swift format cleanup
+make lint                  # SwiftLint only
 make test                  # Run app/unit tests
 make log-stream            # Stream app logs (subsystem: com.onevcat.prowl)
 ```
