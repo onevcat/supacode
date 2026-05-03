@@ -115,7 +115,7 @@ struct WorktreeRowsView: View {
     moveDisabled: Bool,
     shortcutHint: String?
   ) -> some View {
-    let isSidebarDragActive = store.state.isSidebarDragActive
+    let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
     let displayName =
       if row.isDeleting {
@@ -125,7 +125,7 @@ struct WorktreeRowsView: View {
       } else {
         row.name
       }
-    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isSidebarDragActive
+    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isWorktreeDragActive
     let pinAction: (() -> Void)? =
       canShowRowActions && !row.isMainWorktree
       ? { togglePin(for: row.id, isPinned: row.isPinned) }
@@ -156,9 +156,9 @@ struct WorktreeRowsView: View {
     let config = WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
-      isHovered: !isSidebarDragActive && hoveredWorktreeID == row.id,
-      showsNotificationIndicator: !isSidebarDragActive && showsNotificationIndicator,
-      notifications: isSidebarDragActive ? [] : notifications,
+      isHovered: !isWorktreeDragActive && hoveredWorktreeID == row.id,
+      showsNotificationIndicator: !isWorktreeDragActive && showsNotificationIndicator,
+      notifications: isWorktreeDragActive ? [] : notifications,
       onFocusNotification: onFocusNotification,
       shortcutHint: shortcutHint,
       pinAction: pinAction,
@@ -304,12 +304,12 @@ struct WorktreeRowsView: View {
     let isSelected = selectedWorktreeIDs.contains(row.id)
     let taskStatus = terminalManager.taskStatus(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
-    let isSidebarDragActive = store.state.isSidebarDragActive
+    let isWorktreeDragActive = !draggingWorktreeIDs.isEmpty
     return WorktreeRow(
       name: config.displayName,
       worktreeName: config.worktreeName,
       info: row.info,
-      showsPullRequestInfo: !isSidebarDragActive && !draggingWorktreeIDs.contains(row.id),
+      showsPullRequestInfo: !isWorktreeDragActive,
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,

@@ -36,8 +36,6 @@ struct RepositorySectionView: View {
         }
       }
     }
-    let isDragging = isDragActive
-
     let appearance = repositoryAppearances[repository.id] ?? .empty
     let header = HStack {
       // Inner HStack groups the name row and the tab-count badge so they
@@ -73,7 +71,7 @@ struct RepositorySectionView: View {
             }
         }
       }
-      if isRemovingRepository && !isDragging {
+      if isRemovingRepository {
         ProgressView()
           .controlSize(.small)
           .background {
@@ -94,7 +92,7 @@ struct RepositorySectionView: View {
           .help(color.displayName)
           .accessibilityLabel(Text("Repo color: \(color.displayName)"))
       }
-      if isHovering && !isDragging {
+      if isHovering {
         Menu {
           Button("Repo Settings") {
             openRepoSettings()

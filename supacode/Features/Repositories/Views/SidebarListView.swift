@@ -118,6 +118,9 @@ struct SidebarListView: View {
         return true
       }
       .focused($isSidebarFocused)
+      .onAppear {
+        resetSidebarDrag()
+      }
       .task(id: pendingSidebarReveal?.id) {
         await revealPendingSidebarWorktree(pendingSidebarReveal, with: scrollProxy)
       }
@@ -256,7 +259,12 @@ struct SidebarListView: View {
 
   private func endSidebarDrag() {
     targetedRepositoryDropDestination = nil
-    guard isDragActive else { return }
+    isDragActive = false
+    store.send(.worktreeOrdering(.setSidebarDragActive(false)))
+  }
+
+  private func resetSidebarDrag() {
+    targetedRepositoryDropDestination = nil
     isDragActive = false
     store.send(.worktreeOrdering(.setSidebarDragActive(false)))
   }

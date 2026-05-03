@@ -2,26 +2,50 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-  static let prowlSidebarRepositoryID = UTType(exportedAs: "com.onevcat.prowl.sidebar.repository-id")
-  static let prowlSidebarWorktreeID = UTType(exportedAs: "com.onevcat.prowl.sidebar.worktree-id")
+  nonisolated static let prowlSidebarDragPayload = UTType.plainText
 }
 
 enum SidebarDragProvider {
-  static func repository(id: Repository.ID) -> NSItemProvider {
-    itemProvider(id: id, type: .prowlSidebarRepositoryID)
+  private nonisolated static let repositoryPrefix = "prowl-sidebar-repository:"
+  private nonisolated static let worktreePrefix = "prowl-sidebar-worktree:"
+
+  nonisolated static func repository(id: Repository.ID) -> NSItemProvider {
+    itemProvider(payload: repositoryPrefix + id)
   }
 
-  static func worktree(id: Worktree.ID) -> NSItemProvider {
-    itemProvider(id: id, type: .prowlSidebarWorktreeID)
+  nonisolated static func worktree(id: Worktree.ID) -> NSItemProvider {
+    itemProvider(payload: worktreePrefix + id)
   }
 
-  private static func itemProvider(id: String, type: UTType) -> NSItemProvider {
+  nonisolated static func repositoryID(from data: Data) -> Repository.ID? {
+    payload(from: data, prefix: repositoryPrefix)
+  }
+
+  nonisolated static func worktreeID(from data: Data) -> Worktree.ID? {
+    payload(from: data, prefix: worktreePrefix)
+  }
+
+  private nonisolated static func itemProvider(payload: String) -> NSItemProvider {
     let provider = NSItemProvider()
-    provider.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .all) { completion in
-      completion(Data(id.utf8), nil)
+    let loadHandler: (@escaping (Data?, (any Error)?) -> Void) -> Progress? = { completion in
+      completion(Data(payload.utf8), nil)
       return nil
     }
+    provider.registerDataRepresentation(
+      forTypeIdentifier: UTType.prowlSidebarDragPayload.identifier,
+      visibility: .all,
+      loadHandler: loadHandler
+    )
     return provider
+  }
+
+  private nonisolated static func payload(from data: Data, prefix: String) -> String? {
+    guard let payload = String(data: data, encoding: .utf8),
+      payload.hasPrefix(prefix)
+    else {
+      return nil
+    }
+    return String(payload.dropFirst(prefix.count))
   }
 }
 
@@ -48,13 +72,13 @@ struct SidebarRepositoryDropDelegate: DropDelegate {
   func performDrop(info: DropInfo) -> Bool {
     let dropDestination = destination(info)
     targetedDestination = nil
-    guard let provider = info.itemProviders(for: [.prowlSidebarRepositoryID]).first else {
+    guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
       onDragEnded()
       return false
     }
-    provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarRepositoryID.identifier) { data, _ in
+    provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarDragPayload.identifier) { data, _ in
       guard let data,
-        let repositoryID = String(data: data, encoding: .utf8),
+        let repositoryID = SidebarDragProvider.repositoryID(from: data),
         let source = repositoryOrderIDs.firstIndex(of: repositoryID),
         source != dropDestination,
         source + 1 != dropDestination
@@ -94,13 +118,13 @@ struct SidebarWorktreeDropDelegate: DropDelegate {
   func performDrop(info: DropInfo) -> Bool {
     let dropDestination = destination(info)
     targetedDestination = nil
-    guard let provider = info.itemProviders(for: [.prowlSidebarWorktreeID]).first else {
+    guard let provider = info.itemProviders(for: [.prowlSidebarDragPayload]).first else {
       onDragEnded()
       return false
     }
-    provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarWorktreeID.identifier) { data, _ in
+    provider.loadDataRepresentation(forTypeIdentifier: UTType.prowlSidebarDragPayload.identifier) { data, _ in
       guard let data,
-        let worktreeID = String(data: data, encoding: .utf8),
+        let worktreeID = SidebarDragProvider.worktreeID(from: data),
         let source = sectionIDs.firstIndex(of: worktreeID),
         source != dropDestination,
         source + 1 != dropDestination
@@ -152,24 +176,18 @@ extension View {
       .overlay(alignment: .bottom) {
         SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1)
       }
-      .background {
-        GeometryReader { proxy in
-          Color.clear
-            .onDrop(
-              of: [.prowlSidebarRepositoryID],
-              delegate: SidebarRepositoryDropDelegate(
-                destination: { info in
-                  info.location.y < proxy.size.height / 2 ? index : index + 1
-                },
-                repositoryOrderIDs: repositoryOrderIDs,
-                targetedDestination: targetedDestination,
-                onDrop: onDrop,
-                onDragEnded: onDragEnded
-              )
-            )
-            .accessibilityHidden(true)
-        }
-      }
+      .onDrop(
+        of: [.prowlSidebarDragPayload],
+        delegate: SidebarRepositoryDropDelegate(
+          destination: { info in
+            info.location.y < 24 ? index : index + 1
+          },
+          repositoryOrderIDs: repositoryOrderIDs,
+          targetedDestination: targetedDestination,
+          onDrop: onDrop,
+          onDragEnded: onDragEnded
+        )
+      )
   }
 
   func worktreeDropTarget(
@@ -186,24 +204,18 @@ extension View {
       .overlay(alignment: .bottom) {
         SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == index + 1, horizontalPadding: 28)
       }
-      .background {
-        GeometryReader { proxy in
-          Color.clear
-            .onDrop(
-              of: [.prowlSidebarWorktreeID],
-              delegate: SidebarWorktreeDropDelegate(
-                destination: { info in
-                  info.location.y < proxy.size.height / 2 ? index : index + 1
-                },
-                sectionIDs: rowIDs,
-                targetedDestination: targetedDestination,
-                onDrop: onDrop,
-                onDragEnded: onDragEnded
-              )
-            )
-            .accessibilityHidden(true)
-        }
-      }
+      .onDrop(
+        of: [.prowlSidebarDragPayload],
+        delegate: SidebarWorktreeDropDelegate(
+          destination: { info in
+            info.location.y < 18 ? index : index + 1
+          },
+          sectionIDs: rowIDs,
+          targetedDestination: targetedDestination,
+          onDrop: onDrop,
+          onDragEnded: onDragEnded
+        )
+      )
   }
 
   @ViewBuilder
