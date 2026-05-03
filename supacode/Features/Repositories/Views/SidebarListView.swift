@@ -173,6 +173,7 @@ struct SidebarListView: View {
       }
     }
     .frame(maxWidth: .infinity, minHeight: 26, alignment: .center)
+    .padding(.horizontal, 12)
     .padding(.top, 8)
     .padding(.bottom, 4)
   }
