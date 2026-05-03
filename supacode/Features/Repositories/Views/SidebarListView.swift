@@ -39,14 +39,19 @@ struct SidebarListView: View {
   var body: some View {
     let state = store.state
     let hotkeyRows = state.orderedWorktreeRows(includingRepositoryIDs: expandedRepoIDs)
-    let orderedRoots = state.orderedRepositoryRoots()
+    let presentation = state.sidebarPresentation(expandedRepositoryIDs: expandedRepoIDs)
     let expandableRepositoryIDs = Self.expandableRepositoryIDs(in: state.repositories)
     let repositoryListHeaderAction = Self.repositoryListHeaderAction(
       expandedRepoIDs: expandedRepoIDs,
       expandableRepositoryIDs: expandableRepositoryIDs
     )
-    let visibleRepositoryCount = orderedRoots.isEmpty ? state.repositories.count : orderedRoots.count
-    let showsRepositoryListHeader = Self.showsRepositoryListHeader(repositoryCount: visibleRepositoryCount)
+    let repositoryItems = presentation.items.filter(\.isRepositoryOrderItem)
+    let showsRepositoryListHeader = presentation.items.contains { item in
+      if case .listHeader = item {
+        return true
+      }
+      return false
+    }
     let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
     let selection = Binding<Set<SidebarSelection>>(
       get: {
@@ -131,7 +136,6 @@ struct SidebarListView: View {
         }
       }
     )
-    let repositoriesByID = Dictionary(uniqueKeysWithValues: store.repositories.map { ($0.id, $0) })
     let pendingSidebarReveal = state.pendingSidebarReveal
 
     ScrollViewReader { scrollProxy in
@@ -144,75 +148,17 @@ struct SidebarListView: View {
           .listRowInsets(EdgeInsets())
         }
 
-        if orderedRoots.isEmpty {
-          let repositories = store.repositories
-          ForEach(Array(repositories.enumerated()), id: \.element.id) { index, repository in
-            RepositorySectionView(
-              repository: repository,
-              hasTopSpacing: index > 0,
-              isDragActive: isDragActive,
-              hotkeyRows: hotkeyRows,
-              selectedWorktreeIDs: selectedWorktreeIDs,
-              expandedRepoIDs: $expandedRepoIDs,
-              store: store,
-              terminalManager: terminalManager
-            )
-            .listRowInsets(EdgeInsets())
-          }
-        } else {
-          let orderedRows = Array(orderedRoots.enumerated()).map { index, rootURL in
-            (
-              index: index,
-              rootURL: rootURL,
-              repositoryID: rootURL.standardizedFileURL.path(percentEncoded: false)
-            )
-          }
-          ForEach(orderedRows, id: \.repositoryID) { row in
-            let index = row.index
-            let rootURL = row.rootURL
-            let repositoryID = row.repositoryID
-            if let failureMessage = state.loadFailuresByID[repositoryID] {
-              let name = Repository.name(for: rootURL.standardizedFileURL)
-              let path = rootURL.standardizedFileURL.path(percentEncoded: false)
-              FailedRepositoryRow(
-                name: name,
-                path: path,
-                showFailure: {
-                  let message = "\(path)\n\n\(failureMessage)"
-                  store.send(.presentAlert(title: "Unable to load \(name)", message: message))
-                },
-                removeRepository: {
-                  store.send(.repositoryManagement(.removeFailedRepository(repositoryID)))
-                }
-              )
-              .padding(.horizontal, 12)
-              .overlay(alignment: .top) {
-                if index > 0 {
-                  Rectangle()
-                    .fill(.secondary)
-                    .frame(height: 1)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityHidden(true)
-                }
-              }
-              .listRowInsets(EdgeInsets())
-            } else if let repository = repositoriesByID[repositoryID] {
-              RepositorySectionView(
-                repository: repository,
-                hasTopSpacing: index > 0,
-                isDragActive: isDragActive,
-                hotkeyRows: hotkeyRows,
-                selectedWorktreeIDs: selectedWorktreeIDs,
-                expandedRepoIDs: $expandedRepoIDs,
-                store: store,
-                terminalManager: terminalManager
-              )
-              .listRowInsets(EdgeInsets())
-            }
-          }
-          .onMove { offsets, destination in
-            store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
-          }
+        ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
+          repositoryItemView(
+            item,
+            index: index,
+            hotkeyRows: hotkeyRows,
+            selectedWorktreeIDs: selectedWorktreeIDs
+          )
+          .listRowInsets(EdgeInsets())
+        }
+        .onMove { offsets, destination in
+          store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
         }
       }
       .listStyle(.sidebar)
@@ -222,17 +168,20 @@ struct SidebarListView: View {
         if case .ended = session.phase {
           if isDragActive {
             isDragActive = false
+            store.send(.worktreeOrdering(.setSidebarDragActive(false)))
           }
           return
         }
         if case .dataTransferCompleted = session.phase {
           if isDragActive {
             isDragActive = false
+            store.send(.worktreeOrdering(.setSidebarDragActive(false)))
           }
           return
         }
         if !isDragActive {
           isDragActive = true
+          store.send(.worktreeOrdering(.setSidebarDragActive(true)))
         }
       }
       .safeAreaInset(edge: .top) {
@@ -318,6 +267,56 @@ struct SidebarListView: View {
     .padding(.bottom, 4)
   }
 
+  @ViewBuilder
+  private func repositoryItemView(
+    _ item: SidebarItem,
+    index: Int,
+    hotkeyRows: [WorktreeRowModel],
+    selectedWorktreeIDs: Set<Worktree.ID>
+  ) -> some View {
+    switch item {
+    case .repository(let model):
+      if let repository = store.state.repositories[id: model.repositoryID] {
+        RepositorySectionView(
+          repository: repository,
+          hasTopSpacing: index > 0,
+          isDragActive: isDragActive,
+          hotkeyRows: hotkeyRows,
+          selectedWorktreeIDs: selectedWorktreeIDs,
+          expandedRepoIDs: $expandedRepoIDs,
+          store: store,
+          terminalManager: terminalManager
+        )
+      }
+
+    case .failedRepository(let model):
+      FailedRepositoryRow(
+        name: model.name,
+        path: model.path,
+        showFailure: {
+          let message = "\(model.path)\n\n\(model.failureMessage)"
+          store.send(.presentAlert(title: "Unable to load \(model.name)", message: message))
+        },
+        removeRepository: {
+          store.send(.repositoryManagement(.removeFailedRepository(model.id)))
+        }
+      )
+      .padding(.horizontal, 12)
+      .overlay(alignment: .top) {
+        if index > 0 {
+          Rectangle()
+            .fill(.secondary)
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
+        }
+      }
+
+    case .listHeader, .archivedWorktrees:
+      EmptyView()
+    }
+  }
+
   @MainActor
   private func revealPendingSidebarWorktree(
     _ pendingSidebarReveal: PendingSidebarReveal?,
@@ -354,7 +353,13 @@ struct SidebarListView: View {
   }
 
   static func showsRepositoryListHeader(repositoryCount: Int) -> Bool {
-    repositoryCount > 10
+    SidebarPresentation.showsListHeader(repositoryCount: repositoryCount)
+  }
+}
+
+extension SidebarItem {
+  fileprivate var isRepositoryOrderItem: Bool {
+    repositoryOrderID != nil
   }
 }
 

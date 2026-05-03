@@ -2577,6 +2577,115 @@ struct RepositoriesFeatureTests {
     #expect(store.state.statusToast == nil)
   }
 
+  @Test func worktreeNotificationDuringSidebarDragDefersReorder() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let featureB = makeWorktree(id: "/tmp/repo/b", name: "b", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA, featureB])
+    var state = makeState(repositories: [repository])
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id, featureB.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeOrdering(.setSidebarDragActive(true))) {
+      $0.isSidebarDragActive = true
+    }
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureB.id))) {
+      $0.pendingSidebarNotifyReorderIDs = [featureB.id]
+    }
+    #expect(store.state.worktreeOrderByRepository[repoRoot] == [featureA.id, featureB.id])
+  }
+
+  @Test func endingSidebarDragAppliesPendingNotificationReordersInOrder() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let featureB = makeWorktree(id: "/tmp/repo/b", name: "b", repoRoot: repoRoot)
+    let featureC = makeWorktree(id: "/tmp/repo/c", name: "c", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA, featureB, featureC])
+    var state = makeState(repositories: [repository])
+    state.isSidebarDragActive = true
+    state.pendingSidebarNotifyReorderIDs = [featureA.id, featureC.id, featureB.id]
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id, featureB.id, featureC.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeOrdering(.setSidebarDragActive(false))) {
+      $0.isSidebarDragActive = false
+      $0.pendingSidebarNotifyReorderIDs = []
+      $0.worktreeOrderByRepository[repoRoot] = [featureB.id, featureC.id, featureA.id]
+    }
+  }
+
+  @Test func repeatedNotificationDuringSidebarDragKeepsLatestPosition() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let featureB = makeWorktree(id: "/tmp/repo/b", name: "b", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA, featureB])
+    var state = makeState(repositories: [repository])
+    state.isSidebarDragActive = true
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id, featureB.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureA.id))) {
+      $0.pendingSidebarNotifyReorderIDs = [featureA.id]
+    }
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureB.id))) {
+      $0.pendingSidebarNotifyReorderIDs = [featureA.id, featureB.id]
+    }
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureA.id))) {
+      $0.pendingSidebarNotifyReorderIDs = [featureB.id, featureA.id]
+    }
+    await store.send(.worktreeOrdering(.setSidebarDragActive(false))) {
+      $0.isSidebarDragActive = false
+      $0.pendingSidebarNotifyReorderIDs = []
+      $0.worktreeOrderByRepository[repoRoot] = [featureA.id, featureB.id]
+    }
+  }
+
+  @Test func stalePendingNotificationReordersAreIgnoredWhenDragEnds() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA])
+    var state = makeState(repositories: [repository])
+    state.isSidebarDragActive = true
+    state.pendingSidebarNotifyReorderIDs = ["/tmp/repo/stale", featureA.id]
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeOrdering(.setSidebarDragActive(false))) {
+      $0.isSidebarDragActive = false
+      $0.pendingSidebarNotifyReorderIDs = []
+    }
+  }
+
+  @Test func notificationDuringSidebarDragDoesNotRecordWhenMoveToTopDisabled() async {
+    let repoRoot = "/tmp/repo"
+    let mainWorktree = makeWorktree(id: repoRoot, name: "main", repoRoot: repoRoot)
+    let featureA = makeWorktree(id: "/tmp/repo/a", name: "a", repoRoot: repoRoot)
+    let repository = makeRepository(id: repoRoot, worktrees: [mainWorktree, featureA])
+    var state = makeState(repositories: [repository])
+    state.isSidebarDragActive = true
+    state.moveNotifiedWorktreeToTop = false
+    state.worktreeOrderByRepository[repoRoot] = [featureA.id]
+    let store = TestStore(initialState: state) {
+      RepositoriesFeature()
+    }
+
+    await store.send(.worktreeOrdering(.worktreeNotificationReceived(featureA.id)))
+    #expect(store.state.pendingSidebarNotifyReorderIDs.isEmpty)
+    #expect(store.state.worktreeOrderByRepository[repoRoot] == [featureA.id])
+  }
+
   @Test func setMoveNotifiedWorktreeToTopUpdatesState() async {
     var state = makeState(repositories: [])
     state.moveNotifiedWorktreeToTop = true

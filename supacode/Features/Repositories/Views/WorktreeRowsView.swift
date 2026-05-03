@@ -25,6 +25,7 @@ struct WorktreeRowsView: View {
     let state = store.state
     let sections = state.worktreeRowSections(in: repository)
     let isRepositoryRemoving = state.isRemovingRepository(repository)
+    let isSidebarDragActive = state.isSidebarDragActive
     let showShortcutHints = commandKeyObserver.isPressed
     let allRows = showShortcutHints ? hotkeyRows : []
     let shortcutIndexByID = Dictionary(
@@ -37,7 +38,7 @@ struct WorktreeRowsView: View {
       showShortcutHints: showShortcutHints,
       shortcutIndexByID: shortcutIndexByID
     )
-    .animation(.easeOut(duration: 0.2), value: rowIDs)
+    .animation(isSidebarDragActive ? nil : .easeOut(duration: 0.2), value: rowIDs)
   }
 
   @ViewBuilder
@@ -94,6 +95,7 @@ struct WorktreeRowsView: View {
     moveDisabled: Bool,
     shortcutHint: String?
   ) -> some View {
+    let isSidebarDragActive = store.state.isSidebarDragActive
     let showsNotificationIndicator = terminalManager.hasUnseenNotifications(for: row.id)
     let displayName =
       if row.isDeleting {
@@ -103,7 +105,7 @@ struct WorktreeRowsView: View {
       } else {
         row.name
       }
-    let canShowRowActions = row.isRemovable && !isRepositoryRemoving
+    let canShowRowActions = row.isRemovable && !isRepositoryRemoving && !isSidebarDragActive
     let pinAction: (() -> Void)? =
       canShowRowActions && !row.isMainWorktree
       ? { togglePin(for: row.id, isPinned: row.isPinned) }
@@ -134,9 +136,9 @@ struct WorktreeRowsView: View {
     let config = WorktreeRowViewConfig(
       displayName: displayName,
       worktreeName: worktreeName(for: row),
-      isHovered: hoveredWorktreeID == row.id,
-      showsNotificationIndicator: showsNotificationIndicator,
-      notifications: notifications,
+      isHovered: !isSidebarDragActive && hoveredWorktreeID == row.id,
+      showsNotificationIndicator: !isSidebarDragActive && showsNotificationIndicator,
+      notifications: isSidebarDragActive ? [] : notifications,
       onFocusNotification: onFocusNotification,
       shortcutHint: shortcutHint,
       pinAction: pinAction,
@@ -205,11 +207,12 @@ struct WorktreeRowsView: View {
     let isSelected = selectedWorktreeIDs.contains(row.id)
     let taskStatus = terminalManager.taskStatus(for: row.id)
     let isRunScriptRunning = terminalManager.isRunScriptRunning(for: row.id)
+    let isSidebarDragActive = store.state.isSidebarDragActive
     return WorktreeRow(
       name: config.displayName,
       worktreeName: config.worktreeName,
       info: row.info,
-      showsPullRequestInfo: !draggingWorktreeIDs.contains(row.id),
+      showsPullRequestInfo: !isSidebarDragActive && !draggingWorktreeIDs.contains(row.id),
       isHovered: config.isHovered,
       isPinned: row.isPinned,
       isMainWorktree: row.isMainWorktree,
