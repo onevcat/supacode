@@ -66,6 +66,28 @@ struct WorktreeTerminalManagerTests {
     #expect(state.onFontSizeAdjusted != nil)
   }
 
+  @Test func closeTargetAvailabilityFollowsTerminalModelState() {
+    let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
+    let worktree = makeWorktree()
+    let state = manager.state(for: worktree)
+
+    #expect(state.canCloseFocusedTab == false)
+    #expect(state.canCloseFocusedSurface == false)
+
+    let tabId = state.createTab()
+
+    #expect(tabId != nil)
+    #expect(state.canCloseFocusedTab == true)
+    #expect(state.canCloseFocusedSurface == true)
+
+    if let tabId {
+      state.closeTab(tabId)
+    }
+
+    #expect(state.canCloseFocusedTab == false)
+    #expect(state.canCloseFocusedSurface == false)
+  }
+
   @Test func notificationIndicatorUsesCurrentCountOnStreamStart() async {
     let manager = WorktreeTerminalManager(runtime: GhosttyRuntime())
     let worktree = makeWorktree()

@@ -69,6 +69,20 @@ final class WorktreeTerminalState {
     let surfaceIds = trees[tabId]?.leaves().map(\.id) ?? []
     return notifications.contains { !$0.isRead && surfaceIds.contains($0.surfaceId) }
   }
+
+  var canCloseFocusedTab: Bool {
+    tabManager.selectedTabId != nil
+  }
+
+  var canCloseFocusedSurface: Bool {
+    guard let tabId = tabManager.selectedTabId,
+      let focusedId = focusedSurfaceIdByTab[tabId]
+    else {
+      return false
+    }
+    return surfaces[focusedId] != nil
+  }
+
   var isSelected: () -> Bool = { false }
   var onNotificationReceived: ((String, String) -> Void)?
   var onNotificationIndicatorChanged: (() -> Void)?
