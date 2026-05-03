@@ -59,6 +59,12 @@ enum SidebarPresentationItemID: Equatable, Hashable {
   case archivedWorktrees
 }
 
+enum SidebarScrollID: Equatable, Hashable {
+  case repository(Repository.ID)
+  case worktree(Worktree.ID)
+  case archivedWorktrees
+}
+
 struct SidebarListHeaderModel: Equatable, Identifiable {
   let id = SidebarPresentationItemID.listHeader
   var repositoryCount: Int

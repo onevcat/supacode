@@ -14,6 +14,8 @@ struct WorktreeRowsView: View {
   @Environment(\.resolvedKeybindings) private var resolvedKeybindings
   @State private var draggingWorktreeIDs: Set<Worktree.ID> = []
   @State private var hoveredWorktreeID: Worktree.ID?
+  @State private var targetedPinnedDropDestination: Int?
+  @State private var targetedUnpinnedDropDestination: Int?
 
   var body: some View {
     if isExpanded {
@@ -35,7 +37,6 @@ struct WorktreeRowsView: View {
     return rowsGroup(
       sections: sections,
       isRepositoryRemoving: isRepositoryRemoving,
-      showShortcutHints: showShortcutHints,
       shortcutIndexByID: shortcutIndexByID
     )
     .animation(isSidebarDragActive ? nil : .easeOut(duration: 0.2), value: rowIDs)
@@ -45,7 +46,6 @@ struct WorktreeRowsView: View {
   private func rowsGroup(
     sections: WorktreeRowSections,
     isRepositoryRemoving: Bool,
-    showShortcutHints: Bool,
     shortcutIndexByID: [Worktree.ID: Int]
   ) -> some View {
     if let row = sections.main {
@@ -53,39 +53,62 @@ struct WorktreeRowsView: View {
         row,
         isRepositoryRemoving: isRepositoryRemoving,
         moveDisabled: true,
-        shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
+        shortcutHint: worktreeShortcutHint(for: shortcutIndexByID[row.id])
       )
     }
-    ForEach(sections.pinned) { row in
-      rowView(
-        row,
-        isRepositoryRemoving: isRepositoryRemoving,
-        moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
-        shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
-      )
-    }
-    .onMove { offsets, destination in
-      store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
-    }
+    movableRowsGroup(
+      rows: sections.pinned,
+      section: .pinned,
+      targetedDestination: $targetedPinnedDropDestination,
+      isRepositoryRemoving: isRepositoryRemoving,
+      shortcutIndexByID: shortcutIndexByID
+    )
     ForEach(sections.pending) { row in
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
         moveDisabled: true,
-        shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
+        shortcutHint: worktreeShortcutHint(for: shortcutIndexByID[row.id])
       )
     }
-    ForEach(sections.unpinned) { row in
+    movableRowsGroup(
+      rows: sections.unpinned,
+      section: .unpinned,
+      targetedDestination: $targetedUnpinnedDropDestination,
+      isRepositoryRemoving: isRepositoryRemoving,
+      shortcutIndexByID: shortcutIndexByID
+    )
+  }
+
+  @ViewBuilder
+  private func movableRowsGroup(
+    rows: [WorktreeRowModel],
+    section: SidebarWorktreeSection,
+    targetedDestination: Binding<Int?>,
+    isRepositoryRemoving: Bool,
+    shortcutIndexByID: [Worktree.ID: Int]
+  ) -> some View {
+    let rowIDs = rows.map(\.id)
+    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+      worktreeDropZone(
+        destination: index,
+        rowIDs: rowIDs,
+        targetedDestination: targetedDestination,
+        section: section
+      )
       rowView(
         row,
         isRepositoryRemoving: isRepositoryRemoving,
         moveDisabled: isRepositoryRemoving || row.isDeleting || row.isArchiving,
-        shortcutHint: showShortcutHints ? worktreeShortcutHint(for: shortcutIndexByID[row.id]) : nil
+        shortcutHint: worktreeShortcutHint(for: shortcutIndexByID[row.id])
       )
     }
-    .onMove { offsets, destination in
-      store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
-    }
+    worktreeDropZone(
+      destination: rows.count,
+      rowIDs: rowIDs,
+      targetedDestination: targetedDestination,
+      section: section
+    )
   }
 
   @ViewBuilder
@@ -159,6 +182,18 @@ struct WorktreeRowsView: View {
     }
     .contentShape(.dragPreview, .rect)
     .contentShape(.interaction, .rect)
+    .onTapGesture {
+      selectWorktreeRow(row.id)
+    }
+    .accessibilityAddTraits(.isButton)
+    .draggableWorktree(
+      id: row.id,
+      isEnabled: !moveDisabled,
+      beginDrag: {
+        draggingWorktreeIDs = [row.id]
+        store.send(.worktreeOrdering(.setSidebarDragActive(true)))
+      }
+    )
     .environment(\.colorScheme, colorScheme)
     .preferredColorScheme(colorScheme)
     .onHover { hovering in
@@ -169,23 +204,101 @@ struct WorktreeRowsView: View {
       }
     }
     .onDragSessionUpdated { session in
-      let draggedIDs = Set(session.draggedItemIDs(for: Worktree.ID.self))
-      if case .ended = session.phase {
-        if !draggingWorktreeIDs.isEmpty {
-          draggingWorktreeIDs = []
+      let didEnd =
+        if case .ended = session.phase {
+          true
+        } else if case .dataTransferCompleted = session.phase {
+          true
+        } else {
+          false
         }
+      handleWorktreeDragSession(
+        draggedIDs: Set(session.draggedItemIDs(for: Worktree.ID.self)),
+        didEnd: didEnd
+      )
+    }
+  }
+
+  private func handleWorktreeDragSession(
+    draggedIDs: Set<Worktree.ID>,
+    didEnd: Bool
+  ) {
+    if didEnd {
+      draggingWorktreeIDs = []
+      return
+    }
+    if draggedIDs != draggingWorktreeIDs {
+      draggingWorktreeIDs = draggedIDs
+    }
+  }
+
+  private func worktreeDropZone(
+    destination: Int,
+    rowIDs: [Worktree.ID],
+    targetedDestination: Binding<Int?>,
+    section: SidebarWorktreeSection
+  ) -> some View {
+    SidebarDropIndicator(isVisible: targetedDestination.wrappedValue == destination, horizontalPadding: 28)
+      .onDrop(
+        of: [.prowlSidebarWorktreeID],
+        delegate: SidebarWorktreeDropDelegate(
+          destination: destination,
+          sectionIDs: rowIDs,
+          targetedDestination: targetedDestination,
+          onDrop: { offsets, destination in
+            switch section {
+            case .pinned:
+              store.send(.worktreeOrdering(.pinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
+            case .unpinned:
+              store.send(.worktreeOrdering(.unpinnedWorktreesMoved(repositoryID: repository.id, offsets, destination)))
+            }
+          },
+          onDragEnded: endWorktreeDrag
+        )
+      )
+  }
+
+  private func selectWorktreeRow(_ worktreeID: Worktree.ID) {
+    if commandKeyObserver.isPressed {
+      var nextSelection = selectedWorktreeIDs
+      if nextSelection.contains(worktreeID) {
+        nextSelection.remove(worktreeID)
+      } else {
+        nextSelection.insert(worktreeID)
+      }
+      guard !nextSelection.isEmpty else {
+        store.send(.selectWorktree(nil))
         return
       }
-      if case .dataTransferCompleted = session.phase {
-        if !draggingWorktreeIDs.isEmpty {
-          draggingWorktreeIDs = []
+      let primarySelection =
+        hotkeyRows.map(\.id).first(where: nextSelection.contains)
+        ?? nextSelection.first
+      store.send(.selectWorktree(primarySelection, focusTerminal: false))
+      store.send(.setSidebarSelectedWorktreeIDs(nextSelection))
+      return
+    }
+
+    store.send(.selectWorktree(worktreeID, focusTerminal: true))
+    focusTerminalAfterSelection(worktreeID: worktreeID)
+  }
+
+  private func focusTerminalAfterSelection(worktreeID: Worktree.ID) {
+    Task { @MainActor [terminalManager] in
+      for _ in 0..<4 {
+        await Task.yield()
+        if let terminalState = terminalManager.stateIfExists(for: worktreeID) {
+          terminalState.focusSelectedTab()
+          return
         }
-        return
-      }
-      if draggedIDs != draggingWorktreeIDs {
-        draggingWorktreeIDs = draggedIDs
       }
     }
+  }
+
+  private func endWorktreeDrag() {
+    draggingWorktreeIDs = []
+    targetedPinnedDropDestination = nil
+    targetedUnpinnedDropDestination = nil
+    store.send(.worktreeOrdering(.setSidebarDragActive(false)))
   }
 
   private struct WorktreeRowViewConfig {
@@ -230,10 +343,16 @@ struct WorktreeRowsView: View {
       onStopRunScript: config.onStopRunScript,
     )
     .tag(SidebarSelection.worktree(row.id))
-    .id(row.id)
+    .id(SidebarScrollID.worktree(row.id))
     .typeSelectEquivalent("")
-    .listRowInsets(EdgeInsets())
-    .listRowSeparator(.hidden)
+    .padding(.horizontal, 8)
+    .background {
+      if isSelected {
+        RoundedRectangle(cornerRadius: 5)
+          .fill(Color.accentColor.opacity(0.18))
+          .padding(.horizontal, 6)
+      }
+    }
     .transition(.opacity)
     .moveDisabled(config.moveDisabled)
   }

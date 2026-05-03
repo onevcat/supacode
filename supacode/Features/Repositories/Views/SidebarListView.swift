@@ -35,6 +35,7 @@ struct SidebarListView: View {
   let terminalManager: WorktreeTerminalManager
   @FocusState private var isSidebarFocused: Bool
   @State private var isDragActive = false
+  @State private var targetedRepositoryDropDestination: Int?
 
   var body: some View {
     let state = store.state
@@ -52,137 +53,51 @@ struct SidebarListView: View {
       }
       return false
     }
-    let selectedWorktreeIDs = Set(sidebarSelections.compactMap(\.worktreeID))
-    let selection = Binding<Set<SidebarSelection>>(
-      get: {
-        var nextSelections = sidebarSelections
-        if state.isShowingCanvas {
-          nextSelections = [.canvas]
-        } else if state.isShowingArchivedWorktrees {
-          nextSelections = [.archivedWorktrees]
-        } else {
-          nextSelections.remove(.archivedWorktrees)
-          nextSelections.remove(.canvas)
-          if let selectedRepository = state.selectedRepository, selectedRepository.kind == .plain {
-            nextSelections = [.repository(selectedRepository.id)]
-          } else if let selectedWorktreeID = state.selectedWorktreeID {
-            nextSelections.insert(.worktree(selectedWorktreeID))
-          }
-        }
-        return nextSelections
-      },
-      set: { newValue in
-        let nextSelections = newValue
-        let repositorySelections: [Repository.ID] = nextSelections.compactMap { selection in
-          guard case .repository(let repositoryID) = selection else { return nil }
-          return repositoryID
-        }
-
-        if nextSelections.contains(.canvas) {
-          sidebarSelections = [.canvas]
-          store.send(.selectCanvas)
-          return
-        }
-
-        if nextSelections.contains(.archivedWorktrees) {
-          sidebarSelections = [.archivedWorktrees]
-          store.send(.selectArchivedWorktrees)
-          return
-        }
-
-        if let repositoryID = repositorySelections.first {
-          guard let repository = state.repositories[id: repositoryID] else {
-            return
-          }
-          if repository.capabilities.supportsWorktrees {
-            withAnimation(.easeOut(duration: 0.2)) {
-              if expandedRepoIDs.contains(repositoryID) {
-                expandedRepoIDs.remove(repositoryID)
-              } else {
-                expandedRepoIDs.insert(repositoryID)
-              }
-            }
-            sidebarSelections = []
-          } else {
-            sidebarSelections = [.repository(repositoryID)]
-            store.send(.selectRepository(repositoryID))
-            focusTerminalAfterSidebarSelection(worktreeID: store.state.selectedTerminalWorktree?.id)
-          }
-          return
-        }
-
-        let worktreeIDs = Set(nextSelections.compactMap(\.worktreeID))
-        guard !worktreeIDs.isEmpty else {
-          sidebarSelections = []
-          store.send(.selectWorktree(nil))
-          return
-        }
-        let shouldFocusTerminal = worktreeIDs.count == 1
-        sidebarSelections = Set(worktreeIDs.map(SidebarSelection.worktree))
-        if let selectedWorktreeID = state.selectedWorktreeID,
-          worktreeIDs.contains(selectedWorktreeID)
-        {
-          if shouldFocusTerminal {
-            focusTerminalAfterSidebarSelection(worktreeID: selectedWorktreeID)
-          }
-          return
-        }
-        let nextPrimarySelection =
-          hotkeyRows.map(\.id).first(where: worktreeIDs.contains)
-          ?? worktreeIDs.first
-        store.send(.selectWorktree(nextPrimarySelection, focusTerminal: shouldFocusTerminal))
-        if shouldFocusTerminal {
-          focusTerminalAfterSidebarSelection(worktreeID: nextPrimarySelection)
-        }
-      }
-    )
+    let selectedWorktreeIDs = Self.selectedWorktreeIDs(in: state)
     let pendingSidebarReveal = state.pendingSidebarReveal
 
     ScrollViewReader { scrollProxy in
-      List(selection: selection) {
-        if showsRepositoryListHeader {
-          repositoryListHeader(
-            action: repositoryListHeaderAction,
-            expandableRepositoryIDs: expandableRepositoryIDs
-          )
-          .listRowInsets(EdgeInsets())
-        }
+      ScrollView {
+        LazyVStack(spacing: 0) {
+          if showsRepositoryListHeader {
+            repositoryListHeader(
+              action: repositoryListHeaderAction,
+              expandableRepositoryIDs: expandableRepositoryIDs
+            )
+          }
 
-        ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
-          repositoryItemView(
-            item,
-            index: index,
-            hotkeyRows: hotkeyRows,
-            selectedWorktreeIDs: selectedWorktreeIDs
+          ForEach(Array(repositoryItems.enumerated()), id: \.element.id) { index, item in
+            repositoryDropZone(
+              destination: index,
+              repositoryOrderIDs: presentation.repositoryOrderIDs
+            )
+            repositoryItemView(
+              item,
+              index: index,
+              hotkeyRows: hotkeyRows,
+              selectedWorktreeIDs: selectedWorktreeIDs
+            )
+          }
+          repositoryDropZone(
+            destination: repositoryItems.count,
+            repositoryOrderIDs: presentation.repositoryOrderIDs
           )
-          .listRowInsets(EdgeInsets())
         }
-        .onMove { offsets, destination in
-          store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
-        }
+        .padding(.vertical, 2)
       }
-      .listStyle(.sidebar)
       .scrollIndicators(.never)
       .frame(minWidth: 220)
+      .background(.bar)
       .onDragSessionUpdated { session in
         if case .ended = session.phase {
-          if isDragActive {
-            isDragActive = false
-            store.send(.worktreeOrdering(.setSidebarDragActive(false)))
-          }
+          endSidebarDrag()
           return
         }
         if case .dataTransferCompleted = session.phase {
-          if isDragActive {
-            isDragActive = false
-            store.send(.worktreeOrdering(.setSidebarDragActive(false)))
-          }
+          endSidebarDrag()
           return
         }
-        if !isDragActive {
-          isDragActive = true
-          store.send(.worktreeOrdering(.setSidebarDragActive(true)))
-        }
+        beginSidebarDrag()
       }
       .safeAreaInset(edge: .top) {
         HStack(spacing: 4) {
@@ -285,7 +200,15 @@ struct SidebarListView: View {
           selectedWorktreeIDs: selectedWorktreeIDs,
           expandedRepoIDs: $expandedRepoIDs,
           store: store,
-          terminalManager: terminalManager
+          terminalManager: terminalManager,
+          onRepositorySelected: {
+            selectRepository(repository)
+          }
+        )
+        .draggableRepository(
+          id: model.repositoryID,
+          isEnabled: !model.isRemoving,
+          beginDrag: beginSidebarDrag
         )
       }
 
@@ -311,9 +234,63 @@ struct SidebarListView: View {
             .accessibilityHidden(true)
         }
       }
+      .draggableRepository(
+        id: model.id,
+        isEnabled: model.isReorderable,
+        beginDrag: beginSidebarDrag
+      )
 
     case .listHeader, .archivedWorktrees:
       EmptyView()
+    }
+  }
+
+  private func repositoryDropZone(
+    destination: Int,
+    repositoryOrderIDs: [Repository.ID]
+  ) -> some View {
+    SidebarDropIndicator(isVisible: targetedRepositoryDropDestination == destination)
+      .onDrop(
+        of: [.prowlSidebarRepositoryID],
+        delegate: SidebarRepositoryDropDelegate(
+          destination: destination,
+          repositoryOrderIDs: repositoryOrderIDs,
+          targetedDestination: $targetedRepositoryDropDestination,
+          onDrop: { offsets, destination in
+            store.send(.worktreeOrdering(.repositoriesMoved(offsets, destination)))
+          },
+          onDragEnded: endSidebarDrag
+        )
+      )
+  }
+
+  private func beginSidebarDrag() {
+    guard !isDragActive else { return }
+    isDragActive = true
+    store.send(.worktreeOrdering(.setSidebarDragActive(true)))
+  }
+
+  private func endSidebarDrag() {
+    targetedRepositoryDropDestination = nil
+    guard isDragActive else { return }
+    isDragActive = false
+    store.send(.worktreeOrdering(.setSidebarDragActive(false)))
+  }
+
+  private func selectRepository(_ repository: Repository) {
+    if repository.capabilities.supportsWorktrees {
+      withAnimation(.easeOut(duration: 0.2)) {
+        if expandedRepoIDs.contains(repository.id) {
+          expandedRepoIDs.remove(repository.id)
+        } else {
+          expandedRepoIDs.insert(repository.id)
+        }
+      }
+      sidebarSelections = []
+    } else {
+      sidebarSelections = [.repository(repository.id)]
+      store.send(.selectRepository(repository.id))
+      focusTerminalAfterSidebarSelection(worktreeID: store.state.selectedTerminalWorktree?.id)
     }
   }
 
@@ -328,7 +305,7 @@ struct SidebarListView: View {
     await Task.yield()
     isSidebarFocused = true
     withAnimation(.easeOut(duration: 0.2)) {
-      scrollProxy.scrollTo(pendingSidebarReveal.worktreeID, anchor: .center)
+      scrollProxy.scrollTo(SidebarScrollID.worktree(pendingSidebarReveal.worktreeID), anchor: .center)
     }
     store.send(.consumePendingSidebarReveal(pendingSidebarReveal.id))
   }
@@ -354,6 +331,14 @@ struct SidebarListView: View {
 
   static func showsRepositoryListHeader(repositoryCount: Int) -> Bool {
     SidebarPresentation.showsListHeader(repositoryCount: repositoryCount)
+  }
+
+  static func selectedWorktreeIDs(in state: RepositoriesFeature.State) -> Set<Worktree.ID> {
+    var selectedWorktreeIDs = state.sidebarSelectedWorktreeIDs
+    if let selectedWorktreeID = state.selectedWorktreeID {
+      selectedWorktreeIDs.insert(selectedWorktreeID)
+    }
+    return selectedWorktreeIDs
   }
 }
 
