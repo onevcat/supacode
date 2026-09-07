@@ -42,6 +42,73 @@ struct WorktreeTerminalStateViewedSurfaceTests {
     #expect(!state.isViewedSurface(UUID()))
   }
 
+  enum ViewingCondition: CaseIterable {
+    case viewed, inactive, hidden, unknown, canvas, otherWorktree, otherPane, otherTab
+  }
+
+  @Test(arguments: ViewingCondition.allCases, [AgentRawState.working, .blocked])
+  func completionReadStateRequiresViewedSurface(condition: ViewingCondition, previousState: AgentRawState) {
+    let (state, surfaceID) = makeViewedState()
+    apply(condition, to: state)
+    let previous = PaneAgentState(state: previousState, seen: true)
+
+    #expect(
+      state.resolvedSeen(previous: previous, stabilized: .idle, surfaceID: surfaceID) == (condition == .viewed))
+  }
+
+  @Test(arguments: ViewingCondition.allCases)
+  func pollingAndAutomaticFocusOnlyReadViewedCompletions(condition: ViewingCondition) {
+    let (state, surfaceID) = makeViewedState()
+    apply(condition, to: state)
+    let done = PaneAgentState(state: .idle, seen: false)
+    state.surfaceAgentStates[surfaceID] = done
+
+    #expect(state.resolvedSeen(previous: done, stabilized: .idle, surfaceID: surfaceID) == (condition == .viewed))
+    state.markAgentSeen(surfaceID: surfaceID)
+    #expect(state.surfaceAgentStates[surfaceID]?.displayState == (condition == .viewed ? .idle : .done))
+  }
+
+  @Test func returningToViewedSurfaceAcknowledgesCompletion() {
+    let (state, surfaceID) = makeViewedState()
+    state.lastWindowIsKey = false
+    state.surfaceAgentStates[surfaceID] = PaneAgentState(state: .idle, seen: false)
+    state.markAgentSeen(surfaceID: surfaceID)
+    #expect(state.surfaceAgentStates[surfaceID]?.displayState == .done)
+
+    state.lastWindowIsKey = true
+    state.markAgentSeen(surfaceID: surfaceID)
+    #expect(state.surfaceAgentStates[surfaceID]?.displayState == .idle)
+  }
+
+  @Test func unviewedPollingPreservesReadStateWithoutANewCompletion() {
+    let (state, surfaceID) = makeViewedState()
+    state.lastWindowIsKey = false
+    let idle = PaneAgentState(state: .idle, seen: true)
+    #expect(state.resolvedSeen(previous: idle, stabilized: .idle, surfaceID: surfaceID))
+    let unread = PaneAgentState(state: .idle, seen: false)
+    #expect(!state.resolvedSeen(previous: unread, stabilized: .blocked, surfaceID: surfaceID))
+  }
+
+  private func apply(_ condition: ViewingCondition, to state: WorktreeTerminalState) {
+    switch condition {
+    case .viewed: break
+    case .inactive: state.lastWindowIsKey = false
+    case .hidden: state.lastWindowIsVisible = false
+    case .unknown:
+      state.lastWindowIsKey = nil
+      state.lastWindowIsVisible = nil
+    case .canvas: state.isCanvasManaged = true
+    case .otherWorktree: state.isSelected = { false }
+    case .otherPane:
+      if let tabID = state.tabManager.selectedTabId {
+        state.focusedSurfaceIdByTab[tabID] = UUID()
+      }
+    case .otherTab:
+      let tabID = state.tabManager.createTab(title: "other", icon: nil)
+      state.tabManager.selectTab(tabID)
+    }
+  }
+
   private func makeViewedState() -> (WorktreeTerminalState, UUID) {
     let state = WorktreeTerminalState(
       runtime: GhosttyRuntime(),
