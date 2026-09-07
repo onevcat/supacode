@@ -55,7 +55,8 @@ A row whose pane is bound to an active workflow run replaces its subtitle with
 ## Interactions
 
 - **Click a row** → focuses that worktree + tab + pane and brings Prowl forward. A
-  **Done** row downgrades to **Idle** once focused.
+  **Done** row downgrades to **Idle** once viewed in the active, visible Prowl window.
+  Internal focus changes while the window is inactive do not clear the completion.
 - **Right-click a row** for the context menu:
   - **Hand Off…** — opens the Hand Off HUD for that agent's pane
     (selecting and focusing it first), regardless of which pane currently has
