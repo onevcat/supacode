@@ -63,7 +63,8 @@ cannot be dismissed from the island. A
 Blocked cell clears when the agent leaves that state, a Done cell clears once the entry is viewed,
 and a removed entry disappears with the roster. A selected pane is not considered viewed while
 Prowl's window is inactive, hidden, or minimized, so its Done reminder remains. Unknown window
-state and Canvas-managed panes also retain reminders rather than automatically marking them read.
+state also retains reminders rather than automatically marking them read. See [Canvas](canvas.md)
+for Canvas-specific behavior.
 
 ## Interactions
 

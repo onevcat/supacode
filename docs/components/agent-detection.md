@@ -118,7 +118,7 @@ frames keep the last trusted state instead of forcing Idle.
 A **Done** pane becomes **Idle** when it is actually viewed: its worktree and tab are selected,
 its pane is focused, and the Prowl window is key and visible. Keeping a pane selected while
 Prowl is inactive, hidden, or minimized does not mark its completion as read. Unknown window
-state and Canvas-managed panes are conservatively treated as not viewed.
+state is conservatively treated as not viewed. See [Canvas](canvas.md) for Canvas-specific behavior.
 
 ## Cooperative signal bus
 
