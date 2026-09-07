@@ -110,11 +110,6 @@ extension WorktreeTerminalState {
       raw: raw
     )
 
-    let seen = Self.resolvedSeen(
-      previous: previous,
-      stabilized: stabilized,
-      isForeground: isSelected() && isFocusedSurface(surfaceID)
-    )
     let iconLookupToken = identified?.iconLookupToken ?? previous.iconLookupToken ?? agent.iconLookupToken
     let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
     let (session, sessionMissStreak) = await resolveRetainedSession(
@@ -141,7 +136,7 @@ extension WorktreeTerminalState {
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
-      seen: seen,
+      seen: resolvedSeen(previous: previous, stabilized: stabilized, surfaceID: surfaceID),
       lastChangedAt: lastChangedAt
     )
     next.sessionMissStreak = sessionMissStreak
@@ -209,12 +204,12 @@ extension WorktreeTerminalState {
     return detection
   }
 
-  private static func resolvedSeen(
+  private func resolvedSeen(
     previous: PaneAgentState,
     stabilized: AgentRawState,
-    isForeground: Bool
+    surfaceID: UUID
   ) -> Bool {
-    if isForeground || stabilized == .blocked {
+    if isViewedSurface(surfaceID) {
       return true
     }
     if (previous.state == .working || previous.state == .blocked) && stabilized == .idle {
@@ -293,7 +288,8 @@ extension WorktreeTerminalState {
   }
 
   func markAgentSeen(surfaceID: UUID) {
-    guard var state = surfaceAgentStates[surfaceID], !state.seen else { return }
+    // Focus bookkeeping can run while the window is inactive or before a tab is selected.
+    guard isViewedSurface(surfaceID), var state = surfaceAgentStates[surfaceID], !state.seen else { return }
     state.seen = true
     state.lastChangedAt = Date()
     surfaceAgentStates[surfaceID] = state
