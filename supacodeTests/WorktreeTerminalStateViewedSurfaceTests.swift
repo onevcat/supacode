@@ -78,6 +78,94 @@ struct WorktreeTerminalStateViewedSurfaceTests {
     #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
   }
 
+  enum ViewingCondition: CaseIterable {
+    case viewed, inactive, hidden, unknown, canvas, otherWorktree, otherPane, otherTab
+  }
+
+  @Test(arguments: ViewingCondition.allCases, [AgentRawState.working, .blocked])
+  func completionPollingRequiresViewedSurface(
+    condition: ViewingCondition,
+    previousState: AgentRawState
+  ) async {
+    let fixture = makeDetectionFixture()
+    apply(condition, to: fixture.state)
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(detectedAgent: .claude, state: previousState, seen: true),
+      detected: .idle
+    )
+
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(
+      fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState
+        == (condition == .viewed ? .idle : .done)
+    )
+  }
+
+  @Test(arguments: ViewingCondition.allCases)
+  func automaticAcknowledgementRequiresViewedSurface(condition: ViewingCondition) {
+    let fixture = makeDetectionFixture()
+    apply(condition, to: fixture.state)
+    fixture.state.surfaceAgentStates[fixture.surface.id] = PaneAgentState(
+      detectedAgent: .claude,
+      state: .idle,
+      seen: false
+    )
+
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+
+    #expect(
+      fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState
+        == (condition == .viewed ? .idle : .done)
+    )
+  }
+
+  @Test func inactiveStableIdlePollDoesNotCreateCompletion() async {
+    let fixture = makeDetectionFixture()
+    fixture.state.lastWindowIsKey = false
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(detectedAgent: .claude, state: .idle, seen: true),
+      detected: .idle
+    )
+
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
+  }
+
+  @Test func inactiveUnreadStateSurvivesBlockedRoundTrip() async {
+    let fixture = makeDetectionFixture()
+    fixture.state.lastWindowIsKey = false
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(detectedAgent: .claude, state: .idle, seen: false),
+      detected: .blocked
+    )
+
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.seen == false)
+
+    prepareDetection(fixture, detected: .idle)
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+  }
+
+  @Test func returningToViewedSurfaceAcknowledgesCompletion() {
+    let fixture = makeDetectionFixture()
+    fixture.state.lastWindowIsKey = false
+    fixture.state.surfaceAgentStates[fixture.surface.id] = PaneAgentState(
+      detectedAgent: .claude,
+      state: .idle,
+      seen: false
+    )
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+
+    fixture.state.lastWindowIsKey = true
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
+  }
+
   private func makeViewedState() -> (WorktreeTerminalState, UUID) {
     let state = WorktreeTerminalState(
       runtime: GhosttyRuntime(),
@@ -132,5 +220,50 @@ struct WorktreeTerminalStateViewedSurfaceTests {
     state.lastWindowIsKey = true
     state.lastWindowIsVisible = true
     return DetectionFixture(state: state, tabID: tabID, surface: surface)
+  }
+
+  private func apply(_ condition: ViewingCondition, to state: WorktreeTerminalState) {
+    switch condition {
+    case .viewed:
+      break
+    case .inactive:
+      state.lastWindowIsKey = false
+    case .hidden:
+      state.lastWindowIsVisible = false
+    case .unknown:
+      state.lastWindowIsKey = nil
+      state.lastWindowIsVisible = nil
+    case .canvas:
+      state.isCanvasManaged = true
+    case .otherWorktree:
+      state.isSelected = { false }
+    case .otherPane:
+      if let tabID = state.tabManager.selectedTabId {
+        state.focusedSurfaceIdByTab[tabID] = UUID()
+      }
+    case .otherTab:
+      let tabID = state.tabManager.createTab(title: "other", icon: nil)
+      state.tabManager.selectTab(tabID)
+    }
+  }
+
+  private func preparePoll(
+    _ fixture: DetectionFixture,
+    previous: PaneAgentState,
+    detected: AgentRawState
+  ) {
+    fixture.state.surfaceAgentStates[fixture.surface.id] = previous
+    fixture.state.agentDetectionPresenceBySurface[fixture.surface.id] = AgentDetectionPresence(
+      currentAgent: .claude
+    )
+    prepareDetection(fixture, detected: detected)
+  }
+
+  private func prepareDetection(_ fixture: DetectionFixture, detected: AgentRawState) {
+    fixture.state.lastAgentScreenScanBySurface[fixture.surface.id] = WorktreeTerminalState.AgentScreenScan(
+      agent: .claude,
+      text: "",
+      detection: AgentScreenDetection(state: detected, reason: .legacyDetector)
+    )
   }
 }
