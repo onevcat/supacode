@@ -17,6 +17,28 @@ struct WorkflowHistoryReviewTests {
     ).machine
   }
 
+  @Test func sessionIdentityUsesCurrentExactHookEvidence() {
+    let signal = AgentSignal(
+      kind: .sessionStart, source: .hook(runtime: .pi, event: "session-start"),
+      confidence: .exact, timestamp: .distantPast, sessionID: "pi-session", detail: nil, claimedOrigin: nil)
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .pi, detected: nil, currentSignal: signal) == "pi:pi-session")
+    let stale = AgentSession(id: "old-session", transcriptPath: nil, source: .recentFile, confidence: .medium)
+    #expect(
+      WorkflowHistorySessionIdentity.resolve(agent: .pi, detected: stale, currentSignal: signal) == "pi:pi-session")
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .codex, detected: nil, currentSignal: signal) == nil)
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .pi, detected: stale, currentSignal: nil) == nil)
+    let exact = AgentSession(id: "known", transcriptPath: nil, source: .commandLine, confidence: .exact)
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .codex, detected: exact, currentSignal: nil) == "codex:known")
+    let claimed = AgentSignal(
+      kind: .sessionStart, source: .cooperativeCLI, confidence: .exact,
+      timestamp: .distantPast, sessionID: "claimed", detail: nil, claimedOrigin: "hook_pi")
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .pi, detected: nil, currentSignal: claimed) == nil)
+    let ended = AgentSignal(
+      kind: .sessionEnd, source: .hook(runtime: .pi, event: "session-end"),
+      confidence: .exact, timestamp: .distantPast, sessionID: "ended", detail: nil, claimedOrigin: nil)
+    #expect(WorkflowHistorySessionIdentity.resolve(agent: .pi, detected: exact, currentSignal: ended) == nil)
+  }
+
   @Test func controlErrorsKeepCompletedWorkAndErrorAfterCancellation() throws {
     var machine = try start(
       """

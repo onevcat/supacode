@@ -14,6 +14,19 @@ nonisolated struct WorkflowHistoryContext: Equatable, Sendable {
   var livePaneIDs: Set<UUID> = []
 }
 
+nonisolated enum WorkflowHistorySessionIdentity {
+  static func resolve(agent: DetectedAgent, detected: AgentSession?, currentSignal: AgentSignal?) -> String? {
+    if let signal = currentSignal, signal.confidence == .exact,
+      case .hook(let runtime, _) = signal.source, runtime.agent == agent
+    {
+      if case .sessionEnd = signal.kind { return nil }
+      if let sessionID = signal.sessionID, !sessionID.isEmpty { return "\(agent.rawValue):\(sessionID)" }
+    }
+    guard let detected, detected.confidence == .exact, !detected.id.isEmpty else { return nil }
+    return "\(agent.rawValue):\(detected.id)"
+  }
+}
+
 nonisolated enum WorkflowHistoryStatus {
   static func label(_ state: String) -> String {
     switch state {

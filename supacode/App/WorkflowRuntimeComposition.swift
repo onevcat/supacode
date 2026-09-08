@@ -207,7 +207,10 @@ extension SupacodeApp {
             "state": .string(AgentConditionEvidence.normalizedState(snapshot)),
             "session_identity": storeBox.store?.state.repositories.activeAgents.entries
               .first(where: { $0.surfaceID == pane.surfaceID }).flatMap { entry in
-                entry.session.map { .string("\(entry.agent.rawValue):\($0.id)") }
+                WorkflowHistorySessionIdentity.resolve(
+                  agent: entry.agent, detected: entry.session,
+                  currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: pane.surfaceID).latest
+                ).map(WorkflowJSONValue.string)
               } ?? .null,
           ])
         }
@@ -499,7 +502,9 @@ extension SupacodeApp {
         appStore.state.repositories.activeAgents.entries.first { $0.surfaceID == surfaceID }.map { entry in
           WorkflowDetectedAgent(
             token: entry.agent.rawValue, displayName: entry.agent.displayName,
-            sessionIdentity: entry.session.map { session in "\(entry.agent.rawValue):\(session.id)" })
+            sessionIdentity: WorkflowHistorySessionIdentity.resolve(
+              agent: entry.agent, detected: entry.session,
+              currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID).latest))
         }
       },
       pendingDispatchID: { surfaceID in

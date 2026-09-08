@@ -220,3 +220,24 @@ reference or omit a cancelled retry. Both variants failed in regression tests. I
 and retries now use one function that registers metadata and returns the write effect together.
 The focused run passed 83 tests, including preservation of both bodies and their acceptance
 states. A fourth convergence review checks this narrow change before native acceptance.
+
+### Convergence and live acceptance
+
+The fourth Pi review found no remaining substantiated P0, P1, or material P2 in the
+reviewed implementation. The full suite passed 3184 main tests and two process-cancellation
+tests; the Debug build and checks passed.
+
+Real workflows in an isolated Debug instance verified a built-in action, an accepted
+80-line Pi delivery, and four outputs with distinct nested iteration paths. This exposed
+one additional identity gap: Pi's exact managed-hook session was not included when process
+detection had no session. History now shares one resolver across admission, observation,
+and pane filtering. It uses current exact same-runtime hook evidence, rejects ended
+sessions, and accepts only exact detected identities as a fallback. A regression failed
+before the fix, then all ten focused review tests passed. A fifth focused review and a
+repeat live participant run check this change. The repeat run completed and persisted the
+exact Pi hook session for the reviewer; a second workflow started from that Pi pane also
+persisted the same identity for the initiator.
+
+Native screenshot acceptance is still pending because the Mac is locked. CLI execution
+receipts establish actual workflow behavior; they do not establish toolbar layout,
+hover interaction, native script approval, or external output-opening behavior.

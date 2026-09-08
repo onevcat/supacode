@@ -203,7 +203,11 @@ struct WorktreeDetailView: View {
     let agent = repositories.activeAgents.entries.first { $0.surfaceID == pane }
     return WorkflowHistoryContext(
       paneID: pane,
-      session: agent.flatMap { entry in entry.session.map { "\(entry.agent.rawValue):\($0.id)" } },
+      session: agent.flatMap { entry in
+        WorkflowHistorySessionIdentity.resolve(
+          agent: entry.agent, detected: entry.session,
+          currentSignal: terminalManager.currentAgentSignalEvidenceSnapshot(surfaceID: entry.surfaceID).latest)
+      },
       worktreeID: worktree?.id, livePaneIDs: Set(repositories.activeAgents.entries.map(\.surfaceID)))
   }
 
