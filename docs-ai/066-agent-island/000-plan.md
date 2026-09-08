@@ -149,3 +149,6 @@ until it reconnects. The picker matches by UUID only (`AgentIslandDisplaySelecti
 
 - Updated 2026-09-08: preserve completion acknowledgements across session lookup suspension — see
   [005-completion-acknowledgement.md](005-completion-acknowledgement.md).
+
+- Updated 2026-09-08: continue Canvas completion viewing with viewport coverage — see
+  [006-canvas-completion-visibility.md](006-canvas-completion-visibility.md).
