@@ -158,7 +158,7 @@ struct WorkflowRunsFeature {
 
       case .event(let runID, let event):
         guard var session = state.sessions[runID], !session.run.status.isTerminal else {
-          return lateEventCleanup(event, runID: runID, session: state.sessions[runID])
+          return archiveOrCleanLateEvent(event, runID: runID, state: &state)
         }
         let timestamp = now
         let generator = uuid
@@ -381,6 +381,20 @@ struct WorkflowRunsFeature {
   }
 
   // MARK: - Late and stale events
+
+  private func archiveOrCleanLateEvent(_ event: WorkflowRunEvent, runID: UUID, state: inout State) -> Effect<Action> {
+    guard var session = state.sessions[runID] else { return lateEventCleanup(event, runID: runID, session: nil) }
+    let timestamp = now
+    let generator = uuid
+    var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
+    let effects = machine.apply(event)
+    guard !effects.isEmpty else { return lateEventCleanup(event, runID: runID, session: session) }
+    session.run = machine.run
+    state.sessions[runID] = session
+    // The non-revocable write precedes the cancellation batch. Its acknowledgement queues this
+    // snapshot before finish closes the stream; buffered archival writes still drain in order.
+    return perform(effects, runID: runID, session: session)
+  }
 
   /// An event that arrives after the run ended (or for an unknown run) may own a pane or a
   /// dispatch record nobody will use: a `.launched` abandons its record and closes the pane, an

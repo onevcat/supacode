@@ -295,7 +295,8 @@ nonisolated struct WorkflowRunMachine {
   // MARK: Events
 
   mutating func apply(_ event: WorkflowRunEvent) -> [WorkflowRunEffect] {
-    guard !run.status.isTerminal else { return [] }
+    let archived = archiveDeliveryPersistence(event)
+    guard !run.status.isTerminal else { return archived ? [.persist] : [] }
     var effects: [WorkflowRunEffect] = []
     switch event {
     case .roleIdle(let ordinal):
@@ -326,7 +327,33 @@ nonisolated struct WorkflowRunMachine {
     case .user(let action):
       applyUser(action, effects: &effects)
     }
-    return effects
+    return archived && !effects.contains(.persist) ? effects + [.persist] : effects
+  }
+
+  private mutating func archiveDeliveryPersistence(_ event: WorkflowRunEvent) -> Bool {
+    let ordinal: Int
+    let failure: String?
+    switch event {
+    case .deliveryPersisted(let value):
+      ordinal = value
+      failure = nil
+    case .deliveryPersistFailed(let value, let reason):
+      ordinal = value
+      failure = reason
+    default: return false
+    }
+    guard let submission = run.pendingHistorySubmissions.removeValue(forKey: ordinal),
+      let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal })
+    else { return false }
+    if let failure {
+      let message = "Delivery could not be saved: \(failure)"
+      run.stepRecords[index].error = run.stepRecords[index].error.map { $0 + "\n" + message } ?? message
+    } else {
+      run.stepRecords[index].delivery = submission.delivery
+      run.stepRecords[index].submissions = (run.stepRecords[index].submissions ?? []) + [submission]
+    }
+    run.updatedAt = now()
+    return true
   }
 
   private mutating func continueControlFlow(effects: inout [WorkflowRunEffect]) {
@@ -437,6 +464,9 @@ nonisolated struct WorkflowRunMachine {
       validated = delivery
     }
     let record = deliveryRecord(for: activation, verdict: validated.verdict)
+    run.pendingHistorySubmissions[activation.ordinal] = .init(
+      delivery: submissionRecord(activation: activation, delivery: validated, verdict: validated.verdict),
+      accepted: false, issues: validated.issues.map(\.message))
     updateActivation(ordinal: activation.ordinal) {
       $0.state = .persisting
       $0.pendingDelivery = validated
@@ -502,14 +532,6 @@ nonisolated struct WorkflowRunMachine {
     guard case .waitingForDelivery(ordinal) = run.phase, let activation = run.activeActivation,
       activation.state == .persisting, let delivery = activation.pendingDelivery
     else { return }
-    if let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal }) {
-      let record = submissionRecord(activation: activation, delivery: delivery, verdict: delivery.verdict)
-      run.stepRecords[index].delivery = record
-      run.stepRecords[index].submissions =
-        (run.stepRecords[index].submissions ?? []) + [
-          .init(delivery: record, accepted: false, issues: delivery.issues.map(\.message))
-        ]
-    }
     guard delivery.issues.isEmpty else {
       updateActivation(ordinal: ordinal) { $0.state = .provisional }
       raiseAttention(

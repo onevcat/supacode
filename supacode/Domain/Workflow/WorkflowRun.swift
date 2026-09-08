@@ -273,6 +273,7 @@ nonisolated struct WorkflowHistorySubmission: Codable, Equatable, Sendable {
   var delivery: WorkflowDeliveryRecord
   var accepted: Bool
   var issues: [String]
+  var statusLabel: String { accepted ? "Accepted" : issues.isEmpty ? "Not accepted" : "Needs correction" }
 }
 
 // MARK: - Position and step records
@@ -412,6 +413,8 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   /// Latest delivered output per name (latest wins across steps).
   var deliveries: [String: WorkflowDeliveryRecord] = [:]
   var actionOutputs: [String: [String: WorkflowJSONValue]] = [:]
+  /// Metadata for non-revocable writes; cancellation can discard activation bodies but not their attribution.
+  var pendingHistorySubmissions: [Int: WorkflowHistorySubmission] = [:]
   var controlCursor: WorkflowControlCursor?
   var stepValues: [String: WorkflowJSONValue] = [:]
   var observations: [String: WorkflowJSONValue] = [:]

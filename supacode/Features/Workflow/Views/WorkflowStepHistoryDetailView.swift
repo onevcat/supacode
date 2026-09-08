@@ -223,10 +223,10 @@ private struct WorkflowHistoryStepRow: View {
     if let submissions = attempt.submissions, !submissions.isEmpty, let directory {
       ForEach(Array(submissions.enumerated()), id: \.offset) { index, submission in
         if index == submissions.count - 1 {
-          Text("Submission \(index + 1) · \(submission.accepted ? "Accepted" : "Needs correction")").font(.caption)
+          Text("Submission \(index + 1) · \(submission.statusLabel)").font(.caption)
           WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
         } else {
-          DisclosureGroup("Submission \(index + 1) · \(submission.accepted ? "Accepted" : "Needs correction")") {
+          DisclosureGroup("Submission \(index + 1) · \(submission.statusLabel)") {
             ForEach(submission.issues, id: \.self) { Text($0).foregroundStyle(.orange).lineLimit(3) }
             WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
           }
@@ -265,6 +265,9 @@ private struct WorkflowHistoryStepRow: View {
       Text("Step: \(attempt.id)").textSelection(.enabled)
       if let ordinal = attempt.ordinal { Text("Invocation: \(ordinal)") }
       if let iteration = attempt.iteration { Text("Round: \(iteration)") }
+      if let path = attempt.iterationPath, !path.isEmpty {
+        Text("Iteration path: \(path.joined(separator: " / "))").textSelection(.enabled)
+      }
     }.font(.caption).foregroundStyle(.secondary)
   }
 }

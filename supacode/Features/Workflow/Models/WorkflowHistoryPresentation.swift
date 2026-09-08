@@ -51,10 +51,11 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   let iteration: Int?
   let attempts: [WorkflowRunRecord.Step]
   var legacyDetailsUnavailable = false
+  var iterationLabel: String?
 
   var subtitle: String {
     var parts = [WorkflowHistoryStatus.label(state)]
-    if let iteration { parts.append("Round \(iteration)") }
+    if let iterationLabel { parts.append(iterationLabel) } else if let iteration { parts.append("Round \(iteration)") }
     if attempts.count > 1 { parts.append("\(attempts.count) attempts") }
     return parts.joined(separator: " · ")
   }
@@ -70,6 +71,7 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
       definitions.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
     let deliveries = Dictionary(
       record.deliveries.values.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
+    let titles = Dictionary(definitions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     let byStep = Dictionary(grouping: record.steps, by: \.id)
     var result: [(group: Self, order: [Int])] = []
     for definition in definitions {
@@ -80,6 +82,9 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
         let attempts = (byPath[path] ?? []).map { step in
           var step = step
           if step.delivery == nil, let ordinal = step.ordinal { step.delivery = deliveries[ordinal] }
+          if record.stepDefinitions == nil, records.count == 1, step.state == .completed, step.outputs == nil {
+            step.outputs = record.actions[step.id]
+          }
           return step
         }
         let latest = attempts.last
@@ -90,7 +95,14 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
         let group = Self(
           id: "\(definition.id):\(path.joined(separator: "/"))",
           title: latest?.title ?? definition.title, state: state, iteration: latest?.iteration, attempts: attempts,
-          legacyDetailsUnavailable: record.stepDefinitions == nil)
+          legacyDetailsUnavailable: record.stepDefinitions == nil,
+          iterationLabel: path.isEmpty || path.first?.hasPrefix("legacy:") == true
+            ? nil
+            : path.map { component in
+              let parts = component.split(separator: ":")
+              let loop = parts.first.map(String.init) ?? ""
+              return "\(titles[loop] ?? loop) · Round \(parts.last ?? "?")"
+            }.joined(separator: " / "))
         var order: [Int] = []
         for component in path {
           let parts = component.split(separator: ":")

@@ -273,6 +273,79 @@ struct WorkflowRunsFeatureTests {
     var effects: [WorkflowRunEffect] { batches.flatMap(\.effects) }
   }
 
+  @MainActor
+  final class HoldingDeliveryQueue {
+    private let queue = WorkflowEffectQueue()
+    private var held: [(UUID, WorkflowEffectBatch)] = []
+    var isHolding = false
+    var client: WorkflowEffectQueueClient {
+      WorkflowEffectQueueClient(
+        start: { [queue] in queue.start($0) },
+        enqueue: { [self] id, batch in
+          if isHolding || batch.effects.contains(where: { if case .persistDelivery = $0 { true } else { false } }) {
+            isHolding = true
+            held.append((id, batch))
+          } else {
+            queue.enqueue(id, batch)
+          }
+        }, fence: { [queue] in queue.fence($0) }, isStale: { [queue] in queue.isStale($0, sequence: $1) },
+        finish: { [queue] in queue.finish($0) })
+    }
+    func release() {
+      isHolding = false
+      for (id, batch) in held { queue.enqueue(id, batch) }
+      held = []
+    }
+  }
+
+  @Test(.dependencies, arguments: [false, true])
+  func cancellationRetainsLatePersistenceEvidence(persistenceFails: Bool) async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let queue = HoldingDeliveryQueue()
+    let store = makeStore(fixture, queue: queue.client)
+    let (session, effects) = try fixture.session()
+    let id = session.run.id
+    await store.send(.started(session, effects: effects))
+    await store.receive(.event(runID: id, .roleIdle(ordinal: 1)), timeout: Self.timeout)
+    await store.receive(
+      .event(runID: id, .injectionSucceeded(ordinal: 1, dispatchID: "dispatch-1")), timeout: Self.timeout)
+    await store.send(
+      .deliver(
+        .init(
+          requestID: UUID(), runID: id, ordinal: 1, selector: .token(Self.firstToken),
+          body: "# Brief\n## Scope\nx\n## Claims\ny", verdict: nil, source: "pane")))
+    #expect(queue.isHolding)
+    let activation = try #require(store.state.sessions[id]?.run.activeActivation)
+    let body = try #require(activation.pendingDelivery?.body)
+    let path = WorkflowRunPaths.submissionURL(
+      runDirectory: session.run.runDirectory,
+      name: activation.deliveryName, ordinal: 1, body: body)
+    if persistenceFails { try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false) }
+    await store.send(.userAction(runID: id, .cancel))
+    queue.release()
+    await store.receive(\.event, timeout: Self.timeout)
+    await store.finish(timeout: Self.timeout)
+    let run = try #require(store.state.sessions[id]?.run)
+    let record = try session.store.readRecord(runID: id)
+    #expect(run.status == .cancelled)
+    #expect(record.run.status.state == "cancelled")
+    #expect(fixture.completed.isEmpty)
+    #expect(fixture.launches.isEmpty)
+    #expect(fixture.responses.count == 1)
+    #expect(fixture.responses.allSatisfy { if case .failed = $0.resolution { true } else { false } })
+    let submissions = record.steps.flatMap { $0.submissions ?? [] }
+    if persistenceFails {
+      #expect(submissions.isEmpty)
+      #expect(record.steps.first?.error?.contains("save") == true)
+    } else {
+      #expect(submissions.count == 1)
+      #expect(submissions.first?.accepted == false)
+      #expect(record.steps.first?.ordinal == 1)
+      #expect(try String(contentsOf: path, encoding: .utf8) == body)
+    }
+  }
+
   /// A real queue whose fence rises on the n-th staleness check of the run — as a cancel that
   /// reduces on that very main-actor turn would raise it; `reached()` returns once it did.
   @MainActor

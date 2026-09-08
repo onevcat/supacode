@@ -148,7 +148,8 @@ Runs** include broader history and records whose pane identity is unavailable.
 Select a run on the left, then expand its steps on the right. Checkmarks indicate
 completed execution; a delivery verdict such as `issues` does not mean execution
 failed. Branches not selected, skipped steps, and steps not reached before
-termination have separate states. Rounds and retry attempts retain their own
+termination have separate states. Nested rounds show their complete loop path.
+Rounds and retry attempts retain their own
 recorded outputs and errors. Provisional and corrected submissions keep separate
 body snapshots. Failed action attempts link to their own stdout, stderr, and
 execution record. Older records can lack some details.

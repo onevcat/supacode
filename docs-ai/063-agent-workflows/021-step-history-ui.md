@@ -195,3 +195,19 @@ snapshot terminal candidates before reading, and late disk detail reads cannot r
 newer in-memory state. Both regressions failed before the fixes; all seven history
 reducer/model tests then passed. The complete pre-race-fix suite passed 3179 main tests
 and two process-cancellation tests, with a clean Debug build.
+
+### Adversarial review, round 2
+
+The reviewer rechecked all ten first-round findings at `727e3646` and confirmed the two
+stale-read fixes. Three P2 gaps remained; all three were reproduced by new failing tests.
+
+- Pending submission metadata now survives activation revocation. Late persistence events
+  update archival evidence through the ordered queue, while the run remains cancelled and
+  the CLI still reports cancellation. Failed writes add an error, not a saved body reference.
+- A legacy action result is recovered only for one completed occurrence of that step.
+  Repeated or retried old steps do not receive an invented per-attempt result.
+- Each recorded round shows its complete named iteration path, including outer loops.
+  Execution Details also exposes the saved path. Zero and future iterations are not added.
+
+The focused domain/reducer run passed 88 tests. Native menu, hover, and screenshot acceptance
+remain pending; the third review checks these fixes before that phase starts.

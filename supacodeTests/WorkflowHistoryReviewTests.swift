@@ -80,6 +80,42 @@ struct WorkflowHistoryReviewTests {
     #expect(
       steps.filter { $0.id == "stop" }.map(\.iterationPath) == [["outer:1", "inner:1"], ["outer:2", "inner:1"]])
     #expect(steps.filter { $0.id == "inner" }.map(\.iterationPath) == [["outer:1"], ["outer:2"]])
+    let work = WorkflowHistoryStepGroup.groups(WorkflowRunRecord(run: machine.run)).filter { $0.id.hasPrefix("work:") }
+    #expect(Set(work.map(\.subtitle)).count == 2)
+    #expect(work.allSatisfy { $0.subtitle.contains("outer") && $0.subtitle.contains("inner") })
+  }
+
+  @Test func legacyActionOutputRequiresOneCompletedOccurrence() throws {
+    var machine = try start(
+      """
+      schema: prowl.workflow/v1
+      id: old-action
+      name: Old Action
+      steps: [{id: snapshot, action: 'builtin:collect-worktree-context'}]
+      """)
+    let file = FileManager.default.temporaryDirectory.appending(path: "legacy-action-\(UUID().uuidString).json")
+    try Data("{\"branch\":\"main\"}".utf8).write(to: file)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let output: [String: WorkflowJSONValue] = [
+      "output": .object(["branch": .string("main")]), "output_path": .string(file.path),
+    ]
+    _ = machine.apply(
+      .actionCompleted(stepID: "snapshot", outputs: output, executionID: try #require(machine.run.actionExecutionID)))
+    var json = try #require(
+      JSONSerialization.jsonObject(
+        with: WorkflowRunRecord.makeEncoder().encode(
+          WorkflowRunRecord(run: machine.run))) as? [String: Any])
+    json.removeValue(forKey: "step_definitions")
+    json["steps"] = [["id": "snapshot", "state": "completed"]]
+    let single = try WorkflowRunRecord.makeDecoder().decode(
+      WorkflowRunRecord.self,
+      from: JSONSerialization.data(withJSONObject: json))
+    #expect(WorkflowHistoryStepGroup.groups(single).first?.attempts.first?.outputs == output)
+    json["steps"] = [1, 2].map { ["id": "snapshot", "state": "completed", "iteration": $0] as [String: Any] }
+    let repeated = try WorkflowRunRecord.makeDecoder().decode(
+      WorkflowRunRecord.self,
+      from: JSONSerialization.data(withJSONObject: json))
+    #expect(WorkflowHistoryStepGroup.groups(repeated).flatMap(\.attempts).compactMap(\.outputs).isEmpty)
   }
 
   @Test func provisionalAndCorrectedSubmissionsKeepBothBodies() throws {
