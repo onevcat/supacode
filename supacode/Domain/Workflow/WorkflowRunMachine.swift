@@ -61,10 +61,10 @@ nonisolated enum WorkflowRunEvent: Equatable, Sendable {
   case actionCompleted(stepID: String, outputs: [String: WorkflowJSONValue], executionID: String = "")
   case actionFailed(stepID: String, reason: String, executionID: String = "", retryAllowed: Bool = true)
   case continueControlFlow
-  /// The `.persistOutput` effect of a delivery succeeded / failed (dsl-spec §5: validate,
+  /// The `.persistDelivery` effect of a delivery succeeded / failed (dsl-spec §5: validate,
   /// persist, then complete the record).
-  case outputPersisted(ordinal: Int)
-  case outputPersistFailed(ordinal: Int, reason: String)
+  case deliveryPersisted(ordinal: Int)
+  case deliveryPersistFailed(ordinal: Int, reason: String)
   case watchdog(ordinal: Int, WorkflowWatchdogVerdict)
   case user(WorkflowUserAction)
 }
@@ -109,7 +109,7 @@ nonisolated enum WorkflowRunEffect: Equatable, Sendable {
   case completeActivation(dispatchID: String, summary: String)
   case armWatchdog(WorkflowWatchdogRequest)
   case disarmWatchdog(ordinal: Int)
-  case persistOutput(name: String, ordinal: Int, body: String)
+  case persistDelivery(name: String, ordinal: Int, body: String)
   case persist
   case log(String)
   case finished(WorkflowRunStatus)
@@ -127,17 +127,17 @@ nonisolated enum WorkflowDeliverySelector: Equatable, Sendable {
 nonisolated struct WorkflowDeliveryReceipt: Equatable, Sendable {
   let ordinal: Int
   let stepID: String
-  let output: WorkflowDeliveryRecord
+  let record: WorkflowDeliveryRecord
   /// Non-empty when the delivery was accepted provisionally; the CLI reports them as warnings.
   let issues: [WorkflowDeliveryIssue]
 }
 
 nonisolated enum WorkflowSkipConsequence: Equatable, Sendable {
-  /// The step delivers no output; skipping it affects nothing else.
-  case noOutput
-  /// Only optional action inputs read the output; those actions run without the key.
+  /// The step produces no delivery; skipping it affects nothing else.
+  case noDelivery
+  /// Only optional action inputs read the delivery; those actions run without the key.
   case continues(optionalInputs: [String])
-  /// A template, condition, or required action input reads the output: the run ends `skipped`.
+  /// A template, condition, or required action input reads the delivery: the run ends `skipped`.
   case endsRun(dependent: String)
 }
 
@@ -315,10 +315,10 @@ nonisolated struct WorkflowRunMachine {
         stepID: stepID, reason: reason, executionID: executionID, retryAllowed: retryAllowed, effects: &effects)
     case .continueControlFlow:
       continueControlFlow(effects: &effects)
-    case .outputPersisted(let ordinal):
-      applyOutputPersisted(ordinal: ordinal, effects: &effects)
-    case .outputPersistFailed(let ordinal, let reason):
-      applyOutputPersistFailed(ordinal: ordinal, reason: reason, effects: &effects)
+    case .deliveryPersisted(let ordinal):
+      applyDeliveryPersisted(ordinal: ordinal, effects: &effects)
+    case .deliveryPersistFailed(let ordinal, let reason):
+      applyDeliveryPersistFailed(ordinal: ordinal, reason: reason, effects: &effects)
     case .watchdog(let ordinal, let verdict):
       applyWatchdog(ordinal: ordinal, verdict: verdict, effects: &effects)
     case .user(let action):
@@ -427,7 +427,7 @@ nonisolated struct WorkflowRunMachine {
     case .success(let delivery):
       validated = delivery
     }
-    let record = outputRecord(for: activation, verdict: validated.verdict)
+    let record = deliveryRecord(for: activation, verdict: validated.verdict)
     updateActivation(ordinal: activation.ordinal) {
       $0.state = .persisting
       $0.pendingDelivery = validated
@@ -437,23 +437,23 @@ nonisolated struct WorkflowRunMachine {
     run.status = .running
     run.updatedAt = now()
     // The watchdog supervises a *waiting* delivery: an accepted one is no longer its business,
-    // so it is disarmed before the output is even written and queued verdicts are ignored.
+    // so it is disarmed before the delivery is even written and queued verdicts are ignored.
     let effects: [WorkflowRunEffect] = [
       .disarmWatchdog(ordinal: activation.ordinal),
       .log(
-        "Step '\(activation.stepID)': output '\(activation.deliveryName)' accepted "
+        "Step '\(activation.stepID)': delivery '\(activation.deliveryName)' accepted "
           + "(invocation \(activation.ordinal))\(issueNote); persisting."),
-      .persistOutput(name: activation.deliveryName, ordinal: activation.ordinal, body: validated.body),
+      .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: validated.body),
     ]
     return (
       .success(
         WorkflowDeliveryReceipt(
-          ordinal: activation.ordinal, stepID: activation.stepID, output: record, issues: validated.issues)),
+          ordinal: activation.ordinal, stepID: activation.stepID, record: record, issues: validated.issues)),
       effects
     )
   }
 
-  private func outputRecord(for activation: WorkflowActivation, verdict: String?) -> WorkflowDeliveryRecord {
+  private func deliveryRecord(for activation: WorkflowActivation, verdict: String?) -> WorkflowDeliveryRecord {
     WorkflowDeliveryRecord(
       name: activation.deliveryName,
       ordinal: activation.ordinal,
@@ -467,16 +467,16 @@ nonisolated struct WorkflowRunMachine {
     )
   }
 
-  private mutating func applyOutputPersistFailed(ordinal: Int, reason: String, effects: inout [WorkflowRunEffect]) {
+  private mutating func applyDeliveryPersistFailed(ordinal: Int, reason: String, effects: inout [WorkflowRunEffect]) {
     guard let activation = run.activeActivation, activation.ordinal == ordinal, activation.state == .persisting
     else { return }
     raiseAttention(
       .persistFailed(reason), stepID: activation.stepID, role: activation.role, ordinal: ordinal, effects: &effects)
   }
 
-  /// The output is on disk: a clean delivery completes the dispatch record and advances; one
+  /// The delivery is on disk: a clean delivery completes the dispatch record and advances; one
   /// with issues stays provisional and asks the user (Accept / Accept with verdict / Ask again).
-  private mutating func applyOutputPersisted(ordinal: Int, effects: inout [WorkflowRunEffect]) {
+  private mutating func applyDeliveryPersisted(ordinal: Int, effects: inout [WorkflowRunEffect]) {
     guard case .waitingForDelivery(ordinal) = run.phase, let activation = run.activeActivation,
       activation.state == .persisting, let delivery = activation.pendingDelivery
     else { return }
@@ -496,9 +496,9 @@ nonisolated struct WorkflowRunMachine {
     effects: inout [WorkflowRunEffect]
   ) {
     let ordinal = activation.ordinal
-    let record = outputRecord(for: activation, verdict: verdict)
+    let record = deliveryRecord(for: activation, verdict: verdict)
     run.deliveries[activation.deliveryName] = record
-    run.skippedOutputs[activation.deliveryName] = nil
+    run.skippedDeliveries[activation.deliveryName] = nil
     updateActivation(ordinal: ordinal) {
       $0.state = .delivered
       $0.pendingDelivery = nil
@@ -509,11 +509,11 @@ nonisolated struct WorkflowRunMachine {
         .completeActivation(
           dispatchID: dispatchID,
           summary:
-            "Delivered output '\(activation.deliveryName)' for workflow step '\(activation.stepID)'\(verdictNote)."
+            "Received delivery '\(activation.deliveryName)' for workflow step '\(activation.stepID)'\(verdictNote)."
         ))
     }
     effects.append(
-      .log("Step '\(activation.stepID)': output '\(activation.deliveryName)' delivered (invocation \(ordinal))."))
+      .log("Step '\(activation.stepID)': delivery '\(activation.deliveryName)' delivered (invocation \(ordinal))."))
     run.status = .running
     completeCurrentStep(effects: &effects)
     advance(effects: &effects)
@@ -537,12 +537,12 @@ nonisolated struct WorkflowRunMachine {
     return startConsequence(forStep: stepID, definition: definition, preSkipped: alreadySkipped)
   }
 
-  /// Before execution, conservatively inspect every branch that could consume a skipped output.
+  /// Before execution, conservatively inspect every branch that could consume a skipped delivery.
   private static func startConsequence(
     forStep stepID: String, definition: WorkflowDefinition, preSkipped: Set<String>
   ) -> WorkflowSkipConsequence {
     guard let name = definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
-      return .noOutput
+      return .noDelivery
     }
     let remaining = definition.steps
     return consequence(of: name, forStep: stepID, remaining: remaining, preSkipped: preSkipped)
@@ -553,7 +553,7 @@ nonisolated struct WorkflowRunMachine {
     -> WorkflowSkipConsequence
   {
     guard let name = run.definition.flattenedSteps.first(where: { $0.id == stepID })?.deliveryName else {
-      return .noOutput
+      return .noDelivery
     }
     return consequence(
       of: name, forStep: stepID,
@@ -671,7 +671,7 @@ nonisolated struct WorkflowRunMachine {
   private mutating func skipAtStart(_ step: WorkflowStepDefinition, effects: inout [WorkflowRunEffect]) {
     recordStep(step, state: .skipped, ordinal: nil)
     if let name = step.deliveryName {
-      run.skippedOutputs[name] = step.id
+      run.skippedDeliveries[name] = step.id
     }
     effects.append(.log("Step '\(step.id)': skipped at start."))
     moveNext()
@@ -974,7 +974,7 @@ nonisolated struct WorkflowRunMachine {
             stepID: evaluation.stepID, iteration: evaluation.iteration,
             state: evaluation.skipped ? .skipped : .completed, ordinal: nil))
       }
-      for name in cursor.expiredOutputs { run.deliveries.removeValue(forKey: name) }
+      for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
       for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
       switch outcome {
       case .step: return true
@@ -1013,7 +1013,8 @@ nonisolated struct WorkflowRunMachine {
     effects.append(.persist)
     effects.append(
       .log(
-        "Step '\(invocation.stepID)': waiting for output '\(activation.deliveryName)' from role '\(invocation.role)'.")
+        "Step '\(invocation.stepID)': waiting for delivery '\(activation.deliveryName)' from role '\(invocation.role)'."
+      )
     )
     armWatchdog(ordinal: ordinal, nudgedAlready: false, effects: &effects)
   }
@@ -1099,8 +1100,9 @@ nonisolated struct WorkflowRunMachine {
         let delivery = activation.pendingDelivery
       {
         run.status = .running
-        effects.append(.log("Step '\(activation.stepID)': retrying to persist output '\(activation.deliveryName)'."))
-        effects.append(.persistOutput(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body))
+        effects.append(.log("Step '\(activation.stepID)': retrying to persist delivery '\(activation.deliveryName)'."))
+        effects.append(
+          .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body))
         return
       }
       retryCurrentStep(effects: &effects)
@@ -1134,7 +1136,7 @@ nonisolated struct WorkflowRunMachine {
   }
 
   /// "Accept as delivered" / "Accept with verdict": a declared verdict must be supplied when the
-  /// delivery lacked one, otherwise the accepted output could not drive conditions or templates.
+  /// delivery lacked one, otherwise the accepted delivery could not drive conditions or templates.
   private mutating func acceptProvisionalDelivery(verdict: String?, effects: inout [WorkflowRunEffect]) {
     guard let attention = run.status.attention, let activation = run.activeActivation,
       activation.state == .provisional, let delivery = activation.pendingDelivery
@@ -1207,14 +1209,14 @@ nonisolated struct WorkflowRunMachine {
       run.stepRecords[index].state = .skipped
     }
     if let name = step.deliveryName {
-      run.skippedOutputs[name] = step.id
+      run.skippedDeliveries[name] = step.id
     }
     run.status = .running
     effects.append(.log("Step '\(step.id)': skipped."))
     switch skipConsequence(forStep: step.id) {
     case .endsRun(let dependent):
       finish(.skipped(step: step.id, dependent: dependent), effects: &effects)
-    case .noOutput, .continues:
+    case .noDelivery, .continues:
       moveNext()
       advance(effects: &effects)
     }
@@ -1326,7 +1328,7 @@ nonisolated struct WorkflowRunMachine {
     } else {
       subject = role ?? "the step"
     }
-    let deliveryName = run.currentActivation?.deliveryName ?? "its output"
+    let deliveryName = run.currentActivation?.deliveryName ?? "its delivery"
     switch reason {
     case .needsInput:
       return "\(subject) is waiting for input in its pane."
@@ -1362,7 +1364,7 @@ nonisolated struct WorkflowRunMachine {
     case .actionFailed(let detail):
       return "Step '\(stepID)' failed: \(detail)"
     case .persistFailed(let detail):
-      return "The delivered output of step '\(stepID)' could not be saved to the run directory: \(detail)"
+      return "The delivery from step '\(stepID)' could not be saved to the run directory: \(detail)"
     case .deliveryIssues(let issues):
       return "\(subject) delivered \(deliveryName), but: \(issues.map(\.message).joined(separator: "; "))."
         + " Accept it, ask again, or skip."
@@ -1396,7 +1398,7 @@ nonisolated struct WorkflowRunMachine {
     case .completed: "completed"
     case .cancelled: "cancelled"
     case .skipped(let step, let dependent):
-      "skipped (step '\(step)' was skipped but '\(dependent)' depends on its output)"
+      "skipped (step '\(step)' was skipped but '\(dependent)' depends on its delivery)"
     case .iterationLimitReached: "iteration limit reached"
     case .interrupted: "interrupted"
     }

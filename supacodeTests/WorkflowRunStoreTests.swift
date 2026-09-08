@@ -95,6 +95,14 @@ struct WorkflowRunStoreTests {
 
     let url = store.directory(for: run.id).appending(path: "run.json")
     let json = try String(contentsOf: url, encoding: .utf8)
+    #expect(json.contains("\"skipped_deliveries\""))
+    #expect(!json.contains("\"skipped_outputs\""))
+    let retiredRecord = json.replacing("\"skipped_deliveries\"", with: "\"skipped_outputs\"")
+    #expect(throws: (any Error).self) {
+      try WorkflowRunRecord.makeDecoder().decode(WorkflowRunRecord.self, from: Data(retiredRecord.utf8))
+    }
+    #expect(json.contains("\"delivery\" : \"brief\""))
+    #expect(!json.contains("\"output\""))
     #expect(!json.contains("SECRET-TOKEN"))
     #expect(json.contains("\"dispatch_id\" : \"dispatch-1\""))
     #expect(json.contains("\"version\" : 1"))
@@ -109,7 +117,7 @@ struct WorkflowRunStoreTests {
     #expect(decoded.inputs == [])
     #expect(decoded.bindings["receiver"]?.profile == WorkflowRunMachineTests.reviewerProfile)
     #expect(decoded.bindings["source"]?.pane == WorkflowRunMachineTests.authorPane)
-    #expect(decoded.invocations.first?.activation?.output == "brief")
+    #expect(decoded.invocations.first?.activation?.delivery == "brief")
     #expect(decoded.run.status.attention?.actions == [.nudge, .keepWaiting, .skip, .cancel])
     #expect(decoded.run.status.attention?.issues == nil)
   }
@@ -208,14 +216,14 @@ struct WorkflowRunStoreTests {
     #expect(try store.readRecord(runID: run.id).run.id == run.id)
   }
 
-  @Test func outputsAreVersionedAndTheLatestViewIsReplacedAtomically() throws {
+  @Test func deliveriesAreVersionedAndTheLatestViewIsReplacedAtomically() throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let store = WorkflowRunStore(rootURL: root)
     let runID = UUID()
     try store.ensureLayout(runID: runID)
-    let first = try store.writeOutput(runID: runID, name: "findings", ordinal: 2, body: "round 1\n")
-    let second = try store.writeOutput(runID: runID, name: "findings", ordinal: 4, body: "round 2\n")
+    let first = try store.writeDelivery(runID: runID, name: "findings", ordinal: 2, body: "round 1\n")
+    let second = try store.writeDelivery(runID: runID, name: "findings", ordinal: 4, body: "round 2\n")
     #expect(first.versioned.lastPathComponent == "findings.2.md")
     #expect(second.versioned.lastPathComponent == "findings.4.md")
     #expect(first.latest == second.latest)
@@ -253,7 +261,7 @@ struct WorkflowRunStoreTests {
       try store.writeInstruction(runID: runID, stepID: "../escape", ordinal: 1, text: "x")
     }
     #expect(throws: WorkflowRunStoreError.unsafePath("Bad Name")) {
-      try store.writeOutput(runID: runID, name: "Bad Name", ordinal: 1, body: "x")
+      try store.writeDelivery(runID: runID, name: "Bad Name", ordinal: 1, body: "x")
     }
     #expect(throws: WorkflowRunStoreError.unsafePath("brief")) {
       try store.writeInstruction(runID: runID, stepID: "brief", ordinal: 0, text: "x")
@@ -323,7 +331,7 @@ struct WorkflowRunStoreTests {
     #expect(try store.markInterruptedRuns(now: { Self.now }).unreadable.count == 1)
   }
 
-  @Test func symlinkedOutputsDirectoryIsRejected() throws {
+  @Test func symlinkedDeliveriesDirectoryIsRejected() throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let store = WorkflowRunStore(rootURL: root)
@@ -335,7 +343,7 @@ struct WorkflowRunStoreTests {
     try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(at: deliveries, withDestinationURL: elsewhere)
     #expect(throws: WorkflowRunStoreError.self) {
-      try store.writeOutput(runID: runID, name: "findings", ordinal: 1, body: "x")
+      try store.writeDelivery(runID: runID, name: "findings", ordinal: 1, body: "x")
     }
     #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path(percentEncoded: false)).isEmpty)
   }

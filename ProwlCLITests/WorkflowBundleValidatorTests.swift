@@ -148,7 +148,7 @@ struct WorkflowBundleValidatorTests {
       - id: after
         notify: '{{ deliveries.report.path }}'
     """, state: "roles: {author: {source: current}}")
-    #expect(diagnostics.contains("output_shadowing"))
+    #expect(diagnostics.contains("delivery_shadowing"))
   }
 
 }

@@ -41,7 +41,7 @@ final class WorkflowValidatorTests: XCTestCase {
 
   // MARK: - Ids and roles
 
-  func testSlugsAreEnforcedForIdsRolesStepsOutputsAndInputs() {
+  func testSlugsAreEnforcedForIdsRolesStepsDeliveriesAndInputs() {
     XCTAssertEqual(WorkflowFixtures.codes(minimal(id: "Demo Flow")), ["workflow_id"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal(roles: "  Reviewer:\n    source: pick")), ["role_name_slug"])
@@ -50,7 +50,7 @@ final class WorkflowValidatorTests: XCTestCase {
     XCTAssertEqual(
       WorkflowFixtures.codes(
         minimal(steps: "  - id: b\n    message: author\n    text: hi\n    expect: { delivery: Bad.Name }")),
-      ["output_name_slug"])
+      ["delivery_name_slug"])
     XCTAssertEqual(
       WorkflowFixtures.codes(minimal() + "inputs:\n  Max: { type: integer }\n"), ["input_name_slug"])
   }
@@ -130,7 +130,7 @@ final class WorkflowValidatorTests: XCTestCase {
     XCTAssertEqual(codes("{{ }}"), ["expression_syntax"])
   }
 
-  func testOutputAndActionReferencesFollowProducers() {
+  func testDeliveryAndActionReferencesFollowProducers() {
     let steps = """
         - id: b
           message: author

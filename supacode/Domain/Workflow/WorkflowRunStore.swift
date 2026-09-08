@@ -41,12 +41,12 @@ nonisolated struct WorkflowRunRecordInvocation: Codable, Equatable, Sendable {
 nonisolated struct WorkflowRunRecordActivation: Codable, Equatable, Sendable {
   let dispatchID: String?
   let state: WorkflowActivationState
-  let output: String
+  let delivery: String
 
   enum CodingKeys: String, CodingKey {
     case dispatchID = "dispatch_id"
     case state
-    case output
+    case delivery
   }
 }
 
@@ -123,7 +123,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
   let actions: [String: [String: WorkflowJSONValue]]
   let state: [String: WorkflowJSONValue]?
   let actionAttempts: [String: Int]?
-  let skippedOutputs: [String: String]
+  let skippedDeliveries: [String: String]
   let steps: [Step]
 
   enum CodingKeys: String, CodingKey {
@@ -137,7 +137,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     case actions
     case state
     case actionAttempts = "action_attempts"
-    case skippedOutputs = "skipped_outputs"
+    case skippedDeliveries = "skipped_deliveries"
     case steps
   }
 
@@ -168,7 +168,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
         resources: invocation.content?.resources.mapValues { String($0.dropFirst(run.runDirectory.path.count + 1)) },
         skill: invocation.content?.skill,
         activation: invocation.activation.map {
-          WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, output: $0.deliveryName)
+          WorkflowRunRecordActivation(dispatchID: $0.dispatchID, state: $0.state, delivery: $0.deliveryName)
         },
         startedAt: invocation.startedAt,
         endedAt: invocation.endedAt
@@ -178,7 +178,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     actions = run.actionOutputs
     state = run.controlCursor?.state.values
     actionAttempts = run.actionAttempts
-    skippedOutputs = run.skippedOutputs
+    skippedDeliveries = run.skippedDeliveries
     steps = run.stepRecords.map { Step(id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal) }
   }
 
@@ -203,7 +203,7 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     actions = record.actions
     state = record.state
     actionAttempts = record.actionAttempts
-    skippedOutputs = record.skippedOutputs
+    skippedDeliveries = record.skippedDeliveries
     steps = record.steps
   }
 
@@ -441,7 +441,7 @@ nonisolated struct WorkflowRunStore: Sendable {
   /// Writes `deliveries/<name>.<ordinal>.md` and replaces `deliveries/<name>.md` atomically
   /// (temp file + rename), so a reader never sees a partially written latest view.
   @discardableResult
-  func writeOutput(runID: UUID, name: String, ordinal: Int, body: String) throws -> (versioned: URL, latest: URL) {
+  func writeDelivery(runID: UUID, name: String, ordinal: Int, body: String) throws -> (versioned: URL, latest: URL) {
     let runDirectory = try containedRunDirectory(runID: runID)
     guard WorkflowSchema.isSlug(name), ordinal > 0 else { throw WorkflowRunStoreError.unsafePath(name) }
     let versioned = WorkflowRunPaths.deliveryURL(runDirectory: runDirectory, name: name, ordinal: ordinal)

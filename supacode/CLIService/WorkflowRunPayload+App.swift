@@ -138,7 +138,7 @@ extension WorkflowActivationPayload {
       role: activation.role,
       state: activation.state.rawValue,
       dispatchID: activation.dispatchID,
-      output: activation.deliveryName,
+      delivery: activation.deliveryName,
       expect: WorkflowExpectationPayload(
         format: activation.expect.format,
         sections: activation.expect.sections,
@@ -170,7 +170,7 @@ extension WorkflowDeliveryPayload {
       ordinal: receipt.ordinal,
       step: receipt.stepID,
       role: role,
-      output: WorkflowDeliveryRecordPayload(receipt.output, formatter: WorkflowRunPayload.makeDateFormatter()),
+      record: WorkflowDeliveryRecordPayload(receipt.record, formatter: WorkflowRunPayload.makeDateFormatter()),
       warnings: receipt.issues.map {
         WorkflowDeliveryWarningPayload(code: $0.code, message: $0.message)
       }

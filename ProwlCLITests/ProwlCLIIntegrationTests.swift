@@ -1294,7 +1294,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
       ok: false, command: "workflow", schemaVersion: "prowl.cli.workflow.v1",
       error: .init(code: "STEP_NOT_EXPECTING", message: "No assigned task."))
     let (request, result) = try runWithMockServer(
-      socketPath: temporarySocketPath(suffix: "workflow-large-done"), response: response,
+      socketPath: temporarySocketPath(suffix: "workflow-large-deliver"), response: response,
       args: ["workflow", "deliver", "--file", file.path, "--json"])
     XCTAssertEqual(result.exitCode, 1)
     XCTAssertGreaterThan(request.count, 32 * 1024 * 1024)
@@ -1331,7 +1331,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertEqual(content["total_bytes"] as? Int, 8)
   }
 
-  func testWorkflowRunAndDoneRoundTripThroughTheSocket() throws {
+  func testWorkflowRunAndDeliverRoundTripThroughTheSocket() throws {
     let output = WorkflowDeliveryRecordPayload(
       name: "brief", ordinal: 1, path: "/Projects/App/.prowl/workflow-runs/R/deliveries/brief.1.md",
       latestPath: "/Projects/App/.prowl/workflow-runs/R/deliveries/brief.md", verdict: nil,
@@ -1355,7 +1355,7 @@ final class ProwlCLIIntegrationTests: XCTestCase {
             agent: "claude"))
       ],
       activation: WorkflowActivationPayload(
-        ordinal: 1, step: "brief", role: "author", state: "waiting", dispatchID: "d-1", output: "brief",
+        ordinal: 1, step: "brief", role: "author", state: "waiting", dispatchID: "d-1", delivery: "brief",
         expect: WorkflowExpectationPayload(
           format: .markdown, sections: ["## Scope"], verdicts: nil, strict: false,
           completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]),
@@ -1402,36 +1402,36 @@ final class ProwlCLIIntegrationTests: XCTestCase {
     XCTAssertTrue(runText.stdout.contains("Run: 0BADCAFE-0000-4000-8000-000000000042"), runText.stdout)
     XCTAssertTrue(runText.stdout.contains("Follow this line yourself"), runText.stdout)
 
-    let doneResponse = try CommandResponse(
+    let deliverResponse = try CommandResponse(
       ok: true, command: "workflow", schemaVersion: "prowl.cli.workflow.v1",
       data: RawJSON(
         encoding: WorkflowCommandPayload.deliver(
           WorkflowDeliverPayload(
             run: run,
             delivery: WorkflowDeliveryPayload(
-              state: .provisional, ordinal: 1, step: "brief", role: "author", output: output,
+              state: .provisional, ordinal: 1, step: "brief", role: "author", record: output,
               warnings: [WorkflowDeliveryWarningPayload(code: "missing_sections", message: "missing section(s) ## Claims")])
           ))))
-    let (doneRequest, doneResult) = try runWithMockServer(
-      socketPath: temporarySocketPath(suffix: "workflow-done"), response: doneResponse,
+    let (deliverRequest, deliverResult) = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-deliver"), response: deliverResponse,
       args: ["workflow", "deliver", "-", "--verdict", "clean", "--json"],
       stdinData: Data("## Scope\nOnly the scope.\n".utf8),
       environment: [WorkflowSchema.tokenEnvironmentKey: "T"])
-    XCTAssertEqual(doneResult.exitCode, 0, doneResult.stderr)
-    let doneEnvelope = try JSONDecoder().decode(CommandEnvelope.self, from: doneRequest)
-    guard case .workflow(let doneInput) = doneEnvelope.command else { return XCTFail("Expected a workflow envelope") }
-    XCTAssertEqual(doneInput.action, .deliver)
-    XCTAssertEqual(doneInput.body, "## Scope\nOnly the scope.\n")
-    XCTAssertEqual(doneInput.verdict, "clean")
-    XCTAssertEqual(doneInput.token, "T", "the token comes from the environment the step handed out")
-    XCTAssertNil(doneInput.runID)
-    XCTAssertFalse(doneInput.force)
-    let doneText = try runWithMockServer(
-      socketPath: temporarySocketPath(suffix: "workflow-done-text"), response: doneResponse,
+    XCTAssertEqual(deliverResult.exitCode, 0, deliverResult.stderr)
+    let deliverEnvelope = try JSONDecoder().decode(CommandEnvelope.self, from: deliverRequest)
+    guard case .workflow(let deliverInput) = deliverEnvelope.command else { return XCTFail("Expected a workflow envelope") }
+    XCTAssertEqual(deliverInput.action, .deliver)
+    XCTAssertEqual(deliverInput.body, "## Scope\nOnly the scope.\n")
+    XCTAssertEqual(deliverInput.verdict, "clean")
+    XCTAssertEqual(deliverInput.token, "T", "the token comes from the environment the step handed out")
+    XCTAssertNil(deliverInput.runID)
+    XCTAssertFalse(deliverInput.force)
+    let deliverText = try runWithMockServer(
+      socketPath: temporarySocketPath(suffix: "workflow-deliver-text"), response: deliverResponse,
       args: ["workflow", "deliver", "-", "--no-color"], stdinData: Data("x".utf8)).1
-    XCTAssertEqual(doneText.exitCode, 0, doneText.stderr)
-    XCTAssertTrue(doneText.stdout.contains("Provisional"), doneText.stdout)
-    XCTAssertTrue(doneText.stdout.contains("missing_sections"), doneText.stdout)
+    XCTAssertEqual(deliverText.exitCode, 0, deliverText.stderr)
+    XCTAssertTrue(deliverText.stdout.contains("Provisional"), deliverText.stdout)
+    XCTAssertTrue(deliverText.stdout.contains("missing_sections"), deliverText.stdout)
 
     let noStdin = try runProwl(args: ["workflow", "deliver", "-"], environment: [ProwlSocket.environmentKey: "/nonexistent.sock"])
     XCTAssertNotEqual(noStdin.exitCode, 0)

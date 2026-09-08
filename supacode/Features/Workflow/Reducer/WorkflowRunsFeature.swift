@@ -767,12 +767,12 @@ struct WorkflowRunsFeature {
     case .completeActivation(let dispatchID, let summary):
       activation.complete(dispatchID, summary)
 
-    case .persistOutput(let name, let ordinal, let body):
+    case .persistDelivery(let name, let ordinal, let body):
       do {
-        _ = try store.writeOutput(runID: runID, name: name, ordinal: ordinal, body: body)
-        await send(.event(runID: runID, .outputPersisted(ordinal: ordinal)))
+        _ = try store.writeDelivery(runID: runID, name: name, ordinal: ordinal, body: body)
+        await send(.event(runID: runID, .deliveryPersisted(ordinal: ordinal)))
       } catch {
-        await send(.event(runID: runID, .outputPersistFailed(ordinal: ordinal, reason: "\(error)")))
+        await send(.event(runID: runID, .deliveryPersistFailed(ordinal: ordinal, reason: "\(error)")))
       }
 
     case .persist:
@@ -821,7 +821,7 @@ extension WorkflowRunEffect {
     switch self {
     case .openActivation, .inject, .typeLine, .launch, .runAction, .close: true
     case .awaitRoleIdle, .cancelRoleWait, .materializeInstruction, .materializeSkill, .notify,
-      .abandonActivation, .completeActivation, .armWatchdog, .disarmWatchdog, .persistOutput, .persist, .log,
+      .abandonActivation, .completeActivation, .armWatchdog, .disarmWatchdog, .persistDelivery, .persist, .log,
       .finished, .yieldControl:
       false
     }

@@ -47,7 +47,7 @@ final class WorkflowCommandParsingTests: XCTestCase {
     XCTAssertThrowsError(try WorkflowValidateCommand.parse(["x.yaml", "--scope", "global"]))
   }
 
-  func testDoneParsesItsDeliveryOptions() throws {
+  func testDeliverParsesItsDeliveryOptions() throws {
     let deliver = try XCTUnwrap(
       ProwlCommand.parseAsRoot([
         "workflow", "deliver", "-", "--verdict", "clean", "--token", "T", "--run",
@@ -66,7 +66,7 @@ final class WorkflowCommandParsingTests: XCTestCase {
     XCTAssertNil(file.input)
   }
 
-  func testDoneRejectsMissingOrDoubledBodiesAndHalfManualTargets() {
+  func testDeliverRejectsMissingOrDoubledBodiesAndHalfManualTargets() {
     XCTAssertThrowsError(try ProwlCommand.parseAsRoot(["workflow", "deliver"]))
     XCTAssertThrowsError(
       try ProwlCommand.parseAsRoot(["workflow", "deliver", "-", "--file", "/tmp/out.md"]))

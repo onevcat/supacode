@@ -4035,7 +4035,7 @@
         "deliveries": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/workflowOutput"
+            "$ref": "#/$defs/workflowDeliveryRecord"
           }
         },
         "started_at": {
@@ -4122,7 +4122,7 @@
         "deliveries": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/workflowOutput"
+            "$ref": "#/$defs/workflowDeliveryRecord"
           }
         },
         "started_at": {
@@ -4209,7 +4209,7 @@
         "deliveries": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/workflowOutput"
+            "$ref": "#/$defs/workflowDeliveryRecord"
           }
         },
         "started_at": {
@@ -4312,7 +4312,7 @@
         "deliveries": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/workflowOutput"
+            "$ref": "#/$defs/workflowDeliveryRecord"
           }
         },
         "started_at": {
@@ -4515,7 +4515,7 @@
         "step",
         "role",
         "state",
-        "output",
+        "delivery",
         "expect"
       ],
       "properties": {
@@ -4542,7 +4542,7 @@
         "dispatch_id": {
           "type": "string"
         },
-        "output": {
+        "delivery": {
           "type": "string"
         },
         "expect": {
@@ -4594,7 +4594,7 @@
         }
       }
     },
-    "workflowOutput": {
+    "workflowDeliveryRecord": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -4657,7 +4657,7 @@
         "ordinal",
         "step",
         "role",
-        "output",
+        "record",
         "warnings"
       ],
       "properties": {
@@ -4677,8 +4677,8 @@
         "role": {
           "type": "string"
         },
-        "output": {
-          "$ref": "#/$defs/workflowOutput"
+        "record": {
+          "$ref": "#/$defs/workflowDeliveryRecord"
         },
         "warnings": {
           "type": "array",

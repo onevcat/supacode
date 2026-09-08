@@ -185,7 +185,7 @@ valid; the app-side `list` always has the bundle.
         "name": "Review",
         "description": "…",
         "scope": "repo",
-        "path": "/Projects/App/.prowl/workflows/review.yaml",
+        "path": "/Projects/App/.prowl/workflows/review.pwlworkflow",
         "enabled": true,
         "valid": true,
         "errors": 0,
@@ -216,7 +216,7 @@ valid; the app-side `list` always has the bundle.
     "id": "0BADCAFE-0000-4000-8000-000000000042",
     "workflow": { "id": "review", "name": "Review" },
     "scope": "repo",
-    "definition_path": "/Projects/App/.prowl/workflows/review.yaml",
+    "definition_path": "/Projects/App/.prowl/workflows/review.pwlworkflow",
     "source": "live",
     "status": { "state": "running" },
     "step": "brief",
@@ -228,7 +228,7 @@ valid; the app-side `list` always has the bundle.
       "reviewer": { "source": "launch", "profile": { "id": "…", "name": "Codex", "agent": "codex" } }
     },
     "activation": {
-      "ordinal": 1, "step": "brief", "role": "author", "state": "waiting", "dispatch_id": "…", "output": "brief",
+      "ordinal": 1, "step": "brief", "role": "author", "state": "waiting", "dispatch_id": "…", "delivery": "brief",
       "expect": { "format": "markdown", "sections": ["## Scope", "## Claims"], "strict": false,
                   "completion": ["PROWL_WORKFLOW_TOKEN=… prowl workflow deliver -"] },
       "deadline": "2026-08-30T01:10:00.000Z"
@@ -261,6 +261,8 @@ valid; the app-side `list` always has the bundle.
   step stuck in an injection or launch attention reports none.
 - `bindings.<role>.profile` is the frozen profile (id, name, agent) of a `launch` role;
   `bindings.<role>.pane` is the role's pane (`launch` roles gain it once launched).
+- `activation.delivery` is the expected delivery name. The `deliver` receipt exposes
+  the resulting record at `delivery.record`.
 - `deliveries` is the latest delivered output per name (`name`, `ordinal`, `path`,
   `latest_path`, `verdict`, `delivered_at`).
 - `self_initiated` appears on `run` only, when the run started from the pane that is its
@@ -280,7 +282,7 @@ valid; the app-side `list` always has the bundle.
     "delivery": {
       "state": "provisional",
       "ordinal": 1, "step": "brief", "role": "author",
-      "output": { "name": "brief", "ordinal": 1, "path": "…/deliveries/brief.1.md", "latest_path": "…/deliveries/brief.md", "delivered_at": "…" },
+      "record": { "name": "brief", "ordinal": 1, "path": "…/deliveries/brief.1.md", "latest_path": "…/deliveries/brief.md", "delivered_at": "…" },
       "warnings": [{ "code": "missing_sections", "message": "missing section(s) ## Claims" }]
     }
   }
@@ -302,7 +304,7 @@ B3 offers no CLI control for that decision, C1 does).
   "schema_version": "prowl.cli.workflow.v1",
   "data": {
     "action": "validate",
-    "path": "/Projects/App/.prowl/workflows/review.yaml",
+    "path": "/Projects/App/.prowl/workflows/review.pwlworkflow",
     "valid": true,
     "workflow": { "id": "review", "name": "Review" },
     "diagnostics": [
@@ -315,7 +317,7 @@ B3 offers no CLI control for that decision, C1 does).
 `diagnostics[]` lists parse diagnostics first, then validation diagnostics; `line` and
 `column` are 1-based and omitted when a diagnostic has no position. `workflow` is present
 whenever the file parsed. Codes are stable identifiers (`unknown_key`, `undefined_role`,
-`message_before_launch`, `until_verdict_literal`, `skill_unchecked`, …) and are the
+`message_before_launch`, `delivery_shadowing`, `skill_unchecked`, …) and are the
 contract; messages are not.
 
 ### `schema`

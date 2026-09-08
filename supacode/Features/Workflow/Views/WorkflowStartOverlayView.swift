@@ -347,10 +347,10 @@ private struct WorkflowStartCard: View {
   private func consequenceText(_ consequence: WorkflowSkipConsequence?) -> String? {
     switch consequence {
     case .endsRun(let dependent):
-      return "Cannot skip: step '\(dependent)' needs its output."
+      return "Cannot skip: step '\(dependent)' needs its delivery."
     case .continues(let optional) where !optional.isEmpty:
-      return "The run continues; \(optional.joined(separator: ", ")) proceeds without this output."
-    case .continues, .noOutput, nil:
+      return "The run continues; \(optional.joined(separator: ", ")) proceeds without this delivery."
+    case .continues, .noDelivery, nil:
       return nil
     }
   }

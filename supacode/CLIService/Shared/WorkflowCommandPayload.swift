@@ -398,7 +398,7 @@ nonisolated public struct WorkflowActivationPayload: Codable, Equatable, Sendabl
   /// `waiting`, `persisting`, `provisional`, `delivered`, `skipped`, `revoked`.
   public let state: String
   public let dispatchID: String?
-  public let output: String
+  public let delivery: String
   public let expect: WorkflowExpectationPayload
   /// The absolute `expect.timeout` deadline, when the step declares one.
   public let deadline: String?
@@ -409,7 +409,7 @@ nonisolated public struct WorkflowActivationPayload: Codable, Equatable, Sendabl
     case role
     case state
     case dispatchID = "dispatch_id"
-    case output
+    case delivery
     case expect
     case deadline
   }
@@ -420,7 +420,7 @@ nonisolated public struct WorkflowActivationPayload: Codable, Equatable, Sendabl
     role: String,
     state: String,
     dispatchID: String?,
-    output: String,
+    delivery: String,
     expect: WorkflowExpectationPayload,
     deadline: String?
   ) {
@@ -429,7 +429,7 @@ nonisolated public struct WorkflowActivationPayload: Codable, Equatable, Sendabl
     self.role = role
     self.state = state
     self.dispatchID = dispatchID
-    self.output = output
+    self.delivery = delivery
     self.expect = expect
     self.deadline = deadline
   }
@@ -529,7 +529,7 @@ nonisolated public struct WorkflowDeliveryPayload: Codable, Equatable, Sendable 
   public let ordinal: Int
   public let step: String
   public let role: String
-  public let output: WorkflowDeliveryRecordPayload
+  public let record: WorkflowDeliveryRecordPayload
   public let warnings: [WorkflowDeliveryWarningPayload]
 
   public init(
@@ -537,14 +537,14 @@ nonisolated public struct WorkflowDeliveryPayload: Codable, Equatable, Sendable 
     ordinal: Int,
     step: String,
     role: String,
-    output: WorkflowDeliveryRecordPayload,
+    record: WorkflowDeliveryRecordPayload,
     warnings: [WorkflowDeliveryWarningPayload]
   ) {
     self.state = state
     self.ordinal = ordinal
     self.step = step
     self.role = role
-    self.output = output
+    self.record = record
     self.warnings = warnings
   }
 }

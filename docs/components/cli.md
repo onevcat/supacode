@@ -599,7 +599,9 @@ prowl workflow cancel "$(printf '%s\n' "$run" | jq -r '.data.id')"
 
 JSON is `prowl.cli.workflow.v1` with `data.action` = `list` | `run` | `status` | `deliver` |
 `cancel` | `read` | `validate` | `schema`; `run`, `status`, and `cancel` share the run shape, `deliver`
-nests it under `.data.run` beside `.data.delivery`.
+nests it under `.data.run` beside `.data.delivery`. The activation names its expected
+delivery with `activation.delivery`; the receipt stores the resulting record in
+`delivery.record`.
 
 `prowl workflow test-action <workflow> <action> [source] --input-json '<JSON object>' [--json]`
 starts a real single-action run from a discovered bundle. Use `builtin:collect-worktree-context` or

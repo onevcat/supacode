@@ -26,6 +26,10 @@ This change does not implement handoff migration, new context collectors, or rev
   single-Git-directory behavior remains unchanged. Broader collection belongs to D3.
 - Participant submission is `prowl workflow deliver` and socket `command: workflow` with `action: deliver`.
   Retain `run`, `status`, `read`, `cancel`, and `test-action`.
+- CLI and persisted activations name their delivery with `delivery`. CLI delivery
+  receipts expose `record`; the schema definition is `workflowDeliveryRecord`.
+  Persisted skipped dependencies use `skipped_deliveries`.
+- Delivery diagnostics use `delivery_shadowing` and `delivery_name_slug`.
 - The terminal loop-limit state is `iteration_limit_reached`.
 
 ## Verification
@@ -77,3 +81,16 @@ Flow-style YAML declaration scanning remains an optional coverage gap. The runti
 workflow/action parsers reject those retired declaration keys; the lightweight
 repository check does not parse all YAML syntax. No new runtime/schema/reference
 naming defect was confirmed in the fourth review.
+
+### Delivery contract follow-up (2026-09-08)
+
+Implemented: complete delivery naming in CLI and persisted records. Use
+`activation.delivery` for the delivery name, `delivery.record` for its record,
+`skipped_deliveries` for skipped-name dependencies, and `workflowDeliveryRecord`
+for the JSON schema definition. Rename delivery-specific diagnostics and internal
+helpers. Correct active CLI examples to bundle paths. No aliases or migration.
+
+Encoded-key assertions and retired-shape rejection cover CLI payloads and persisted
+records. Validation passed: CLI build/smoke, 291 CLI unit tests, 112 integration tests,
+3147 App tests, and `make check` with 152 script tests. The original serialization
+assertions failed before the implementation changed. Final App build passed.

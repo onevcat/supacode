@@ -208,7 +208,7 @@ struct WorkflowRuntimeCoordinatorTests {
     var machine = session.machine(now: { Self.now }, makeToken: { "T" })
     let (result, _) = machine.deliver(
       ordinal: 1, selector: .token("TOKEN-1"), body: "## Scope\nx\n## Claims\ny", verdict: nil)
-    _ = machine.apply(.outputPersisted(ordinal: 1))
+    _ = machine.apply(.deliveryPersisted(ordinal: 1))
     return .delivered(run: machine.run, receipt: try result.get())
   }
 
@@ -218,7 +218,7 @@ struct WorkflowRuntimeCoordinatorTests {
 
   // MARK: - deliver attribution (decision W3)
 
-  @Test func doneFromTheRolePaneIsAttributedByItsPendingDispatch() async throws {
+  @Test func deliverFromTheRolePaneIsAttributedByItsPendingDispatch() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let session = try fixture.waitingSession()
@@ -245,12 +245,12 @@ struct WorkflowRuntimeCoordinatorTests {
     }
     #expect(deliver.delivery.state == .delivered)
     #expect(deliver.delivery.role == "author")
-    #expect(deliver.delivery.output.name == "brief")
+    #expect(deliver.delivery.record.name == "brief")
     #expect(deliver.run.role == "author")
     #expect(fixture.rendezvous.pendingRequestIDs.isEmpty)
   }
 
-  @Test func doneWithoutABodyOrHalfAManualTargetIsInvalid() async throws {
+  @Test func deliverWithoutABodyOrHalfAManualTargetIsInvalid() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let noBody = await fixture.coordinator.deliver(WorkflowInput(action: .deliver), callerPane: Self.authorCaller)
@@ -264,7 +264,7 @@ struct WorkflowRuntimeCoordinatorTests {
     #expect(fixture.sent.isEmpty)
   }
 
-  @Test func doneOutsideAnyPaneNeedsAnExplicitTargetAndThenIsManual() async throws {
+  @Test func deliverOutsideAnyPaneNeedsAnExplicitTargetAndThenIsManual() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let session = try fixture.waitingSession()
@@ -348,7 +348,7 @@ struct WorkflowRuntimeCoordinatorTests {
     #expect(forced.selector == .manual(stepID: "launch"))
   }
 
-  @Test func doneAwaitsTheReducerAndAProvisionalAnswerIsReportedAsProvisional() async throws {
+  @Test func deliverAwaitsTheReducerAndAProvisionalAnswerIsReportedAsProvisional() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let session = try fixture.waitingSession()
@@ -362,7 +362,7 @@ struct WorkflowRuntimeCoordinatorTests {
     #expect(fixture.rendezvous.pendingRequestIDs == [fixture.requestID])
     var machine = session.machine(now: { Self.now }, makeToken: { "T" })
     let (result, _) = machine.deliver(ordinal: 1, selector: .token("TOKEN-1"), body: "## Scope\nonly", verdict: nil)
-    _ = machine.apply(.outputPersisted(ordinal: 1))
+    _ = machine.apply(.deliveryPersisted(ordinal: 1))
     fixture.coordinator.resolve(fixture.requestID, .provisional(run: machine.run, receipt: try result.get()))
     let response = await task.value
     #expect(response.ok)
@@ -438,7 +438,7 @@ struct WorkflowRuntimeCoordinatorTests {
     var machine = session.machine(now: { Self.now }, makeToken: { "TOKEN-2" })
     let (result, _) = machine.deliver(
       ordinal: nil, selector: .manual(stepID: "brief"), body: "## Scope\nx\n## Claims\ny", verdict: nil)
-    _ = machine.apply(.outputPersisted(ordinal: 1))
+    _ = machine.apply(.deliveryPersisted(ordinal: 1))
     #expect(machine.run.phase == .launching(ordinal: 2))
     let reviewerPane = WorkflowPaneIdentity(surfaceID: UUID(), tabID: nil, handle: "p9", displayName: "Pi", agent: "pi")
     _ = machine.apply(.launched(ordinal: 2, pane: reviewerPane, dispatchID: "dispatch-2"))
