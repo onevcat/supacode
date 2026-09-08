@@ -15,7 +15,7 @@ roles:
   receiver:
     source: launch
     placement: tab
-    background: true
+    background: false
 steps:
   - id: briefing
     title: Prepare handoff briefing

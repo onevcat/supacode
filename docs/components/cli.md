@@ -615,7 +615,7 @@ as a workflow run. Poll the returned run ID with `workflow status` and inspect i
 ### Built-in handoff workflow
 
 `prowl workflow run prowl.handoff --role receiver=Codex --json` asks the calling agent for
-a briefing, saves a durable packet, and launches the selected Profile in a background tab.
+a briefing, saves a durable packet, and launches the selected Profile in a new tab with focus.
 Use `--input next=save` to save only; no receiver binding or installed receiver Profile is
 required. Launch roles proven unused by start inputs or skipped steps are not bound. Roles
 in runtime-dependent branches remain required. The existing `prowl handoff` commands remain

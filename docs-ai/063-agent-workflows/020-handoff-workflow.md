@@ -107,3 +107,11 @@ used the matching Debug CLI; AX key delivery could not raise the window, while s
 Agents-menu/start-sheet actions worked. After all test tabs closed, AX window re-discovery
 failed. All created panes were closed and the isolated process was stopped; local evidence
 and its temporary directory entry were retained. No UI metadata repair was warranted.
+
+## Receiver focus amendment
+
+The owner requested `receiver.background: false` after initial acceptance. The receiver now
+opens in a new tab and takes focus; the source remains open. The earlier Debug evidence above
+records the original background behavior, not a live verification of this amendment. Both
+launch and save-only still require a detected source agent to author the briefing. Admission
+rejects a missing source pane or bare shell before the run starts.

@@ -310,10 +310,16 @@ before publishing the new pair. No old-history migration or fallback is performe
 ## Built-in Handoff
 
 `prowl.handoff` asks the current agent to summarize its task, saves the briefing with
-repository and available session context, and optionally launches a receiver in a background
-tab. Select `next=save` to save only; the receiver Profile is then unnecessary and hidden in
-the start sheet. The default `next=launch` uses the normal Profile picker without a runtime
+repository and available session context, and optionally launches a receiver in a new tab
+and switches focus to it. Select `next=save` to save only; the receiver Profile is then
+unnecessary and hidden in the start sheet. The default `next=launch` uses the normal Profile picker without a runtime
 restriction. Both source and receiver panes stay open.
+
+Both modes require a source pane with a detected agent to write the briefing. A selected bare
+shell cannot start the run; choose another agent pane in the same worktree. With no available
+agent pane, start an agent first. The workflow does not create its own author. CLI admission
+returns `AGENT_NOT_FOUND` for a bare shell or `SOURCE_REQUIRED` for a missing source pane,
+before saving or launching anything.
 
 ```bash
 prowl workflow run prowl.handoff --role receiver=Codex --json
