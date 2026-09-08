@@ -56,7 +56,16 @@ extension WorktreeTerminalState {
     }
   }
 
-  func detectAgentState(for view: GhosttySurfaceView, tabId: TerminalTabID) async -> Bool {
+  typealias RetainedSessionResolver =
+    @MainActor (
+      IdentifiedAgentProcess?, PaneAgentState, URL?, String, URL?
+    ) async -> (session: AgentSession?, missStreak: Int)
+
+  func detectAgentState(
+    for view: GhosttySurfaceView,
+    tabId: TerminalTabID,
+    resolveSession: RetainedSessionResolver? = nil
+  ) async -> Bool {
     let surfaceID = view.id
     let childPID = view.bridge.childPID()
     let processGroupID = view.bridge.foregroundProcessGroupID()
@@ -94,7 +103,7 @@ extension WorktreeTerminalState {
     }
 
     let now = Date()
-    let previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
+    var previous = surfaceAgentStates[surfaceID] ?? PaneAgentState(lastChangedAt: now)
     let activeText = view.bridge.readActiveText() ?? ""
     // Reuse the previous scan while the screen and detected agent are unchanged.
     // A live-but-idle agent is polled every 300 ms and `detectState` re-splits,
@@ -110,24 +119,22 @@ extension WorktreeTerminalState {
       raw: raw
     )
 
-    let seen = Self.resolvedSeen(
-      previous: previous,
-      stabilized: stabilized,
-      isForeground: isSelected() && isFocusedSurface(surfaceID)
-    )
     let iconLookupToken = identified?.iconLookupToken ?? previous.iconLookupToken ?? agent.iconLookupToken
     let workingDirectory = activeAgentWorkingDirectory(surfaceID: surfaceID)
-    let (session, sessionMissStreak) = await resolveRetainedSession(
-      identified: identified,
-      previous: previous,
-      workingDirectory: workingDirectory,
-      activeText: activeText,
-      configRoot: launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
+    let (session, sessionMissStreak) = await (resolveSession ?? Self.resolveRetainedSession)(
+      identified, previous, workingDirectory, activeText,
+      launchProfilesBySurface[surfaceID]?.configRoot(forDetected: agent)
     )
     // Re-check after the suspension: the pane may have been closed and its
     // agent state cleaned up while the resolver was doing file inspection;
     // writing below would resurrect a ghost Active Agents entry.
     guard surfaces[surfaceID] != nil else { return false }
+    // Acknowledgement can change while session inspection is suspended. Preserve it,
+    // but discard this observation if any other state changed in the meantime.
+    guard let current = surfaceAgentStates[surfaceID] else { return false }
+    previous.seen = current.seen
+    previous.lastChangedAt = current.lastChangedAt
+    guard previous == current else { return true }
     let launchObservation = resolvedLaunchObservation(identified: identified, previous: previous)
     let lastChangedAt = (previous.detectedAgent != agent || previous.state != stabilized) ? now : previous.lastChangedAt
     var next = PaneAgentState(
@@ -141,7 +148,7 @@ extension WorktreeTerminalState {
       iconLookupToken: iconLookupToken,
       fallbackState: raw,
       state: stabilized,
-      seen: seen,
+      seen: resolvedSeen(previous: previous, stabilized: stabilized, surfaceID: surfaceID),
       lastChangedAt: lastChangedAt
     )
     next.sessionMissStreak = sessionMissStreak
@@ -209,12 +216,12 @@ extension WorktreeTerminalState {
     return detection
   }
 
-  private static func resolvedSeen(
+  private func resolvedSeen(
     previous: PaneAgentState,
     stabilized: AgentRawState,
-    isForeground: Bool
+    surfaceID: UUID
   ) -> Bool {
-    if isForeground || stabilized == .blocked {
+    if isViewedSurface(surfaceID) {
       return true
     }
     if (previous.state == .working || previous.state == .blocked) && stabilized == .idle {
@@ -268,7 +275,7 @@ extension WorktreeTerminalState {
     )
   }
 
-  private func resolveRetainedSession(
+  private static func resolveRetainedSession(
     identified: IdentifiedAgentProcess?,
     previous: PaneAgentState,
     workingDirectory: URL?,
@@ -293,7 +300,8 @@ extension WorktreeTerminalState {
   }
 
   func markAgentSeen(surfaceID: UUID) {
-    guard var state = surfaceAgentStates[surfaceID], !state.seen else { return }
+    // Focus bookkeeping can run while the window is inactive or before a tab is selected.
+    guard isViewedSurface(surfaceID), var state = surfaceAgentStates[surfaceID], !state.seen else { return }
     state.seen = true
     state.lastChangedAt = Date()
     surfaceAgentStates[surfaceID] = state
