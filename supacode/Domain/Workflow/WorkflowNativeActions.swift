@@ -99,6 +99,8 @@ nonisolated struct WorkflowNativeActionRunner: WorkflowActionExecuting {
         try WorkflowActionRegistry.worktreeContextInput.validate(.object(inputs))
         output = try await collectWorktreeContext(inputs: inputs, context: context, artifacts: artifacts)
         try WorkflowActionRegistry.worktreeContextOutput.validate(output)
+      } else if actionID == "builtin:save-handoff" {
+        output = try await WorkflowHandoffAction.save(inputs: inputs, context: context)
       } else {
         output = try await script(actionID: actionID, inputs: inputs, context: context, request: requestData)
       }

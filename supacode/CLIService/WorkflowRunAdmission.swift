@@ -132,7 +132,7 @@ enum WorkflowRunAdmission {
     }
     if let actionID = input.testAction {
       let localID = actionID.hasPrefix("local:") ? String(actionID.dropFirst(6)) : ""
-      guard actionID == "builtin:collect-worktree-context" || entry.file.actions[localID] != nil else {
+      guard WorkflowActionRegistry.schema(for: actionID) != nil || entry.file.actions[localID] != nil else {
         return .failure(.init(code: CLIErrorCode.invalidArgument, message: "Unknown bundle action '\(actionID)'."))
       }
       definition = WorkflowDefinition(
@@ -174,7 +174,9 @@ enum WorkflowRunAdmission {
       overrides: arguments.overrides,
       scope: runScope(entry.file.scope, worktree: worktree),
       deliversToCurrent: deliversToCurrentRole(definition, skipped: arguments.skipped))
-    for role in definition.roles {
+    let launchRoles = WorkflowRoleRequirements.launchRoles(
+      in: definition, inputs: arguments.inputs, skipped: arguments.skipped)
+    for role in definition.roles where role.source != .launch || launchRoles.contains(role.name) {
       if let failure = binder.bind(role) {
         return .failure(failure)
       }

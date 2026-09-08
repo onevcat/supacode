@@ -219,6 +219,25 @@ struct WorkflowRunAdmissionTests {
     return nil
   }
 
+  @Test(arguments: ["save", "launch"])
+  func shippedHandoffResolvesOnlyTheSelectedPath(next: String) throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let yaml = try String(
+      contentsOf: root.appending(path: "Resources/workflows/handoff.pwlworkflow/workflow.yaml"), encoding: .utf8
+    )
+    .replacing("id: prowl.handoff", with: "id: handoff")
+    try fixture.write(yaml, to: "handoff")
+    let admitted = try admit(
+      fixture, workflow: "handoff", pane: fixture.authorPane,
+      roles: next == "launch" ? ["receiver=Codex"] : [], inputs: ["next=\(next)"]
+    ).get()
+    #expect(admitted.session.run.selfInitiatedLine?.contains("prowl workflow deliver -") == true)
+    #expect((admitted.session.run.bindings["receiver"] != nil) == (next == "launch"))
+    #expect(fixture.plannedProfiles.isEmpty == (next == "save"))
+  }
+
   @Test func testActionTreatsJSONInputAsLiteralData() throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }

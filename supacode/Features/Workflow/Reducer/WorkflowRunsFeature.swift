@@ -115,6 +115,7 @@ struct WorkflowRunsFeature {
     case notice(WorkflowRunNotice)
   }
 
+  @Dependency(TerminalClient.self) var terminal
   @Dependency(WorkflowHistoryStorageKey.self) var historyStorage
   @Dependency(WorkflowRuntimeClient.self) var runtime
   @Dependency(WorkflowActivationClient.self) var activation
@@ -539,9 +540,17 @@ struct WorkflowRunsFeature {
   ) -> Effect<Action> {
     let run = session.run
     let timestamp = now
+    let sourcePane = run.context.sourcePaneID ?? run.bindings.values.first { $0.source == .current }?.pane?.surfaceID
+    let sourceContext =
+      actionID == "builtin:save-handoff"
+      ? sourcePane.flatMap {
+        terminal.handoffSourceContextForSurface(session.worktree.id, $0)?.sessionContext
+      } : nil
     let context = WorkflowActionContext(
       runID: run.id, rootURL: run.context.worktree.rootURL,
-      roleAgents: run.bindings.mapValues { $0.agent }, outgoingAgent: nil, now: timestamp,
+      roleAgents: run.bindings.mapValues { $0.agent },
+      outgoingAgent: sourceContext?.agent ?? run.bindings.values.first { $0.source == .current }?.agent,
+      sessionContext: sourceContext, now: timestamp,
       stepID: stepID, executionID: executionID, attempt: run.actionAttempts[stepID] ?? 1,
       bundle: run.context.bundle, values: run.stepValues, runDirectory: run.runDirectory)
     run.context.occupancy?.beginActivity()

@@ -159,3 +159,17 @@ worktree-oriented name describes the workflow target; multi-repository workspace
 plain-directory collection are future work. `builtin:collect-agent-context` is planned,
 not registered. Use verb-first kebab-case names for local actions, such as
 `local:write-report`; the runner does not infer behavior or permissions from the name.
+
+## Save handoff
+
+`builtin:save-handoff` takes a required `briefing` path to a UTF-8 briefing file within the
+current run directory, normally `{{ deliveries.briefing.path }}`. It validates the briefing
+before updating shared handoff state. It supports the existing handoff storage targets:
+Git worktrees, workspaces, and plain directories. Available source session context is included.
+
+The action returns `output.path` (an independent briefing/context packet),
+`output.current_path`, and `output.context_path`. Packets live under
+`.prowl/handoff/archive/` and survive workflow history cleanup. The action never launches an
+agent. The built-in `prowl.handoff` combines this action with a current-agent briefing and
+an optional receiver launch. Retrying a save creates a new packet and may archive shared
+state again; cancellation does not roll back completed writes.

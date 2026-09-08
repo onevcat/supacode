@@ -1,3 +1,7 @@
+> **2026-09-08 D3 scope:** Add only `prowl.handoff`, with optional receiver launch.
+> Keep the existing handoff HUD and CLI. No checkpoint built-in or legacy retirement
+> in this slice. See [020](020-handoff-workflow.md); this overrides the older D3 scope below.
+
 > **2026-09-07 naming slice:** Action bundles (#774) and personal history (#775) are
 > merged. Normalize the unreleased contract before D3; see [019](019-workflow-naming.md).
 > This slice does not implement handoff or adversarial review and does not publish a release.
@@ -63,7 +67,7 @@ say when each is cut:
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
 | #726 T1 | Implemented and verified — #767 merged; closure [#769](https://github.com/onevcat/Prowl/pull/769) merged | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; T1 verification and scoped publication are complete; R2b GUI/workflow acceptance belongs to D3. |
-| D3 | Next | `prowl.handoff` and `prowl.handoff-checkpoint`, legacy retirement, first built-in workflow E2E; R2b release candidate after acceptance |
+| D3 | Implemented and Debug-accepted; PR #786 | Added `prowl.handoff` with optional receiver launch; legacy handoff retained. Self-review, two Pi review rounds, and live Codex/Pi E2E complete. See [020](020-handoff-workflow.md). |
 | D2 | Deferred to R3 | `prowl.adversarial-review` built-in + reviewer skill + loop-specific E2E — after the handoff-first R2b release |
 
 #### R1 PR ledger
@@ -150,7 +154,7 @@ touch B1's files); #733 must merge before B3 starts. Docs: `workflows.md` (CLI p
 | 1 | **C2** start sheet + entry points (capsule popover, palette, Active Agents) | 063 | B3 | GUI-initiated runs |
 | 2 | **D1** `prowl-workflow` authoring skill (shipped early in #754; skills embedding from 065), `docs/components/workflows.md`, Settings › Workflows page, CLI reachability status (deferred from C0) | 063 | B1, C2, 065-K1 | custom workflows, agent-assisted authoring |
 | 3 | **#726 T1** headless contract tests against the real tier-A binaries through the production renderers/decoder (`make test-agent-contracts`, passing runs update T0) | 064 | #726 T0, S3 wave 1 | hook contracts fail loudly on binary drift before D3's E2E leans on them |
-| 4 | **D3** `prowl.handoff` + `prowl.handoff-checkpoint`, native actions, legacy retirement, docs/skill migration, and Debug E2E | 063 | A2, C2, D1, S3 wave 1, #733, #726 T1 | handoff is the first built-in workflow; assess R2b release after acceptance |
+| 4 | **D3** additive `prowl.handoff`, save action, optional receiver, docs/skill updates, and Debug E2E | 063 | A2, C2, D1, S3 wave 1, #733, #726 T1 | handoff is the first built-in workflow; assess R2b release after acceptance |
 
 The owner revised the order on 2026-09-05: handoff is simpler than adversarial review and
 will provide the first built-in workflow validation. Keep slice IDs stable (D3 remains handoff,

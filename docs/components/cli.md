@@ -612,6 +612,22 @@ as a workflow run. Poll the returned run ID with `workflow status` and inspect i
 
 `validate` accepts the bundle directory, not its `workflow.yaml`. Loose YAML files are not workflow bundles. See [Workflows](workflows.md#script-actions-and-bundles) for approval and results.
 
+### Built-in handoff workflow
+
+`prowl workflow run prowl.handoff --role receiver=Codex --json` asks the calling agent for
+a briefing, saves a durable packet, and launches the selected Profile in a new tab with focus.
+Use `--input next=save` to save only; no receiver binding or installed receiver Profile is
+required. Launch roles proven unused by start inputs or skipped steps are not bound. Roles
+in runtime-dependent branches remain required. The existing `prowl handoff` commands remain
+available.
+
+For self-initiated runs, follow `data.self_initiated.line` and its exact delivery command.
+The workflow expression `actions.save.output.path` names the saved packet. For CLI inspection,
+read `actions/save/<execution UUID>/result.json` under the reported `run_directory`; its
+`path` field is the packet path.
+Workflow completion confirms saving and optional launch, not completion of the receiver's
+continued task. See [Built-in Handoff](workflows.md#built-in-handoff).
+
 ### `prowl read [target]`
 Read a pane's content.
 

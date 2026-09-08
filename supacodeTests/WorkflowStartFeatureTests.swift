@@ -8,6 +8,21 @@ import Testing
 
 @MainActor
 struct WorkflowStartFeatureTests {
+  @Test func shippedHandoffSaveOnlyNeedsNoReceiverProfile() throws {
+    let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let yaml = try String(
+      contentsOf: root.appending(path: "Resources/workflows/handoff.pwlworkflow/workflow.yaml"), encoding: .utf8)
+    let context = try makeContext(yaml: yaml, includeCandidates: false)
+    var state = WorkflowStartFeature.State(context: context)
+    #expect(!state.canRun)
+    #expect(state.requiredLaunchRoles.map(\.name) == ["receiver"])
+    state.inputValues["next"] = "save"
+    #expect(state.requiredLaunchRoles.isEmpty)
+    #expect(state.canRun)
+    state.inputValues["next"] = "launch"
+    #expect(!state.canRun)
+  }
+
   static let review = """
     schema: prowl.workflow/v1
     id: review
