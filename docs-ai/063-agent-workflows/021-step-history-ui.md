@@ -189,3 +189,9 @@ JSON keys and complete previews have byte bounds.
 Focused regression coverage includes 10,000 ordered rounds, 2/3/4-byte UTF-8 boundaries,
 provisional/redelivered files, cancelled control errors, capped loops, failed action
 execution IDs, and explicit-notification identity without duplicate completion notices.
+
+A follow-up concurrency check reproduced two stale-read races. Navigation scans now
+snapshot terminal candidates before reading, and late disk detail reads cannot replace
+newer in-memory state. Both regressions failed before the fixes; all seven history
+reducer/model tests then passed. The complete pre-race-fix suite passed 3179 main tests
+and two process-cancellation tests, with a clean Debug build.

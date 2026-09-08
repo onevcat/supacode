@@ -15,6 +15,7 @@ struct WorkflowStepHistoryFeature {
     var selectedID: UUID?
     var detail: WorkflowRunRecord?
     var removedIDs: Set<UUID> = []
+    var scanTerminalIDs: Set<UUID>?
     var limit = 10
     var isLoading = false
     var error: String?
@@ -87,6 +88,7 @@ struct WorkflowStepHistoryFeature {
       case .refresh:
         guard !state.isLoading else { return .none }
         state.isLoading = true
+        state.scanTerminalIDs = Set(state.liveRuns.values.filter { $0.status.isTerminal }.map(\.id))
         return .run { [storage] send in
           do {
             let result = try await Task.detached(priority: .utility) { try Self.loadIndex(storage) }.value
@@ -96,7 +98,9 @@ struct WorkflowStepHistoryFeature {
       case .loaded(let entries, let directories):
         state.isLoading = false
         let diskIDs = Set(entries.map(\.id))
-        let removed = state.liveRuns.values.filter { $0.status.isTerminal && !diskIDs.contains($0.id) }.map(\.id)
+        let candidates = state.scanTerminalIDs ?? Set(state.liveRuns.values.filter { $0.status.isTerminal }.map(\.id))
+        let removed = candidates.subtracting(diskIDs)
+        state.scanTerminalIDs = nil
         state.removedIDs.formUnion(removed)
         for id in removed { state.liveRuns.removeValue(forKey: id) }
         let liveIDs = Set(state.liveRuns.keys)
@@ -139,7 +143,7 @@ struct WorkflowStepHistoryFeature {
           } catch { await send(.failed("Run details are unavailable: \(error)")) }
         }.cancellable(id: CancelID.detail, cancelInFlight: true)
       case .detailLoaded(let id, let detail):
-        if state.selectedID == id { state.detail = detail }
+        if state.selectedID == id, state.liveRuns[id] == nil { state.detail = detail }
         return .none
       case .setPresented(let presented):
         state.isPresented = presented
