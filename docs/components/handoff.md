@@ -36,7 +36,7 @@ shared root — but works for any runnable target.
 
 ## The transition
 
-Every handoff runs one pure sequence, no matter which entry point started it:
+The legacy HUD and `prowl handoff` CLI share this transition sequence:
 
 ```text
 collect briefing → archive outgoing state → install fresh current.md

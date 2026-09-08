@@ -1,6 +1,6 @@
 # 063.020 — Additive Handoff Workflow
 
-Status: Implemented; external review and Debug acceptance pending, 2026-09-08.
+Status: Implemented, reviewed, and accepted in Debug; PR #786, 2026-09-08.
 
 ## Scope and authority
 
@@ -77,3 +77,33 @@ Before PR: CLI build, smoke, unit (225 XCTest plus 69 Swift Testing), and integr
 (112 tests) passed. The initial app core run passed 137 tests; focused follow-ups passed
 25 and 53 tests. Bundle/role tests passed four tests. `make check` passed. External review
 and live acceptance are tracked separately below when complete.
+
+## Adversarial review
+
+PR #786 received two reviews from the neighboring Pi session. Round 1 confirmed one P2:
+the CLI guide section was accidentally placed inside a delivery heredoc. A focused Markdown
+boundary check reproduced the failure; 58c29416 corrected it and the same check passed.
+Round 2 verified the fix and found no new issues. The P0/P1/major-UX P2 gate is clean.
+No runtime code changed during review. Both rounds are recorded on the PR.
+
+## Debug acceptance and documentation
+
+The isolated Debug instance used the matching checkout CLI and `/tmp/prowl-self-verify.sock`.
+Native AX inspection showed that selecting `save` hides the Receiver picker and keeps Run
+enabled. A GUI-started Codex save-only run completed with only an author binding, no new
+pane, and a durable briefing/session packet. A self-initiated Codex-to-Pi run then completed;
+its log confirms that the first instruction returned to the caller instead of being typed.
+Pi read the packet, created the exact requested receipt, and preserved the input file. The
+source pane stayed open and the receiver launched in the background. The previous packet
+remained byte-for-byte unchanged.
+
+A third live run submitted a briefing without required sections. It returned `OUTPUT_INVALID`;
+cancellation produced no delivery/action output, no new receiver, and no changes to the shared
+handoff files (verified by hashes). Component, CLI, and shipped skill documentation now
+reflect these observed paths and distinguish workflow completion from receiver task completion.
+
+Verification friction was environmental: the installed CLI lacked `workflow read`, so agents
+used the matching Debug CLI; AX key delivery could not raise the window, while semantic
+Agents-menu/start-sheet actions worked. After all test tabs closed, AX window re-discovery
+failed. All created panes were closed and the isolated process was stopped; local evidence
+and its temporary directory entry were retained. No UI metadata repair was warranted.

@@ -622,7 +622,9 @@ in runtime-dependent branches remain required. The existing `prowl handoff` comm
 available.
 
 For self-initiated runs, follow `data.self_initiated.line` and its exact delivery command.
-Inspect `actions.save.output.path` in the run's action results for the saved packet.
+The workflow expression `actions.save.output.path` names the saved packet. For CLI inspection,
+read `actions/save/<execution UUID>/result.json` under the reported `run_directory`; its
+`path` field is the packet path.
 Workflow completion confirms saving and optional launch, not completion of the receiver's
 continued task. See [Built-in Handoff](workflows.md#built-in-handoff).
 

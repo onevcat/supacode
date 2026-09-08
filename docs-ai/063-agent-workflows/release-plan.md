@@ -67,7 +67,7 @@ say when each is cut:
 | D1 (rest) | Merged | #761: Settings › Agents › Workflows page, `docs/components/workflows.md`, CLI reachability status (deferred from C0); [063.013](013-d1-workflows-settings.md) |
 | D1 (UI refinement) | Merged | #763: post-merge native list/detail refinement, repository-local workflow Settings, Run Setup copy, explicit run targets, file opening, and capsule YAML icons; [063.014](014-workflow-settings-ui-refinement.md) |
 | #726 T1 | Implemented and verified — #767 merged; closure [#769](https://github.com/onevcat/Prowl/pull/769) merged | [064.016](../064-agent-completion-signals/016-t1-contract-test-plan.md): zero-inference inventory and production configuration preflight verified; [runbook](../064-agent-completion-signals/agent-contracts-runbook.md). Eight-runtime headless checks pass; T1 verification and scoped publication are complete; R2b GUI/workflow acceptance belongs to D3. |
-| D3 | In progress | Add `prowl.handoff` with optional receiver launch, retain legacy handoff; self-review, Pi review, and Debug E2E required. See [020](020-handoff-workflow.md). |
+| D3 | Implemented and Debug-accepted; PR #786 | Added `prowl.handoff` with optional receiver launch; legacy handoff retained. Self-review, two Pi review rounds, and live Codex/Pi E2E complete. See [020](020-handoff-workflow.md). |
 | D2 | Deferred to R3 | `prowl.adversarial-review` built-in + reviewer skill + loop-specific E2E — after the handoff-first R2b release |
 
 #### R1 PR ledger
