@@ -166,6 +166,79 @@ struct WorktreeTerminalStateViewedSurfaceTests {
     #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
   }
 
+  @Test(arguments: [false, true])
+  func acknowledgementDuringSessionLookupIsPreserved(metadataChanges: Bool) async {
+    let fixture = makeDetectionFixture()
+    fixture.state.lastWindowIsKey = false
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(
+        detectedAgent: .claude, fallbackState: .idle, state: .idle, seen: false),
+      detected: .idle
+    )
+    let session =
+      metadataChanges ? AgentSession(id: "resolved", transcriptPath: nil, source: .recentFile) : nil
+    let (started, signalStarted) = AsyncStream<Void>.makeStream()
+    let (resume, signalResume) = AsyncStream<Void>.makeStream()
+    let poll = Task {
+      await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID) {
+        _, _, _, _, _ in
+        signalStarted.yield(())
+        signalStarted.finish()
+        for await _ in resume { break }
+        return (session, 0)
+      }
+    }
+    for await _ in started { break }
+    fixture.state.lastWindowIsKey = true
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+    let acknowledgedAt = fixture.state.surfaceAgentStates[fixture.surface.id]?.lastChangedAt
+    fixture.state.lastWindowIsKey = false
+    signalResume.yield(())
+    signalResume.finish()
+
+    #expect(await poll.value)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.lastChangedAt == acknowledgedAt)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.session == session)
+
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(detectedAgent: .claude, state: .working, seen: true),
+      detected: .idle
+    )
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+  }
+
+  @Test func stateChangedDuringSessionLookupIsNotOverwritten() async {
+    let fixture = makeDetectionFixture()
+    preparePoll(
+      fixture,
+      previous: PaneAgentState(detectedAgent: .claude, state: .idle, seen: false),
+      detected: .idle
+    )
+    let (started, signalStarted) = AsyncStream<Void>.makeStream()
+    let (resume, signalResume) = AsyncStream<Void>.makeStream()
+    let poll = Task {
+      await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID) {
+        _, _, _, _, _ in
+        signalStarted.yield(())
+        signalStarted.finish()
+        for await _ in resume { break }
+        return (nil, 0)
+      }
+    }
+    for await _ in started { break }
+    let newer = PaneAgentState(detectedAgent: .claude, state: .working, seen: true)
+    fixture.state.surfaceAgentStates[fixture.surface.id] = newer
+    signalResume.yield(())
+    signalResume.finish()
+
+    #expect(await poll.value)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id] == newer)
+  }
+
   private func makeViewedState() -> (WorktreeTerminalState, UUID) {
     let state = WorktreeTerminalState(
       runtime: GhosttyRuntime(),

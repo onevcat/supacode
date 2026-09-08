@@ -146,3 +146,6 @@ until it reconnects. The picker matches by UUID only (`AgentIslandDisplaySelecti
 
 - Updated 2026-09-05: consolidated agent presentation settings and refined the floating grip — see
   [004-agent-display-settings.md](004-agent-display-settings.md).
+
+- Updated 2026-09-08: preserve completion acknowledgements across session lookup suspension — see
+  [005-completion-acknowledgement.md](005-completion-acknowledgement.md).
