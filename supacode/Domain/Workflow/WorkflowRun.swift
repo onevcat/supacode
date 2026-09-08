@@ -394,8 +394,8 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var observations: [String: WorkflowJSONValue] = [:]
   var actionExecutionID: String?
   var actionAttempts: [String: Int] = [:]
-  /// Output name → the step whose skip made it missing.
-  var skippedOutputs: [String: String] = [:]
+  /// Delivery name → the step whose skip made it missing.
+  var skippedDeliveries: [String: String] = [:]
   /// Steps skipped at start (`--skip` / the start sheet).
   let preSkippedSteps: Set<String>
   var stepRecords: [WorkflowStepRecord] = []

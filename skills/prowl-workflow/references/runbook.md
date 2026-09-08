@@ -74,7 +74,7 @@ delivery is rejected instead and the participant can correct it while the step i
 - `.data.status.state` — see the states above; `.data.finished_at` is set once the run ended.
   `.data.status.attention` (`reason`, `message`, `step`, `actions`) explains a `needs_attention`.
 - `.data.step` — the step in progress; `.data.activation` — the awaited delivery (`step`,
-  `role`, `output`, `state` `waiting` | `persisting` | `provisional`, `ordinal`, `deadline`,
+  `role`, `delivery`, `state` `waiting` | `persisting` | `provisional`, `ordinal`, `deadline`,
   and `expect.completion[]`, the exact commands that complete it).
 - `.data.deliveries.<name>` — the latest accepted delivery (`path`, `latest_path`, `ordinal`,
   `verdict`); `.data.bindings` and `.data.run_directory` are frozen at start.
@@ -148,3 +148,6 @@ Every awaited step mints a fresh token for its activation; Skip/Cancel/Relaunch 
 | `OUTPUT_INVALID` / `VERDICT_REQUIRED` / `OUTPUT_TOO_LARGE` | empty body / missing mandatory verdict under `strict` / body over the cap |
 | `WORKFLOW_DELIVERY_REQUIRED` | `dispatch-complete` was used inside a workflow activation — run the `prowl workflow deliver` command the error echoes |
 | `PROMPT_TOO_LARGE` / `RENDERED_TEXT_INVALID` | a rendered launch prompt over 128 KiB / a rendered line that isn't one clean terminal line — shorten, or move content into an `instruction` |
+
+The `workflow deliver --json` receipt exposes its delivery record at
+`.data.delivery.record`; `.data.activation.delivery` in a status response is the expected delivery name.

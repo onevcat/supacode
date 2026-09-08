@@ -166,14 +166,14 @@ final class WorkflowRunHarness {
         watchdogs.append(request)
       case .disarmWatchdog(let ordinal):
         disarmed.append(ordinal)
-      case .persistOutput(let name, let ordinal, let body):
+      case .persistDelivery(let name, let ordinal, let body):
         do {
-          try store.writeOutput(runID: runID, name: name, ordinal: ordinal, body: body)
+          try store.writeDelivery(runID: runID, name: name, ordinal: ordinal, body: body)
         } catch {
-          try await apply(.outputPersistFailed(ordinal: ordinal, reason: "\(error)"))
+          try await apply(.deliveryPersistFailed(ordinal: ordinal, reason: "\(error)"))
           continue
         }
-        try await apply(.outputPersisted(ordinal: ordinal))
+        try await apply(.deliveryPersisted(ordinal: ordinal))
       case .persist:
         try store.writeRecord(WorkflowRunRecord(run: machine.run))
       case .log(let line):
@@ -366,7 +366,7 @@ struct WorkflowRunHarnessTests {
     #expect(try harness.store.readRecord(runID: harness.run.id).deliveries["brief"]?.ordinal == 1)
   }
 
-  @Test func cancelAbandonsThePendingActivationAndKeepsDeliveredOutputs() async throws {
+  @Test func cancelAbandonsThePendingActivationAndKeepsDeliveries() async throws {
     let root = try makeRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let harness = try await makeHarness(root: root)
@@ -429,7 +429,7 @@ struct WorkflowRunHarnessTests {
     #expect(!harness.launches[0].expectsDelivery)
     #expect(harness.notifications == ["Handed off to Pi Reviewer"])
     let record = try harness.store.readRecord(runID: harness.run.id)
-    #expect(record.skippedOutputs == ["brief": "brief"])
+    #expect(record.skippedDeliveries == ["brief": "brief"])
     #expect(record.actions["transition"]?["output"] != nil)
   }
 }

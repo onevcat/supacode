@@ -104,7 +104,7 @@ nonisolated public enum CLIErrorCode {
   public static let workflowInvalid = "WORKFLOW_INVALID"
   /// `workflow run` named a definition the user switched off.
   public static let workflowDisabled = "WORKFLOW_DISABLED"
-  // Run-time codes of the workflow runner (dsl-spec §9); emitted by `workflow run/done` from B3 on.
+  // Run-time codes of the workflow runner (dsl-spec §9); emitted by `workflow run/deliver` from B3 on.
   public static let runNotFound = "RUN_NOT_FOUND"
   public static let paneBusy = "PANE_BUSY"
   public static let roleMismatch = "ROLE_MISMATCH"

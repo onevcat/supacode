@@ -1,6 +1,6 @@
 // supacodeTests/WorkflowRunsFeatureTests.swift
 // The reducer that wires B2's machine to the boundaries (docs-ai 063 B3): ordered effect
-// execution, the two-phase `done` rendezvous, late launches, and the restart scan.
+// execution, the two-phase `deliver` rendezvous, late launches, and the restart scan.
 
 import ComposableArchitecture
 import DependenciesTestSupport
@@ -336,7 +336,7 @@ struct WorkflowRunsFeatureTests {
 
   // MARK: - Ordered execution
 
-  @Test(.dependencies) func aRunPerformsItsEffectsInMachineOrderAndAnswersDoneAfterPersistence()
+  @Test(.dependencies) func aRunPerformsItsEffectsInMachineOrderAndAnswersDeliverAfterPersistence()
     async throws
   {
     let fixture = try Fixture()
@@ -369,7 +369,7 @@ struct WorkflowRunsFeatureTests {
           body: "# Brief\n## Scope\nx\n## Claims\ny", verdict: nil, source: "pane"))
     )
     #expect(store.state.pendingDeliveries[requestID]?.ordinal == 1)
-    await store.receive(.event(runID: runID, .outputPersisted(ordinal: 1)), timeout: Self.timeout)
+    await store.receive(.event(runID: runID, .deliveryPersisted(ordinal: 1)), timeout: Self.timeout)
     #expect(fixture.responses.count == 1)
     guard case .delivered(let run, let receipt) = fixture.responses[0].resolution else {
       Issue.record("expected a delivered resolution, got \(fixture.responses[0].resolution)")
@@ -442,7 +442,7 @@ struct WorkflowRunsFeatureTests {
 
   // MARK: - Rendezvous (decision W1)
 
-  @Test(.dependencies) func cancelWhileTheOutputIsPersistingFailsThePendingDone() async throws {
+  @Test(.dependencies) func cancelWhileTheOutputIsPersistingFailsThePendingDeliver() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let queue = RecordingQueue()
@@ -462,7 +462,7 @@ struct WorkflowRunsFeatureTests {
     #expect(store.state.sessions[runID]?.run.activeActivation?.state == .persisting)
     #expect(fixture.responses.isEmpty)
     #expect(
-      queue.effects.contains { if case .persistOutput = $0 { return true } else { return false } })
+      queue.effects.contains { if case .persistDelivery = $0 { return true } else { return false } })
 
     await store.send(.userAction(runID: runID, .cancel))
     await store.finish(timeout: Self.timeout)
@@ -476,12 +476,12 @@ struct WorkflowRunsFeatureTests {
           message: "The step stopped waiting for this delivery before the output was saved."))
     #expect(queue.effects.contains(.finished(.cancelled)))
 
-    // The queued `.outputPersisted` of the abandoned write is stale: ignored, nothing answered twice.
-    await store.send(.event(runID: runID, .outputPersisted(ordinal: 1)))
+    // The queued `.deliveryPersisted` of the abandoned write is stale: ignored, nothing answered twice.
+    await store.send(.event(runID: runID, .deliveryPersisted(ordinal: 1)))
     #expect(fixture.responses.count == 1)
   }
 
-  @Test(.dependencies) func aPersistenceFailureFailsThePendingDoneWithWorkflowFailed() async throws {
+  @Test(.dependencies) func aPersistenceFailureFailsThePendingDeliverWithWorkflowFailed() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
     let queue = RecordingQueue()
@@ -498,7 +498,7 @@ struct WorkflowRunsFeatureTests {
           body: "## Scope\nx\n## Claims\ny", verdict: nil, source: "manual")))
     #expect(queue.effects.first == .log("Step 'brief': delivery received (source=manual)."))
 
-    await store.send(.event(runID: runID, .outputPersistFailed(ordinal: 1, reason: "disk full")))
+    await store.send(.event(runID: runID, .deliveryPersistFailed(ordinal: 1, reason: "disk full")))
     #expect(store.state.sessions[runID]?.run.status.attention?.reason.code == "persist_failed")
     #expect(store.state.pendingDeliveries.isEmpty)
     #expect(fixture.responses.count == 1)
@@ -527,7 +527,7 @@ struct WorkflowRunsFeatureTests {
         WorkflowDeliveryRequest(
           requestID: requestID, runID: runID, ordinal: 1, selector: .token("TOKEN-1"),
           body: "## Scope\nonly", verdict: nil, source: "pane")))
-    await store.send(.event(runID: runID, .outputPersisted(ordinal: 1)))
+    await store.send(.event(runID: runID, .deliveryPersisted(ordinal: 1)))
     #expect(store.state.sessions[runID]?.run.status.attention?.reason.code == "delivery_issues")
     #expect(fixture.responses.count == 1)
     guard case .provisional(_, let receipt) = fixture.responses[0].resolution else {
@@ -853,7 +853,7 @@ struct WorkflowRunsFeatureTests {
         WorkflowDeliveryRequest(
           requestID: UUID(), runID: runID, ordinal: 1, selector: .token(Self.firstToken),
           body: "# Brief\n## Scope\nx\n## Claims\ny", verdict: nil, source: "pane")))
-    await store.receive(.event(runID: runID, .outputPersisted(ordinal: 1)), timeout: Self.timeout)
+    await store.receive(.event(runID: runID, .deliveryPersisted(ordinal: 1)), timeout: Self.timeout)
     await store.receive(\.event, timeout: Self.timeout)
     let first = try #require(store.state.sessions[runID]?.run.bindings["reviewer"]?.pane)
     #expect(store.state.paneOwners[first.surfaceID] == runID)
@@ -916,7 +916,7 @@ struct WorkflowRunsFeatureTests {
         WorkflowDeliveryRequest(
           requestID: UUID(), runID: runID, ordinal: 1, selector: .token(Self.firstToken), body: "brief",
           verdict: nil, source: "pane")))
-    await store.receive(.event(runID: runID, .outputPersisted(ordinal: 1)), timeout: Self.timeout)
+    await store.receive(.event(runID: runID, .deliveryPersisted(ordinal: 1)), timeout: Self.timeout)
     await store.receive(\.event, timeout: Self.timeout)
     let reviewer = try #require(store.state.sessions[runID]?.run.bindings["reviewer"]?.pane)
     await store.send(
@@ -924,7 +924,7 @@ struct WorkflowRunsFeatureTests {
         WorkflowDeliveryRequest(
           requestID: UUID(), runID: runID, ordinal: 2, selector: .token(Self.secondToken), body: "findings",
           verdict: nil, source: "pane")))
-    await store.receive(.event(runID: runID, .outputPersisted(ordinal: 2)), timeout: Self.timeout)
+    await store.receive(.event(runID: runID, .deliveryPersisted(ordinal: 2)), timeout: Self.timeout)
     return reviewer
   }
 
@@ -945,7 +945,7 @@ struct WorkflowRunsFeatureTests {
     #expect(!WorkflowRunEffect.completeActivation(dispatchID: "d", summary: "s").isRevocable)
     #expect(!WorkflowRunEffect.abandonActivation(dispatchID: "d", reason: "r").isRevocable)
     #expect(!WorkflowRunEffect.persist.isRevocable)
-    #expect(!WorkflowRunEffect.persistOutput(name: "o", ordinal: 1, body: "b").isRevocable)
+    #expect(!WorkflowRunEffect.persistDelivery(name: "o", ordinal: 1, body: "b").isRevocable)
     #expect(!WorkflowRunEffect.log("l").isRevocable)
     #expect(WorkflowRunEffect.close(role: "r", surfaceID: pane).isRevocable, "cancel never closes panes")
     #expect(!WorkflowRunEffect.notify("n").isRevocable)

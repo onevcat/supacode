@@ -418,11 +418,11 @@ nonisolated struct WorkflowAttentionControl: Equatable, Sendable, Identifiable {
     consequence: WorkflowSkipConsequence
   ) -> String {
     switch consequence {
-    case .noOutput:
+    case .noDelivery:
       "Skip step '\(stepID)'? The workflow continues without an output from this step."
     case .continues(let optionalInputs):
       if optionalInputs.isEmpty {
-        "Skip step '\(stepID)'? The workflow continues without this output."
+        "Skip step '\(stepID)'? The workflow continues without this delivery."
       } else {
         "Skip step '\(stepID)'? The workflow continues without the optional input used by "
           + optionalInputs.joined(separator: ", ") + "."

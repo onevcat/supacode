@@ -1,6 +1,6 @@
 // supacode/Clients/Workflow/WorkflowCLIResponderClient.swift
 // The reducer's side of the CLI rendezvous (docs-ai 063 B3, decision W1): a `done` request is
-// answered when its activation leaves `persisting`, never on the `.outputPersisted` event alone;
+// answered when its activation leaves `persisting`, never on the `.deliveryPersisted` event alone;
 // a self-initiated `run` is answered once its first activation is open. The composition root
 // turns the resolution into a wire response and resumes the socket handler.
 

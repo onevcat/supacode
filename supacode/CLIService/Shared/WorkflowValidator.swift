@@ -61,34 +61,34 @@ nonisolated public enum WorkflowValidator {
 
 // MARK: - Walker
 
-nonisolated private enum OutputConsumer {
+nonisolated private enum DeliveryConsumer {
   case template
   case until
   case requiredActionInput
   case optionalActionInput
 }
 
-/// Where an output is read or skipped: the step's walk ordinal and the loop body it sits in.
-nonisolated private struct OutputUse {
-  let consumer: OutputConsumer
+/// Where a delivery is read or skipped: the step's walk ordinal and the loop body it sits in.
+nonisolated private struct DeliveryUse {
+  let consumer: DeliveryConsumer
   let ordinal: Int
   let loopID: String?
 }
 
 nonisolated private struct SkipRecord {
   let name: String
-  let use: OutputUse
+  let use: DeliveryUse
   let location: WorkflowSourceLocation?
 }
 
-nonisolated private struct OutputProducer {
+nonisolated private struct DeliveryProducer {
   let verdicts: Set<String>?
   /// The `repeat` step whose body holds the producer; nil at the top level.
   let loopID: String?
 }
 
-nonisolated private struct OutputInfo {
-  var producers: [OutputProducer] = []
+nonisolated private struct DeliveryInfo {
+  var producers: [DeliveryProducer] = []
   /// Verdict set of the producer whose delivery is the latest at this point of the walk; nil
   /// when it declares none, or when a skippable loop leaves the latest producer ambiguous.
   var latestVerdicts: Set<String>?
@@ -102,18 +102,18 @@ nonisolated private final class Walker {
   private var stepIDs: Set<String> = []
   private var launchedRoles: Set<String> = []
   private var possiblyLaunchedRoles: Set<String> = []
-  private var deliveries: [String: OutputInfo] = [:]
-  private var consumers: [String: [OutputUse]] = [:]
+  private var deliveries: [String: DeliveryInfo] = [:]
+  private var consumers: [String: [DeliveryUse]] = [:]
   /// Walk position of the step being checked; 0 before the first step.
   private var ordinal = 0
   /// Action steps visible to the step being validated: outer sequences first, current last.
   private var actionScopes: [[String: WorkflowActionSchema]] = [[:]]
   private var checkingActionInputs = false
   private var currentLoopID: String?
-  private var outerOutputNames: Set<String> = []
+  private var outerDeliveryNames: Set<String> = []
   /// `on_timeout: skip` expectations, kept apart from `deliveries` so folding a skippable loop
   /// cannot lose them before the consumers are reported.
-  private var skipOutputs: [SkipRecord] = []
+  private var skippedDeliveries: [SkipRecord] = []
 
   init(definition: WorkflowDefinition, context: WorkflowValidationContext) {
     self.definition = definition
@@ -408,10 +408,10 @@ nonisolated private final class Walker {
         }
       } catch { collector.error("expression_syntax", "\(error)", at: step.location) }
     }
-    let previousOutputs = deliveries
-    let previousOuterNames = outerOutputNames
-    outerOutputNames.formUnion(deliveries.keys)
-    defer { outerOutputNames = previousOuterNames }
+    let previousDeliveries = deliveries
+    let previousOuterNames = outerDeliveryNames
+    outerDeliveryNames.formUnion(deliveries.keys)
+    defer { outerDeliveryNames = previousOuterNames }
     let previousRoles = launchedRoles
     let previousPossibleRoles = possiblyLaunchedRoles
     var branchRoles: [Set<String>] = []
@@ -428,7 +428,7 @@ nonisolated private final class Walker {
       branchRoles.append(launchedRoles)
       possibleRoles.formUnion(possiblyLaunchedRoles)
       actionScopes.removeLast()
-      deliveries = previousOutputs
+      deliveries = previousDeliveries
       launchedRoles = previousRoles
       possiblyLaunchedRoles = previousPossibleRoles
     }
@@ -442,15 +442,15 @@ nonisolated private final class Walker {
 
   private func checkExpect(_ expect: WorkflowExpectation?, step: WorkflowStepDefinition) {
     guard let expect, let name = step.deliveryName else { return }
-    if outerOutputNames.contains(name) {
+    if outerDeliveryNames.contains(name) {
       collector.error(
-        "output_shadowing",
-        "Output '\(name)' would overwrite an outer scope. Use a distinct output name and retain values in state.",
+        "delivery_shadowing",
+        "Delivery '\(name)' would overwrite an outer scope. Use a distinct delivery name and retain values in state.",
         at: step.location)
     }
     let location = expect.location ?? step.location
     if !WorkflowSchema.isSlug(name) {
-      collector.error("output_name_slug", "Output name '\(name)' is not a valid slug.", at: location)
+      collector.error("delivery_name_slug", "Delivery name '\(name)' is not a valid slug.", at: location)
     }
     if expect.sections.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
       collector.error("section_empty", "'sections' entries must not be empty.", at: location)
@@ -461,14 +461,15 @@ nonisolated private final class Walker {
     if let timeout = expect.timeoutSeconds, timeout > WorkflowValidator.longTimeoutSeconds {
       collector.warning("timeout_long", "'timeout' above 2h; the watchdog already supervises waiting.", at: location)
     }
-    var info = deliveries[name] ?? OutputInfo()
+    var info = deliveries[name] ?? DeliveryInfo()
     let verdicts = expect.verdicts.map(Set.init)
-    info.producers.append(OutputProducer(verdicts: verdicts, loopID: currentLoopID))
+    info.producers.append(DeliveryProducer(verdicts: verdicts, loopID: currentLoopID))
     info.latestVerdicts = verdicts
     if expect.onTimeout == .skip {
-      skipOutputs.append(
+      skippedDeliveries.append(
         SkipRecord(
-          name: name, use: OutputUse(consumer: .template, ordinal: ordinal, loopID: currentLoopID), location: location))
+          name: name, use: DeliveryUse(consumer: .template, ordinal: ordinal, loopID: currentLoopID), location: location
+        ))
     }
     deliveries[name] = info
   }
@@ -488,7 +489,7 @@ nonisolated private final class Walker {
   /// A skipped delivery ends the run only when a non-optional reader comes after it — later in
   /// document order, or anywhere in the same loop body, which the next iteration reads again.
   private func reportSkipConsumers() {
-    for record in skipOutputs {
+    for record in skippedDeliveries {
       let (name, skip, location) = (record.name, record.use, record.location)
       let blocking = (consumers[name] ?? []).contains { use in
         use.consumer != .optionalActionInput
@@ -497,14 +498,14 @@ nonisolated private final class Walker {
       guard blocking else { continue }
       collector.warning(
         "skip_ends_run",
-        "'on_timeout: skip' on output '\(name)' would end the run: a later step depends on it.",
+        "'on_timeout: skip' on delivery '\(name)' would end the run: a later step depends on it.",
         at: location)
     }
   }
 
   // MARK: Templates
 
-  private func checkTemplate(_ text: String, at location: WorkflowSourceLocation?, consumer: OutputConsumer) {
+  private func checkTemplate(_ text: String, at location: WorkflowSourceLocation?, consumer: DeliveryConsumer) {
     var remaining = text[...]
     while let start = remaining.range(of: "{{") {
       remaining = remaining[start.upperBound...]
@@ -518,7 +519,7 @@ nonisolated private final class Walker {
     if remaining.contains("}}") { collector.error("template_syntax", "Unexpected expression delimiter.", at: location) }
   }
 
-  private func checkExpression(_ expression: String, at location: WorkflowSourceLocation?, consumer: OutputConsumer) {
+  private func checkExpression(_ expression: String, at location: WorkflowSourceLocation?, consumer: DeliveryConsumer) {
     do {
       var parser = try WorkflowExpressionParser(expression)
       let node = try parser.parse()
@@ -548,7 +549,7 @@ nonisolated private final class Walker {
   }
 
   private func checkReference(
-    _ reference: WorkflowTemplate.Reference, at location: WorkflowSourceLocation?, consumer: OutputConsumer
+    _ reference: WorkflowTemplate.Reference, at location: WorkflowSourceLocation?, consumer: DeliveryConsumer
   ) {
     let parts = reference.components
     let valid: Bool
@@ -557,7 +558,7 @@ nonisolated private final class Walker {
       valid = checkContextReference(parts)
     case "inputs": valid = parts.count >= 2 && definition.input(named: parts[1]) != nil
     case "state": valid = parts.count >= 2 && definition.state[parts[1]] != nil
-    case "deliveries": valid = parts.count == 3 && checkOutputReference(parts, at: location, consumer: consumer)
+    case "deliveries": valid = parts.count == 3 && checkDeliveryReference(parts, at: location, consumer: consumer)
     case "actions": valid = parts.count >= 3 && checkActionReference(parts)
     default: valid = false
     }
@@ -587,14 +588,14 @@ nonisolated private final class Walker {
     return parts.count == 2 || (parts.count == 3 && allowed.contains(parts[2]))
   }
 
-  private func checkOutputReference(
-    _ parts: [String], at location: WorkflowSourceLocation?, consumer: OutputConsumer
+  private func checkDeliveryReference(
+    _ parts: [String], at location: WorkflowSourceLocation?, consumer: DeliveryConsumer
   ) -> Bool {
     guard let info = deliveries[parts[1]], ["path", "verdict"].contains(parts[2]) else { return false }
     if parts[2] == "verdict", info.latestVerdicts == nil {
       return false
     }
-    consumers[parts[1], default: []].append(OutputUse(consumer: consumer, ordinal: ordinal, loopID: currentLoopID))
+    consumers[parts[1], default: []].append(DeliveryUse(consumer: consumer, ordinal: ordinal, loopID: currentLoopID))
     return true
   }
 

@@ -28,7 +28,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   public private(set) var evaluations: [Evaluation] = []
   private var frames: [Frame]
   public private(set) var state: WorkflowTypedState
-  public private(set) var expiredOutputs: Set<String> = []
+  public private(set) var expiredDeliveries: Set<String> = []
   public private(set) var expiredActions: Set<String> = []
   public private(set) var currentStep: WorkflowStepDefinition?
   public var remainingSteps: [WorkflowStepDefinition] {
@@ -47,7 +47,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   public func values(over context: [String: WorkflowJSONValue]) -> [String: WorkflowJSONValue] {
     var result = context
     result["state"] = Self.object(state.values)
-    for (group, expired) in [("deliveries", expiredOutputs), ("actions", expiredActions)] {
+    for (group, expired) in [("deliveries", expiredDeliveries), ("actions", expiredActions)] {
       if case .object(var fields) = result[group] {
         for name in expired { fields.removeValue(forKey: name) }
         result[group] = .object(fields)
@@ -82,7 +82,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   public mutating func complete() {
     guard let step = currentStep, !frames.isEmpty else { return }
     if case .action = step.action { expiredActions.remove(step.id) }
-    if let output = step.deliveryName { expiredOutputs.remove(output) }
+    if let output = step.deliveryName { expiredDeliveries.remove(output) }
     frames[frames.count - 1].index += 1
     currentStep = nil
   }
@@ -174,7 +174,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   private mutating func expire(_ steps: [WorkflowStepDefinition]) {
     for step in steps {
       if case .action = step.action { expiredActions.insert(step.id) }
-      if let output = step.deliveryName { expiredOutputs.insert(output) }
+      if let output = step.deliveryName { expiredDeliveries.insert(output) }
       expire(step.action.children)
     }
   }

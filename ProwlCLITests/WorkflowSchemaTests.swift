@@ -10,37 +10,37 @@ final class WorkflowSchemaTests: XCTestCase {
 
   func testOutputSchemaAcceptsEveryAction() throws {
     let entry =
-      #"{"id":"demo","name":"Demo","description":"d","scope":"user","path":"/Users/me/.prowl/workflows/demo.yaml","enabled":true,"valid":true,"errors":0,"warnings":1,"shadowed":false}"#
+      #"{"id":"demo","name":"Demo","description":"d","scope":"user","path":"/Users/me/.prowl/workflows/demo.pwlworkflow","enabled":true,"valid":true,"errors":0,"warnings":1,"shadowed":false}"#
     let unparsed =
-      #"{"scope":"repo","path":"/Projects/App/.prowl/workflows/broken.yaml","enabled":false,"valid":false,"errors":1,"warnings":0,"shadowed":false}"#
+      #"{"scope":"repo","path":"/Projects/App/.prowl/workflows/broken.pwlworkflow","enabled":false,"valid":false,"errors":1,"warnings":0,"shadowed":false}"#
     let list =
       #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"list","worktree":{"id":"w","name":"main","path":"/Projects/App","root_path":"/Projects/App"},"sources":{"bundle":"/Applications/Prowl.app/Contents/Resources/workflows","user":"/Users/me/.prowl/workflows","repo":"/Projects/App/.prowl/workflows"},"workflows":[\#(entry),\#(unparsed)]}}"#
     let listWithoutWorktree =
       #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"list","sources":{"user":"/Users/me/.prowl/workflows"},"workflows":[]}}"#
     let validate =
-      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"validate","path":"/x.yaml","valid":true,"workflow":{"id":"demo","name":"Demo"},"diagnostics":[{"severity":"warning","code":"timeout_long","message":"long","line":4,"column":7},{"severity":"warning","code":"skill_unchecked","message":"unchecked"}]}}"#
+      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"validate","path":"/x.pwlworkflow","valid":true,"workflow":{"id":"demo","name":"Demo"},"diagnostics":[{"severity":"warning","code":"timeout_long","message":"long","line":4,"column":7},{"severity":"warning","code":"skill_unchecked","message":"unchecked"}]}}"#
     let schema =
       #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"schema","schema":{"$id":"x","type":"object"}}}"#
     let error =
-      #"{"ok":false,"command":"workflow","schema_version":"prowl.cli.workflow.v1","error":{"code":"WORKFLOW_INVALID","message":"2 error(s).","details":{"action":"validate","path":"/x.yaml","valid":false,"diagnostics":[]}}}"#
+      #"{"ok":false,"command":"workflow","schema_version":"prowl.cli.workflow.v1","error":{"code":"WORKFLOW_INVALID","message":"2 error(s).","details":{"action":"validate","path":"/x.pwlworkflow","valid":false,"diagnostics":[]}}}"#
     let run =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"run",\###(Self.runFields)}}"###
     let status =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"status",\###(Self.recordFields)}}"###
     let cancel =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"cancel",\###(Self.runFields)}}"###
-    let done =
-      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
+    let deliver =
+      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"provisional","ordinal":1,"step":"brief","role":"author","record":\###(Self.output),"warnings":[{"code":"missing_sections","message":"missing ## Claims"}]}}}"###
     let read =
       #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"read","run":"0BADCAFE-0000-4000-8000-000000000042","invocation":1,"role":"author","step":"brief","resource":"instruction","body":"Read","encoding":"utf-8","resources":[],"offset":0,"next_offset":4,"total_bytes":8}}"#
-    for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, done, read] {
+    for instance in [list, listWithoutWorktree, validate, schema, error, run, status, cancel, deliver, read] {
       try assertValidity(instance, expected: true)
     }
   }
 
   func testOutputSchemaRejectsMalformedRuntimePayloads() throws {
     let badDeliveryState =
-      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"accepted","ordinal":1,"step":"brief","role":"author","output":\###(Self.output),"warnings":[]}}}"###
+      ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"deliver","run":{\###(Self.runFields)},"delivery":{"state":"accepted","ordinal":1,"step":"brief","role":"author","record":\###(Self.output),"warnings":[]}}}"###
     let badBindingSource =
       ###"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"run",\###(Self.runFields.replacingOccurrences(of: #""source":"current""#, with: #""source":"remote""#))}}"###
     let badState =
@@ -80,7 +80,7 @@ final class WorkflowSchemaTests: XCTestCase {
       id: "0BADCAFE-0000-4000-8000-000000000042",
       workflow: WorkflowIdentity(id: "prowl.adversarial-review", name: "Adversarial Review"),
       scope: .repo,
-      definitionPath: "/Projects/App/.prowl/workflows/review.yaml",
+      definitionPath: "/Projects/App/.prowl/workflows/review.pwlworkflow",
       source: .live,
       status: WorkflowRunStatusPayload(
         state: "needs_attention", step: "brief",
@@ -102,7 +102,7 @@ final class WorkflowSchemaTests: XCTestCase {
           profile: WorkflowProfileBindingPayload(id: "00000000-0000-0000-0000-000000000009", name: "Pi", agent: "pi")),
       ],
       activation: WorkflowActivationPayload(
-        ordinal: 1, step: "brief", role: "author", state: "provisional", dispatchID: "dispatch-1", output: "brief",
+        ordinal: 1, step: "brief", role: "author", state: "provisional", dispatchID: "dispatch-1", delivery: "brief",
         expect: WorkflowExpectationPayload(
           format: .markdown, sections: ["## Scope"], verdicts: nil, strict: false,
           completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]),
@@ -115,13 +115,41 @@ final class WorkflowSchemaTests: XCTestCase {
         line: "[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -",
         instructionPath: "/r/instructions/brief.1.md",
         completion: ["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]))
-    let done = WorkflowCommandPayload.deliver(
+    let runObject = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(run)) as? [String: Any])
+    let activationObject = try XCTUnwrap(runObject["activation"] as? [String: Any])
+    XCTAssertEqual(activationObject["delivery"] as? String, "brief")
+    XCTAssertNil(activationObject["output"])
+    var retiredRun = runObject
+    var retiredActivation = activationObject
+    retiredActivation["output"] = retiredActivation.removeValue(forKey: "delivery")
+    retiredRun["activation"] = retiredActivation
+    let retiredRunData = try JSONSerialization.data(withJSONObject: retiredRun)
+    XCTAssertThrowsError(try JSONDecoder().decode(WorkflowRunPayload.self, from: retiredRunData))
+    try assertValidity(
+      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":{"action":"run",\#(String(decoding: retiredRunData, as: UTF8.self).dropFirst().dropLast())}}"#,
+      expected: false)
+
+    let deliver = WorkflowCommandPayload.deliver(
       WorkflowDeliverPayload(
         run: run,
         delivery: WorkflowDeliveryPayload(
-          state: .provisional, ordinal: 1, step: "brief", role: "author", output: output,
+          state: .provisional, ordinal: 1, step: "brief", role: "author", record: output,
           warnings: [WorkflowDeliveryWarningPayload(code: "missing_sections", message: "missing ## Claims")])))
-    for payload in [WorkflowCommandPayload.run(run), .status(run), .cancel(run), done] {
+    let deliveryObject = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(deliver)) as? [String: Any])
+    let receiptObject = try XCTUnwrap(deliveryObject["delivery"] as? [String: Any])
+    XCTAssertNotNil(receiptObject["record"])
+    XCTAssertNil(receiptObject["output"])
+    var retiredDelivery = deliveryObject
+    var retiredReceipt = receiptObject
+    retiredReceipt["output"] = retiredReceipt.removeValue(forKey: "record")
+    retiredDelivery["delivery"] = retiredReceipt
+    let retiredDeliveryData = try JSONSerialization.data(withJSONObject: retiredDelivery)
+    XCTAssertThrowsError(try JSONDecoder().decode(WorkflowCommandPayload.self, from: retiredDeliveryData))
+    try assertValidity(
+      #"{"ok":true,"command":"workflow","schema_version":"prowl.cli.workflow.v1","data":\#(String(decoding: retiredDeliveryData, as: UTF8.self))}"#,
+      expected: false)
+
+    for payload in [WorkflowCommandPayload.run(run), .status(run), .cancel(run), deliver] {
       let data = try encoder.encode(payload)
       XCTAssertTrue(String(decoding: data, as: UTF8.self).hasPrefix(#"{"action":"\#(payload.action.rawValue)""#))
       XCTAssertEqual(try JSONDecoder().decode(WorkflowCommandPayload.self, from: data), payload)
@@ -135,7 +163,7 @@ final class WorkflowSchemaTests: XCTestCase {
     #"{"name":"brief","ordinal":1,"path":"/r/deliveries/brief.1.md","latest_path":"/r/deliveries/brief.md","delivered_at":"2026-08-30T01:02:03Z"}"#
 
   private static let runFields =
-    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.yaml","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","output":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]},"deadline":"2026-08-30T01:10:00Z"},"deliveries":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -","instruction_path":"/r/instructions/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]}"###
+    ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.adversarial-review","name":"Adversarial Review"},"scope":"repo","definition_path":"/Projects/App/.prowl/workflows/review.pwlworkflow","source":"live","status":{"state":"running"},"step":"brief","role":"author","worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"author":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","tab_id":"00000000-0000-0000-0000-000000000011","handle":"p1","display_name":"Claude Code","agent":"claude"}},"reviewer":{"source":"launch","profile":{"id":"00000000-0000-0000-0000-000000000009","name":"Pi Reviewer","agent":"pi"}}},"activation":{"ordinal":1,"step":"brief","role":"author","state":"waiting","dispatch_id":"dispatch-1","delivery":"brief","expect":{"format":"markdown","sections":["## Scope","## Claims"],"strict":false,"completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]},"deadline":"2026-08-30T01:10:00Z"},"deliveries":{},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:00:00Z","self_initiated":{"line":"[Prowl] Read /r/instructions/brief.1.md and follow it — finish with: PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -","instruction_path":"/r/instructions/brief.1.md","completion":["PROWL_WORKFLOW_TOKEN=T prowl workflow deliver -"]}"###
 
   private static let recordFields =
     ###""id":"0BADCAFE-0000-4000-8000-000000000042","workflow":{"id":"prowl.handoff","name":"Hand Off"},"scope":"bundle","source":"record","status":{"state":"interrupted"},"worktree":{"id":"wt","name":"feature","branch":"feat/x","path":"/Projects/App"},"run_directory":"/Projects/App/.prowl/workflow-runs/0BADCAFE-0000-4000-8000-000000000042","bindings":{"source":{"source":"current","pane":{"id":"00000000-0000-0000-0000-000000000001","handle":"p1","display_name":"shell"}}},"deliveries":{"brief":\###(WorkflowSchemaTests.output)},"started_at":"2026-08-30T01:00:00Z","updated_at":"2026-08-30T01:05:00Z","finished_at":"2026-08-30T01:05:00Z""###
@@ -161,7 +189,7 @@ final class WorkflowSchemaTests: XCTestCase {
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     let validate = WorkflowCommandPayload.validate(
       WorkflowValidatePayload(
-        path: "/x.yaml", valid: false, workflow: WorkflowIdentity(id: "demo", name: "Demo"),
+        path: "/x.pwlworkflow", valid: false, workflow: WorkflowIdentity(id: "demo", name: "Demo"),
         diagnostics: [
           WorkflowDiagnosticPayload(severity: .error, code: "undefined_role", message: "Role 'x'", line: 3, column: 5)
         ]))

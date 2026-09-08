@@ -69,7 +69,7 @@ extension OutputRenderer {
       var line = "Step: \(step)"
       if let activation = payload.activation {
         line +=
-          "  waiting for '\(activation.role)' → output '\(activation.output)' (\(activation.state))"
+          "  waiting for '\(activation.role)' → delivery '\(activation.delivery)' (\(activation.state))"
       }
       lines.append(line)
     }
@@ -115,17 +115,17 @@ extension OutputRenderer {
     switch delivery.state {
     case .delivered:
       lines.append(
-        "\("Delivered".green)  output '\(delivery.output.name)' for step '\(delivery.step)' (invocation \(delivery.ordinal))"
+        "\("Delivered".green)  delivery '\(delivery.record.name)' for step '\(delivery.step)' (invocation \(delivery.ordinal))"
       )
     case .provisional:
       lines.append(
-        "\("Provisional".yellow)  output '\(delivery.output.name)' for step '\(delivery.step)' is on disk but needs a decision in Prowl:"
+        "\("Provisional".yellow)  delivery '\(delivery.record.name)' for step '\(delivery.step)' is on disk but needs a decision in Prowl:"
       )
       for warning in delivery.warnings {
         lines.append("  - \(warning.message) [\(warning.code)]")
       }
     }
-    lines.append("  \(delivery.output.path.dim)")
+    lines.append("  \(delivery.record.path.dim)")
     lines.append("Run: \(payload.run.id)  \(workflowStatusText(payload.run.status))")
     return lines.joined(separator: "\n")
   }
