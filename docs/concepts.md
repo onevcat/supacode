@@ -65,7 +65,7 @@ user-visible states:
 - **Blocked** — waiting for you (a confirmation/permission prompt). This is the
   one that needs your attention.
 - **Done** — finished and you haven't looked yet (an unseen completion). Becomes
-  **Idle** once you focus it.
+  **Idle** once you view the focused pane in the active, visible Prowl window.
 - **Idle** — nothing running / seen.
 
 How this is detected (process inspection + on-screen heuristics) and the full
