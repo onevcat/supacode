@@ -70,6 +70,91 @@ struct CanvasViewedSurfaceTests {
     #expect(fixture.state.isViewedSurface(fixture.surface.id))
   }
 
+  @Test func offscreenFocusedCompletionRemainsUnreadUntilItReturns() async {
+    let fixture = Fixture()
+    fixture.surface.setFrameOrigin(NSPoint(x: 2000, y: 2000))
+    #expect(fixture.window.firstResponder === fixture.surface)
+    #expect(!fixture.surface.isHiddenOrHasHiddenAncestor)
+    #expect(!fixture.surface.bounds.intersects(fixture.surface.visibleRect))
+    #expect(!fixture.state.isViewedSurface(fixture.surface.id))
+    fixture.state.surfaceAgentStates[fixture.surface.id] = PaneAgentState(
+      detectedAgent: .claude, state: .working, seen: true
+    )
+    fixture.state.agentDetectionPresenceBySurface[fixture.surface.id] = AgentDetectionPresence(currentAgent: .claude)
+    fixture.state.lastAgentScreenScanBySurface[fixture.surface.id] = WorktreeTerminalState.AgentScreenScan(
+      agent: .claude, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector)
+    )
+
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+
+    fixture.surface.setFrameOrigin(NSPoint(x: 20, y: 20))
+    #expect(fixture.window.firstResponder === fixture.surface)
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
+  }
+
+  @Test(arguments: [0.5, 1.0, 2.0])
+  func scaledViewportRequiresIntersection(scale: Double) {
+    let fixture = Fixture()
+    let viewport = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+    viewport.clipsToBounds = true
+    viewport.bounds = NSRect(x: 0, y: 0, width: 600 / scale, height: 400 / scale)
+    fixture.window.contentView?.addSubview(viewport)
+    viewport.addSubview(fixture.surface)
+    #expect(fixture.window.makeFirstResponder(fixture.surface))
+    fixture.surface.focused = true
+
+    fixture.surface.setFrameOrigin(NSPoint(x: viewport.bounds.maxX + 10, y: 20))
+    #expect(!fixture.state.isViewedSurface(fixture.surface.id))
+
+    fixture.surface.setFrameOrigin(NSPoint(x: viewport.bounds.maxX, y: 20))
+    #expect(!fixture.state.isViewedSurface(fixture.surface.id))
+
+    fixture.surface.setFrameOrigin(NSPoint(x: viewport.bounds.maxX - 20, y: 20))
+    #expect(fixture.state.isViewedSurface(fixture.surface.id))
+
+    fixture.surface.setFrameOrigin(NSPoint(x: 20, y: 20))
+    #expect(fixture.state.isViewedSurface(fixture.surface.id))
+  }
+
+  @Test func zeroAreaSurfaceDoesNotCountAsViewed() {
+    let fixture = Fixture()
+    fixture.surface.setFrameSize(.zero)
+    #expect(!fixture.state.isViewedSurface(fixture.surface.id))
+  }
+
+  @Test func logicalFocusAndInactiveWindowDoNotReadCompletion() async {
+    let fixture = Fixture()
+    fixture.state.surfaceAgentStates[fixture.surface.id] = PaneAgentState(
+      detectedAgent: .claude, state: .idle, seen: false
+    )
+    fixture.state.agentDetectionPresenceBySurface[fixture.surface.id] = AgentDetectionPresence(currentAgent: .claude)
+    fixture.state.lastAgentScreenScanBySurface[fixture.surface.id] = WorktreeTerminalState.AgentScreenScan(
+      agent: .claude, text: "", detection: AgentScreenDetection(state: .idle, reason: .legacyDetector)
+    )
+    fixture.window.makeFirstResponder(nil)
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+
+    #expect(fixture.window.makeFirstResponder(fixture.surface))
+    fixture.window.reportsKey = false
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .done)
+
+    fixture.window.reportsKey = true
+    #expect(await fixture.state.detectAgentState(for: fixture.surface, tabId: fixture.tabID))
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .idle)
+
+    fixture.state.surfaceAgentStates[fixture.surface.id] = PaneAgentState(
+      detectedAgent: .claude, state: .blocked, seen: false
+    )
+    fixture.state.markAgentSeen(surfaceID: fixture.surface.id)
+    #expect(fixture.state.surfaceAgentStates[fixture.surface.id]?.displayState == .blocked)
+  }
+
   private struct Fixture {
     let state: WorktreeTerminalState
     let surface: GhosttySurfaceView
@@ -98,6 +183,7 @@ struct CanvasViewedSurfaceTests {
       tabID = state.tabManager.createTab(title: "Canvas", icon: nil)
       state.tabManager.selectTab(tabID)
       state.surfaces[surface.id] = surface
+      state.trees[tabID] = SplitTree<GhosttySurfaceView>(view: surface)
       state.focusedSurfaceIdByTab[tabID] = surface.id
       state.isCanvasManaged = true
       state.isSelected = { false }
@@ -110,6 +196,7 @@ struct CanvasViewedSurfaceTests {
         backing: .buffered,
         defer: true
       )
+      surface.frame = NSRect(x: 20, y: 20, width: 400, height: 300)
       window.contentView?.addSubview(surface)
       #expect(window.makeFirstResponder(surface))
       // No Ghostty C surface is created in these tests, so its focus callback is skipped.

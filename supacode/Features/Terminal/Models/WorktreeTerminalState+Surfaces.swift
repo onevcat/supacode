@@ -701,11 +701,14 @@ extension WorktreeTerminalState {
     if isCanvasManaged {
       // Canvas owns focus separately from normal-mode selection and window observers.
       // Its logical focus callback runs before requestFocus actually installs the responder.
+      // Panning preserves focus. visibleRect can extend outside bounds on non-clipping views.
       guard isFocusedSurface(surfaceId), let view = surfaces[surfaceId],
         view.focused, !view.isHiddenOrHasHiddenAncestor,
         let window = view.window
       else { return false }
-      return window.isKeyWindow && window.occlusionState.contains(.visible) && window.firstResponder === view
+      let visibleBounds = view.bounds.intersection(view.visibleRect)
+      return !visibleBounds.isEmpty && window.isKeyWindow && window.occlusionState.contains(.visible)
+        && window.firstResponder === view
     }
     return isViewingWorktree() && isFocusedSurface(surfaceId)
   }

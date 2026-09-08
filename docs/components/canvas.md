@@ -96,7 +96,10 @@ or the repository page otherwise.
 
 Clicking an Agent Island **Done** reminder keeps the existing Canvas navigation: Prowl comes
 forward and focuses the target card and pane. The completion becomes read once that terminal
-is the actual keyboard responder in its key, visible window. A logical focus request alone,
+is the actual keyboard responder in its key, visible window and some of the terminal intersects
+its visible viewport. A focused pane completely outside the viewport stays unread until navigation
+brings it back. Partial visibility is sufficient; no minimum visible percentage is required.
+A logical focus request alone,
 an inactive window, or a hidden/detached terminal does not count as viewing it. Other cards
 and splits are not acknowledged merely because they are selected or receive broadcast input.
 **Blocked** reminders remain until the agent leaves the blocked state.
