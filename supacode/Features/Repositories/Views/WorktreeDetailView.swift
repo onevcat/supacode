@@ -206,7 +206,8 @@ struct WorktreeDetailView: View {
       session: agent.flatMap { entry in
         WorkflowHistorySessionIdentity.resolve(
           agent: entry.agent, detected: entry.session,
-          currentSignal: terminalManager.currentAgentSignalEvidenceSnapshot(surfaceID: entry.surfaceID).latest)
+          currentSignal: terminalManager.currentAgentSignalEvidenceSnapshot(surfaceID: entry.surfaceID)
+            .latestManagedHook)
       },
       worktreeID: worktree?.id, livePaneIDs: Set(repositories.activeAgents.entries.map(\.surfaceID)))
   }

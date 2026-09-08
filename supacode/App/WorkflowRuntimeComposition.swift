@@ -209,7 +209,7 @@ extension SupacodeApp {
               .first(where: { $0.surfaceID == pane.surfaceID }).flatMap { entry in
                 WorkflowHistorySessionIdentity.resolve(
                   agent: entry.agent, detected: entry.session,
-                  currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: pane.surfaceID).latest
+                  currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: pane.surfaceID).latestManagedHook
                 ).map(WorkflowJSONValue.string)
               } ?? .null,
           ])
@@ -504,7 +504,7 @@ extension SupacodeApp {
             token: entry.agent.rawValue, displayName: entry.agent.displayName,
             sessionIdentity: WorkflowHistorySessionIdentity.resolve(
               agent: entry.agent, detected: entry.session,
-              currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID).latest))
+              currentSignal: terminalManager.currentAgentSignalEvidence(surfaceID: surfaceID).latestManagedHook))
         }
       },
       pendingDispatchID: { surfaceID in

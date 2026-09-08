@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented; adversarial review and live acceptance pending |
+| **Status** | Implemented; five review rounds converged; native UI acceptance pending |
 | **Anchor date** | 2026-09-08 |
 | **Related** | [Status center](010-c1-workflow-status-center.md), [history storage](018-history-storage-plan.md), [toolbar rules](../061-native-toolbar-controls/toolbar-controls.md) |
 
@@ -241,3 +241,24 @@ persisted the same identity for the initiator.
 Native screenshot acceptance is still pending because the Mac is locked. CLI execution
 receipts establish actual workflow behavior; they do not establish toolbar layout,
 hover interaction, native script approval, or external output-opening behavior.
+
+### Adversarial review, round 5
+
+A current cooperative progress signal could hide an independently verified hook session.
+The reviewer reproduced the missing persisted role identity and an incorrect exact-detector
+fallback; the owner independently reproduced both. A producer regression failed before the
+fix. The observation store now keeps the last accepted managed hook separately and clears
+it together with current signal evidence on every epoch invalidation. Admission, observation,
+and pane filtering all use that evidence. General latest-signal behavior is unchanged.
+
+The reviewer replayed completed-run persistence, conflicting detection, session end and
+rotation, process replacement, revocation, and new dispatch epochs against the fix. The
+final receipt reports no remaining substantiated P0, P1, or material P2 in scope. The full
+suite passed 3186 main tests and two process-cancellation tests; the final managed-hook
+suite passed 18 tests. Checks and the Debug build passed.
+
+A real Pi workflow sent a current cooperative progress signal, then delivered its result.
+The completed history retained the exact hook session. Local evidence under
+`build/verification/workflow-step-history/` includes the progress receipt, completed record,
+review reports, regression logs, and acceptance checklist. Native UI acceptance still
+requires an unlocked Mac; no screenshot or visual-layout pass is claimed.
