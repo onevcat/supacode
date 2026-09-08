@@ -57,7 +57,7 @@ Three sources, later ones winning for the same `id`:
 
 | Source | Location | Notes |
 |---|---|---|
-| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context (`builtin:collect-worktree-context`). |
+| Built-in | `Prowl.app/Contents/Resources/workflows/` | ids `prowl.*` are reserved for it. Includes Repository Context and Handoff (`prowl.handoff`). |
 | Your workflows | `~/.prowl/workflows/*.pwlworkflow` | personal; not tied to a repository |
 | Repository | `<repo root>/.prowl/workflows/*.pwlworkflow` | travels with the repo; seen only from that repository's worktrees |
 
@@ -236,11 +236,11 @@ is not listening on its socket. The same status appears under Settings → Agent
 ## Script actions and bundles
 
 Local actions live under `actions/<id>/action.yaml` in a `.pwlworkflow` bundle, with scripts,
-helpers, and assets beside them. Steps reference `local:<id>` or `builtin:collect-worktree-context`.
+helpers, and assets beside them. Steps reference `local:<id>` or a registered `builtin:<id>`.
 Action inputs and results are typed JSON; validated results appear at
 `actions.<step>.output` and `actions.<step>.output_path`. The built-in repository context
-writes per-invocation artifacts, not shared handoff files. Legacy `prowl handoff` remains a
-separate CLI feature. These actions are also distinct from shell-command Custom Actions.
+writes per-invocation artifacts. `builtin:save-handoff` saves a briefing and generated context
+under `.prowl/handoff/`. The existing `prowl handoff` CLI remains available. These actions are also distinct from shell-command Custom Actions.
 
 Scripts have your local user permissions. In Settings > Agents > Workflows, open the bundle's
 script review, inspect the source location, interpreter, entrypoint, and changed files, then
@@ -306,3 +306,27 @@ metadata. History scans check the record's file identity without decoding its
 contents. Missing metadata or a changed record protects the run from cleanup and
 export until it can be inspected. Record replacement invalidates the old metadata
 before publishing the new pair. No old-history migration or fallback is performed.
+
+## Built-in Handoff
+
+`prowl.handoff` asks the current agent to summarize its task, saves the briefing with
+repository and available session context, and optionally launches a receiver in a background
+tab. Select `next=save` to save only; the receiver Profile is then unnecessary and hidden in
+the start sheet. The default `next=launch` uses the normal Profile picker without a runtime
+restriction. Both source and receiver panes stay open.
+
+```bash
+prowl workflow run prowl.handoff --role receiver=Codex --json
+prowl workflow run prowl.handoff --input next=save --json
+```
+
+When an agent starts the workflow itself, it must follow `self_initiated.line` in the response
+and deliver its briefing with the supplied token. The run saves nothing until that delivery
+passes its required sections. The receiver reads an independent packet under
+`.prowl/handoff/archive/workflow-<run UUID>.md`; later handoffs do not change that packet.
+`current.md` and `context.md` retain the latest handoff for the existing HUD and CLI.
+
+A completed workflow means the packet was saved and the selected receiver was launched.
+It does not certify that the receiver finished the task. A failed launch keeps the packet;
+retry the failed step or use the packet manually. Cancelling keeps saved material and panes.
+See [Handoff](handoff.md) for storage and session context details.

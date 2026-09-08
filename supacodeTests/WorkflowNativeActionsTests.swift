@@ -45,6 +45,65 @@ struct WorkflowNativeActionsTests {
       now: Self.now)
   }
 
+  @Test(arguments: [true, false])
+  func handoffSavesAnImmutablePacketAndPreservesThePreviousBriefing(git: Bool) async throws {
+    let root = try makeRepo()
+    if !git { try FileManager.default.removeItem(at: root.appending(path: ".git")) }
+    defer { try? FileManager.default.removeItem(at: root) }
+    let invocation = context(root: root)
+    let runDirectory = invocation.directory.deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+    let briefing = "# Handoff\n## Objective\nFinish task.\n## Current State\nReady.\n## Next Steps\nVerify receipt.\n"
+    let source = runDirectory.appending(path: "briefing.md")
+    try briefing.write(to: source, atomically: true, encoding: .utf8)
+    let store = HandoffStore(rootURL: root)
+    try store.writeBriefing("Previous briefing", archivingPrevious: false, now: Self.now)
+
+    let result = try await WorkflowNativeActionRunner().execute(
+      actionID: "builtin:save-handoff", inputs: ["briefing": .string(source.path)], context: invocation)
+    guard case .object(let output) = result["output"], case .string(let path) = output["path"] else {
+      Issue.record("Missing handoff packet")
+      return
+    }
+    let packet = try String(contentsOf: URL(filePath: path), encoding: .utf8)
+    #expect(packet.contains("Finish task."))
+    #expect(packet.contains("# Handoff Context"))
+    #expect(path.hasPrefix(store.archiveDirectory.path + "/"))
+    #expect(try String(contentsOf: store.currentURL, encoding: .utf8).contains("Finish task."))
+    let archives = try FileManager.default.contentsOfDirectory(
+      at: store.archiveDirectory, includingPropertiesForKeys: nil)
+    #expect(try archives.contains { try String(contentsOf: $0, encoding: .utf8).contains("Previous briefing") })
+    try store.writeBriefing("Later briefing", archivingPrevious: true, now: Self.now)
+    #expect(try String(contentsOf: URL(filePath: path), encoding: .utf8) == packet)
+  }
+
+  @Test(arguments: ["outside", "invalid", "symlink"])
+  func handoffRejectsUnsafeBriefingsBeforeWritingSharedState(kind: String) async throws {
+    let root = try makeRepo()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let invocation = context(root: root)
+    let runDirectory = WorkflowRunPaths.runDirectory(root: root, runID: invocation.runID)
+    try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+    let source = (kind == "outside" ? root : runDirectory).appending(path: "briefing.md")
+    let briefing = "# Handoff\n## Objective\nFinish.\n## Current State\nReady.\n## Next Steps\nVerify."
+    try (kind == "invalid" ? "" : briefing).write(to: source, atomically: true, encoding: .utf8)
+    let handoff = root.appending(path: ".prowl/handoff")
+    let external = root.appending(path: "external")
+    if kind == "symlink" {
+      try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(
+        at: handoff.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try FileManager.default.createSymbolicLink(at: handoff, withDestinationURL: external)
+    }
+    await #expect(throws: (any Error).self) {
+      try await WorkflowNativeActionRunner().execute(
+        actionID: "builtin:save-handoff", inputs: ["briefing": .string(source.path)], context: invocation)
+    }
+    #expect(!FileManager.default.fileExists(atPath: handoff.appending(path: "current.md").path))
+    #expect(!FileManager.default.fileExists(atPath: handoff.appending(path: "context.md").path))
+  }
+
   @Test func worktreeContextWritesInvocationArtifactsAndRecords() async throws {
     let root = try makeRepo()
     defer { try? FileManager.default.removeItem(at: root) }

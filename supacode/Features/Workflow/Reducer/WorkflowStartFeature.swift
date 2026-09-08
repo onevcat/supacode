@@ -85,6 +85,12 @@ struct WorkflowStartFeature {
         alreadySkipped: skippedSteps.subtracting([stepID]))
     }
 
+    var requiredLaunchRoles: [WorkflowStartLaunchRole] {
+      let names = WorkflowRoleRequirements.launchRoles(
+        in: context.definition, inputs: inputValues, skipped: skippedSteps)
+      return context.launchRoles.filter { names.contains($0.name) }
+    }
+
     var canRun: Bool {
       guard !requiresBundleApproval, !isSubmitting, cliInstalled, context.cliServiceFailure == nil,
         context.item.isRunnable
@@ -97,7 +103,7 @@ struct WorkflowStartFeature {
         else { return false }
         if sourceRequiresAgent, candidate.agentToken == nil { return false }
       }
-      for role in context.launchRoles {
+      for role in requiredLaunchRoles {
         guard let chosen = launchSelections[role.name],
           let candidate = candidates(for: role).first(where: { $0.profileID == chosen }),
           candidate.unavailableReason == nil
@@ -124,7 +130,7 @@ struct WorkflowStartFeature {
         workflowID: context.item.workflowID,
         worktreeID: context.worktreeID,
         sourceSurfaceID: context.source != nil ? selectedSourceSurfaceID : nil,
-        roleBindings: context.launchRoles.compactMap { role in
+        roleBindings: requiredLaunchRoles.compactMap { role in
           launchSelections[role.name].map { "\(role.name)=\($0.uuidString)" }
         }
           + context.pickRoles.compactMap { role in

@@ -56,6 +56,15 @@ steps, and output contracts the task needs; add loops, deadlines, and automatic 
 only when their behavior serves the requested outcome. The authoring reference explains
 data dependencies, loop exits, and typed state and result scopes.
 
+## Built-in handoff
+
+Use `prowl workflow run prowl.handoff --role receiver=<Profile> --json` to prepare and save
+this conversation's task context, then start a receiver. Use `--input next=save` instead to
+save without a receiver. Follow the returned `self_initiated.line` and deliver the briefing
+with its exact command; do not wait for Prowl to message you again. The receiver reads the
+saved packet and continues the task. A completed run confirms save/launch, not task completion.
+The existing `prowl handoff` CLI and HUD remain available.
+
 ## Running a workflow
 
 ```bash

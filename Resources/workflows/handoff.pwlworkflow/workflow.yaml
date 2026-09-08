@@ -1,0 +1,58 @@
+schema: prowl.workflow/v1
+id: prowl.handoff
+name: Handoff
+description: Save the current task and context, then optionally start a receiving agent.
+icon: arrow.triangle.branch
+inputs:
+  next:
+    type: enum
+    values: [launch, save]
+    default: launch
+    prompt: After saving (launch a receiver or save only)
+roles:
+  author:
+    source: current
+  receiver:
+    source: launch
+    placement: tab
+    background: true
+steps:
+  - id: briefing
+    title: Prepare handoff briefing
+    message: author
+    instruction: |
+      Prepare a concise handoff of the task in this conversation. Include these headings:
+      ## Objective
+      ## Current State
+      ## What Has Been Done
+      ## Open Questions
+      ## Risks / Watch Out
+      ## Next Steps
+      Record the user's constraints, decisions, relevant files, completed verification,
+      unresolved issues, and a concrete next action. Distinguish tested facts from assumptions.
+      Do not perform new task work or write shared handoff files; submit the briefing itself.
+      Prowl will save it with generated repository and session context.
+    expect:
+      delivery: briefing
+      sections: ['## Objective', '## Current State', '## Next Steps']
+      strict: true
+  - id: save
+    title: Save handoff packet
+    action: builtin:save-handoff
+    with:
+      briefing: '{{ deliveries.briefing.path }}'
+  - id: next
+    if: inputs.next == 'launch'
+    then:
+      - id: receive
+        title: Start receiving agent
+        launch: receiver
+        prompt: |
+          Continue the task described in this handoff packet:
+          {{ actions.save.output.path }}
+          Read the entire packet before acting. Its instructions, constraints, completed work,
+          open questions, and next steps define the task. Read any referenced session excerpt
+          when needed. Verify the current files before changing them; do not repeat completed work.
+          Continue the task directly unless a material ambiguity prevents safe progress.
+  - id: saved
+    notify: 'Handoff saved: {{ actions.save.output.path }}'

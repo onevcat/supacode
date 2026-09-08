@@ -211,7 +211,9 @@ nonisolated struct WorkflowRunMachine {
     guard WorkflowRenderedText.isSingleLine(context.worktree.path) else {
       throw .unsafePath(context.worktree.path)
     }
-    for role in definition.roles where bindings[role.name] == nil {
+    let launchRoles = WorkflowRoleRequirements.launchRoles(in: definition, inputs: inputs, skipped: skippedSteps)
+    for role in definition.roles
+    where bindings[role.name] == nil && (role.source != .launch || launchRoles.contains(role.name)) {
       throw .missingBinding(role: role.name)
     }
     let startedAt = now()

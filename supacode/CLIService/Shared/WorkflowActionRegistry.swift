@@ -94,7 +94,20 @@ nonisolated public enum WorkflowActionRegistry {
       outputs: [
         WorkflowActionOutput(name: "output", description: "JSON object containing path and branch"),
         WorkflowActionOutput(name: "output_path", description: "Path to this invocation's result.json"),
-      ])
+      ]),
+    WorkflowActionSchema(
+      id: "builtin:save-handoff",
+      description: "Save a validated briefing and generated context, with an immutable handoff packet.",
+      inputs: [
+        WorkflowActionInput(
+          name: "briefing", required: true, kind: .path,
+          description: "UTF-8 briefing file in this workflow run, with Objective, Current State, and Next Steps")
+      ],
+      outputs: [
+        WorkflowActionOutput(
+          name: "output", description: "JSON object containing path, current_path, and context_path"),
+        WorkflowActionOutput(name: "output_path", description: "Path to this invocation's result.json"),
+      ]),
   ]
 
   public static func schema(for id: String, in actions: [WorkflowActionSchema] = all) -> WorkflowActionSchema? {

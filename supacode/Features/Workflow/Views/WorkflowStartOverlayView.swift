@@ -67,7 +67,7 @@ private struct WorkflowStartCard: View {
           if let source = store.context.source {
             sourceSection(source)
           }
-          ForEach(store.context.launchRoles) { role in
+          ForEach(store.requiredLaunchRoles) { role in
             launchRoleSection(role)
           }
           ForEach(store.context.pickRoles) { role in
@@ -410,7 +410,7 @@ private struct WorkflowStartCard: View {
 extension WorkflowStartFeature.State {
   /// The toggle appears exactly when a launch role would ask again next time (011 decision 5).
   var showsDontAskAgain: Bool {
-    context.launchRoles.contains { $0.effectiveBind == .ask } || dontAskAgain
+    requiredLaunchRoles.contains { $0.effectiveBind == .ask } || dontAskAgain
   }
 
   var selectedSourceIsBareShell: Bool {

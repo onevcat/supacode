@@ -11,6 +11,16 @@
 
 **Related:** [workspaces](workspaces.md) · [cli](cli.md) · [agent-detection](agent-detection.md) · [command-palette](command-palette.md)
 
+## Workflow entry point
+
+The built-in `prowl.handoff` adds an agent-authored workflow entry point alongside the
+existing HUD and commands described below. It asks the current agent for a briefing,
+saves it with generated context, then launches a receiving Profile unless `next=save`.
+The receiver reads an independent packet in `archive/workflow-<run UUID>.md`, so later
+handoffs cannot replace its instructions. Workflow history cleanup does not delete these
+handoff packets. See [Built-in Handoff](workflows.md#built-in-handoff) for commands and
+completion semantics. The legacy transition sequence below is unchanged.
+
 ## Why
 
 Coding agents are independent processes; each keeps its own conversation

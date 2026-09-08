@@ -166,7 +166,10 @@ nonisolated struct WorkflowStartContext: Equatable, Sendable {
     guard !requiresBundleApproval, item.isRunnable, cliInstalled, cliServiceFailure == nil, pickRoles.isEmpty else {
       return false
     }
-    guard launchRoles.allSatisfy({ $0.effectiveBind == .auto && $0.resolvedProfileID != nil })
+    let required = WorkflowRoleRequirements.launchRoles(in: definition, inputs: [:])
+    guard
+      launchRoles.filter({ required.contains($0.name) })
+        .allSatisfy({ $0.effectiveBind == .auto && $0.resolvedProfileID != nil })
     else { return false }
     guard definition.inputs.allSatisfy({ $0.defaultValue != nil }) else { return false }
     guard let source else { return true }

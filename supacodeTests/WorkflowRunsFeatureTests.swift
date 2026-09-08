@@ -233,7 +233,8 @@ struct WorkflowRunsFeatureTests {
   private func makeStore(
     _ fixture: Fixture, queue: WorkflowEffectQueueClient,
     storage: SettingsTestStorage = SettingsTestStorage(),
-    actionExecutor: (any WorkflowActionExecuting)? = nil
+    actionExecutor: (any WorkflowActionExecuting)? = nil,
+    handoffSource: HandoffSourceContext? = nil
   ) -> TestStoreOf<WorkflowRunsFeature> {
     let store = TestStore(initialState: WorkflowRunsFeature.State()) {
       WorkflowRunsFeature()
@@ -241,6 +242,7 @@ struct WorkflowRunsFeatureTests {
       if let actionExecutor {
         $0.workflowActionExecutor = actionExecutor
       }
+      $0[TerminalClient.self].handoffSourceContextForSurface = { _, _ in handoffSource }
       $0.workflowRuntimeClient = fixture.runtime
       $0.workflowActivationClient = fixture.activation
       $0.workflowWatchdogClient = fixture.watchdog
@@ -309,12 +311,14 @@ struct WorkflowRunsFeatureTests {
 
   /// A native action that reports when it started and finishes only once released.
   nonisolated final class GatedActionExecutor: WorkflowActionExecuting, Sendable {
+    let receivedContext = LockIsolated<WorkflowActionContext?>(nil)
     private let startedStream = AsyncStream<Void>.makeStream()
     private let releaseStream = AsyncStream<Void>.makeStream()
 
     func execute(actionID: String, inputs: [String: WorkflowJSONValue], context: WorkflowActionContext) async throws
       -> [String: WorkflowJSONValue]
     {
+      receivedContext.setValue(context)
       startedStream.continuation.yield()
       for await _ in releaseStream.stream { break }
       return ["summary": "done"]
@@ -714,6 +718,27 @@ struct WorkflowRunsFeatureTests {
     #expect(fixture.guardAnswers.isEmpty)
     #expect(store.state.sessions[runID]?.run.phase == .injecting(ordinal: 1))
     await store.send(.userAction(runID: runID, .cancel))
+    await store.finish(timeout: Self.timeout)
+  }
+
+  @Test(.dependencies) func handoffActionCapturesTheSourceSession() async throws {
+    let fixture = try Fixture()
+    defer { fixture.cleanUp() }
+    let gate = GatedActionExecutor()
+    let source = HandoffSourceContext(
+      sessionContext: .init(
+        agent: "pi", sessionID: "handoff-session", paneID: "source-pane", paneTitle: nil, source: "test",
+        confidence: "exact", excerptText: nil), observation: nil)
+    let store = makeStore(fixture, queue: WorkflowEffectQueue().client, actionExecutor: gate, handoffSource: source)
+    let (session, effects) = try fixture.session(
+      Self.actionFirst
+        .replacing("builtin:collect-worktree-context", with: "builtin:save-handoff")
+        .replacing("root:", with: "briefing:"))
+    await store.send(.started(session, effects: effects))
+    await gate.started()
+    #expect(gate.receivedContext.value?.sessionContext?.sessionID == "handoff-session")
+    #expect(gate.receivedContext.value?.outgoingAgent == "pi")
+    gate.release()
     await store.finish(timeout: Self.timeout)
   }
 

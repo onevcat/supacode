@@ -591,6 +591,21 @@ run="$(prowl workflow run review --role reviewer=Codex --input max_rounds=3 --js
 printf '%s\n' "$run" | jq -r '.data.self_initiated.line'      # what to do now, when this pane is the current role
 prowl workflow status --json | jq '.data.activation'           # what this pane owes, and how to deliver it
 PROWL_WORKFLOW_TOKEN=… prowl workflow deliver - <<'EOF'
+### Built-in handoff workflow
+
+`prowl workflow run prowl.handoff --role receiver=Codex --json` asks the calling agent for
+a briefing, saves a durable packet, and launches the selected Profile in a background tab.
+Use `--input next=save` to save only; no receiver binding or installed receiver Profile is
+required. Launch roles proven unused by start inputs or skipped steps are not bound. Roles
+in runtime-dependent branches remain required. The existing `prowl handoff` commands remain
+available.
+
+For self-initiated runs, follow `data.self_initiated.line` and its exact delivery command.
+Inspect `actions.save.output.path` in the run's action results for the saved packet.
+Workflow completion confirms saving and optional launch, not completion of the receiver's
+continued task. See [Built-in Handoff](workflows.md#built-in-handoff).
+
+
 ## Scope
 …
 EOF
