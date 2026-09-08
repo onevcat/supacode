@@ -205,6 +205,10 @@ extension SupacodeApp {
           values[pane.surfaceID.uuidString] = .object([
             "exists": .boolean(snapshot.isLive),
             "state": .string(AgentConditionEvidence.normalizedState(snapshot)),
+            "session_identity": storeBox.store?.state.repositories.activeAgents.entries
+              .first(where: { $0.surfaceID == pane.surfaceID }).flatMap { entry in
+                entry.session.map { .string("\(entry.agent.rawValue):\($0.id)") }
+              } ?? .null,
           ])
         }
         return values
@@ -251,7 +255,8 @@ extension SupacodeApp {
             title: notification.title,
             body: notification.body,
             surfaceId: surfaceID,
-            treatAsViewedWhenWorktreeIsVisible: notification.treatAsViewedWhenWorktreeIsVisible
+            treatAsViewedWhenWorktreeIsVisible: notification.treatAsViewedWhenWorktreeIsVisible,
+            workflowRunID: notification.workflowRunID
           )
           return
         }
@@ -491,8 +496,10 @@ extension SupacodeApp {
         return settings.rememberedWorkflowBinding(for: key)
       },
       detectedAgent: { surfaceID in
-        appStore.state.repositories.activeAgents.entries.first { $0.surfaceID == surfaceID }.map {
-          WorkflowDetectedAgent(token: $0.agent.rawValue, displayName: $0.agent.displayName)
+        appStore.state.repositories.activeAgents.entries.first { $0.surfaceID == surfaceID }.map { entry in
+          WorkflowDetectedAgent(
+            token: entry.agent.rawValue, displayName: entry.agent.displayName,
+            sessionIdentity: entry.session.map { session in "\(entry.agent.rawValue):\(session.id)" })
         }
       },
       pendingDispatchID: { surfaceID in

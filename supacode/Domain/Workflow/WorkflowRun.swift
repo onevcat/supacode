@@ -18,6 +18,7 @@ nonisolated struct WorkflowPaneIdentity: Equatable, Sendable, Codable {
   let displayName: String
   /// The detected agent token; nil for a bare shell.
   let agent: String?
+  var sessionIdentity: String?
 
   enum CodingKeys: String, CodingKey {
     case surfaceID = "surface_id"
@@ -25,6 +26,7 @@ nonisolated struct WorkflowPaneIdentity: Equatable, Sendable, Codable {
     case handle
     case displayName = "display_name"
     case agent
+    case sessionIdentity = "session_identity"
   }
 }
 
@@ -145,6 +147,7 @@ nonisolated struct WorkflowRunContext: Equatable, Sendable {
   let worktree: WorkflowRunWorktree
   var bundle: WorkflowPreparedBundle?
   var sourcePaneID: UUID?
+  var sourceSessionIdentity: String?
   var sourceTabID: UUID?
   var literalActionInputs = false
   var historyDirectory: URL?
@@ -274,6 +277,12 @@ nonisolated struct WorkflowStepRecord: Equatable, Sendable {
   let iteration: Int?
   var state: WorkflowStepState
   var ordinal: Int?
+  var iterationPath: [String]?
+  var branchExcluded: Bool?
+  var title: String?
+  var error: String?
+  var outputs: [String: WorkflowJSONValue]?
+  var delivery: WorkflowDeliveryRecord?
 }
 
 // MARK: - Attention and status
@@ -398,11 +407,24 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var skippedDeliveries: [String: String] = [:]
   /// Steps skipped at start (`--skip` / the start sheet).
   let preSkippedSteps: Set<String>
+  var historyIsPartial = false
+  var participants: [String: [WorkflowPaneIdentity]] = [:]
   var stepRecords: [WorkflowStepRecord] = []
   var nextOrdinal = 1
   /// The first step's rendered line when the run was started from the `current` role's own
   /// pane: returned to the caller instead of being typed (dsl-spec §9).
   var selfInitiatedLine: String?
+
+  mutating func captureParticipantSessions() {
+    for (role, binding) in bindings {
+      guard var pane = binding.pane,
+        case .object(let fields) = observations[pane.surfaceID.uuidString],
+        case .string(let identity) = fields["session_identity"]
+      else { continue }
+      pane.sessionIdentity = identity
+      if !participants[role, default: []].contains(pane) { participants[role, default: []].append(pane) }
+    }
+  }
 
   var runDirectory: URL {
     context.historyDirectory

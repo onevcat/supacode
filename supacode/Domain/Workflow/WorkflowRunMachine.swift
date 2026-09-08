@@ -365,6 +365,10 @@ nonisolated struct WorkflowRunMachine {
     guard case .launching(ordinal) = run.phase, let invocation = invocation(ordinal),
       let binding = run.bindings[invocation.role]
     else { return }
+    if let previous = binding.pane, !run.participants[invocation.role, default: []].contains(previous) {
+      run.participants[invocation.role, default: []].append(previous)
+    }
+    run.participants[invocation.role, default: []].append(pane)
     run.bindings[invocation.role] = binding.binding(pane: pane)
     effects.append(.log("Step '\(invocation.stepID)': role '\(invocation.role)' launched in \(pane.handle)."))
     openWaiting(ordinal: ordinal, dispatchID: dispatchID, effects: &effects)
@@ -393,6 +397,9 @@ nonisolated struct WorkflowRunMachine {
     guard run.actionExecutionID == executionID, case .runningAction(stepID) = run.phase,
       run.currentStep?.id == stepID
     else { return }
+    if let index = run.stepRecords.indices.last {
+      run.stepRecords[index].outputs = outputs
+    }
     run.actionOutputs[stepID] = outputs
     completeCurrentStep(effects: &effects)
     effects.append(.log("Step '\(stepID)': action completed."))
@@ -499,6 +506,9 @@ nonisolated struct WorkflowRunMachine {
   ) {
     let ordinal = activation.ordinal
     let record = deliveryRecord(for: activation, verdict: verdict)
+    if let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal }) {
+      run.stepRecords[index].delivery = record
+    }
     run.deliveries[activation.deliveryName] = record
     run.skippedDeliveries[activation.deliveryName] = nil
     updateActivation(ordinal: ordinal) {
@@ -969,12 +979,17 @@ nonisolated struct WorkflowRunMachine {
       let outcome = try cursor.next(values: run.expressionValues(capturedAt: now()))
       run.controlCursor = cursor
       for evaluation in cursor.evaluations {
-        // Pure control steps keep their latest evaluation; state-only loops cannot grow history forever.
-        run.stepRecords.removeAll { $0.stepID == evaluation.stepID }
+        // Keep each round distinct, but bound control-only loops that can run indefinitely.
+        run.stepRecords.removeAll { $0.stepID == evaluation.stepID && $0.iterationPath == evaluation.path }
+        if run.stepRecords.count >= 10_000 {
+          run.historyIsPartial = true
+          continue
+        }
         run.stepRecords.append(
           .init(
             stepID: evaluation.stepID, iteration: evaluation.iteration,
-            state: evaluation.skipped ? .skipped : .completed, ordinal: nil))
+            state: evaluation.skipped ? .skipped : .completed, ordinal: nil, iterationPath: evaluation.path,
+            branchExcluded: evaluation.skipped))
       }
       for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
       for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
@@ -1245,6 +1260,9 @@ nonisolated struct WorkflowRunMachine {
     }
     revokeCurrentActivation(
       reason: "Workflow run \(run.id.uuidString): role '\(role)' relaunched at step '\(step.id)'.", effects: &effects)
+    if let previous = run.bindings[role]?.pane, !run.participants[role, default: []].contains(previous) {
+      run.participants[role, default: []].append(previous)
+    }
     run.bindings[role] = .launch(profile, pane: nil)
     switch step.action {
     case .launch:
@@ -1316,6 +1334,9 @@ nonisolated struct WorkflowRunMachine {
     let attention = WorkflowAttention(
       reason: reason, stepID: stepID, role: role, ordinal: ordinal, actions: allowedActions ?? actions,
       message: attentionMessage(reason, stepID: stepID, role: role))
+    if let index = run.stepRecords.lastIndex(where: { $0.stepID == stepID }) {
+      run.stepRecords[index].error = attention.message
+    }
     run.status = .needsAttention(attention)
     effects.append(.log("Step '\(stepID)': needs attention — \(attention.message)"))
     effects.append(.persist)
@@ -1424,7 +1445,11 @@ nonisolated struct WorkflowRunMachine {
 
   private mutating func recordStep(_ step: WorkflowStepDefinition, state: WorkflowStepState, ordinal: Int?) {
     run.stepRecords.append(
-      WorkflowStepRecord(stepID: step.id, iteration: run.currentIteration, state: state, ordinal: ordinal))
+      WorkflowStepRecord(
+        stepID: step.id, iteration: run.currentIteration, state: state, ordinal: ordinal,
+        iterationPath: run.controlCursor?.iterationPath,
+        title: step.title.flatMap { try? WorkflowExpression.renderText($0, values: run.stepValues) }
+          ?? step.historyTitle))
     run.updatedAt = now()
   }
 

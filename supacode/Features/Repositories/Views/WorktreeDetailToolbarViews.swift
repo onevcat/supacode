@@ -349,6 +349,7 @@ private struct CanvasToolbarPreview: View {
         .toolbar(removing: .title)
         .toolbar {
           WorktreeDetailView.AgentNotificationsToolbarContent(
+            onHistoryIntent: { _ in },
             agentsCapsule: nil,
             agentsLauncherItems: [],
             notificationGroups: [],

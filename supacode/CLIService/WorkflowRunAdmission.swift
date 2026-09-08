@@ -26,6 +26,7 @@ struct WorkflowRunSource: Sendable {
 nonisolated struct WorkflowDetectedAgent: Equatable, Sendable {
   let token: String
   let displayName: String
+  var sessionIdentity: String?
 }
 
 /// Main-actor facts admission reads through closures so it stays testable without the app.
@@ -213,7 +214,8 @@ enum WorkflowRunAdmission {
       definitionPath: entry.file.url.path(percentEncoded: false),
       worktree: WorkflowRunWorktree(
         id: worktree.id, name: worktree.name, branch: environment.branchName(worktree),
-        path: worktree.workingDirectory.path(percentEncoded: false)))
+        path: worktree.workingDirectory.path(percentEncoded: false)),
+      sourceSessionIdentity: source.paneID.flatMap { environment.detectedAgent($0)?.sessionIdentity })
     context.sourcePaneID = source.paneID
     context.sourceTabID = source.worktree.tabs.first { tab in tab.panes.contains { $0.id == source.paneID } }?.id
     context.literalActionInputs = admission.literalActionInputs
@@ -253,8 +255,7 @@ enum WorkflowRunAdmission {
         try WorkflowRunStore(rootURL: context.worktree.rootURL, directory: directory).ensureLayout(runID: runID)
         context.bundle = try WorkflowPreparedBundle(
           source: entry.file,
-          directory: directory.appending(
-            path: "definition"),
+          directory: directory.appending(path: "definition"),
           environment: ProcessInfo.processInfo.environment)
       } catch {
         return .failure(.init(code: CLIErrorCode.workflowFailed, message: "Bundle preparation failed: \(error)"))
@@ -667,7 +668,7 @@ enum WorkflowRunAdmission {
         tabID: tab.id,
         handle: pane.handle.map { "p\($0)" } ?? paneID.uuidString,
         displayName: agent?.displayName ?? "shell",
-        agent: agent?.token)
+        agent: agent?.token, sessionIdentity: agent?.sessionIdentity)
     }
     return nil
   }

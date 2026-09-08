@@ -114,7 +114,8 @@ extension WorktreeTerminalState {
     title: String,
     body: String,
     surfaceId: UUID,
-    treatAsViewedWhenWorktreeIsVisible: Bool = false
+    treatAsViewedWhenWorktreeIsVisible: Bool = false,
+    workflowRunID: UUID? = nil
   ) {
     let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -133,7 +134,7 @@ extension WorktreeTerminalState {
           title: trimmedTitle,
           body: trimmedBody,
           createdAt: Date(),
-          isRead: isRead
+          isRead: isRead, workflowRunID: workflowRunID
         ),
         at: 0
       )

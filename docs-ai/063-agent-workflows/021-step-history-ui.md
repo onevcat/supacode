@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Planned; implementation is not part of this change |
+| **Status** | Implemented; adversarial review and live acceptance pending |
 | **Anchor date** | 2026-09-08 |
 | **Related** | [Status center](010-c1-workflow-status-center.md), [history storage](018-history-storage-plan.md), [toolbar rules](../061-native-toolbar-controls/toolbar-controls.md) |
 
@@ -137,7 +137,7 @@ Before implementation, audit `supacode/Domain/Workflow/WorkflowRunStore.swift` a
 
 The exact pane/session identity mapping, historical attempt coverage, and viewing-file
 lifecycle require a focused code audit before implementation. These are implementation
-questions, not authorization for name-based matching or synthetic history.
+constraints, not authorization for name-based matching or synthetic history.
 
 ## Verification and delivery
 
@@ -150,4 +150,27 @@ questions, not authorization for name-based matching or synthetic history.
   hover-to-panel, click pinning, keyboard dismissal, long content, and last-run completion.
 - Verify restart history and closed-role panes. Run required build/checks for implementation
   and update the user manual and toolbar guide with the shipped behavior.
-- This document records the design only. No app implementation or UI verification is claimed.
+- Implementation now includes the shared step panel, pane/session navigation index,
+  persisted step attempts, and terminal history. Live UI acceptance is still pending.
+
+## Implementation notes (2026-09-09)
+
+- The toolbar and center status use the same detail view. Workflow bell notices carry run
+  identity. Storage administration remains in Settings.
+- `navigation.json` is a best-effort navigation projection; it must not fail execution
+  persistence. Older records fall back to existing metadata/records. Details decode on a
+  utility task with a 64 MiB reader bound; oversized or corrupt records remain exportable
+  through Settings and show an unavailable detail state.
+- Step records retain rendered titles, loop paths, errors, accepted delivery references,
+  and action outputs. Source identity and known participant session identities are saved.
+  Session association uses identities available at binding or subsequent runtime events;
+  it never guesses a session for a launch that finished before detection.
+- Pure control history stops adding new positions after 10,000 step records, with an
+  explicit partial-history notice. Executed action/message records and outputs are retained.
+- Full JSON/error views use private temporary directories and the default external app.
+  Viewing files are temporary OS data; Export remains the durable-copy operation.
+- Self-review fixed terminal records being reintroduced from memory after retention removed
+  them. The regression was observed failing before the merge logic was corrected.
+- Automated validation: `make check`; `make test` (3172 primary tests and 2 process tests);
+  CLI build, smoke, 295 unit tests, and 112 integration tests. PR review and screenshot
+  evidence will be added after live acceptance.

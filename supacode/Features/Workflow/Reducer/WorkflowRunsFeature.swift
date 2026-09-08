@@ -163,6 +163,7 @@ struct WorkflowRunsFeature {
         let timestamp = now
         let generator = uuid
         session.run.observations = runtime.observe(session.run)
+        session.run.captureParticipantSessions()
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let effects = machine.apply(event)
         let previous = session.run
@@ -193,6 +194,7 @@ struct WorkflowRunsFeature {
         let timestamp = now
         let generator = uuid
         session.run.observations = runtime.observe(session.run)
+        session.run.captureParticipantSessions()
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let (result, effects) = machine.deliver(
           ordinal: request.ordinal, selector: request.selector, body: request.body,
@@ -221,6 +223,7 @@ struct WorkflowRunsFeature {
         let timestamp = now
         let generator = uuid
         session.run.observations = runtime.observe(session.run)
+        session.run.captureParticipantSessions()
         var machine = session.machine(now: { timestamp }, makeToken: { generator().uuidString })
         let effects = machine.apply(.user(userAction))
         let previous = session.run

@@ -23,6 +23,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     public let stepID: String
     public let iteration: Int?
     public let skipped: Bool
+    public var path: [String] = []
   }
 
   public private(set) var evaluations: [Evaluation] = []
@@ -37,6 +38,9 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
     }
   }
   public var isFinished: Bool { frames.isEmpty }
+  public var iterationPath: [String] {
+    frames.compactMap { frame in frame.loop.map { "\($0.id):\(frame.iteration)" } }
+  }
   public var iteration: Int? { frames.last(where: { $0.loop != nil })?.iteration }
 
   public init(definition: WorkflowDefinition) throws {
@@ -74,7 +78,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
       let stepContext = Self.positioned(context, stepID: step.id, iteration: position)
       let currentIteration = iteration
       try execute(control, step: step, context: stepContext)
-      evaluations.append(Evaluation(stepID: step.id, iteration: currentIteration, skipped: false))
+      evaluations.append(Evaluation(stepID: step.id, iteration: currentIteration, skipped: false, path: iterationPath))
     }
     return frames.isEmpty ? .finished : .yielded
   }
@@ -166,7 +170,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
 
   private mutating func recordSkipped(_ steps: [WorkflowStepDefinition]) {
     for step in steps {
-      evaluations.append(Evaluation(stepID: step.id, iteration: iteration, skipped: true))
+      evaluations.append(Evaluation(stepID: step.id, iteration: iteration, skipped: true, path: iterationPath))
       recordSkipped(step.action.children)
     }
   }

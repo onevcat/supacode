@@ -1170,7 +1170,7 @@ struct AppFeature {
                 WorkflowRuntimeNotification(
                   title: notice.title,
                   body: notice.body,
-                  targetSurfaceID: notice.targetSurfaceID
+                  targetSurfaceID: notice.targetSurfaceID, workflowRunID: notice.runID
                 )
               )
             }
