@@ -1,0 +1,153 @@
+# 063.021 — Step-Based Workflow History UI
+
+| | |
+| --- | --- |
+| **Status** | Planned; implementation is not part of this change |
+| **Anchor date** | 2026-09-08 |
+| **Related** | [Status center](010-c1-workflow-status-center.md), [history storage](018-history-storage-plan.md), [toolbar rules](../061-native-toolbar-controls/toolbar-controls.md) |
+
+## Context and decisions
+
+The active status panel already shows steps, rounds, roles, and attention controls. It
+excludes terminal runs and closes when the last active run ends. Settings history provides
+retention, export, and cleanup, but no step details. Users need to inspect execution after
+completion, including runs in which their agent participated rather than initiated.
+
+Use one generic step-based presentation for every workflow. Do not add a display DSL or
+workflow-specific result layouts. Step titles, deliveries, verdicts, action outputs, and
+recorded errors supply the content. Execution success and business verdicts remain distinct:
+a completed review step with an `issues` verdict still receives a completion checkmark.
+
+## Toolbar entry and scope
+
+- Place Workflow History immediately right of Bell, before the conditional Update button.
+  Reuse the isolated shared capsule in Normal, Shelf, and Canvas; follow the toolbar guide.
+- Show the entry when its available scopes contain active or retained runs. Keep it after
+  completion. Use a static history icon and tooltip; no cumulative count or completion badge.
+- Default to **This Pane**: the union of runs initiated from the current pane and runs in
+  which the current pane or its identified agent session was bound to any workflow role.
+  Deduplicate by run ID. Source-only filtering is insufficient.
+- Match concrete pane/session identity, never the agent executable, display name, or profile
+  alone. Two unrelated agents of the same type must not share participant history.
+- Offer **This Worktree** and **All Runs** for broader history, closed panes, and records
+  without enough identity information. With no current pane, default to This Worktree.
+- Show a short relationship label when useful: Started here or Role: reviewer. Multiple
+  role matches remain one run. In broader scopes show worktree attribution.
+- Hover opens a preview; click pins it. Selecting a run or interacting with a step also pins
+  it. Moving the pointer from button to panel must not dismiss it. Esc/outside click closes.
+- The center status entry opens the same detail surface and selects its active run.
+  Workflow notices should also select their run when the record remains available.
+
+## Panel layout and selection
+
+Use two columns: a compact run list and a wider step detail pane. Each column scrolls
+independently; header and footer stay visible. Bound panel size to the available screen.
+
+The list puts active runs first, then history by descending time. Rows show name, state,
+and time, plus attribution when needed. Initially load about ten recent records and offer
+Load More. This is a presentation limit, not a retention change. First opening selects an
+attention run, otherwise an active run, otherwise the latest historical run.
+
+The detail header shows name, overall state, start/end time, and elapsed duration. The
+step list is the main content; do not place a large result dashboard above it. While open,
+keep the selected run, expanded steps, and reading position stable across status changes,
+new runs, and list reorderings. A pane/scope change must not silently replace an open detail;
+keep the selected record until the user selects another run or reopens the panel.
+
+## Step rows and details
+
+| State | Presentation |
+| --- | --- |
+| Completed | Checkmark; successful execution, independent of verdict |
+| Running | Small progress indicator and explicit running/waiting text |
+| Needs attention / failed attempt | Warning icon and short reason |
+| Skipped | Skip icon; distinguish explicit skip from branch choice |
+| Branch not selected | Muted branch state; normal non-execution |
+| Pending | Empty circle; execution can still reach this step |
+| Not run after termination | Muted terminal state; never an ongoing spinner |
+
+Use the declared step title or a generic action title. A collapsed row can show role,
+output count, or a short error reason. Expand a row to show error/wait reason first, then
+outputs, then collapsed technical details. Failed/attention steps initially expand; successful
+steps initially collapse. Do not override a user's expansion choices on routine updates.
+
+- Text/Markdown deliveries: name, verdict when present, bounded readable preview, Copy,
+  and Open Full Output. Preview limits must bound both loaded content and visual height.
+- JSON action output: bounded field preview with depth/item limits, Copy, and Open Full
+  Output. Long strings wrap or truncate; no unbounded trees or horizontal layout expansion.
+- Known file artifacts: name, Open, and Reveal in Finder. Do not infer files from arbitrary
+  string fields. Missing files keep their record and an unavailable explanation.
+- Steps with no output: a short No output message only when expanded.
+- Errors: show recorded error details and any partial output. Offer existing permitted
+  attention actions only while the run remains active; history is read-only.
+- Technical details: step ID, role, attempt, and available invocation times. Do not invent
+  precise per-step durations when the record does not contain them.
+
+## Full output opens externally
+
+There is no Expand Full Text action inside the panel. Open Full Output opens the recorded
+text/Markdown/JSON file with the default external application, only on explicit user action.
+For structured output or errors without a standalone file, materialize a bounded-purpose
+viewing file from that specific recorded result, then open it. This file is not a new source
+of truth or a durable export. Keep its lifecycle separate from the original run data.
+
+Keep the panel dimensions and preview limits unchanged after opening. If opening fails,
+show an inline error and retain Copy/Reveal where applicable. Copy must state whether it
+copies the full output or preview; never silently copy a truncated preview as full content.
+
+## Loops, branches, retries, and completion
+
+Group loops by actual iteration, with steps inside each round; do not create future rounds.
+Show the chosen conditional branch and collapse the unselected branch. Put retry attempts
+inside the corresponding step, default to the latest attempt, and retain earlier errors and
+outputs. A successful retry shows a checkmark plus its attempt count.
+
+On completion, update the same panel in place and freeze elapsed time. Do not close it,
+switch runs, expand every output, or reset scroll position. On cancellation/interruption,
+stop progress indicators and distinguish interrupted work from steps never reached.
+Role information remains visible after a pane closes, but unavailable focus actions are
+disabled. Workflow completion never implies completion of a launched agent's later work.
+
+Footer actions are Run Folder, Log, and a menu for Keep Run and Export. Storage budgets and
+cleanup stay in Settings. Retention policy is unchanged. A removed/corrupt record gets an
+explicit unavailable state; empty filters get a scoped empty state and broader-scope entry.
+
+## Data and implementation boundaries
+
+Reuse `supacode/Features/Repositories/Views/WorkflowStatusPopoverButton.swift`,
+`supacode/Features/Workflow/Models/WorkflowStatusCenterPresentation.swift`, and the existing
+history storage/read operations. Extend presentation to terminal states instead of treating
+historical records as running. Read details lazily off the main thread; do not run storage
+size scans or load full output bodies during toolbar rendering/hover.
+
+Before implementation, audit `supacode/Domain/Workflow/WorkflowRunStore.swift` and
+`supacode/Domain/Workflow/WorkflowRun.swift` for these requirements:
+
+1. Persist source and role participation identity for history lookup, including stable
+   session identity where available. Current source context and persisted bindings must
+   not be assumed to provide the complete historical association contract.
+2. Associate each output/error with its step, iteration, and attempt. Latest-result maps
+   alone cannot implement attempt history. Add focused records where needed; no log-text
+   parsing as the primary data model and no reconstruction of facts that were never saved.
+3. Resolve historical titles from a retained execution definition where available, not a
+   subsequently edited source workflow. Fall back to recorded IDs when unavailable.
+4. Distinguish branch exclusion, skip, and terminal non-execution from absence of a record.
+5. Preserve existing privacy and path-containment rules. Old records with missing fields
+   remain readable in broader scopes and explicitly lack unavailable detail.
+
+The exact pane/session identity mapping, historical attempt coverage, and viewing-file
+lifecycle require a focused code audit before implementation. These are implementation
+questions, not authorization for name-based matching or synthetic history.
+
+## Verification and delivery
+
+- Reducer/model tests: source-or-role union, deduplication, unrelated same-type agents,
+  pane/session changes, older records, scopes, terminal states, branches, rounds, retries,
+  missing files, and selection stability after completion.
+- Output tests: huge text/JSON, bounded loading, correct attempt association, external-open
+  failure, and full-content versus preview copy behavior.
+- Debug visual checks: Normal/Shelf/Canvas; narrow window; Bell unread/Update states;
+  hover-to-panel, click pinning, keyboard dismissal, long content, and last-run completion.
+- Verify restart history and closed-role panes. Run required build/checks for implementation
+  and update the user manual and toolbar guide with the shipped behavior.
+- This document records the design only. No app implementation or UI verification is claimed.
