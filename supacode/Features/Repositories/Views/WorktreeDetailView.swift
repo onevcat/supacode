@@ -835,6 +835,7 @@ struct WorktreeDetailView: View {
     _ notification: WorktreeTerminalNotification
   ) {
     if let runID = notification.workflowRunID {
+      terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notification.id)
       historyStore.send(.setPresented(true))
       historyStore.send(.select(runID))
       historyStore.send(.openRequested)

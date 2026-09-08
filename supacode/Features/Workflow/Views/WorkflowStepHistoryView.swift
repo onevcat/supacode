@@ -29,8 +29,15 @@ struct WorkflowStepHistoryView: View {
         if let detail = store.detail {
           WorkflowStepHistoryDetailView(
             record: detail, directory: store.selectedDirectory, livePaneIDs: store.context.livePaneIDs,
-            liveRun: store.selectedLiveRun, onIntent: onIntent,
-            onOutput: { store.send(.output($0)) }
+            liveRun: store.selectedLiveRun,
+            onIntent: {
+              onInteraction()
+              onIntent($0)
+            },
+            onOutput: {
+              onInteraction()
+              store.send(.output($0))
+            }, onInteraction: onInteraction
           )
           .id(detail.run.id)
         } else {
@@ -60,6 +67,7 @@ struct WorkflowStepHistoryView: View {
       LazyVStack(alignment: .leading, spacing: 4) {
         ForEach(store.visibleEntries) { entry in
           Button {
+            onInteraction()
             store.send(.select(entry.id))
           } label: {
             HStack(alignment: .top, spacing: 8) {
@@ -94,7 +102,10 @@ struct WorkflowStepHistoryView: View {
           .help("Show steps for \(entry.name)")
         }
         if store.hasMore {
-          Button("Load More") { store.send(.loadMore) }.help("Show more workflow runs")
+          Button("Load More") {
+            onInteraction()
+            store.send(.loadMore)
+          }.help("Show more workflow runs")
             .padding(8)
         }
         if store.visibleEntries.isEmpty {

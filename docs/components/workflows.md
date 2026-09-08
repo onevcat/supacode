@@ -149,7 +149,9 @@ Select a run on the left, then expand its steps on the right. Checkmarks indicat
 completed execution; a delivery verdict such as `issues` does not mean execution
 failed. Branches not selected, skipped steps, and steps not reached before
 termination have separate states. Rounds and retry attempts retain their own
-recorded outputs and errors. Older records can lack some details.
+recorded outputs and errors. Provisional and corrected submissions keep separate
+body snapshots. Failed action attempts link to their own stdout, stderr, and
+execution record. Older records can lack some details.
 
 Text and JSON previews have fixed limits. **Open Full Output** opens the complete
 file in its default external application; **Copy Full Output** copies the complete

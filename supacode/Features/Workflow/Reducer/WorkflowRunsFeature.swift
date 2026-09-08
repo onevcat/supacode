@@ -761,7 +761,8 @@ struct WorkflowRunsFeature {
         WorkflowRuntimeNotification(
           title: "Workflow · \(session.run.definition.name)",
           body: text,
-          targetSurfaceID: WorkflowRunNotice.targetSurfaceID(for: session.run)
+          targetSurfaceID: WorkflowRunNotice.targetSurfaceID(for: session.run),
+          workflowRunID: session.run.id
         )
       )
 

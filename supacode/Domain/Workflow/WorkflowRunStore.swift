@@ -116,6 +116,8 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     var error: String?
     var outputs: [String: WorkflowJSONValue]?
     var delivery: WorkflowDeliveryRecord?
+    var submissions: [WorkflowHistorySubmission]?
+    var actionExecutionID: String?
   }
 
   var historyIsPartial: Bool?
@@ -204,7 +206,8 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
       Step(
         id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal,
         iterationPath: $0.iterationPath, branchExcluded: $0.branchExcluded, title: $0.title, error: $0.error,
-        outputs: $0.outputs, delivery: $0.delivery)
+        outputs: $0.outputs, delivery: $0.delivery, submissions: $0.submissions, actionExecutionID: $0.actionExecutionID
+      )
     }
   }
 
@@ -489,6 +492,10 @@ nonisolated struct WorkflowRunStore: Sendable {
     try requireNotSymbolicLink(versioned)
     try requireNotSymbolicLink(latest)
     let data = Data(body.utf8)
+    let submission = WorkflowRunPaths.submissionURL(
+      runDirectory: runDirectory, name: name, ordinal: ordinal, body: body)
+    try requireNotSymbolicLink(submission)
+    try data.write(to: submission, options: .atomic)
     try data.write(to: versioned, options: .atomic)
     let temporary = latest.deletingLastPathComponent()
       .appending(path: ".\(name).md.\(UUID().uuidString).tmp", directoryHint: .notDirectory)

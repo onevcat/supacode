@@ -161,8 +161,8 @@ constraints, not authorization for name-based matching or synthetic history.
   persistence. Older records fall back to existing metadata/records. Details decode on a
   utility task with a 64 MiB reader bound; oversized or corrupt records remain exportable
   through Settings and show an unavailable detail state.
-- Step records retain rendered titles, loop paths, errors, accepted delivery references,
-  and action outputs. Source identity and known participant session identities are saved.
+- Step records retain rendered titles, loop paths, errors, immutable delivery submissions,
+  action execution identities, and action outputs. Source identity and known participant session identities are saved.
   Session association uses identities available at binding or subsequent runtime events;
   it never guesses a session for a launch that finished before detection.
 - Pure control history stops adding new positions after 10,000 step records, with an
@@ -174,3 +174,18 @@ constraints, not authorization for name-based matching or synthetic history.
 - Automated validation: `make check`; `make test` (3172 primary tests and 2 process tests);
   CLI build, smoke, 295 unit tests, and 112 integration tests. PR review and screenshot
   evidence will be added after live acceptance.
+
+### Adversarial review, round 1
+
+All ten findings were confirmed. The first five behavioral regression cases failed before
+fixes. The changes preserve provisional and corrected delivery bodies separately, expose
+per-attempt action diagnostics, recover exact-ordinal legacy delivery associations, retain
+control evaluations on termination, and capture loop paths before stack changes. Projection
+now buckets records once and runs off the main actor. Interaction callbacks pin both
+entry points; reading a workflow notice marks only that notice read, and explicit workflow
+notifications carry run identity. UTF-8 previews preserve incomplete scalar boundaries;
+JSON keys and complete previews have byte bounds.
+
+Focused regression coverage includes 10,000 ordered rounds, 2/3/4-byte UTF-8 boundaries,
+provisional/redelivered files, cancelled control errors, capped loops, failed action
+execution IDs, and explicit-notification identity without duplicate completion notices.

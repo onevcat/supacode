@@ -476,6 +476,19 @@ nonisolated struct WorkflowRunMachine {
     )
   }
 
+  private func submissionRecord(
+    activation: WorkflowActivation, delivery: WorkflowValidatedDelivery, verdict: String?
+  ) -> WorkflowDeliveryRecord {
+    let record = deliveryRecord(for: activation, verdict: verdict)
+    return WorkflowDeliveryRecord(
+      name: record.name, ordinal: record.ordinal,
+      path: WorkflowRunPaths.submissionURL(
+        runDirectory: run.runDirectory, name: record.name,
+        ordinal: record.ordinal, body: delivery.body
+      ).path,
+      latestPath: record.latestPath, verdict: verdict, deliveredAt: record.deliveredAt)
+  }
+
   private mutating func applyDeliveryPersistFailed(ordinal: Int, reason: String, effects: inout [WorkflowRunEffect]) {
     guard let activation = run.activeActivation, activation.ordinal == ordinal, activation.state == .persisting
     else { return }
@@ -489,6 +502,14 @@ nonisolated struct WorkflowRunMachine {
     guard case .waitingForDelivery(ordinal) = run.phase, let activation = run.activeActivation,
       activation.state == .persisting, let delivery = activation.pendingDelivery
     else { return }
+    if let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal }) {
+      let record = submissionRecord(activation: activation, delivery: delivery, verdict: delivery.verdict)
+      run.stepRecords[index].delivery = record
+      run.stepRecords[index].submissions =
+        (run.stepRecords[index].submissions ?? []) + [
+          .init(delivery: record, accepted: false, issues: delivery.issues.map(\.message))
+        ]
+    }
     guard delivery.issues.isEmpty else {
       updateActivation(ordinal: ordinal) { $0.state = .provisional }
       raiseAttention(
@@ -507,7 +528,12 @@ nonisolated struct WorkflowRunMachine {
     let ordinal = activation.ordinal
     let record = deliveryRecord(for: activation, verdict: verdict)
     if let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal }) {
-      run.stepRecords[index].delivery = record
+      let archived = submissionRecord(activation: activation, delivery: delivery, verdict: verdict)
+      run.stepRecords[index].delivery = archived
+      if let last = run.stepRecords[index].submissions?.indices.last {
+        run.stepRecords[index].submissions?[last].accepted = true
+        run.stepRecords[index].submissions?[last].delivery = archived
+      }
     }
     run.deliveries[activation.deliveryName] = record
     run.skippedDeliveries[activation.deliveryName] = nil
@@ -945,6 +971,7 @@ nonisolated struct WorkflowRunMachine {
     recordStep(step, state: .active, ordinal: nil)
     let executionID = makeToken()
     run.actionExecutionID = executionID
+    run.stepRecords[run.stepRecords.count - 1].actionExecutionID = executionID
     run.actionAttempts[step.id, default: 0] += 1
     var values = run.stepValues
     let directory = run.runDirectory.appending(path: "actions/\(step.id)/\(executionID)")
@@ -978,21 +1005,7 @@ nonisolated struct WorkflowRunMachine {
     do {
       let outcome = try cursor.next(values: run.expressionValues(capturedAt: now()))
       run.controlCursor = cursor
-      for evaluation in cursor.evaluations {
-        // Keep each round distinct, but bound control-only loops that can run indefinitely.
-        run.stepRecords.removeAll { $0.stepID == evaluation.stepID && $0.iterationPath == evaluation.path }
-        if run.stepRecords.count >= 10_000 {
-          run.historyIsPartial = true
-          continue
-        }
-        run.stepRecords.append(
-          .init(
-            stepID: evaluation.stepID, iteration: evaluation.iteration,
-            state: evaluation.skipped ? .skipped : .completed, ordinal: nil, iterationPath: evaluation.path,
-            branchExcluded: evaluation.skipped))
-      }
-      for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
-      for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
+      recordControlEvaluations(cursor)
       switch outcome {
       case .step: return true
       case .finished: finish(.completed, effects: &effects)
@@ -1000,15 +1013,39 @@ nonisolated struct WorkflowRunMachine {
       }
     } catch let limit as WorkflowLoopLimit {
       run.controlCursor = cursor
+      recordControlEvaluations(cursor)
       effects.append(.log("Loop '\(limit.stepID)' reached max_iterations while its condition remained true."))
       finish(.iterationLimitReached, effects: &effects)
     } catch {
       run.controlCursor = cursor
+      recordControlEvaluations(cursor)
+      if let position = cursor.failedPosition {
+        run.stepRecords.append(
+          .init(
+            stepID: position.stepID, iteration: position.iteration, state: .active,
+            ordinal: nil, iterationPath: position.path))
+      }
       raiseAttention(
-        .actionFailed("Control evaluation failed: \(error)"), stepID: run.currentStep?.id ?? "control",
+        .actionFailed("Control evaluation failed: \(error)"), stepID: cursor.failedPosition?.stepID ?? "control",
         role: nil, ordinal: nil, effects: &effects, allowedActions: [.cancel])
     }
     return false
+  }
+
+  private mutating func recordControlEvaluations(_ cursor: WorkflowControlCursor) {
+    for evaluation in cursor.evaluations {
+      if run.stepRecords.count >= 10_000 {
+        run.historyIsPartial = true
+        continue
+      }
+      run.stepRecords.append(
+        .init(
+          stepID: evaluation.stepID, iteration: evaluation.iteration,
+          state: evaluation.skipped ? .skipped : .completed, ordinal: nil,
+          iterationPath: evaluation.path, branchExcluded: evaluation.skipped))
+    }
+    for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
+    for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
   }
 
   // MARK: Waiting and watchdog

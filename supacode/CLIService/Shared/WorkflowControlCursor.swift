@@ -27,6 +27,7 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
   }
 
   public private(set) var evaluations: [Evaluation] = []
+  public private(set) var failedPosition: Evaluation?
   private var frames: [Frame]
   public private(set) var state: WorkflowTypedState
   public private(set) var expiredDeliveries: Set<String> = []
@@ -62,11 +63,16 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
 
   public mutating func next(values context: [String: WorkflowJSONValue], budget: Int = 64) throws -> Outcome {
     evaluations = []
+    failedPosition = nil
     if let currentStep { return .step(currentStep) }
     for _ in 0..<max(1, budget) {
       guard let frame = frames.last else { return .finished }
       if frame.index >= frame.steps.count {
+        failedPosition = frame.loop.map {
+          Evaluation(stepID: $0.id, iteration: iteration, skipped: false, path: iterationPath)
+        }
         try endFrame(context: context)
+        failedPosition = nil
         continue
       }
       let step = frame.steps[frame.index]
@@ -76,9 +82,11 @@ nonisolated public struct WorkflowControlCursor: Equatable, Sendable {
       }
       let position = if case .loop = control { 0 } else { iteration }
       let stepContext = Self.positioned(context, stepID: step.id, iteration: position)
-      let currentIteration = iteration
+      let positionRecord = Evaluation(stepID: step.id, iteration: iteration, skipped: false, path: iterationPath)
+      failedPosition = positionRecord
       try execute(control, step: step, context: stepContext)
-      evaluations.append(Evaluation(stepID: step.id, iteration: currentIteration, skipped: false, path: iterationPath))
+      evaluations.append(positionRecord)
+      failedPosition = nil
     }
     return frames.isEmpty ? .finished : .yielded
   }

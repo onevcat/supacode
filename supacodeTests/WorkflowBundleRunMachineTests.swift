@@ -46,6 +46,7 @@ struct WorkflowBundleRunMachineTests {
     let history = WorkflowRunRecord(run: machine.run)
     let attempts = history.steps.filter { $0.id == "snapshot" }
     #expect(attempts.count == 2)
+    #expect(attempts.map(\.actionExecutionID) == [first, second])
     #expect(attempts.first?.error?.contains("failed") == true)
     #expect(attempts.first?.outputs == nil)
     #expect(attempts.last?.outputs == ["output": .object(["branch": .string("main")])])

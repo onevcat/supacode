@@ -231,7 +231,21 @@ struct WorkflowRunStoreTests {
     #expect(try String(contentsOf: second.latest, encoding: .utf8) == "round 2\n")
     let leftovers = try FileManager.default.contentsOfDirectory(
       atPath: second.latest.deletingLastPathComponent().path(percentEncoded: false))
-    #expect(leftovers.sorted() == ["findings.2.md", "findings.4.md", "findings.md"])
+    let firstSnapshot = WorkflowRunPaths.submissionURL(
+      runDirectory: store.directory(for: runID), name: "findings",
+      ordinal: 2, body: "round 1\n")
+    let secondSnapshot = WorkflowRunPaths.submissionURL(
+      runDirectory: store.directory(for: runID), name: "findings",
+      ordinal: 4, body: "round 2\n")
+    #expect(
+      Set(leftovers)
+        == Set([
+          "findings.2.md", "findings.4.md", "findings.md",
+          firstSnapshot.lastPathComponent, secondSnapshot.lastPathComponent,
+        ]))
+    try store.writeDelivery(runID: runID, name: "findings", ordinal: 2, body: "corrected\n")
+    #expect(try String(contentsOf: firstSnapshot, encoding: .utf8) == "round 1\n")
+    #expect(try String(contentsOf: first.versioned, encoding: .utf8) == "corrected\n")
   }
 
   @Test func instructionsAndLogAreWrittenUnderTheRun() throws {

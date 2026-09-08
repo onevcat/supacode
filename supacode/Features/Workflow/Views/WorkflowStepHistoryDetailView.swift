@@ -12,6 +12,7 @@ struct WorkflowStepHistoryDetailView: View {
   var onInteraction: () -> Void = {}
   @State private var pendingControl: WorkflowAttentionControl?
   @State private var confirmsControl = false
+  @State private var groups: [WorkflowHistoryStepGroup] = []
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -49,7 +50,7 @@ struct WorkflowStepHistoryDetailView: View {
       Divider()
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
-          ForEach(WorkflowHistoryStepGroup.groups(record)) { group in
+          ForEach(groups) { group in
             WorkflowHistoryStepRow(group: group, directory: directory, onOutput: onOutput, onInteraction: onInteraction)
           }
         }
@@ -60,6 +61,11 @@ struct WorkflowStepHistoryDetailView: View {
       }
       Divider()
       footer
+    }
+    .task(id: HistoryProjectionKey(record: record)) {
+      let snapshot = record
+      let result = await Task.detached(priority: .userInitiated) { WorkflowHistoryStepGroup.groups(snapshot) }.value
+      if !Task.isCancelled { groups = result }
     }
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -101,6 +107,7 @@ struct WorkflowStepHistoryDetailView: View {
           }.help(control.label)
         } else {
           Button(control.label) {
+            onInteraction()
             if control.confirmationMessage != nil {
               pendingControl = control
               confirmsControl = true
@@ -129,6 +136,7 @@ struct WorkflowStepHistoryDetailView: View {
             .disabled(!record.run.status.isTerminal).help("Export this finished run as a ZIP")
           if let run = liveRun, !run.status.isTerminal {
             Button("Cancel Run", role: .destructive) {
+              onInteraction()
               pendingControl = WorkflowAttentionControl(
                 action: .cancel, run: run,
                 attention: WorkflowAttention(
@@ -207,11 +215,24 @@ private struct WorkflowHistoryStepRow: View {
   @ViewBuilder
   private func attemptContent(_ attempt: WorkflowRunRecord.Step) -> some View {
     if let error = attempt.error {
+      Text(attempt.state == .completed ? "Earlier issue" : "Error").font(.caption).foregroundStyle(.secondary)
       Text(String(error.prefix(1000))).foregroundStyle(.orange).textSelection(.enabled).lineLimit(6)
       Button("Open Full Error") { onOutput(.openText(error, "error.txt")) }
         .help("Open the full recorded error in an external application")
     }
-    if let delivery = attempt.delivery, let directory {
+    if let submissions = attempt.submissions, !submissions.isEmpty, let directory {
+      ForEach(Array(submissions.enumerated()), id: \.offset) { index, submission in
+        if index == submissions.count - 1 {
+          Text("Submission \(index + 1) · \(submission.accepted ? "Accepted" : "Needs correction")").font(.caption)
+          WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
+        } else {
+          DisclosureGroup("Submission \(index + 1) · \(submission.accepted ? "Accepted" : "Needs correction")") {
+            ForEach(submission.issues, id: \.self) { Text($0).foregroundStyle(.orange).lineLimit(3) }
+            WorkflowHistoryDeliveryView(delivery: submission.delivery, directory: directory, onOutput: onOutput)
+          }
+        }
+      }
+    } else if let delivery = attempt.delivery, let directory {
       WorkflowHistoryDeliveryView(delivery: delivery, directory: directory, onOutput: onOutput)
     }
     if let outputs = attempt.outputs, !outputs.isEmpty {
@@ -229,7 +250,16 @@ private struct WorkflowHistoryStepRow: View {
       }
     }
     if attempt.delivery == nil && attempt.outputs == nil && attempt.error == nil {
-      Text("No output.").foregroundStyle(.secondary)
+      Text(group.legacyDetailsUnavailable ? "Output details were not recorded." : "No output.").foregroundStyle(
+        .secondary)
+    }
+    if let execution = attempt.actionExecutionID, let directory {
+      HStack {
+        ForEach(["stdout.log", "stderr.log", "execution.json"], id: \.self) { name in
+          Button(name) { onOutput(.openFile(directory.appending(path: "actions/\(attempt.id)/\(execution)/\(name)"))) }
+            .help("Open the recorded action diagnostic; missing files are reported")
+        }
+      }.controlSize(.small)
     }
     DisclosureGroup("Execution Details") {
       Text("Step: \(attempt.id)").textSelection(.enabled)
@@ -247,7 +277,8 @@ private struct WorkflowHistoryDeliveryView: View {
   @State private var available = false
 
   private var url: URL {
-    WorkflowRunPaths.deliveryURL(runDirectory: directory, name: delivery.name, ordinal: delivery.ordinal)
+    if delivery.path.hasPrefix("/") { return URL(filePath: delivery.path) }
+    return directory.appending(path: delivery.path)
   }
 
   var body: some View {
@@ -275,8 +306,15 @@ private struct WorkflowHistoryDeliveryView: View {
       }.value
       available = result != nil
       preview =
-        result.map { String(bytes: $0.data.prefix(4096), encoding: .utf8) ?? "Output preview is not valid UTF-8." }
+        result.map { WorkflowHistoryOutputPreview.text($0.data) ?? "Output preview is not valid UTF-8." }
         ?? "Output is no longer available."
     }
   }
+}
+
+// A constant hash keeps the full record comparison out of hashing large JSON bodies.
+private struct HistoryProjectionKey: Hashable {
+  let record: WorkflowRunRecord
+  static func == (lhs: Self, rhs: Self) -> Bool { lhs.record == rhs.record }
+  func hash(into hasher: inout Hasher) { hasher.combine(record.run.id) }
 }

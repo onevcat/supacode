@@ -1143,8 +1143,7 @@ struct WorkflowRunsFeatureTests {
   @Test(.dependencies) func explicitFinalNotifySuppressesTheDuplicateGenericCompletionNotification() async throws {
     let fixture = try Fixture()
     defer { fixture.cleanUp() }
-    let queue = RecordingQueue()
-    let store = makeStore(fixture, queue: queue.client)
+    let store = makeStore(fixture, queue: WorkflowEffectQueue().client)
     var session = try fixture.session().0
     session.run.status = .completed
     let base = try #require(WorkflowRunNotice.statusEdge(from: nil, to: session.run))
@@ -1162,6 +1161,8 @@ struct WorkflowRunsFeatureTests {
     await store.send(.started(session, effects: [.notify("Custom completion")]))
     await store.receive(\.delegate.notice, expected)
     await store.finish(timeout: Self.timeout)
+    #expect(fixture.notifications.count == 1)
+    #expect(fixture.notifications.first?.workflowRunID == session.run.id)
   }
 
   // MARK: - Restart scan

@@ -18,8 +18,7 @@ struct ToolbarStatusView: View {
       pullRequest: pullRequest
     )
     ZStack {
-      // Keep this mounted across the last-run transition so its local popover state observes the
-      // empty run list and resets before a later run appears.
+      // Keep the panel mounted so a selected run remains readable after the last active run ends.
       if featureFlags.workflowUI {
         WorkflowStatusPopoverButton(
           presentation: workflow,

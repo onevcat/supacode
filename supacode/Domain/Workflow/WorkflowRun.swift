@@ -3,6 +3,7 @@
 // bindings, the position cursor, invocations and activations, deliveries, and the attention
 // vocabulary the panel renders. Transitions live in WorkflowRunMachine.
 
+import CryptoKit
 import Foundation
 import ProwlCLIShared
 
@@ -172,7 +173,12 @@ nonisolated enum WorkflowRunPaths {
       .appending(path: "\(stepID).\(ordinal).md", directoryHint: .notDirectory)
   }
 
-  /// `deliveries/<name>.<ordinal>.md`, or the latest view `deliveries/<name>.md` without an ordinal.
+  /// Content-addressed snapshots preserve each submission when an invocation is corrected.
+  static func submissionURL(runDirectory: URL, name: String, ordinal: Int, body: String) -> URL {
+    let digest = SHA256.hash(data: Data(body.utf8)).map { String(format: "%02x", $0) }.joined()
+    return runDirectory.appending(path: "deliveries/\(name).\(ordinal).\(digest).md")
+  }
+
   static func deliveryURL(runDirectory: URL, name: String, ordinal: Int?) -> URL {
     let file = ordinal.map { "\(name).\($0).md" } ?? "\(name).md"
     return runDirectory.appending(path: "deliveries", directoryHint: .isDirectory)
@@ -263,6 +269,12 @@ nonisolated struct WorkflowDeliveryRecord: Equatable, Sendable, Codable {
   }
 }
 
+nonisolated struct WorkflowHistorySubmission: Codable, Equatable, Sendable {
+  var delivery: WorkflowDeliveryRecord
+  var accepted: Bool
+  var issues: [String]
+}
+
 // MARK: - Position and step records
 
 nonisolated enum WorkflowStepState: String, Equatable, Sendable, Codable {
@@ -283,6 +295,8 @@ nonisolated struct WorkflowStepRecord: Equatable, Sendable {
   var error: String?
   var outputs: [String: WorkflowJSONValue]?
   var delivery: WorkflowDeliveryRecord?
+  var submissions: [WorkflowHistorySubmission]?
+  var actionExecutionID: String?
 }
 
 // MARK: - Attention and status
