@@ -211,3 +211,12 @@ stale-read fixes. Three P2 gaps remained; all three were reproduced by new faili
 
 The focused domain/reducer run passed 88 tests. Native menu, hover, and screenshot acceptance
 remain pending; the third review checks these fixes before that phase starts.
+
+### Adversarial review, round 3
+
+The original round-2 cases passed. One new P2 remained: Retry Save requeued a body after
+failure without restoring its pending metadata, which could overwrite a previous submission's
+reference or omit a cancelled retry. Both variants failed in regression tests. Initial writes
+and retries now use one function that registers metadata and returns the write effect together.
+The focused run passed 83 tests, including preservation of both bodies and their acceptance
+states. A fourth convergence review checks this narrow change before native acceptance.

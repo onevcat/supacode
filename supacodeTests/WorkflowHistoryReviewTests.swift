@@ -118,7 +118,8 @@ struct WorkflowHistoryReviewTests {
     #expect(WorkflowHistoryStepGroup.groups(repeated).flatMap(\.attempts).compactMap(\.outputs).isEmpty)
   }
 
-  @Test func provisionalAndCorrectedSubmissionsKeepBothBodies() throws {
+  @Test(arguments: [false, true])
+  func provisionalAndCorrectedSubmissionsKeepBothBodies(retrySave: Bool) throws {
     let pane = WorkflowPaneIdentity(surfaceID: UUID(), tabID: nil, handle: "p1", displayName: "Pi", agent: "pi")
     var machine = try start(
       """
@@ -149,14 +150,21 @@ struct WorkflowHistoryReviewTests {
     _ = machine.apply(.user(.askAgain))
     let second = machine.deliver(
       ordinal: 1, selector: .manual(stepID: "review"), body: "## Findings\nCorrected output", verdict: nil)
-    try persist(second.effects)
+    var effects = second.effects
+    if retrySave {
+      _ = machine.apply(.deliveryPersistFailed(ordinal: 1, reason: "Disk unavailable"))
+      effects = machine.apply(.user(.retry))
+    }
+    try persist(effects)
     _ = machine.apply(.deliveryPersisted(ordinal: 1))
     let record = WorkflowRunRecord(run: machine.run)
+    #expect(record.steps.last?.submissions?.map(\.accepted) == [false, true])
+    #expect(record.steps.last?.submissions?.last?.issues.isEmpty == true)
     let json = try #require(
       JSONSerialization.jsonObject(with: WorkflowRunRecord.makeEncoder().encode(record)) as? [String: Any])
     let steps = try #require(json["steps"] as? [[String: Any]])
     let submissions = try #require(steps.last?["submissions"] as? [[String: Any]])
-    #expect(submissions.count == 2)
+    try #require(submissions.count == 2)
     let paths = try submissions.map { entry -> String in
       let delivery = try #require(entry["delivery"] as? [String: Any])
       return try #require(delivery["path"] as? String)
@@ -172,6 +180,40 @@ struct WorkflowHistoryReviewTests {
       WorkflowRunRecord.self,
       from: JSONSerialization.data(withJSONObject: legacy))
     #expect(WorkflowHistoryStepGroup.groups(decoded).flatMap(\.attempts).compactMap(\.delivery).count == 1)
+  }
+
+  @Test func cancelledSaveRetryKeepsTheSubmittedBody() throws {
+    let pane = WorkflowPaneIdentity(surfaceID: UUID(), tabID: nil, handle: "p1", displayName: "Pi", agent: "pi")
+    var machine = try start(
+      """
+      schema: prowl.workflow/v1
+      id: delivery
+      name: Delivery
+      roles: {author: {source: current}}
+      steps:
+        - id: review
+          message: author
+          instruction: Review
+          expect: {delivery: report, sections: ['## Findings']}
+      """, roles: ["author": .current(pane)])
+    _ = machine.apply(.roleIdle(ordinal: 1))
+    _ = machine.apply(.injectionSucceeded(ordinal: 1, dispatchID: "dispatch"))
+    let disk = WorkflowRunStore(rootURL: machine.run.context.worktree.rootURL, directory: machine.run.runDirectory)
+    try disk.ensureLayout(runID: machine.run.id)
+    defer { try? FileManager.default.removeItem(at: machine.run.runDirectory) }
+    _ = machine.deliver(
+      ordinal: 1, selector: .manual(stepID: "review"), body: "## Findings\nSaved after retry", verdict: nil)
+    _ = machine.apply(.deliveryPersistFailed(ordinal: 1, reason: "Disk unavailable"))
+    let effects = machine.apply(.user(.retry))
+    _ = machine.apply(.user(.cancel))
+    for case .persistDelivery(let name, let ordinal, let body) in effects {
+      try disk.writeDelivery(runID: machine.run.id, name: name, ordinal: ordinal, body: body)
+    }
+    _ = machine.apply(.deliveryPersisted(ordinal: 1))
+    let record = WorkflowRunRecord(run: machine.run)
+    #expect(machine.run.status == .cancelled)
+    #expect(record.steps.last?.submissions?.count == 1)
+    #expect(record.steps.last?.submissions?.first?.accepted == false)
   }
 
   @Test func textPreviewKeepsMultibyteBoundariesAndRejectsInvalidData() {

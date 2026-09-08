@@ -464,9 +464,6 @@ nonisolated struct WorkflowRunMachine {
       validated = delivery
     }
     let record = deliveryRecord(for: activation, verdict: validated.verdict)
-    run.pendingHistorySubmissions[activation.ordinal] = .init(
-      delivery: submissionRecord(activation: activation, delivery: validated, verdict: validated.verdict),
-      accepted: false, issues: validated.issues.map(\.message))
     updateActivation(ordinal: activation.ordinal) {
       $0.state = .persisting
       $0.pendingDelivery = validated
@@ -482,7 +479,7 @@ nonisolated struct WorkflowRunMachine {
       .log(
         "Step '\(activation.stepID)': delivery '\(activation.deliveryName)' accepted "
           + "(invocation \(activation.ordinal))\(issueNote); persisting."),
-      .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: validated.body),
+      deliveryPersistenceEffect(activation: activation, delivery: validated),
     ]
     return (
       .success(
@@ -504,6 +501,15 @@ nonisolated struct WorkflowRunMachine {
       verdict: verdict,
       deliveredAt: now()
     )
+  }
+
+  private mutating func deliveryPersistenceEffect(
+    activation: WorkflowActivation, delivery: WorkflowValidatedDelivery
+  ) -> WorkflowRunEffect {
+    run.pendingHistorySubmissions[activation.ordinal] = .init(
+      delivery: submissionRecord(activation: activation, delivery: delivery, verdict: delivery.verdict),
+      accepted: false, issues: delivery.issues.map(\.message))
+    return .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body)
   }
 
   private func submissionRecord(
@@ -1177,8 +1183,7 @@ nonisolated struct WorkflowRunMachine {
       {
         run.status = .running
         effects.append(.log("Step '\(activation.stepID)': retrying to persist delivery '\(activation.deliveryName)'."))
-        effects.append(
-          .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body))
+        effects.append(deliveryPersistenceEffect(activation: activation, delivery: delivery))
         return
       }
       retryCurrentStep(effects: &effects)
