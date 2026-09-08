@@ -1,0 +1,32 @@
+Final native harness validation:
+{
+  "input_bytes" : 3,
+  "snapshot_max_ms" : 0.13399124145507812,
+  "sent_bytes" : 29495,
+  "sent_frames" : 5,
+  "columns" : 81,
+  "rows" : 25,
+  "snapshot_count" : 79,
+  "host_pid_after" : 13247,
+  "snapshot_mean_ms" : 0.047093705285953573,
+  "host_pid_before" : 13247
+}
+
+App build output (tail):
+bash -o pipefail -c 'xcodebuild -project supacode.xcodeproj -scheme supacode -configuration Debug build -skipMacroValidation -clonedSourcePackagesDirPath /Users/onevcat/Library/Caches/supacode-spm-cache/SourcePackages SWIFT_COMPILATION_MODE=incremental  2>&1 | mise exec -- xcsift -w --format toon'
+status: success
+summary:
+  errors: 0
+  warnings: 0
+  failed_tests: 0
+  linker_errors: 0
+
+Repository checks (tail):
+mise exec -- swiftlint lint --quiet --config .swiftlint.yml
+........................................................................................................................................................
+----------------------------------------------------------------------
+Ran 152 tests in 14.691s
+
+OK
+python3 scripts/check_workflow_naming.py
+Workflow naming checks passed.

@@ -1,0 +1,12 @@
+{
+  "input_bytes" : 3,
+  "snapshot_max_ms" : 0.13399124145507812,
+  "sent_bytes" : 29495,
+  "sent_frames" : 5,
+  "columns" : 81,
+  "rows" : 25,
+  "snapshot_count" : 79,
+  "host_pid_after" : 13247,
+  "snapshot_mean_ms" : 0.047093705285953573,
+  "host_pid_before" : 13247
+}

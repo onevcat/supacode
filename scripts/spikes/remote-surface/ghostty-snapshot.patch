@@ -1,0 +1,58 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 4f218ff40..6a1b1d22b 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1133,6 +1133,7 @@ bool ghostty_surface_read_text(ghostty_surface_t,
+                                ghostty_selection_s,
+                                ghostty_text_s*);
+ void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
++bool ghostty_surface_spike_snapshot(ghostty_surface_t, ghostty_text_s*);
+ 
+ #ifdef __APPLE__
+ void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 8ddcf145d..f2dfb9dcf 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -1654,6 +1654,41 @@ pub const CAPI = struct {
+         return readTextLocked(surface, core_sel, result);
+     }
+ 
++    /// Spike-only: serialize the active screen for a separate display terminal.
++    export fn ghostty_surface_spike_snapshot(surface: *Surface, result: *Text) bool {
++        const core = &surface.core_surface;
++        core.renderer_state.mutex.lock();
++        defer core.renderer_state.mutex.unlock();
++        const t = &core.io.terminal;
++        var formatter: terminal.formatter.TerminalFormatter = .init(t, .{
++            .emit = .vt,
++            .unwrap = false,
++            .trim = false,
++            .background = t.colors.background.get(),
++            .foreground = t.colors.foreground.get(),
++            .palette = &t.colors.palette.current,
++        });
++        formatter.content = .{ .selection = .init(
++            t.screens.active.pages.getTopLeft(.active),
++            t.screens.active.pages.getBottomRight(.active).?,
++            false,
++        ) };
++        // This is a display snapshot, not a complete terminal-state checkpoint.
++        // Full extras emit tabstops after cursor position and move the replay cursor.
++        formatter.extra = .styles;
++        formatter.extra.modes = true;
++        formatter.extra.screen.cursor = true;
++        var writer: std.Io.Writer.Allocating = .init(global.alloc);
++        defer writer.deinit();
++        formatter.format(&writer.writer) catch return false;
++        const bytes = writer.toOwnedSliceSentinel(0) catch return false;
++        result.* = .{
++            .tl_px_x = 0, .tl_px_y = 0, .offset_start = 0, .offset_len = 0,
++            .text = bytes.ptr, .text_len = bytes.len,
++        };
++        return true;
++    }
++
+     fn readTextLocked(
+         surface: *Surface,
+         core_sel: terminal.Selection,
