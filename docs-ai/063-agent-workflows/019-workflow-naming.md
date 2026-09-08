@@ -62,3 +62,18 @@ remain authoritative; custom input and output schemas do not reserve retired wor
 
 D3 remains separate: the renamed collector still requires one Git directory, and no
 handoff migration or additional collector was implemented.
+
+### Fourth review follow-up (2026-09-08)
+
+The fourth review confirmed the previous fixes and found one remaining required
+scanner correction: nested custom keys could replace the outer exemption scope,
+and a sequence mapping beginning with `with` was not recognized. The checker now
+retains the outer key indentation and ends the exemption at its actual siblings.
+Regression cases cover reordered step keys, nested schema properties, and a real
+sibling expectation that must still fail. Additional probes cover spaced custom
+paths and a custom field named `max_rounds_reached`.
+
+Flow-style YAML declaration scanning remains an optional coverage gap. The runtime
+workflow/action parsers reject those retired declaration keys; the lightweight
+repository check does not parse all YAML syntax. No new runtime/schema/reference
+naming defect was confirmed in the fourth review.

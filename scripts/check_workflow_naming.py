@@ -16,7 +16,7 @@ RULES = (
     (r"(?<![\w.])context\.run\.(?:workflow_id|directory)\b", "Separate workflow metadata from run identity/path."),
     (r"(?<![\w.])context\.roles\.[\w<>-]+\.(?:name|pane)\b", "Use display_name and pane_id."),
     (r"(?<![\w.])context\.action\.(?:id|cwd|artifact_dir)\b", "Use explicit action attempt fields."),
-    (r"(?<![\w.])actions\.[\w<>-]+\.result_path\b|\bmax_rounds_reached\b", "Use output_path and iteration_limit_reached."),
+    (r"(?<![\w.])actions\.[\w<>-]+\.result_path\b|(?<![\w.])max_rounds_reached\b", "Use output_path and iteration_limit_reached."),
     (r"(?<![\w.])backend\.environment\b", "Use backend.inherit_env."),
     (r"(?<![\w.])expect\.(?:output|verdict)\b", "Use expect.delivery and expect.verdicts."),
     (r"(?<![\w.])outputs\.[a-zA-Z_]", "Use deliveries for agent submissions."),
@@ -47,10 +47,10 @@ def violations(text: str, *, swift: bool = False) -> list[tuple[int, str]]:
             custom_indent = None
         # Custom action inputs and schemas are not workflow declarations.
         yaml_line = re.sub(r"""['"]([a-z_]+)['"]\s*:""", r"\1:", line)
-        custom_opener = re.match(r"\s*(?:with|input_schema|output_schema):", yaml_line)
+        custom_opener = re.match(r"\s*(?:-\s*)?(?P<key>with|input_schema|output_schema):", yaml_line)
         custom_data = custom_indent is not None or custom_opener is not None
-        if custom_opener:
-            custom_indent = indent
+        if custom_opener and custom_indent is None:
+            custom_indent = custom_opener.start("key")
         # Swift property names are internal implementation, not expression namespaces.
         public_text = line
         if swift:
@@ -66,6 +66,11 @@ def violations(text: str, *, swift: bool = False) -> list[tuple[int, str]]:
                 candidate = line if pattern.startswith(r"\bWorkflowDone") else public_text
             candidate = candidate.replace("\\", "")
             candidate = re.sub(r"""\[\s*['"]([a-zA-Z_][\w-]*)['"]\s*\]""", r".\1", candidate)
+            candidate = re.sub(
+                r"{{(.*?)}}",
+                lambda match: re.sub(r"\s*\.\s*", ".", match[0]),
+                candidate,
+            )
             if re.search(pattern, candidate):
                 findings.append((number, message))
         if block and line.strip() and indent <= block_indent:

@@ -56,6 +56,34 @@ class WorkflowNamingTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertFalse(violations(text))
 
+    def test_nested_custom_scope_and_spaced_paths(self):
+        for text in (
+            "with:\n  with:\n    x: 1\n  expect: {output: report}",
+            "{{ actions.snapshot.output . context.source }}",
+            "{{ actions.snapshot.output.max_rounds_reached }}",
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(violations(text))
+        self.assertTrue(violations("with:\n  with: {x: 1}\nexpect: {output: report}"))
+
+    def test_custom_scope_is_independent_of_key_order_and_schema_properties(self):
+        for text in (
+            "steps:\n  - with:\n      expect: {output: report}\n"
+            "    id: snapshot\n    action: local:write-report",
+            "with:\n  with: {}\n  expect: {output: report}",
+            "with:\n  input_schema: {}\n  expect: {output: report}",
+            *(
+                f"{key}:\n  type: object\n  properties:\n    with: {{type: object}}\n"
+                "    expect:\n      type: object\n      properties:\n        output: {type: string}"
+                for key in ("input_schema", "output_schema")
+            ),
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(violations(text))
+        self.assertTrue(violations(
+            "steps:\n  - with:\n      expect: {output: report}\n    expect: {output: report}"
+        ))
+
     def test_accepts_current_contract_and_internal_swift_properties(self):
         self.assertFalse(violations("""
 prowl workflow deliver -
