@@ -44,14 +44,17 @@ nonisolated struct WorkflowRuntimeNotification: Equatable, Sendable {
   let title: String
   let body: String
   let targetSurfaceID: UUID?
+  let workflowRunID: UUID?
   let treatAsViewedWhenWorktreeIsVisible: Bool
 
   init(
     title: String,
     body: String,
     targetSurfaceID: UUID?,
-    treatAsViewedWhenWorktreeIsVisible: Bool = true
+    treatAsViewedWhenWorktreeIsVisible: Bool = true,
+    workflowRunID: UUID? = nil
   ) {
+    self.workflowRunID = workflowRunID
     self.title = title
     self.body = body
     self.targetSurfaceID = targetSurfaceID

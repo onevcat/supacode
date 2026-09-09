@@ -697,3 +697,5 @@ attaches hooks through A2's launch boundary.
 - Updated 2026-09-08: Complete delivery naming in CLI/persisted records, diagnostics, helpers, and active examples — see [019](019-workflow-naming.md).
 
 - Updated 2026-09-08: add only `prowl.handoff`, keep existing handoff entry points, and make receiver launch optional — see [020](020-handoff-workflow.md). This supersedes D3's two-workflow and legacy-retirement scope for this slice.
+
+- Updated 2026-09-08: Plan generic step history with source-or-role pane association and external full-output viewing — see [021](021-step-history-ui.md).

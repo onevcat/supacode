@@ -6,6 +6,59 @@ import Testing
 
 @MainActor
 struct ManagedAgentHookObservationTests {
+  @Test func historyIdentitySurvivesCooperativeProgressUntilHookEpochEnds() throws {
+    let now = Date(timeIntervalSince1970: 100)
+    let generation = AgentProcessGeneration(pid: 900, startedAt: now)
+    let store = AgentObservationStore(bufferCapacity: 8, now: { now })
+    let pane = UUID()
+    let registration = makeRegistration(runtime: .claude, cwd: "/tmp/project")
+    _ = store.registerManagedHook(registration, surfaceID: pane)
+    _ = store.updateEvidenceEpoch(surfaceID: pane, processGeneration: generation, sessionID: nil)
+    let input = makeInput(
+      runtime: .claude, token: registration.token, nativeEvent: "SessionStart",
+      event: .sessionStart, cwd: "/tmp/project")
+    guard
+      case .accepted(let hook, _) = store.recordManagedHook(
+        input,
+        callerAncestry: [generation], surfaceID: pane)
+    else {
+      Issue.record("Hook must be accepted")
+      return
+    }
+    func identity() -> String? {
+      WorkflowHistorySessionIdentity.resolve(
+        agent: .claude, detected: nil,
+        currentSignal: store.currentSignalEvidence(surfaceID: pane).latestManagedHook)
+    }
+    #expect(identity() == "claude:\(try #require(hook.sessionID))")
+    let progress = AgentSignal(
+      kind: .progress(50), source: .cooperativeCLI, confidence: .exact,
+      timestamp: now, sessionID: nil, detail: nil, claimedOrigin: "hook_claude")
+    store.publishSignal(progress, binding: .current, surfaceID: pane)
+    #expect(store.currentSignalEvidence(surfaceID: pane).latest == progress)
+    #expect(identity() == "claude:\(try #require(hook.sessionID))")
+    let stale = AgentSession(id: "old", transcriptPath: nil, source: .commandLine, confidence: .exact)
+    #expect(
+      WorkflowHistorySessionIdentity.resolve(
+        agent: .claude, detected: stale,
+        currentSignal: store.currentSignalEvidence(surfaceID: pane).latestManagedHook) == "claude:session-1")
+    let end = makeInput(
+      runtime: .claude, token: registration.token, nativeEvent: "SessionEnd",
+      event: .sessionEnd, cwd: "/tmp/project")
+    #expect(store.recordManagedHook(end, callerAncestry: [generation], surfaceID: pane).isAccepted)
+    store.publishSignal(progress, binding: .current, surfaceID: pane)
+    #expect(
+      WorkflowHistorySessionIdentity.resolve(
+        agent: .claude, detected: stale,
+        currentSignal: store.currentSignalEvidence(surfaceID: pane).latestManagedHook) == nil)
+    #expect(store.recordManagedHook(input, callerAncestry: [generation], surfaceID: pane).isAccepted)
+    #expect(identity() == "claude:session-1")
+    _ = store.updateEvidenceEpoch(
+      surfaceID: pane,
+      processGeneration: .init(pid: 900, startedAt: now.addingTimeInterval(1)), sessionID: nil)
+    #expect(identity() == nil)
+  }
+
   @Test func earlyHookWaitsForFirstTimelyGenerationThenVerifiesDeclaredCoverage() throws {
     let now = Date(timeIntervalSince1970: 100)
     let store = AgentObservationStore(bufferCapacity: 8, now: { now })

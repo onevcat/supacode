@@ -110,8 +110,21 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     let iteration: Int?
     let state: WorkflowStepState
     let ordinal: Int?
+    var iterationPath: [String]?
+    var branchExcluded: Bool?
+    var title: String?
+    var error: String?
+    var outputs: [String: WorkflowJSONValue]?
+    var delivery: WorkflowDeliveryRecord?
+    var submissions: [WorkflowHistorySubmission]?
+    var actionExecutionID: String?
   }
 
+  var historyIsPartial: Bool?
+  var sourcePaneID: UUID?
+  var sourceSessionIdentity: String?
+  var participants: [String: [WorkflowPaneIdentity]]?
+  var stepDefinitions: [WorkflowHistoryStepDefinition]?
   let version: Int
   let run: WorkflowRunRecordInfo
   let worktree: WorkflowRunWorktree
@@ -127,6 +140,11 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
   let steps: [Step]
 
   enum CodingKeys: String, CodingKey {
+    case historyIsPartial = "history_is_partial"
+    case sourceSessionIdentity = "source_session_identity"
+    case participants
+    case stepDefinitions = "step_definitions"
+    case sourcePaneID = "source_pane_id"
     case version
     case run
     case worktree
@@ -142,6 +160,11 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
   }
 
   init(run: WorkflowRun) {
+    historyIsPartial = run.historyIsPartial
+    sourceSessionIdentity = run.context.sourceSessionIdentity
+    participants = run.participants
+    stepDefinitions = WorkflowHistoryStepDefinition.flatten(run.definition.steps)
+    sourcePaneID = run.context.sourcePaneID
     version = Self.currentVersion
     self.run = WorkflowRunRecordInfo(
       id: run.id,
@@ -179,10 +202,21 @@ nonisolated struct WorkflowRunRecord: Codable, Equatable, Sendable {
     state = run.controlCursor?.state.values
     actionAttempts = run.actionAttempts
     skippedDeliveries = run.skippedDeliveries
-    steps = run.stepRecords.map { Step(id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal) }
+    steps = run.stepRecords.map {
+      Step(
+        id: $0.stepID, iteration: $0.iteration, state: $0.state, ordinal: $0.ordinal,
+        iterationPath: $0.iterationPath, branchExcluded: $0.branchExcluded, title: $0.title, error: $0.error,
+        outputs: $0.outputs, delivery: $0.delivery, submissions: $0.submissions, actionExecutionID: $0.actionExecutionID
+      )
+    }
   }
 
   private init(interrupting record: WorkflowRunRecord, at date: Date) {
+    historyIsPartial = record.historyIsPartial
+    sourceSessionIdentity = record.sourceSessionIdentity
+    participants = record.participants
+    stepDefinitions = record.stepDefinitions
+    sourcePaneID = record.sourcePaneID
     version = record.version
     run = WorkflowRunRecordInfo(
       id: record.run.id,
@@ -371,6 +405,14 @@ nonisolated struct WorkflowRunStore: Sendable {
       id: record.run.id, name: record.run.workflowName, root: record.worktree.path,
       state: record.run.status.state, startedAt: record.run.startedAt, finishedAt: record.run.finishedAt)
     try metadata.write(record: data, directory: runDirectory, storage: storage)
+    // Navigation is a rebuildable projection, not part of the execution commit.
+    try? writeNavigation(record, directory: runDirectory)
+  }
+
+  private func writeNavigation(_ record: WorkflowRunRecord, directory: URL) throws {
+    let url = directory.appending(path: WorkflowHistoryIndex.fileName)
+    try storage.validate(url, allowMissing: true)
+    try JSONEncoder().encode(WorkflowHistoryIndex(record: record)).write(to: url, options: .atomic)
   }
 
   func readRecord(runID: UUID) throws -> WorkflowRunRecord {
@@ -450,6 +492,10 @@ nonisolated struct WorkflowRunStore: Sendable {
     try requireNotSymbolicLink(versioned)
     try requireNotSymbolicLink(latest)
     let data = Data(body.utf8)
+    let submission = WorkflowRunPaths.submissionURL(
+      runDirectory: runDirectory, name: name, ordinal: ordinal, body: body)
+    try requireNotSymbolicLink(submission)
+    try data.write(to: submission, options: .atomic)
     try data.write(to: versioned, options: .atomic)
     let temporary = latest.deletingLastPathComponent()
       .appending(path: ".\(name).md.\(UUID().uuidString).tmp", directoryHint: .notDirectory)

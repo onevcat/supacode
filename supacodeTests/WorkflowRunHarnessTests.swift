@@ -299,11 +299,16 @@ struct WorkflowRunHarnessTests {
     let deliveries = try FileManager.default.contentsOfDirectory(
       atPath: runDirectory.appending(path: "deliveries").path(percentEncoded: false)
     ).sorted()
+    let snapshots = harness.run.stepRecords.flatMap { $0.submissions ?? [] }.map {
+      URL(filePath: $0.delivery.path).lastPathComponent
+    }
+    #expect(snapshots.count == 4)
     #expect(
-      deliveries == [
-        "brief.1.md", "brief.md", "disposition.3.md", "disposition.md", "findings.2.md", "findings.md",
-        "round_findings.4.md", "round_findings.md",
-      ])
+      deliveries
+        == ([
+          "brief.1.md", "brief.md", "disposition.3.md", "disposition.md", "findings.2.md", "findings.md",
+          "round_findings.4.md", "round_findings.md",
+        ] + snapshots).sorted())
     #expect(
       try String(contentsOf: runDirectory.appending(path: "deliveries/round_findings.md"), encoding: .utf8)
         == "# Findings\nnone\n")

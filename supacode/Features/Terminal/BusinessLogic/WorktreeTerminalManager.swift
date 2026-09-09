@@ -653,6 +653,10 @@ final class WorktreeTerminalManager {
     return agentObservationStore.currentSignalEvidence(surfaceID: surfaceID)
   }
 
+  func currentAgentSignalEvidenceSnapshot(surfaceID: UUID) -> AgentCurrentSignalEvidence {
+    agentObservationStore.currentSignalEvidence(surfaceID: surfaceID)
+  }
+
   func currentEligibleAgentSignal(surfaceID: UUID) -> AgentSignal? {
     currentAgentSignalEvidence(surfaceID: surfaceID).activeTerminal
   }

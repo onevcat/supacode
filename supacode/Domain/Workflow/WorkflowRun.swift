@@ -3,6 +3,7 @@
 // bindings, the position cursor, invocations and activations, deliveries, and the attention
 // vocabulary the panel renders. Transitions live in WorkflowRunMachine.
 
+import CryptoKit
 import Foundation
 import ProwlCLIShared
 
@@ -18,6 +19,7 @@ nonisolated struct WorkflowPaneIdentity: Equatable, Sendable, Codable {
   let displayName: String
   /// The detected agent token; nil for a bare shell.
   let agent: String?
+  var sessionIdentity: String?
 
   enum CodingKeys: String, CodingKey {
     case surfaceID = "surface_id"
@@ -25,6 +27,7 @@ nonisolated struct WorkflowPaneIdentity: Equatable, Sendable, Codable {
     case handle
     case displayName = "display_name"
     case agent
+    case sessionIdentity = "session_identity"
   }
 }
 
@@ -145,6 +148,7 @@ nonisolated struct WorkflowRunContext: Equatable, Sendable {
   let worktree: WorkflowRunWorktree
   var bundle: WorkflowPreparedBundle?
   var sourcePaneID: UUID?
+  var sourceSessionIdentity: String?
   var sourceTabID: UUID?
   var literalActionInputs = false
   var historyDirectory: URL?
@@ -169,7 +173,12 @@ nonisolated enum WorkflowRunPaths {
       .appending(path: "\(stepID).\(ordinal).md", directoryHint: .notDirectory)
   }
 
-  /// `deliveries/<name>.<ordinal>.md`, or the latest view `deliveries/<name>.md` without an ordinal.
+  /// Content-addressed snapshots preserve each submission when an invocation is corrected.
+  static func submissionURL(runDirectory: URL, name: String, ordinal: Int, body: String) -> URL {
+    let digest = SHA256.hash(data: Data(body.utf8)).map { String(format: "%02x", $0) }.joined()
+    return runDirectory.appending(path: "deliveries/\(name).\(ordinal).\(digest).md")
+  }
+
   static func deliveryURL(runDirectory: URL, name: String, ordinal: Int?) -> URL {
     let file = ordinal.map { "\(name).\($0).md" } ?? "\(name).md"
     return runDirectory.appending(path: "deliveries", directoryHint: .isDirectory)
@@ -260,6 +269,13 @@ nonisolated struct WorkflowDeliveryRecord: Equatable, Sendable, Codable {
   }
 }
 
+nonisolated struct WorkflowHistorySubmission: Codable, Equatable, Sendable {
+  var delivery: WorkflowDeliveryRecord
+  var accepted: Bool
+  var issues: [String]
+  var statusLabel: String { accepted ? "Accepted" : issues.isEmpty ? "Not accepted" : "Needs correction" }
+}
+
 // MARK: - Position and step records
 
 nonisolated enum WorkflowStepState: String, Equatable, Sendable, Codable {
@@ -274,6 +290,14 @@ nonisolated struct WorkflowStepRecord: Equatable, Sendable {
   let iteration: Int?
   var state: WorkflowStepState
   var ordinal: Int?
+  var iterationPath: [String]?
+  var branchExcluded: Bool?
+  var title: String?
+  var error: String?
+  var outputs: [String: WorkflowJSONValue]?
+  var delivery: WorkflowDeliveryRecord?
+  var submissions: [WorkflowHistorySubmission]?
+  var actionExecutionID: String?
 }
 
 // MARK: - Attention and status
@@ -389,6 +413,8 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   /// Latest delivered output per name (latest wins across steps).
   var deliveries: [String: WorkflowDeliveryRecord] = [:]
   var actionOutputs: [String: [String: WorkflowJSONValue]] = [:]
+  /// Metadata for non-revocable writes; cancellation can discard activation bodies but not their attribution.
+  var pendingHistorySubmissions: [Int: WorkflowHistorySubmission] = [:]
   var controlCursor: WorkflowControlCursor?
   var stepValues: [String: WorkflowJSONValue] = [:]
   var observations: [String: WorkflowJSONValue] = [:]
@@ -398,11 +424,24 @@ nonisolated struct WorkflowRun: Equatable, Sendable {
   var skippedDeliveries: [String: String] = [:]
   /// Steps skipped at start (`--skip` / the start sheet).
   let preSkippedSteps: Set<String>
+  var historyIsPartial = false
+  var participants: [String: [WorkflowPaneIdentity]] = [:]
   var stepRecords: [WorkflowStepRecord] = []
   var nextOrdinal = 1
   /// The first step's rendered line when the run was started from the `current` role's own
   /// pane: returned to the caller instead of being typed (dsl-spec §9).
   var selfInitiatedLine: String?
+
+  mutating func captureParticipantSessions() {
+    for (role, binding) in bindings {
+      guard var pane = binding.pane,
+        case .object(let fields) = observations[pane.surfaceID.uuidString],
+        case .string(let identity) = fields["session_identity"]
+      else { continue }
+      pane.sessionIdentity = identity
+      if !participants[role, default: []].contains(pane) { participants[role, default: []].append(pane) }
+    }
+  }
 
   var runDirectory: URL {
     context.historyDirectory

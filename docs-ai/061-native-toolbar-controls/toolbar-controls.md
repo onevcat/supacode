@@ -45,7 +45,7 @@ exposes `ToolbarContent.sharedBackgroundVisibility(_:)` only on macOS 26+. The a
 ### Required visible result
 
 ```
-[ Agents | Quick Launch ]    [ Bell | Update ]
+[ Agents | Quick Launch ]    [ Bell | Workflow History | Update ]
 ```
 
 - Agents and Quick Launch remain one native shared-glass group.
@@ -63,8 +63,8 @@ system surface. Therefore `AgentNotificationsToolbarContent` uses exactly one is
 `ToolbarItem` with all of the following:
 
 1. `.sharedBackgroundVisibility(.hidden)` on that `ToolbarItem`;
-2. an `HStack(spacing: 0)` containing the existing
-   `ToolbarNotificationsPopoverButton` and conditional `ToolbarUpdateButton` unchanged;
+2. an `HStack(spacing: 0)` containing `ToolbarNotificationsPopoverButton`, conditional
+   `WorkflowHistoryPopoverButton`, and conditional `ToolbarUpdateButton`;
 3. one outer `.glassEffect(.regular.interactive(), in: Capsule())`.
 
 This is an ownership boundary, not a new style system. Do not add a divider, child glass,

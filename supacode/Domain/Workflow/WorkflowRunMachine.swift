@@ -295,7 +295,8 @@ nonisolated struct WorkflowRunMachine {
   // MARK: Events
 
   mutating func apply(_ event: WorkflowRunEvent) -> [WorkflowRunEffect] {
-    guard !run.status.isTerminal else { return [] }
+    let archived = archiveDeliveryPersistence(event)
+    guard !run.status.isTerminal else { return archived ? [.persist] : [] }
     var effects: [WorkflowRunEffect] = []
     switch event {
     case .roleIdle(let ordinal):
@@ -326,7 +327,33 @@ nonisolated struct WorkflowRunMachine {
     case .user(let action):
       applyUser(action, effects: &effects)
     }
-    return effects
+    return archived && !effects.contains(.persist) ? effects + [.persist] : effects
+  }
+
+  private mutating func archiveDeliveryPersistence(_ event: WorkflowRunEvent) -> Bool {
+    let ordinal: Int
+    let failure: String?
+    switch event {
+    case .deliveryPersisted(let value):
+      ordinal = value
+      failure = nil
+    case .deliveryPersistFailed(let value, let reason):
+      ordinal = value
+      failure = reason
+    default: return false
+    }
+    guard let submission = run.pendingHistorySubmissions.removeValue(forKey: ordinal),
+      let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal })
+    else { return false }
+    if let failure {
+      let message = "Delivery could not be saved: \(failure)"
+      run.stepRecords[index].error = run.stepRecords[index].error.map { $0 + "\n" + message } ?? message
+    } else {
+      run.stepRecords[index].delivery = submission.delivery
+      run.stepRecords[index].submissions = (run.stepRecords[index].submissions ?? []) + [submission]
+    }
+    run.updatedAt = now()
+    return true
   }
 
   private mutating func continueControlFlow(effects: inout [WorkflowRunEffect]) {
@@ -365,6 +392,10 @@ nonisolated struct WorkflowRunMachine {
     guard case .launching(ordinal) = run.phase, let invocation = invocation(ordinal),
       let binding = run.bindings[invocation.role]
     else { return }
+    if let previous = binding.pane, !run.participants[invocation.role, default: []].contains(previous) {
+      run.participants[invocation.role, default: []].append(previous)
+    }
+    run.participants[invocation.role, default: []].append(pane)
     run.bindings[invocation.role] = binding.binding(pane: pane)
     effects.append(.log("Step '\(invocation.stepID)': role '\(invocation.role)' launched in \(pane.handle)."))
     openWaiting(ordinal: ordinal, dispatchID: dispatchID, effects: &effects)
@@ -393,6 +424,9 @@ nonisolated struct WorkflowRunMachine {
     guard run.actionExecutionID == executionID, case .runningAction(stepID) = run.phase,
       run.currentStep?.id == stepID
     else { return }
+    if let index = run.stepRecords.indices.last {
+      run.stepRecords[index].outputs = outputs
+    }
     run.actionOutputs[stepID] = outputs
     completeCurrentStep(effects: &effects)
     effects.append(.log("Step '\(stepID)': action completed."))
@@ -445,7 +479,7 @@ nonisolated struct WorkflowRunMachine {
       .log(
         "Step '\(activation.stepID)': delivery '\(activation.deliveryName)' accepted "
           + "(invocation \(activation.ordinal))\(issueNote); persisting."),
-      .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: validated.body),
+      deliveryPersistenceEffect(activation: activation, delivery: validated),
     ]
     return (
       .success(
@@ -467,6 +501,28 @@ nonisolated struct WorkflowRunMachine {
       verdict: verdict,
       deliveredAt: now()
     )
+  }
+
+  private mutating func deliveryPersistenceEffect(
+    activation: WorkflowActivation, delivery: WorkflowValidatedDelivery
+  ) -> WorkflowRunEffect {
+    run.pendingHistorySubmissions[activation.ordinal] = .init(
+      delivery: submissionRecord(activation: activation, delivery: delivery, verdict: delivery.verdict),
+      accepted: false, issues: delivery.issues.map(\.message))
+    return .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body)
+  }
+
+  private func submissionRecord(
+    activation: WorkflowActivation, delivery: WorkflowValidatedDelivery, verdict: String?
+  ) -> WorkflowDeliveryRecord {
+    let record = deliveryRecord(for: activation, verdict: verdict)
+    return WorkflowDeliveryRecord(
+      name: record.name, ordinal: record.ordinal,
+      path: WorkflowRunPaths.submissionURL(
+        runDirectory: run.runDirectory, name: record.name,
+        ordinal: record.ordinal, body: delivery.body
+      ).path,
+      latestPath: record.latestPath, verdict: verdict, deliveredAt: record.deliveredAt)
   }
 
   private mutating func applyDeliveryPersistFailed(ordinal: Int, reason: String, effects: inout [WorkflowRunEffect]) {
@@ -499,6 +555,14 @@ nonisolated struct WorkflowRunMachine {
   ) {
     let ordinal = activation.ordinal
     let record = deliveryRecord(for: activation, verdict: verdict)
+    if let index = run.stepRecords.lastIndex(where: { $0.ordinal == ordinal }) {
+      let archived = submissionRecord(activation: activation, delivery: delivery, verdict: verdict)
+      run.stepRecords[index].delivery = archived
+      if let last = run.stepRecords[index].submissions?.indices.last {
+        run.stepRecords[index].submissions?[last].accepted = true
+        run.stepRecords[index].submissions?[last].delivery = archived
+      }
+    }
     run.deliveries[activation.deliveryName] = record
     run.skippedDeliveries[activation.deliveryName] = nil
     updateActivation(ordinal: ordinal) {
@@ -935,6 +999,7 @@ nonisolated struct WorkflowRunMachine {
     recordStep(step, state: .active, ordinal: nil)
     let executionID = makeToken()
     run.actionExecutionID = executionID
+    run.stepRecords[run.stepRecords.count - 1].actionExecutionID = executionID
     run.actionAttempts[step.id, default: 0] += 1
     var values = run.stepValues
     let directory = run.runDirectory.appending(path: "actions/\(step.id)/\(executionID)")
@@ -968,16 +1033,7 @@ nonisolated struct WorkflowRunMachine {
     do {
       let outcome = try cursor.next(values: run.expressionValues(capturedAt: now()))
       run.controlCursor = cursor
-      for evaluation in cursor.evaluations {
-        // Pure control steps keep their latest evaluation; state-only loops cannot grow history forever.
-        run.stepRecords.removeAll { $0.stepID == evaluation.stepID }
-        run.stepRecords.append(
-          .init(
-            stepID: evaluation.stepID, iteration: evaluation.iteration,
-            state: evaluation.skipped ? .skipped : .completed, ordinal: nil))
-      }
-      for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
-      for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
+      recordControlEvaluations(cursor)
       switch outcome {
       case .step: return true
       case .finished: finish(.completed, effects: &effects)
@@ -985,15 +1041,39 @@ nonisolated struct WorkflowRunMachine {
       }
     } catch let limit as WorkflowLoopLimit {
       run.controlCursor = cursor
+      recordControlEvaluations(cursor)
       effects.append(.log("Loop '\(limit.stepID)' reached max_iterations while its condition remained true."))
       finish(.iterationLimitReached, effects: &effects)
     } catch {
       run.controlCursor = cursor
+      recordControlEvaluations(cursor)
+      if let position = cursor.failedPosition {
+        run.stepRecords.append(
+          .init(
+            stepID: position.stepID, iteration: position.iteration, state: .active,
+            ordinal: nil, iterationPath: position.path))
+      }
       raiseAttention(
-        .actionFailed("Control evaluation failed: \(error)"), stepID: run.currentStep?.id ?? "control",
+        .actionFailed("Control evaluation failed: \(error)"), stepID: cursor.failedPosition?.stepID ?? "control",
         role: nil, ordinal: nil, effects: &effects, allowedActions: [.cancel])
     }
     return false
+  }
+
+  private mutating func recordControlEvaluations(_ cursor: WorkflowControlCursor) {
+    for evaluation in cursor.evaluations {
+      if run.stepRecords.count >= 10_000 {
+        run.historyIsPartial = true
+        continue
+      }
+      run.stepRecords.append(
+        .init(
+          stepID: evaluation.stepID, iteration: evaluation.iteration,
+          state: evaluation.skipped ? .skipped : .completed, ordinal: nil,
+          iterationPath: evaluation.path, branchExcluded: evaluation.skipped))
+    }
+    for name in cursor.expiredDeliveries { run.deliveries.removeValue(forKey: name) }
+    for name in cursor.expiredActions { run.actionOutputs.removeValue(forKey: name) }
   }
 
   // MARK: Waiting and watchdog
@@ -1103,8 +1183,7 @@ nonisolated struct WorkflowRunMachine {
       {
         run.status = .running
         effects.append(.log("Step '\(activation.stepID)': retrying to persist delivery '\(activation.deliveryName)'."))
-        effects.append(
-          .persistDelivery(name: activation.deliveryName, ordinal: activation.ordinal, body: delivery.body))
+        effects.append(deliveryPersistenceEffect(activation: activation, delivery: delivery))
         return
       }
       retryCurrentStep(effects: &effects)
@@ -1245,6 +1324,9 @@ nonisolated struct WorkflowRunMachine {
     }
     revokeCurrentActivation(
       reason: "Workflow run \(run.id.uuidString): role '\(role)' relaunched at step '\(step.id)'.", effects: &effects)
+    if let previous = run.bindings[role]?.pane, !run.participants[role, default: []].contains(previous) {
+      run.participants[role, default: []].append(previous)
+    }
     run.bindings[role] = .launch(profile, pane: nil)
     switch step.action {
     case .launch:
@@ -1316,6 +1398,9 @@ nonisolated struct WorkflowRunMachine {
     let attention = WorkflowAttention(
       reason: reason, stepID: stepID, role: role, ordinal: ordinal, actions: allowedActions ?? actions,
       message: attentionMessage(reason, stepID: stepID, role: role))
+    if let index = run.stepRecords.lastIndex(where: { $0.stepID == stepID }) {
+      run.stepRecords[index].error = attention.message
+    }
     run.status = .needsAttention(attention)
     effects.append(.log("Step '\(stepID)': needs attention — \(attention.message)"))
     effects.append(.persist)
@@ -1424,7 +1509,11 @@ nonisolated struct WorkflowRunMachine {
 
   private mutating func recordStep(_ step: WorkflowStepDefinition, state: WorkflowStepState, ordinal: Int?) {
     run.stepRecords.append(
-      WorkflowStepRecord(stepID: step.id, iteration: run.currentIteration, state: state, ordinal: ordinal))
+      WorkflowStepRecord(
+        stepID: step.id, iteration: run.currentIteration, state: state, ordinal: ordinal,
+        iterationPath: run.controlCursor?.iterationPath,
+        title: step.title.flatMap { try? WorkflowExpression.renderText($0, values: run.stepValues) }
+          ?? step.historyTitle))
     run.updatedAt = now()
   }
 

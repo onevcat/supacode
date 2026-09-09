@@ -122,20 +122,47 @@ the feedback.
   the current step, an orange attention glyph when the run waits for you, and a
   count when several runs share the worktree. Hover previews the run panel;
   click pins it.
-- The **run panel** lists every active run in that worktree: role chips (click
-  focuses that pane), loop iterations, the step list with the current instruction,
-  the run folder and log, and **Cancel Run**.
+- The **run panel** opens the same step details as Workflow History. Expand a step
+  to inspect its output, error, and attempts. Role buttons focus available panes;
+  the footer provides the run folder, log, and **Cancel Run**.
 - **Needs attention** is a state, not a deadline: a late delivery is still
   accepted. The panel offers exactly the recoveries the runner permits — Focus
   Pane, Nudge Again, Keep Waiting, Retry, Relaunch Role, Accept as Delivered,
   Accept with a declared verdict, Ask Again, Skip Step, Cancel Run.
 - Waiting is state-driven: a working agent is never interrupted; an agent whose
   turn ended without delivering gets one typed nudge with the completion command.
-- Completion and attention go through the bell with click-to-focus (quiet while
-  you are already watching that worktree). → [notifications](notifications.md)
+- Completion and attention go through the bell with click-to-open run details
+  (quiet while you are already watching that worktree). → [notifications](notifications.md)
 - Active Agents rows bound to a run show `in <workflow> · <role>` for the life
   of the run; a pane belongs to at most one run at a time.
 - Finishing or cancelling never closes a pane; only an explicit `close:` step does.
+
+## Inspect workflow steps after execution
+
+**Workflow History**, beside the toolbar bell, stays available after a run ends.
+Hover to preview; click or interact with its contents to keep it open. The default
+**This Pane** scope includes runs started from this pane and runs in which it or
+its identified agent session participated as a role. **This Worktree** and **All
+Runs** include broader history and records whose pane identity is unavailable.
+
+Select a run on the left, then expand its steps on the right. Checkmarks indicate
+completed execution; a delivery verdict such as `issues` does not mean execution
+failed. Branches not selected, skipped steps, and steps not reached before
+termination have separate states. Nested rounds show their complete loop path.
+Rounds and retry attempts retain their own
+recorded outputs and errors. Provisional and corrected submissions keep separate
+body snapshots. Failed action attempts link to their own stdout, stderr, and
+execution record. Older records can lack some details.
+
+Text and JSON previews have fixed limits. **Open Full Output** opens the complete
+file in its default external application; **Copy Full Output** copies the complete
+content. No full-text expansion changes the panel layout. Missing files remain
+visible as unavailable. **Keep Run** and **Export** are in the run's More menu;
+usage and cleanup remain in Settings.
+
+A selected run stays open when it completes, without switching to another run or
+resetting the reading position. Only active runs offer recovery and cancellation.
+Role focus is available only for panes still present in the agent list.
 
 Every run, including `workflow test-action`, stores its runtime data in
 `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`.

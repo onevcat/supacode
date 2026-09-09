@@ -29,6 +29,9 @@ struct WorktreeDetailView: View {
   /// True while a Canvas card is expanded in place, so the otherwise-transparent
   /// Canvas toolbar gets a matching material scrim instead of showing through.
   @State private var isCanvasCardExpanded = false
+  @State private var historyStore = Store(initialState: WorkflowStepHistoryFeature.State()) {
+    WorkflowStepHistoryFeature()
+  }
 
   var body: some View {
     detailBody(state: store.state)
@@ -41,6 +44,7 @@ struct WorktreeDetailView: View {
     let selectedTerminalWorktree = repositories.selectedTerminalWorktree
     let canvasFocusedTerminalWorktree = canvasFocusedTerminalWorktree(repositories: repositories)
     let actionTargetWorktree = selectedTerminalWorktree ?? canvasFocusedTerminalWorktree
+    let historyContext = workflowHistoryContext(worktree: actionTargetWorktree, repositories: repositories)
     let selectedWorktreeSummaries = selectedWorktreeSummaries(from: repositories)
     let showsMultiSelectionSummary = shouldShowMultiSelectionSummary(
       repositories: repositories,
@@ -108,6 +112,12 @@ struct WorktreeDetailView: View {
           actionTargetWorktree: actionTargetWorktree
         )
       }
+    }
+    .environment(historyStore)
+    .task { loadWorkflowHistory(context: historyContext, runs: state.workflowRuns.sessions.values.map(\.run)) }
+    .onChange(of: historyContext) { _, context in historyStore.send(.context(context)) }
+    .onChange(of: state.workflowRuns.sessions) { _, sessions in
+      historyStore.send(.liveRuns(sessions.values.map(\.run)))
     }
     .windowToolbarChromeBackground(
       toolbarChromeFill(repositories: repositories),
@@ -180,6 +190,28 @@ struct WorktreeDetailView: View {
     )
   }
 
+  private func loadWorkflowHistory(context: WorkflowHistoryContext, runs: [WorkflowRun]) {
+    historyStore.send(.context(context))
+    historyStore.send(.liveRuns(runs))
+    historyStore.send(.refresh)
+  }
+
+  private func workflowHistoryContext(worktree: Worktree?, repositories: RepositoriesFeature.State)
+    -> WorkflowHistoryContext
+  {
+    let pane = worktree.flatMap { terminalManager.stateIfExists(for: $0.id)?.currentFocusedSurfaceId() }
+    let agent = repositories.activeAgents.entries.first { $0.surfaceID == pane }
+    return WorkflowHistoryContext(
+      paneID: pane,
+      session: agent.flatMap { entry in
+        WorkflowHistorySessionIdentity.resolve(
+          agent: entry.agent, detected: entry.session,
+          currentSignal: terminalManager.currentAgentSignalEvidenceSnapshot(surfaceID: entry.surfaceID)
+            .latestManagedHook)
+      },
+      worktreeID: worktree?.id, livePaneIDs: Set(repositories.activeAgents.entries.map(\.surfaceID)))
+  }
+
   private func toolbarSharedState(
     input: ToolbarSharedStateInput
   ) -> ToolbarSharedState {
@@ -215,6 +247,7 @@ struct WorktreeDetailView: View {
     state: ToolbarSharedState
   ) -> some ToolbarContent {
     AgentNotificationsToolbarContent(
+      onHistoryIntent: handleWorkflowIntent,
       agentsCapsule: state.agentsCapsule,
       agentsLauncherItems: state.agentsLauncherItems,
       notificationGroups: state.notificationGroups,
@@ -261,7 +294,6 @@ struct WorktreeDetailView: View {
     let showRunButton =
       state.showRunButtonInToolbar
       && (state.runScriptIsRunning || state.runScriptEnabled)
-    let inlineCommands = Array(state.customCommands.enumerated().prefix(3))
     let overflowCommands = Array(state.customCommands.enumerated().dropFirst(3))
     // A fixed separator keeps the dynamic Run + Custom Command cluster distinct
     // from other trailing actions, mirroring the Normal toolbar spacing.
@@ -311,7 +343,7 @@ struct WorktreeDetailView: View {
               stopAction: { store.send(.stopRunScript) }
             )
           }
-          ForEach(inlineCommands, id: \.element.id) { _, command in
+          ForEach(Array(state.customCommands.enumerated().prefix(3)), id: \.element.id) { _, command in
             UserCustomCommandToolbarButton(
               title: command.command.resolvedTitle,
               systemImage: command.command.resolvedSystemImage,
@@ -807,6 +839,13 @@ struct WorktreeDetailView: View {
     _ worktreeID: Worktree.ID,
     _ notification: WorktreeTerminalNotification
   ) {
+    if let runID = notification.workflowRunID {
+      terminalManager.markNotificationRead(worktreeID: worktreeID, notificationID: notification.id)
+      historyStore.send(.setPresented(true))
+      historyStore.send(.select(runID))
+      historyStore.send(.openRequested)
+      return
+    }
     store.send(.repositories(.selectWorktree(worktreeID)))
     if let terminalState = terminalManager.stateIfExists(for: worktreeID) {
       _ = terminalState.focusSurface(id: notification.surfaceId)
@@ -904,6 +943,10 @@ struct WorktreeDetailView: View {
   /// Quick Launch share one native group; notifications and update status share
   /// the trailing group that replaces the former branch item.
   struct AgentNotificationsToolbarContent: ToolbarContent {
+    @Environment(StoreOf<WorkflowStepHistoryFeature>.self) private var historyStore
+    @Dependency(FeatureFlags.self) private var historyFlags
+    let onHistoryIntent: (WorkflowRunPanelIntent) -> Void
+
     let agentsCapsule: AgentsCapsuleState?
     let agentsLauncherItems: [AgentsLauncherItem]
     let notificationGroups: [ToolbarNotificationRepositoryGroup]
@@ -950,6 +993,9 @@ struct WorktreeDetailView: View {
             onSelectNotification: onSelectNotification,
             onDismissAll: onDismissAllNotifications
           )
+          if historyFlags.workflowUI && !historyStore.entries.isEmpty {
+            WorkflowHistoryPopoverButton(store: historyStore, onIntent: onHistoryIntent)
+          }
           if isUpdateAvailable {
             ToolbarUpdateButton(
               availableVersion: availableUpdateVersion,
@@ -987,6 +1033,7 @@ struct WorktreeDetailView: View {
 
     var body: some ToolbarContent {
       AgentNotificationsToolbarContent(
+        onHistoryIntent: onWorkflowIntent,
         agentsCapsule: toolbarState.shared.agentsCapsule,
         agentsLauncherItems: toolbarState.shared.agentsLauncherItems,
         notificationGroups: toolbarState.shared.notificationGroups,

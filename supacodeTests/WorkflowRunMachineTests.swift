@@ -217,7 +217,11 @@ struct WorkflowRunMachineTests {
     #expect(effects.first == .log("Run \(Self.runID.uuidString) of workflow 'prowl.adversarial-review' started."))
     #expect(machine.run.invocations.map(\.ordinal) == [1])
     #expect(
-      machine.run.stepRecords == [WorkflowStepRecord(stepID: "brief", iteration: nil, state: .active, ordinal: 1)])
+      machine.run.stepRecords == [
+        WorkflowStepRecord(
+          stepID: "brief", iteration: nil, state: .active, ordinal: 1, iterationPath: [],
+          title: "Author writing the brief")
+      ])
     #expect(machine.run.inputs == ["max_rounds": "5", "focus": "", "mode": "strict"])
   }
 
@@ -550,7 +554,11 @@ struct WorkflowRunMachineTests {
     var machine = try machineAfterFindings(verdict: "issues", inputs: ["max_rounds": "3"])
     #expect(machine.run.currentIteration == 1)
     #expect(machine.run.phase == .waitingForRole(role: "author", ordinal: 3))
-    #expect(machine.run.stepRecords.last == WorkflowStepRecord(stepID: "fix", iteration: 1, state: .active, ordinal: 3))
+    #expect(
+      machine.run.stepRecords.last
+        == WorkflowStepRecord(
+          stepID: "fix", iteration: 1, state: .active, ordinal: 3,
+          iterationPath: ["rounds:1"], title: "Round 1: author addressing findings"))
 
     let inject = machine.apply(.roleIdle(ordinal: 3))
     #expect(
@@ -796,7 +804,9 @@ struct WorkflowRunMachineTests {
       skipped: ["brief"])
     #expect(
       machine.run.stepRecords.first
-        == WorkflowStepRecord(stepID: "brief", iteration: nil, state: .skipped, ordinal: nil))
+        == WorkflowStepRecord(
+          stepID: "brief", iteration: nil, state: .skipped, ordinal: nil,
+          iterationPath: [], title: "Message source"))
     #expect(machine.run.invocations.isEmpty)
     #expect(
       effects.contains(

@@ -131,14 +131,7 @@ nonisolated struct WorkflowRunPresentation: Equatable, Sendable, Identifiable {
   }
 
   private static func fallbackTitle(for step: WorkflowStepDefinition) -> String {
-    switch step.action {
-    case .message(let role, _, _): "Message \(role)"
-    case .launch(let role, _, _, _): "Launch \(role)"
-    case .action(let id, _): "Run \(id)"
-    case .notify: "Send notification"
-    case .close(let role): "Close \(role)"
-    case .control: step.id
-    }
+    step.historyTitle
   }
 
   private static func instruction(

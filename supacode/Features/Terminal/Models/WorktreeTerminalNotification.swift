@@ -6,6 +6,7 @@ struct WorktreeTerminalNotification: Identifiable, Equatable, Sendable {
   let title: String
   let body: String
   let createdAt: Date
+  var workflowRunID: UUID?
   var isRead: Bool
 
   init(
@@ -14,7 +15,8 @@ struct WorktreeTerminalNotification: Identifiable, Equatable, Sendable {
     title: String,
     body: String,
     createdAt: Date = .distantPast,
-    isRead: Bool = false
+    isRead: Bool = false,
+    workflowRunID: UUID? = nil
   ) {
     self.id = id
     self.surfaceId = surfaceId
@@ -22,6 +24,7 @@ struct WorktreeTerminalNotification: Identifiable, Equatable, Sendable {
     self.body = body
     self.createdAt = createdAt
     self.isRead = isRead
+    self.workflowRunID = workflowRunID
   }
 
   var content: String {
