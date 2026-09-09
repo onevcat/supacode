@@ -238,17 +238,13 @@ struct WorkflowHistoryReviewTests {
     #expect(record.steps.last?.submissions?.first?.accepted == false)
   }
 
-  @Test func textPreviewKeepsMultibyteBoundariesAndRejectsInvalidData() {
-    for scalar in ["é", "中", "🐈"] {
-      for offset in 1..<scalar.utf8.count {
-        let prefix = String(repeating: "a", count: 4096 - offset)
-        let data = Data((prefix + scalar + "tail").utf8)
-        #expect(WorkflowHistoryOutputPreview.text(data) == prefix)
-      }
+  @Test func textPreviewKeepsMultibyteCharacterBoundaries() {
+    for character in ["é", "中", "🐈", "🐈‍⬛"] {
+      let prefix = String(repeating: "a", count: 199) + character
+      let preview = WorkflowHistoryTextPreview(prefix + "tail")
+      #expect(preview.text == prefix)
+      #expect(preview.remainingCharacters == 4)
     }
-    #expect(WorkflowHistoryOutputPreview.text(Data("hello".utf8)) == "hello")
-    #expect(WorkflowHistoryOutputPreview.text(Data([0xFF, 0x61])) == nil)
-    #expect(WorkflowHistoryOutputPreview.text(Data(repeating: 0x61, count: 4095) + Data([0xFF, 0x61])) == nil)
   }
 
   @Test func groupingKeepsTenThousandRoundsInNumericOrder() throws {
@@ -275,6 +271,6 @@ struct WorkflowHistoryReviewTests {
 
   @Test func longKeysCannotEscapeThePreviewBudget() {
     let key = String(repeating: "k", count: 1_000_000)
-    #expect(WorkflowHistoryOutputPreview.json(["output": .object([key: .string("value")])]).utf8.count <= 4096)
+    #expect(WorkflowHistoryOutputField(key: key, value: .string("value")).displayKey.count == 100)
   }
 }

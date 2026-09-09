@@ -49,9 +49,12 @@ nonisolated enum WorkflowHistoryStatus {
     switch state {
     case "completed": "checkmark.circle.fill"
     case "active", "running": "play.circle"
-    case "needs_attention", "failed": "exclamationmark.circle.fill"
-    case "skipped", "branch_not_selected": "forward.end.circle"
-    case "cancelled", "interrupted": "stop.circle"
+    case "needs_attention", "failed", "iteration_limit_reached": "exclamationmark.circle.fill"
+    case "skipped": "forward.end.circle"
+    case "branch_not_selected": "arrow.triangle.branch"
+    case "cancelled": "stop.circle"
+    case "interrupted": "pause.circle"
+    case "not_run": "minus.circle"
     default: "circle"
     }
   }
@@ -67,7 +70,11 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   var iterationLabel: String?
 
   var subtitle: String {
-    var parts = [WorkflowHistoryStatus.label(state)]
+    [WorkflowHistoryStatus.label(state), contextLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+  }
+
+  var contextLabel: String {
+    var parts: [String] = []
     if let iterationLabel { parts.append(iterationLabel) } else if let iteration { parts.append("Round \(iteration)") }
     if attempts.count > 1 { parts.append("\(attempts.count) attempts") }
     return parts.joined(separator: " · ")
@@ -130,62 +137,12 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   }
 }
 
-nonisolated enum WorkflowHistoryOutputPreview {
-  static func json(_ outputs: [String: WorkflowJSONValue]) -> String {
-    let text = outputs.keys.sorted().prefix(8).map { key in
-      "\(bounded(key, limit: 100)): \(preview(outputs[key]!, depth: 0))"
-    }.joined(separator: "\n")
-    return bounded(text, limit: 4096)
-  }
-
-  static func text(_ data: Data, limit: Int = 4096) -> String? {
-    let prefix = data.prefix(limit)
-    if let value = String(bytes: prefix, encoding: .utf8) { return value }
-    guard data.count > limit else { return nil }
-    for count in 1...min(3, prefix.count) {
-      let suffix = Array(prefix.suffix(count))
-      let lead = suffix[0]
-      let length =
-        (0xC2...0xDF).contains(lead) ? 2 : (0xE0...0xEF).contains(lead) ? 3 : (0xF0...0xF4).contains(lead) ? 4 : 0
-      guard count < length, suffix.dropFirst().allSatisfy({ (0x80...0xBF).contains($0) }) else { continue }
-      if count > 1 {
-        let second = suffix[1]
-        if (lead == 0xE0 && second < 0xA0) || (lead == 0xED && second >= 0xA0)
-          || (lead == 0xF0 && second < 0x90) || (lead == 0xF4 && second >= 0x90)
-        {
-          continue
-        }
-      }
-      if let value = String(bytes: prefix.dropLast(count), encoding: .utf8) { return value }
-    }
-    return nil
-  }
-
-  private static func bounded(_ value: String, limit: Int) -> String {
-    let data = Data(value.utf8.prefix(limit + 4))
-    return text(data, limit: limit) ?? ""
-  }
-
-  private static func preview(_ value: WorkflowJSONValue, depth: Int) -> String {
-    switch value {
-    case .string(let value): bounded(value, limit: 300)
-    case .object(let fields):
-      depth >= 2
-        ? "{…}"
-        : "{"
-          + fields.keys.sorted().prefix(6).map {
-            "\(bounded($0, limit: 100)): \(preview(fields[$0]!, depth: depth + 1))"
-          }.joined(separator: ", ") + "}"
-    case .array(let values):
-      depth >= 2 ? "[…]" : "[" + values.prefix(6).map { preview($0, depth: depth + 1) }.joined(separator: ", ") + "]"
-    default: (try? String(bytes: JSONEncoder().encode(value), encoding: .utf8)) ?? "null"
-    }
-  }
-}
-
 nonisolated enum WorkflowHistoryOutputIntent: Equatable, Sendable {
   case openFile(URL)
   case copyFile(URL)
+  case copyText(String)
+  case openArtifact(URL, worktree: URL)
+  case revealArtifact(URL, worktree: URL)
   case reveal(URL)
   case openText(String, String)
   case openJSON([String: WorkflowJSONValue])

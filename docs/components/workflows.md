@@ -145,24 +145,46 @@ Hover to preview; click or interact with its contents to keep it open. The defau
 its identified agent session participated as a role. **This Worktree** and **All
 Runs** include broader history and records whose pane identity is unavailable.
 
-Select a run on the left, then expand its steps on the right. Checkmarks indicate
-completed execution; a delivery verdict such as `issues` does not mean execution
-failed. Branches not selected, skipped steps, and steps not reached before
+The muted checklist button opens Workflow History. The run list shows each name,
+a tinted state icon, and project or pane attribution; completed runs use a green
+checkmark. The detail header puts status beside the title and start time beside
+elapsed time.
+
+Select a run on the left, then click anywhere on a step row to expand it. Hover
+highlights the row. Recorded step duration appears at the right; a dash means no
+duration was saved. Checkmarks indicate completed execution; a delivery verdict
+such as `issues` does not mean execution failed. Branches not selected, skipped steps, and steps not reached before
 termination have separate states. Nested rounds show their complete loop path.
 Rounds and retry attempts retain their own
 recorded outputs and errors. Provisional and corrected submissions keep separate
 body snapshots. Failed action attempts link to their own stdout, stderr, and
 execution record. Older records can lack some details.
 
-Text and JSON previews have fixed limits. **Open Full Output** opens the complete
-file in its default external application; **Copy Full Output** copies the complete
-content. No full-text expansion changes the panel layout. Missing files remain
-visible as unavailable. **Keep Run** and **Export** are in the run's More menu;
-usage and cleanup remain in Settings.
+Text/Markdown previews show the first 200 characters and the remaining character
+count. JSON output uses nested, expandable fields, with single-line values and
+middle-truncated paths. Each level shows at most 32 fields, up to five levels deep;
+the complete JSON remains available externally. `output` is the action's returned
+JSON value; `output_path` is the saved `result.json` file containing that value,
+not a second result.
+
+Compact icon buttons open full output, copy full content, or reveal files in Finder;
+hover a button for its label. Named absolute path fields also offer file actions.
+Opening is limited to retained workflow storage and the worktree's `.prowl/handoff/`
+artifacts, with link and containment checks. **Diagnostics** holds action stdout,
+stderr, and execution metadata. Empty steps show **No output**; older runs with no
+saved detail show **No saved output**, without claiming that recording failed.
+Missing or unreadable files get a separate message. **Keep Run** and **Export** are
+in the run's More menu; usage and cleanup remain in Settings.
 
 A selected run stays open when it completes, without switching to another run or
 resetting the reading position. Only active runs offer recovery and cancellation.
-Role focus is available only for panes still present in the agent list.
+Roles retain their recorded agent icon after execution. An `@pN` link appears only
+while that terminal pane exists, even if its agent has exited back to the shell.
+Closed panes keep their role and agent icon without an inactive link.
+
+Hovering from History to the bell switches the preview without reopening the old
+panel. A click pins the panel; click the other button to switch a pinned panel.
+Escape or an outside click dismisses it.
 
 Every run, including `workflow test-action`, stores its runtime data in
 `~/.prowl/logs/workflow-runs/<root-name>-<root-hash>/YYYY-MM/<run-id>/`.

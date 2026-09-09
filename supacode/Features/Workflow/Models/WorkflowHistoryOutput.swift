@@ -23,6 +23,13 @@ enum WorkflowHistoryOutput {
         throw CocoaError(.fileReadInapplicableStringEncoding)
       }
       copy(text)
+    case .copyText(let text): copy(text)
+    case .openArtifact(let url, let worktree):
+      try WorkflowHistoryArtifact.validate(url, worktree: worktree, storage: storage)
+      guard NSWorkspace.shared.open(url) else { throw CocoaError(.fileReadUnknown) }
+    case .revealArtifact(let url, let worktree):
+      try WorkflowHistoryArtifact.validate(url, worktree: worktree, storage: storage)
+      NSWorkspace.shared.activateFileViewerSelecting([url])
     case .openText(let text, let name):
       try await openData(Data(text.utf8), name: name)
     case .openJSON(let output):

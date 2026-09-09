@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented; five review rounds converged; native UI acceptance pending |
+| **Status** | Implemented; UI refinement and hover switching verified in Debug |
 | **Anchor date** | 2026-09-08 |
 | **Related** | [Status center](010-c1-workflow-status-center.md), [history storage](018-history-storage-plan.md), [toolbar rules](../061-native-toolbar-controls/toolbar-controls.md) |
 
@@ -43,12 +43,13 @@ a completed review step with an `issues` verdict still receives a completion che
 Use two columns: a compact run list and a wider step detail pane. Each column scrolls
 independently; header and footer stay visible. Bound panel size to the available screen.
 
-The list puts active runs first, then history by descending time. Rows show name, state,
-and time, plus attribution when needed. Initially load about ten recent records and offer
+The list puts active runs first, then history by descending time. Rows show name, a
+baseline-aligned state symbol, and attribution when needed; no repeated state/time text. Initially load about ten recent records and offer
 Load More. This is a presentation limit, not a retention change. First opening selects an
 attention run, otherwise an active run, otherwise the latest historical run.
 
-The detail header shows name, overall state, start/end time, and elapsed duration. The
+The detail header shows name and overall state on one line, then a clock symbol,
+local `yyyy-MM-dd HH:mm` start time, and elapsed duration on one line. The
 step list is the main content; do not place a large result dashboard above it. While open,
 keep the selected run, expanded steps, and reading position stable across status changes,
 new runs, and list reorderings. A pane/scope change must not silently replace an open detail;
@@ -68,15 +69,20 @@ keep the selected record until the user selects another run or reopens the panel
 
 Use the declared step title or a generic action title. A collapsed row can show role,
 output count, or a short error reason. Expand a row to show error/wait reason first, then
-outputs, then collapsed technical details. Failed/attention steps initially expand; successful
+outputs, then an action diagnostics menu when available. Remove duplicate step IDs and
+invocation numbers; retain loop paths and retry counts next to the step title. Failed/attention steps initially expand; successful
 steps initially collapse. Do not override a user's expansion choices on routine updates.
 
-- Text/Markdown deliveries: name, verdict when present, bounded readable preview, Copy,
-  and Open Full Output. Preview limits must bound both loaded content and visual height.
-- JSON action output: bounded field preview with depth/item limits, Copy, and Open Full
-  Output. Long strings wrap or truncate; no unbounded trees or horizontal layout expansion.
-- Known file artifacts: name, Open, and Reveal in Finder. Do not infer files from arbitrary
-  string fields. Missing files keep their record and an unavailable explanation.
+- Text/Markdown deliveries: name, verdict when present, a 200-character preview, exact
+  remaining-character count, and icon-only Copy/Open/Reveal actions. Read at most the
+  delivery protocol limit (16 MiB) on a utility task; retain only the preview in view state.
+- JSON action output: expandable fields with 32 children per level and five levels of
+  disclosure. Values stay on one line with middle truncation. Open/Copy always use the
+  complete result, not the preview.
+- Known file artifacts: named absolute `path`/`*_path` fields offer Open/Reveal/Copy.
+  File operations retain the history containment gate; the only external artifact location
+  is the worktree's `.prowl/handoff/`, with its own link and containment checks. Arbitrary
+  strings are never interpreted as paths. Missing files report an explicit action error.
 - Steps with no output: a short No output message only when expanded.
 - Errors: show recorded error details and any partial output. Offer existing permitted
   attention actions only while the run remains active; history is read-only.
@@ -105,8 +111,8 @@ outputs. A successful retry shows a checkmark plus its attempt count.
 On completion, update the same panel in place and freeze elapsed time. Do not close it,
 switch runs, expand every output, or reset scroll position. On cancellation/interruption,
 stop progress indicators and distinguish interrupted work from steps never reached.
-Role information remains visible after a pane closes, but unavailable focus actions are
-disabled. Workflow completion never implies completion of a launched agent's later work.
+Role information and recorded agent icons remain visible after a pane closes. Only live
+terminal surfaces get `@pN` focus links; agent detection is not the pane-liveness test. Workflow completion never implies completion of a launched agent's later work.
 
 Footer actions are Run Folder, Log, and a menu for Keep Run and Export. Storage budgets and
 cleanup stay in Settings. Retention policy is unchanged. A removed/corrupt record gets an
@@ -152,6 +158,50 @@ constraints, not authorization for name-based matching or synthetic history.
   and update the user manual and toolbar guide with the shipped behavior.
 - Implementation now includes the shared step panel, pane/session navigation index,
   persisted step attempts, and terminal history. Live UI acceptance is still pending.
+
+## UI refinement plan (2026-09-09)
+
+- Keep the native two-column popover. Use baseline-aligned, semantically tinted status
+  symbols; remove list status/time text and put run status beside its title.
+- Put the local start timestamp and duration on one line. Show step durations only from
+  recorded invocation or action timestamps; never infer control-step timing.
+- Keep historical role/runtime identity visible. Only a live pane gets an actionable handle.
+- Use whole-row step disclosure with hover feedback, trailing duration, and compact output
+  actions. Keep retries, loop paths, verdicts, and errors distinct from execution success.
+- Replace flattened JSON with bounded nested fields. Use aligned, single-line values with
+  middle truncation and explicit file actions for named paths. Preserve file validation.
+- Limit delivery previews to 200 characters with an exact remaining-character count.
+  Move action diagnostics to a menu; remove redundant execution metadata. Use neutral
+  empty-output text rather than claiming old control steps lost output.
+- Verify projection boundaries with tests, then inspect the Debug popover and toolbar at
+  normal and constrained widths. Update the user manual, run checks/build, and submit a PR.
+
+### UI refinement result
+
+The detail surface now uses compact step rows, typed output fields, and icon-only file
+controls. Older records without an associated saved result use `No saved output` rather
+than alleging a recording failure. Recorded invocation/action times supply durations;
+unknown control-step timing remains a dash.
+
+The additional History-to-Bell hover regression was reproduced in an isolated Debug app:
+after switching to Bell and holding the pointer still, History reopened. A window-local
+`ToolbarPopoverCoordinator` now owns both presentations, the pin, and the close timer.
+Replacing a panel invalidates its ownership, so its late hover/dismiss callbacks cannot
+reopen it or dismiss the new panel. TestClock cases cover stale callbacks, close timers,
+reverse switching, panel entry, and pinning. Live replay held Notifications open after
+more than one second without pointer movement.
+
+File-action acceptance also caught a macOS path-alias mismatch: standardizing a worktree
+could turn `/private/tmp` into `/tmp` while its recorded artifact kept the physical path.
+The gate now accepts the recorded root or its canonical alias, then validates every
+remaining path component without resolving artifact links. `current.md` opened in Typora;
+full Markdown copy matched all 3,479 characters rather than the 200-character preview.
+
+Verification: `make check`, 3,198 main tests plus two process tests, and `make build-app`
+passed. Debug checks covered the real retained Handoff/Repository Context records in a
+separate data directory, compact output layout, live and closed role presentation,
+History/Bell hover switching, and Normal/Shelf/Canvas toolbar grouping at a 1,000-point
+window width. The final path-alias cases also run in the focused presentation suite.
 
 ## Implementation notes (2026-09-09)
 
