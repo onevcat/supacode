@@ -150,3 +150,6 @@ the failed attempt to extend the first signal to plain commands is
 - Updated 2026-09-05: captured Pi and Codex live footers gained explicit rules, while
   the time-based Working hold was retired in favor of deterministic screen state — see
   [015-deterministic-live-footer-coverage.md](015-deterministic-live-footer-coverage.md)
+- Updated 2026-09-09: Claude Code paints the session title as a chip on the composer's
+  top border; the border predicate rejected it and a working agent read as idle — see
+  [016-claude-titled-composer-border.md](016-claude-titled-composer-border.md)

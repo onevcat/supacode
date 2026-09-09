@@ -43,6 +43,10 @@ struct ClaudeScreenProfileTests {
       "claude/2.1.226/working/676-wrapped-background-agent-wait.txt": .matched(
         ClaudeScreenProfile.RuleID.backgroundWork
       ),
+      "claude/2.1.266/idle/titled-composer.txt": .matched(ClaudeScreenProfile.RuleID.idleComposer),
+      "claude/2.1.266/working/titled-border-spinner.txt": .matched(
+        ClaudeScreenProfile.RuleID.spinner
+      ),
     ]
     let fixtures = try AgentScreenFixtureCorpus.load().filter { $0.agent == .claude }
 
@@ -52,6 +56,50 @@ struct ClaudeScreenProfileTests {
       #expect(detection.state == fixture.expectedState)
       #expect(detection.reason == expectedReasons[fixture.relativePath])
     }
+  }
+
+  @Test func titledComposerBorderStillFramesTheComposer() {
+    let working = ClaudeScreenProfile.detect(
+      in: AgentScreenSnapshot(
+        text: """
+            ✢ Crafting… (19s · still thinking with xhigh effort)
+              ⎿  Tip: Use /permissions to pre-approve tools
+
+            ──────────────────── Titled composer border probe ─
+            ❯
+            ───────────────────────────────────────────────────
+          """
+      )
+    )
+    #expect(working.state == .working)
+    #expect(working.reason == .matched(ClaudeScreenProfile.RuleID.spinner))
+
+    let idle = ClaudeScreenProfile.detect(
+      in: AgentScreenSnapshot(
+        text: """
+            ⏺ Done.
+
+            ──────────────────── Titled composer border probe ─
+            ❯
+            ───────────────────────────────────────────────────
+          """
+      )
+    )
+    #expect(idle.state == .idle)
+    #expect(idle.reason == .matched(ClaudeScreenProfile.RuleID.idleComposer))
+
+    // A chip without its closing rule character is prose, not a border.
+    let unterminated = ClaudeScreenProfile.detect(
+      in: AgentScreenSnapshot(
+        text: """
+            ✢ Crafting… (19s · still thinking with xhigh effort)
+            ──────────────────── Titled composer border probe
+            ❯
+            ───────────────────────────────────────────────────
+          """
+      )
+    )
+    #expect(unterminated.reason == .noRuleMatched)
   }
 
   @Test func elapsedAndBackgroundWorkHaveDistinctReasons() {

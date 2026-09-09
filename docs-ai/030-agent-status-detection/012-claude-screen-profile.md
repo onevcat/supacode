@@ -5,6 +5,10 @@
 > row shape instead of `suffix(3)`; the canonical-tail contract and the Debug
 > canonical-tail assert described below no longer apply to Claude.
 
+> Amended by [016-claude-titled-composer-border.md](016-claude-titled-composer-border.md):
+> the composer border may carry a session title chip; the idle composer rule and the
+> live block anchor accept it.
+
 | | |
 | --- | --- |
 | **Status** | Implemented |
