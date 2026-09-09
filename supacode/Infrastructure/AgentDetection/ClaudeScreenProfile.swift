@@ -402,8 +402,20 @@ nonisolated private func isClaudeWorkspaceTrustChoiceLine(_ line: String) -> Boo
   return option == "no, exit" || option == "yes, i trust this folder"
 }
 
+// A named session paints its title as a chip on the composer's top border:
+// "──────── Titled composer border probe ─". The rule run before the chip and the
+// single rule character after it are structural; the title is free text. Requiring
+// rule characters only made a titled border invisible, which emptied the live status
+// block above it and reported a working agent as idle.
 nonisolated private func isBoxBorderLine(_ line: String) -> Bool {
   let trimmed = line.trimmingCharacters(in: .whitespaces)
-  guard trimmed.count >= 3 else { return false }
-  return trimmed.allSatisfy { $0 == "─" || $0 == "-" }
+  let rule = trimmed.prefix(while: isBorderRuleCharacter)
+  guard rule.count >= 3 else { return false }
+  let titleChip = trimmed[rule.endIndex...]
+  guard !titleChip.isEmpty else { return true }
+  return titleChip.hasPrefix(" ") && titleChip.last.map(isBorderRuleCharacter) == true
+}
+
+nonisolated private func isBorderRuleCharacter(_ character: Character) -> Bool {
+  character == "─" || character == "-"
 }

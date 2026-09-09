@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-09T04:54:12Z",
+  "cli_version": "2.1.266",
+  "capture_source": "prowl-read-detection",
+  "terminal": {
+    "columns": 179,
+    "rows": 58
+  },
+  "redactions": [
+    "workspace path replaced with /…/prowl-fixture-workspace-live-00001/claude-main",
+    "account plan name replaced with XXX in the banner and status line",
+    "model output paragraphs replaced with <MODEL_OUTPUT>",
+    "status line context percentage replaced with X%",
+    "status line quota percentages and elapsed windows replaced with X placeholders"
+  ],
+  "issue": null
+}

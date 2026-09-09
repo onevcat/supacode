@@ -1,0 +1,58 @@
+
+ ▐▛███▛█   Claude Code v2.1.266
+▝▜██████▀  Fable 5.1 with xhigh effort · Claude XXX
+  ▝▝ ▝▝    /…/prowl-fixture-workspace-live-00001/claude-main
+
+
+❯ /rename Titled composer border probe
+  ⎿  Session renamed to: Titled composer border probe
+
+❯ Run the shell command sleep 45 and then reply with exactly: probe done
+
+⏺ <MODEL_OUTPUT>
+
+  Ran 1 shell command
+
+⏺ <MODEL_OUTPUT>
+
+  Ran 1 shell command
+
+⏺ <MODEL_OUTPUT>
+
+✻ Churned for 19s · done 1:48 PM
+
+❯ Without using any tools, write a 300-word story about a lighthouse keeper.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✢ Crafting… (19s · still thinking with xhigh effort)
+  ⎿  Tip: Did you know you can drag and drop image files into your terminal?
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Titled composer border probe ─
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Fable 5.1 | XXX       ] ░░░░░░░░░░ X% | claude-main | 1 CLAUDE.md | 2 hooks | ███░░░░░░░ XX% (Xh XXm / 5h) | █░░░░░░░░░ X% (Xd XXh / 7d) | ⏱️  <1m
+  ✓ Bash ×2
+  ⏸ manual mode on · ← for agents
