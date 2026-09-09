@@ -45,6 +45,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
   }
   var terminalManager: WorktreeTerminalManager?
   var cliSocketServer: CLISocketServer?
+  var remoteMirror: RemoteMirrorStore?
   var agentIslandWindowController: AgentIslandWindowController?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -89,6 +90,7 @@ final class SupacodeAppDelegate: NSObject, NSApplicationDelegate {
     defer {
       agentIslandWindowController?.stop()
       cliSocketServer?.stop()
+      remoteMirror?.stop()
     }
     guard appStore?.state.settings.restoreTerminalLayoutOnLaunch == true else { return }
     guard appStore?.state.suppressLayoutSaveUntilRelaunch != true else { return }
@@ -108,6 +110,7 @@ struct SupacodeApp: App {
   @State private var ghostty: GhosttyRuntime
   @State private var ghosttyShortcuts: GhosttyShortcutManager
   @State private var terminalManager: WorktreeTerminalManager
+  @State private var remoteMirror: RemoteMirrorStore
   @State private var worktreeInfoWatcher: WorktreeInfoWatcherManager
   @State private var pullRequestRefreshCoordinator: PullRequestRefreshCoordinator
   @State private var commandKeyObserver: CommandKeyObserver
@@ -175,7 +178,19 @@ struct SupacodeApp: App {
     #endif
   }
 
+  private static func initializeGhostty(resolvedKeybindings: ResolvedKeybindingMap) {
+    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: resolvedKeybindings)
+    ghosttyArgv.withUnsafeBufferPointer { buffer in
+      let argc = UInt(max(0, buffer.count - 1))
+      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
+      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
+        preconditionFailure("ghostty_init failed")
+      }
+    }
+  }
+
   @MainActor init() {
+    MirrorRelay.runIfRequested()
     NSWindow.allowsAutomaticWindowTabbing = false
     UserDefaults.standard.set(200, forKey: "NSInitialToolTipDelay")
     @Shared(.settingsFile) var settingsFile
@@ -188,14 +203,7 @@ struct SupacodeApp: App {
     if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
       setenv("GHOSTTY_RESOURCES_DIR", resourceURL.path, 1)
     }
-    let ghosttyArgv = GhosttyCLI.argv(resolvedKeybindings: initialResolvedKeybindings)
-    ghosttyArgv.withUnsafeBufferPointer { buffer in
-      let argc = UInt(max(0, buffer.count - 1))
-      let argv = UnsafeMutablePointer(mutating: buffer.baseAddress)
-      if ghostty_init(argc, argv) != GHOSTTY_SUCCESS {
-        preconditionFailure("ghostty_init failed")
-      }
-    }
+    Self.initializeGhostty(resolvedKeybindings: initialResolvedKeybindings)
     let runtime = GhosttyRuntime(initialColorScheme: initialSettings.appearanceMode.colorScheme)
     _ghostty = State(initialValue: runtime)
     let shortcuts = GhosttyShortcutManager(runtime: runtime)
@@ -206,6 +214,7 @@ struct SupacodeApp: App {
     )
     terminalManager.startAgentHookRuntimeMaintenance()
     _terminalManager = State(initialValue: terminalManager)
+    _remoteMirror = State(initialValue: RemoteMirrorStore(manager: terminalManager, runtime: runtime))
     let worktreeInfoWatcher = WorktreeInfoWatcherManager()
     _worktreeInfoWatcher = State(initialValue: worktreeInfoWatcher)
     let storeBox = SupacodeAppStoreBox()
@@ -278,6 +287,7 @@ struct SupacodeApp: App {
     }
     appDelegate.appStore = appStore
     appDelegate.terminalManager = terminalManager
+    appDelegate.remoteMirror = remoteMirror
     appDelegate.cliSocketServer = cliServer
     appDelegate.agentIslandWindowController = .init(store: appStore, terminalManager: terminalManager)
     #if DEBUG
@@ -1741,6 +1751,7 @@ struct SupacodeApp: App {
         preferredColorScheme: store.settings.appearanceMode.colorScheme
       ) {
         ContentView(store: store, terminalManager: terminalManager)
+          .environment(remoteMirror)
           .environment(ghosttyShortcuts)
           .environment(commandKeyObserver)
           .environment(\.resolvedKeybindings, store.resolvedKeybindings)
