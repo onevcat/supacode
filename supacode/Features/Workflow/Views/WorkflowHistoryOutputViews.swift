@@ -5,19 +5,21 @@ struct WorkflowHistoryJSONView: View {
   let values: [String: WorkflowJSONValue]
   let worktree: URL
   let onOutput: (WorkflowHistoryOutputIntent) -> Void
+  var title = "Output"
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text("Output").font(.caption).foregroundStyle(.secondary)
+        Text(title).font(.caption).foregroundStyle(.secondary)
         Spacer()
-        WorkflowHistoryIconButton(label: "Open full JSON output", symbol: "arrow.up.forward.square") {
+        WorkflowHistoryIconButton(label: "Open full JSON \(title.lowercased())", symbol: "arrow.up.forward.square") {
           onOutput(.openJSON(values))
         }
-        WorkflowHistoryIconButton(label: "Copy full JSON output", symbol: "doc.on.doc") {
+        WorkflowHistoryIconButton(label: "Copy full JSON \(title.lowercased())", symbol: "doc.on.doc") {
           onOutput(.copyJSON(values))
         }
       }
+      if values.isEmpty { Text("No fields").foregroundStyle(.secondary) }
       ForEach(WorkflowHistoryOutputField.fields(values)) { field in
         WorkflowHistoryOutputFieldView(field: field, worktree: worktree, onOutput: onOutput)
       }
@@ -100,59 +102,65 @@ struct WorkflowHistoryDeliveryView: View {
   let delivery: WorkflowDeliveryRecord
   let directory: URL
   let onOutput: (WorkflowHistoryOutputIntent) -> Void
+  var revision = WorkflowHistoryFileRevision()
+
+  var body: some View {
+    if WorkflowSchema.isSlug(delivery.name), delivery.ordinal > 0 {
+      let url = delivery.path.hasPrefix("/") ? URL(filePath: delivery.path) : directory.appending(path: delivery.path)
+      WorkflowHistoryTextFileView(
+        label: delivery.name, contentName: "output", url: url, onOutput: onOutput,
+        verdict: delivery.verdict, revision: revision)
+    } else {
+      Text("Output reference is invalid.").foregroundStyle(.secondary)
+    }
+  }
+}
+
+struct WorkflowHistoryTextFileView: View {
+  let label: String
+  let contentName: String
+  let url: URL
+  let onOutput: (WorkflowHistoryOutputIntent) -> Void
+  var verdict: String?
+  var revision = WorkflowHistoryFileRevision()
   @State private var preview: WorkflowHistoryTextPreview?
   @State private var error: String?
-
-  private var url: URL {
-    if delivery.path.hasPrefix("/") { return URL(filePath: delivery.path) }
-    return directory.appending(path: delivery.path)
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(delivery.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-        if let verdict = delivery.verdict { Text(verdict).font(.caption.weight(.medium)).lineLimit(1) }
+        Text(label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        if let verdict { Text(verdict).font(.caption.weight(.medium)).lineLimit(1) }
         Spacer(minLength: 8)
         HStack(spacing: 8) {
-          WorkflowHistoryIconButton(label: "Open full output", symbol: "arrow.up.forward.square") {
+          WorkflowHistoryIconButton(label: "Open full \(contentName)", symbol: "arrow.up.forward.square") {
             onOutput(.openFile(url))
           }
-          WorkflowHistoryIconButton(label: "Copy full output", symbol: "doc.on.doc") { onOutput(.copyFile(url)) }
-          WorkflowHistoryIconButton(label: "Reveal output in Finder", symbol: "folder") { onOutput(.reveal(url)) }
-        }.disabled(preview == nil)
+          WorkflowHistoryIconButton(label: "Copy full \(contentName)", symbol: "doc.on.doc") {
+            onOutput(.copyFile(url))
+          }
+          WorkflowHistoryIconButton(label: "Reveal \(contentName) in Finder", symbol: "folder") {
+            onOutput(.reveal(url))
+          }
+        }
       }
       if let preview {
-        Text(preview.text.isEmpty ? "No output" : preview.text)
-          .lineLimit(6)
-          .textSelection(.enabled)
-          .frame(maxWidth: .infinity, alignment: .leading)
-        if preview.remainingCharacters > 0 {
-          Text("\(preview.remainingCharacters.formatted()) more characters…")
-            .font(.caption).foregroundStyle(.secondary)
-        }
+        WorkflowHistoryMarkdownPreview(preview: preview, emptyText: "Empty \(contentName)")
       } else {
-        Text(error ?? "Loading output…").foregroundStyle(.secondary)
+        Text(error ?? "Loading \(contentName)…").foregroundStyle(.secondary)
       }
     }
-    .task(id: url) {
+    .task(id: WorkflowHistoryFileLoadKey(url: url, revision: revision)) {
       preview = nil
       error = nil
-      guard WorkflowSchema.isSlug(delivery.name), delivery.ordinal > 0 else {
-        error = "Output reference is invalid."
-        return
-      }
       let storage = WorkflowHistoryStorage.configured
       let outputURL = url
       let result = await Task.detached(priority: .utility) { () -> WorkflowHistoryTextPreview? in
-        guard let data = try? storage.read(outputURL, limit: WorkflowSizeLimits.payload),
-          let text = String(data: data, encoding: .utf8)
-        else { return nil }
-        return WorkflowHistoryTextPreview(text)
+        try? WorkflowHistoryTextPreview.read(outputURL, storage: storage)
       }.value
       guard !Task.isCancelled else { return }
       preview = result
-      if result == nil { error = "Saved output could not be read." }
+      if result == nil { error = "Preview unavailable. Open the file to view its contents." }
     }
   }
 }

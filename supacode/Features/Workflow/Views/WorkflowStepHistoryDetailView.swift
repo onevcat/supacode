@@ -14,7 +14,6 @@ struct WorkflowStepHistoryDetailView: View {
   @State private var confirmsControl = false
   @State private var groups: [WorkflowHistoryStepGroup] = []
   @State private var durations: [String: TimeInterval] = [:]
-  @ScaledMetric(relativeTo: .caption) private var agentIconSize = 13
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -30,6 +29,11 @@ struct WorkflowStepHistoryDetailView: View {
           ForEach(groups) { group in
             WorkflowHistoryStepRow(
               group: group, duration: durations[group.id], directory: directory, worktree: record.worktree.rootURL,
+              livePaneIDs: livePaneIDs, updatedAt: record.run.updatedAt,
+              onFocus: { surfaceID in
+                onInteraction()
+                onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: surfaceID))
+              },
               onOutput: onOutput, onInteraction: onInteraction)
           }
         }
@@ -97,29 +101,9 @@ struct WorkflowStepHistoryDetailView: View {
       HStack(spacing: 16) {
         ForEach(record.bindings.keys.sorted(), id: \.self) { role in
           if let binding = record.bindings[role] {
-            let presentation = WorkflowHistoryRole(role: role, binding: binding, livePaneIDs: livePaneIDs)
-            HStack(spacing: 5) {
-              Text("\(role):").foregroundStyle(.secondary)
-              if let agent = presentation.agent {
-                let token = DetectedAgent(rawValue: agent)?.iconLookupToken ?? agent
-                TabIconImage(
-                  rawName: (CommandIconMap.iconForFirstToken(token) ?? TabIconSource(systemSymbol: "terminal"))
-                    .storageString,
-                  pointSize: agentIconSize
-                )
-                .accessibilityLabel(agent)
-                .help(agent)
-              }
-              if let pane = presentation.livePane {
-                Button("@\(pane.handle)") {
-                  onInteraction()
-                  onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: pane.surfaceID))
-                }
-                .buttonStyle(.link)
-                .help("Focus \(role) in @\(pane.handle)")
-              } else if presentation.agent == nil {
-                Text("Not bound").foregroundStyle(.secondary)
-              }
+            WorkflowHistoryRoleView(role: role, binding: binding, livePaneIDs: livePaneIDs) { surfaceID in
+              onInteraction()
+              onIntent(.focusPane(worktreeID: record.worktree.id, surfaceID: surfaceID))
             }
           }
         }

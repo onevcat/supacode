@@ -18,7 +18,9 @@ enum WorkflowHistoryOutput {
       try storage.validate(url)
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .copyFile(let url):
-      let data = try await Task.detached(priority: .utility) { try storage.read(url, limit: 64 * 1024 * 1024) }.value
+      let data = try await Task.detached(priority: .utility) {
+        try storage.read(url, limit: WorkflowHistoryTextPreview.maximumBytes)
+      }.value
       guard let text = String(bytes: data, encoding: .utf8) else {
         throw CocoaError(.fileReadInapplicableStringEncoding)
       }

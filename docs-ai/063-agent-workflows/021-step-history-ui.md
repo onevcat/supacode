@@ -74,8 +74,9 @@ invocation numbers; retain loop paths and retry counts next to the step title. F
 steps initially collapse. Do not override a user's expansion choices on routine updates.
 
 - Text/Markdown deliveries: name, verdict when present, a 200-character preview, exact
-  remaining-character count, and icon-only Copy/Open/Reveal actions. Read at most the
-  delivery protocol limit (16 MiB) on a utility task; retain only the preview in view state.
+  remaining-character count, and icon-only Copy/Open/Reveal actions. Preview and Copy
+  read at most 64 MiB on a utility task; retain only the text preview in view state.
+  Open/Reveal remain available when preview loading fails or exceeds its bound.
 - JSON action output: expandable fields with 32 children per level and five levels of
   disclosure. Values stay on one line with middle truncation. Open/Copy always use the
   complete result, not the preview.
@@ -83,7 +84,7 @@ steps initially collapse. Do not override a user's expansion choices on routine 
   File operations retain the history containment gate; the only external artifact location
   is the worktree's `.prowl/handoff/`, with its own link and containment checks. Arbitrary
   strings are never interpreted as paths. Missing files report an explicit action error.
-- Steps with no output: a short No output message only when expanded.
+- Pure operations show their recorded execution summary, not an empty Output section.
 - Errors: show recorded error details and any partial output. Offer existing permitted
   attention actions only while the run remains active; history is read-only.
 - Technical details: step ID, role, attempt, and available invocation times. Do not invent
@@ -138,8 +139,8 @@ Before implementation, audit `supacode/Domain/Workflow/WorkflowRunStore.swift` a
 3. Resolve historical titles from a retained execution definition where available, not a
    subsequently edited source workflow. Fall back to recorded IDs when unavailable.
 4. Distinguish branch exclusion, skip, and terminal non-execution from absence of a record.
-5. Preserve existing privacy and path-containment rules. Old records with missing fields
-   remain readable in broader scopes and explicitly lack unavailable detail.
+5. Preserve existing privacy and path-containment rules. No aliases, data migration,
+   log parsing, or old-result recovery is required; unsupported records are unavailable.
 
 The exact pane/session identity mapping, historical attempt coverage, and viewing-file
 lifecycle require a focused code audit before implementation. These are implementation
@@ -158,6 +159,46 @@ constraints, not authorization for name-based matching or synthetic history.
   and update the user manual and toolbar guide with the shipped behavior.
 - Implementation now includes the shared step panel, pane/session navigation index,
   persisted step attempts, and terminal history. Live UI acceptance is still pending.
+
+## Execution-summary follow-up plan (2026-09-09)
+
+- Prefer the execution-time rendered title, then the frozen static title or verb summary.
+  Never evaluate an old title against current variables.
+- Message and launch details show their exact invocation target, a 200-character Markdown
+  prompt preview, and full-body Open/Copy/Reveal. A successful launch reports that the
+  agent started; it does not imply the agent's task finished.
+- Capture target profile/pane identity per attempt, including relaunch results. Keep
+  historical identity after closure but show a focus link only for a live surface.
+- Action details show the action identifier and typed inputs from that execution's
+  `request.json`, loaded lazily through the same bounded containment gate as outputs.
+- Notify details show the rendered message and say it was sent to Prowl Notifications.
+  Use the declared title or a fixed notification title, not an empty Output section.
+- Record condition outcomes and state/control summaries when executed. Pure operations
+  show those facts rather than an empty output placeholder. Skipped branches do not claim
+  to have evaluated or delivered anything.
+- Unify all agent task content as `prompt`, including saved paths and CLI fields. This is
+  a clean contract, without aliases, migration, log parsing, or old-content recovery.
+- Verify parser/serialization rejection, transport choice, immutable attempt identity,
+  recorded inputs/conditions/notifications, bounded previews, file safety, and Debug UI.
+
+### Execution-summary result
+
+Implemented the prompt-only contract and per-invocation target snapshots. History now
+shows task-only prompt files with inline Markdown, actual action inputs, rendered notices,
+and condition outcomes. Loop rechecks are recorded as checks rather than retry attempts;
+failed controls keep their rendered titles. File readers reload when an active attempt
+changes or finishes. No legacy result reconstruction remains in step grouping.
+
+Focused regressions first reproduced missing target/condition/title records. Review also
+identified initial file-publication races and the 16 MiB preview mismatch; bounded readers
+now accept 64 MiB while Open/Reveal do not depend on preview success. The full App suite
+passed 3,203 main tests and two process tests. CLI build/smoke, 297 unit tests and 112
+integration tests passed, as did `make check` (153 script tests) and the Debug build.
+
+An isolated Debug workflow completed a real launch, multiline scoped-read message,
+context action, branch, and notifications. Native checks verified prompt Markdown and
+remaining counts, full 386-byte prompt copy, external opening in Typora, action-input copy
+against `request.json`, and closed-pane identity without stale focus links.
 
 ## UI refinement plan (2026-09-09)
 

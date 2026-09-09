@@ -14,6 +14,7 @@ nonisolated struct WorkflowHistoryRole {
 }
 
 nonisolated struct WorkflowHistoryTextPreview {
+  static let maximumBytes = 64 * 1024 * 1024
   let text: String
   let remainingCharacters: Int
 
@@ -21,6 +22,22 @@ nonisolated struct WorkflowHistoryTextPreview {
     text = String(body.prefix(200))
     remainingCharacters = max(0, body.count - text.count)
   }
+
+  static func read(_ url: URL, storage: WorkflowHistoryStorage) throws -> Self {
+    let data = try storage.read(url, limit: maximumBytes)
+    guard let text = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadInapplicableStringEncoding) }
+    return Self(text)
+  }
+}
+
+nonisolated struct WorkflowHistoryFileRevision: Hashable {
+  var updatedAt: Date?
+  var state: String?
+}
+
+nonisolated struct WorkflowHistoryFileLoadKey: Hashable {
+  let url: URL
+  let revision: WorkflowHistoryFileRevision
 }
 
 nonisolated struct WorkflowHistoryOutputField: Identifiable {

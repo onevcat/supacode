@@ -66,47 +66,38 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
   let state: String
   let iteration: Int?
   let attempts: [WorkflowRunRecord.Step]
-  var legacyDetailsUnavailable = false
+  let definition: WorkflowHistoryStepDefinition
+  let invocations: [Int: WorkflowRunRecordInvocation]
   var iterationLabel: String?
 
   var subtitle: String {
     [WorkflowHistoryStatus.label(state), contextLabel].filter { !$0.isEmpty }.joined(separator: " · ")
   }
 
+  var attemptLabel: String { definition.kind == "while" ? "Check" : "Attempt" }
+
   var contextLabel: String {
     var parts: [String] = []
     if let iterationLabel { parts.append(iterationLabel) } else if let iteration { parts.append("Round \(iteration)") }
-    if attempts.count > 1 { parts.append("\(attempts.count) attempts") }
+    if attempts.count > 1 { parts.append("\(attempts.count) \(attemptLabel.lowercased())s") }
     return parts.joined(separator: " · ")
   }
 
   static func groups(_ record: WorkflowRunRecord) -> [Self] {
-    var definitions = record.stepDefinitions ?? []
-    let known = Set(definitions.map(\.id))
-    var added: Set<String> = []
-    for step in record.steps where !known.contains(step.id) && added.insert(step.id).inserted {
-      definitions.append(.init(id: step.id, title: step.title ?? step.id, loop: nil))
-    }
+    let definitions = record.stepDefinitions
     let positions = Dictionary(
       definitions.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
-    let deliveries = Dictionary(
-      record.deliveries.values.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
+    let invocations = Dictionary(
+      record.invocations.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
     let titles = Dictionary(definitions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     let byStep = Dictionary(grouping: record.steps, by: \.id)
     var result: [(group: Self, order: [Int])] = []
     for definition in definitions {
       let records = byStep[definition.id] ?? []
-      let byPath = Dictionary(grouping: records) { $0.iterationPath ?? $0.iteration.map { ["legacy:\($0)"] } ?? [] }
+      let byPath = Dictionary(grouping: records) { $0.iterationPath ?? [] }
       let paths = byPath.isEmpty ? [[]] : Array(byPath.keys)
       for path in paths {
-        let attempts = (byPath[path] ?? []).map { step in
-          var step = step
-          if step.delivery == nil, let ordinal = step.ordinal { step.delivery = deliveries[ordinal] }
-          if record.stepDefinitions == nil, records.count == 1, step.state == .completed, step.outputs == nil {
-            step.outputs = record.actions[step.id]
-          }
-          return step
-        }
+        let attempts = byPath[path] ?? []
         let latest = attempts.last
         var state = latest?.state.rawValue ?? (record.run.status.isTerminal ? "not_run" : "pending")
         if latest?.state == .active && record.run.status.isTerminal { state = "interrupted" }
@@ -115,8 +106,8 @@ nonisolated struct WorkflowHistoryStepGroup: Identifiable, Sendable {
         let group = Self(
           id: "\(definition.id):\(path.joined(separator: "/"))",
           title: latest?.title ?? definition.title, state: state, iteration: latest?.iteration, attempts: attempts,
-          legacyDetailsUnavailable: record.stepDefinitions == nil,
-          iterationLabel: path.isEmpty || path.first?.hasPrefix("legacy:") == true
+          definition: definition, invocations: invocations,
+          iterationLabel: path.isEmpty
             ? nil
             : path.map { component in
               let parts = component.split(separator: ":")
