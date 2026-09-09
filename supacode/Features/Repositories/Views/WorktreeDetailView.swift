@@ -107,6 +107,8 @@ struct WorktreeDetailView: View {
           ),
           actionTargetWorktree: actionTargetWorktree
         )
+      } else {
+        ToolbarItem(placement: .navigation) { MirrorHostButton() }
       }
     }
     .windowToolbarChromeBackground(
@@ -950,6 +952,7 @@ struct WorktreeDetailView: View {
             onSelectNotification: onSelectNotification,
             onDismissAll: onDismissAllNotifications
           )
+          MirrorHostButton()
           if isUpdateAvailable {
             ToolbarUpdateButton(
               availableVersion: availableUpdateVersion,
